@@ -4,7 +4,7 @@ from flask import Flask, render_template, jsonify, url_for
 
 from .index import db, app, cors
 
-from .models.user import User
+from .models.user import Domain, Role, User
 from .models.test_message import TestMessage
 from .models.song import Song, SongUserData
 
@@ -46,12 +46,29 @@ def db_init(*args):
     sys.stdout.write("Creating Database...\n")
     db.create_all()
 
+    default_domain = Domain(app.config['DEFAULT_DOMAIN'])
+    db.session.add(default_domain)
+    sys.stdout.write("Creating Domain: %s\n" % default_domain.name)
+
+    admin_role = Role("admin")
+    db.session.add(admin_role)
+    sys.stdout.write("Creating Role: admin\n")
+
+    default_role = Role(app.config['DEFAULT_ROLE'])
+    db.session.add(default_role)
+    sys.stdout.write("Creating Role: %s\n"%default_role.name)
+
+    db.session.commit()
+    db.session.refresh(default_domain)
+    db.session.refresh(admin_role)
+    db.session.refresh(default_role)
+
     username = "admin"
     password = "admin"
     domain = app.config['DEFAULT_DOMAIN']
     role = "admin"
 
-    user = User(username, password, domain, role)
+    user = User(username, password, default_domain.id, admin_role.id)
     sys.stdout.write("Creating User: %s@%s/%s\n" % (username, domain, role))
     db.session.add(user)
 
@@ -62,7 +79,7 @@ def db_init(*args):
             domain = "test"
             role = app.config['DEFAULT_ROLE']
 
-            user = User(username, password, domain, role)
+            user = User(username, password, default_domain.id, default_role.id)
             sys.stdout.write("Creating User: %s@%s/%s\n" %
                 (username, domain, role))
             db.session.add(user)

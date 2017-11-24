@@ -1,21 +1,58 @@
 from ..index import db, bcrypt
 from sqlalchemy.orm import relationship
 
+class Domain(db.Model):
+    id = db.Column(db.Integer(), primary_key=True)
+    name = db.Column(db.String(), unique=True)
+
+    song_data = db.relationship("User")
+    song_data = db.relationship("SongData")
+
+    def __init__(self, name):
+        super(Domain, self).__init__()
+
+        self.name = name
+
+    @staticmethod
+    def findDomainByName(name):
+        return db.session \
+                .query(Domain) \
+                .filter(Domain.name == name) \
+                .first()
+
+class Role(db.Model):
+    id = db.Column(db.Integer(), primary_key=True)
+    name = db.Column(db.String(), unique=True)
+
+    song_data = db.relationship("User")
+
+    def __init__(self, name):
+        super(Role, self).__init__()
+
+        self.name = name
+
+    @staticmethod
+    def findRoleByName(name):
+        return db.session \
+                .query(Role) \
+                .filter(Role.name == name) \
+                .first()
+
 class User(db.Model):
     id = db.Column(db.Integer(), primary_key=True)
     email = db.Column(db.String(), unique=True)
     password = db.Column(db.String())
-    role = db.Column(db.String())
-    domain = db.Column(db.String())
+    domain_id = db.Column(db.Integer(), db.ForeignKey("domain.id"))
+    role_id = db.Column(db.Integer(), db.ForeignKey("role.id"))
 
     song_user_data = db.relationship("SongUserData")
 
-    def __init__(self, email, password, domain, role):
+    def __init__(self, email, password, domain_id, role_id):
         super(User, self).__init__()
 
         self.email = email
-        self.domain = domain
-        self.role = role
+        self.domain_id = domain_id
+        self.role_id = role_id
         self.password = User.hashed_password(password)
         self.active = True
 
