@@ -1,4 +1,5 @@
 from ..index import db, bcrypt
+from sqlalchemy.orm import relationship
 
 class User(db.Model):
     id = db.Column(db.Integer(), primary_key=True)
@@ -6,6 +7,8 @@ class User(db.Model):
     password = db.Column(db.String())
     role = db.Column(db.String())
     domain = db.Column(db.String())
+
+    song_user_data = db.relationship("SongUserData")
 
     def __init__(self, email, password, domain, role):
         super(User, self).__init__()

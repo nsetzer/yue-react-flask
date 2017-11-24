@@ -2,7 +2,7 @@ from ..index import db, bcrypt
 
 class TestMessage(db.Model):
     id = db.Column(db.Integer(), primary_key=True)
-    text = db.Column(db.String(255), unique=False)
+    text = db.Column(db.String(), unique=False)
 
     def __init__(self, text):
         super(TestMessage, self).__init__();

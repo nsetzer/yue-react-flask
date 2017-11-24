@@ -6,9 +6,11 @@ from .index import db, app, cors
 
 from .models.user import User
 from .models.test_message import TestMessage
+from .models.song import Song, SongUserData
 
 from .endpoints import user
 from .endpoints import test
+from .endpoints import library
 
 # serve the bundle
 @app.route('/', methods=['GET'])
