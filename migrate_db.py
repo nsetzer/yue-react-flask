@@ -8,10 +8,12 @@ from yue.core.song import Song as YueSong
 from server.app import app, db, db_init, Domain, Role, User
 
 from server.models.user import User
-from server.models.song import Song, SongData, SongUserData, Library
+from server.models.song import Song, SongData, SongUserData, SongSearchGrammar, Library
 
 import time
 import datetime
+
+from sqlalchemy import and_, or_, select
 
 text_fields = {
     YueSong.path: Song.path,
@@ -81,6 +83,44 @@ def migrate(username, domain_name, dbpath):
     t = end - start
     print("migrated %d songs in %.3f seconds" % (len(yueLib), t))
 
+def test():
+
+    username = "nsetzer"
+    domain_name = app.config['DEFAULT_DOMAIN']
+
+    domain = Domain.findDomainByName(domain_name)
+    if domain is None:
+        sys.stdout.write("Domain with name `%s` not found"%domain_name)
+        sys.exit(1)
+
+    g = SongSearchGrammar()
+
+    user = User.get_user_with_email(username)
+    lib = Library(user.id, domain.id)
+
+    rule = g.ruleFromString("beast")
+    print( repr(rule) )
+    print( rule.sql() )
+
+    columns = SongData.column_names() + SongUserData.column_names()
+    results = db.session.execute(
+       select("*")
+       .select_from(
+           SongData.__table__.join(SongUserData.__table__,
+                       and_(SongData.id == SongUserData.song_id,
+                            SongUserData.user_id == user.id),
+                       isouter=True))
+       .where(rule.sql())
+
+    )
+    for res in results.fetchall():
+        item = { k:v for k,v in zip(columns, res)}
+        print(item)
+
+
+
+
+
 def main():
 
     mode = sys.argv[1]
@@ -116,6 +156,8 @@ def main():
 
         migrate(username, domain_name, dbpath)
 
+    elif mode == "test":
+        test()
 
 if __name__ == '__main__':
     main()

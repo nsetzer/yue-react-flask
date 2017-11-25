@@ -1,11 +1,37 @@
 from ..index import db
 from sqlalchemy.orm import relationship
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import and_, or_
 
 from .user import User
 
+from .search import SearchGrammar, ParseError
+
 import datetime
 import uuid
+
+# http://docs.sqlalchemy.org/en/latest/orm/tutorial.html
+#
+# not in := ~SongData.artist.in_()
+#
+# session.execute(
+#    select(['field11', 'field12'])
+#    .select_from(
+#        Table1.join(Table2, Table1.tbl1_id == Table2.tbl1_id, isouter=True))
+#    .where(Table2.tbl2_id.is_(None))
+# )
+#
+# session.execute(
+#    select(['field11', 'field12'])
+#    .select_from(
+#        Table1.join(SongUserData,
+#                    and_(SongData.id == SongUserData.song_id,
+#                         SongUserData.user_id == self.user_id),
+#                    isouter=True))
+#    .where(Table2.tbl2_id.is_(None))
+# )
+
+
 
 class Song(object):
     """docstring for Song"""
@@ -167,10 +193,6 @@ class SongData(db.Model):
     equalizer = db.Column(db.Integer(), default=0)
     year = db.Column(db.Integer(), default=0)
 
-    # date
-    last_played = db.Column(db.Date(), default=generate_null_timestamp)
-    date_added = db.Column(db.Date(), default=datetime.datetime.utcnow)
-
     song_user_data = db.relationship("SongUserData")
 
     def as_dict(self):
@@ -206,6 +228,10 @@ class SongUserData(db.Model):
     blocked = db.Column(db.Integer(), default=0)
     frequency = db.Column(db.Integer(), default=0)
 
+    # date
+    last_played = db.Column(db.DateTime(), default=generate_null_timestamp)
+    date_added = db.Column(db.DateTime(), default=datetime.datetime.utcnow)
+
     @staticmethod
     def column_names():
         return [c.name for c in SongUserData.__table__.columns]
@@ -220,6 +246,51 @@ class SongUserData(db.Model):
             if c.default is not None:
                 data[c.name] = c.default.arg
 
+class SongSearchGrammar(SearchGrammar):
+    """docstring for SongSearchGrammar"""
+
+    def __init__(self):
+        super(SongSearchGrammar, self).__init__()
+
+        # all_text is a meta-column name which is used to search all text fields
+        self.all_text = Song.all_text
+        self.text_fields = set(Song.textFields())
+        # i still treat the path as a special case even though it really isnt
+        self.text_fields.add(Song.path)
+        self.date_fields = set(Song.dateFields())
+        self.time_fields = set([Song.length,])
+        self.year_fields = set([Song.year,])
+
+        self.keys_song = set(SongData.column_names())
+        self.keys_user = set(SongUserData.column_names())
+
+    def translateColumn(self,colid):
+        """
+        translate the given colid to an internal column name
+        e.g. user may type 'pcnt' which expands to 'play_count',
+        """
+        try:
+            return Song.column( colid );
+        except KeyError:
+            if hasattr(colid,'pos'):
+                raise ParseError("Invalid column name `%s` at position %d"%(colid,colid.pos))
+            else:
+                raise ParseError("Invalid column name `%s` at position %d"%(colid))
+
+    def getColumnType(self, key):
+        """
+        translate the given colid to an internal column name
+        e.g. convert the string 'play_count' to `SongUserData.play_count`
+        """
+        if key in self.keys_song:
+            return getattr(SongData, key)
+        elif key in self.keys_user:
+            return getattr(SongUserData, key)
+        else:
+            if hasattr(key,'pos'):
+                raise ParseError("Invalid column name `%s` at position %d"%(key,key.pos))
+            else:
+                raise ParseError("Invalid column name `%s`"%(key))
 
 class LibraryException(Exception):
     pass
