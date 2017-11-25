@@ -12,6 +12,8 @@ class Song(object):
 
     id          = 'id'          # unique identifier for song
     ref_id      = 'ref_id'      # uid for aiding migration
+    user_id     = 'user_id'     # user id for per person fields
+    data_id     = 'data_id'     # data id for per person fields
     path        = 'file_path'   # filepath on disk
     art_path    = 'art_path'    # filepath to album art
     artist      = 'artist'      # the full artist name
@@ -36,9 +38,96 @@ class Song(object):
     frequency   = 'frequency'   # how often the song is played (days)
     file_size   = 'file_size'   # in bytes
 
+    all_text    = 'text'
+
+    abbreviations = {
+        "id"          : id,
+        "ref_id"      : ref_id,
+        "user_id"     : user_id,
+        "data_id"     : data_id,
+        "path"        : path,
+        "filepath"    : path,
+        "file_path"   : path,
+        "artpath"     : art_path,
+        "art_path"    : art_path,
+        "art"         : artist,
+        "artist"      : artist,
+        "composer"    : composer,
+        "abm"         : album,
+        "alb"         : album,
+        "album"       : album,
+        "ttl"         : title,
+        "tit"         : title,
+        "title"       : title,
+        "gen"         : genre,
+        "genre"       : genre,
+        "year"        : year,
+        "country"     : country,
+        "lang"        : language,
+        "language"    : language,
+        "com"         : comment,
+        "comm"        : comment,
+        "comment"     : comment,
+        "index"       : album_index,
+        "album_index" : album_index,
+        "len"         : length,
+        "length"      : length,
+        "date"        : last_played,
+        "last_played" : last_played,
+        "pcnt"        : play_count,
+        "count"       : play_count,
+        "play_count"  : play_count,
+        "playcount"   : play_count,
+        "skip"        : skip_count,
+        "scnt"        : skip_count,
+        "skip_count"  : skip_count,
+        "skipcount"  : skip_count,
+        "rate"        : rating,
+        "rating"      : rating,
+        "text"        : all_text,
+        "all_text"    : all_text,
+        "ban"         : blocked,
+        "banned"      : blocked,
+        "blocked"     : blocked,
+        "eq"          : equalizer,
+        "equalizer"   : equalizer,
+        "added"       : date_added,
+        "freq"        : frequency,
+        "frequency"   : frequency,
+    }
+
     def __init__(self, arg):
         super(Song, self).__init__()
         self.arg = arg
+
+    @staticmethod
+    def column( abrv ):
+        return Song.abbreviations[ abrv ]
+
+    @staticmethod
+    def textFields():
+        return Song.artist, Song.composer, Song.album, Song.title, \
+               Song.genre, Song.country, Song.language, Song.comment
+
+    @staticmethod
+    def numberFields():
+        """ integer fields """
+        # Song.last_played,  Song.date_added,
+        return Song.id, Song.year, Song.album_index, Song.length, \
+               Song.play_count, Song.skip_count, \
+               Song.rating, Song.blocked, Song.equalizer, \
+               Song.frequency;
+
+    @staticmethod
+    def dateFields():
+        return Song.last_played, Song.date_added;
+
+    @staticmethod
+    def fields():
+        result = list(Song.textFields()) + \
+                 list(Song.numberFields()) + \
+                 list(Song.dateFields())
+        return result
 
     @staticmethod
     def getArtistKey(artist_name):

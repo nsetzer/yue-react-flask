@@ -61,12 +61,3 @@ class AppTestCase(TestCase):
                             content_type='application/json')
         self.assertEqual(res.status_code, 403)
 
-    def test_get_song_by_id(self):
-
-        email = "user000"
-        password = "user000"
-        app = self.login(email, password)
-        url = "/api/library/%s"%self.SONG['id']
-        res = app.get(url);
-        body = json.loads(res.data)
-        print(body)

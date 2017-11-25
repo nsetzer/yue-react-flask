@@ -5,6 +5,8 @@ import json
 
 from ..util import TestCase
 
+from ..models.song import Song
+
 class LibraryTestCase(TestCase):
 
     def setUp(self):
@@ -15,7 +17,16 @@ class LibraryTestCase(TestCase):
 
     def test_get_song_by_id(self):
 
-        url = "/api/library/%s"%self.SONG.id
-        res = self.app.get(url);
+        email = "user000"
+        password = "user000"
+        app = self.login(email, password)
+        url = "/api/library/%s"%self.SONG['id']
+        res = app.get(url);
         body = json.loads(res.data)
-        print(body)
+
+        song = body['result']
+        self.assertEqual(song['artist'], 'Artist000')
+
+        for field in Song.fields():
+            self.assertTrue(field in song, field)
+
