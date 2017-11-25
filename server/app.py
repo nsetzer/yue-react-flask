@@ -73,7 +73,7 @@ def db_init(*args):
     db.session.add(user)
 
     if app.config['DEFAULT_DOMAIN'] == "test":
-        for i in range(10):
+        for i in range(3):
             username = "user%03d" % i
             password = username
             domain = "test"

@@ -4,13 +4,14 @@ from flask import request, jsonify, g
 from flask_cors import cross_origin
 from sqlalchemy.exc import IntegrityError
 
+from ..models.song import Song, Library
+
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
 from itsdangerous import SignatureExpired, BadSignature
 
 import base64
 from bcrypt import gensalt
 from ..index import app, db
-
 
 TWO_WEEKS = 1209600
 
@@ -29,8 +30,8 @@ def generate_token(user, expiration=TWO_WEEKS):
     token = s.dumps({
         'id': user.id,
         'email': user.email,
-        'domain': user.domain,
-        'role': user.role,
+        'domain_id': user.domain_id,
+        'role_id': user.role_id,
     }).decode('utf-8')
     return token
 
@@ -57,6 +58,7 @@ def _requires_token_auth_impl(f, args, kwargs, token):
         # all information is contained in the token
         # user = User.get_user_with_email(user_data['email'])
         g.current_user = user_data
+        g.library = Library(user_data['id'], user_data['domain_id'])
         return f(*args, **kwargs)
 
     return jsonify(

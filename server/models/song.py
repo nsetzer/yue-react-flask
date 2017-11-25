@@ -40,7 +40,8 @@ class Song(object):
         super(Song, self).__init__()
         self.arg = arg
 
-    def getArtistKey(self, artist_name):
+    @staticmethod
+    def getArtistKey(artist_name):
         if artist_name.lower().startswith("the "):
             artist_name = artist_name[4:]
         return artist_name
@@ -123,6 +124,13 @@ class SongUserData(db.Model):
     def populate_dict(self, data):
         for c in self.__table__.columns:
             data[c.name] = getattr(self, c.name)
+
+    @staticmethod
+    def populate_dict_defaults(data):
+        for c in SongUserData.__table__.columns:
+            if c.default is not None:
+                data[c.name] = c.default.arg
+
 
 class LibraryException(Exception):
     pass
@@ -214,19 +222,32 @@ class Library(object):
             raise LibraryException(str(e))
 
     def findSongById(self, song_id):
+        song = {}
+
         result = db.session \
-                    .query(SongData, SongUserData) \
-                    .join(SongUserData) \
-                    .filter(SongData.id == song_id,
-                            User.id == self.user_id) \
+                    .query(SongData) \
+                    .filter(SongData.id == song_id) \
                     .first()
 
-        song = {}
-        for tableItem in result:
-            tableItem.populate_dict(song)
+        if not result:
+            return None
+
+        result.populate_dict(song)
+
+        result = db.session \
+                    .query(SongUserData) \
+                    .filter(SongUserData.song_id == song_id,
+                            SongUserData.user_id == self.user_id) \
+                    .first()
+
+        if result:
+            result.populate_dict(song)
+        else:
+            SongUserData.populate_dict_defaults(song)
 
         if 'song_id' in song:
             del song['song_id']
+
         return song
 
     def insertOrUpdateByReferenceId(self, ref_id, song):

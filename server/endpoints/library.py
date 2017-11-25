@@ -4,6 +4,7 @@ from flask import request, jsonify, g
 
 from ..index import app, db
 from ..models.user import User
+from ..models.song import Song, Library
 from .util import requires_auth
 
 @app.route("/api/library", methods=["GET"])
@@ -16,7 +17,11 @@ def get_library():
 @requires_auth
 def get_song(song_id):
     """ return information about a specific song """
-    return jsonify(result="ok")
+
+    song = g.library.findSongById(song_id)
+    song['last_played'] = song['last_played'].isoformat()
+    song['date_added'] = song['date_added'].isoformat()
+    return jsonify(result=song)
 
 @app.route("/api/library/<song_id>", methods=["POST"])
 @requires_auth

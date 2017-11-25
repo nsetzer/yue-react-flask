@@ -3,61 +3,15 @@ import unittest
 import tempfile
 import json
 
-from .app import app, db, db_reset
+from .util import TestCase
 
-class AuthAppWrapper(object):
-    """docstring for AuthAppWrapper"""
-    def __init__(self, app, token):
-        super(AuthAppWrapper, self).__init__()
-        self.app = app
-        self.token = token
-
-    def get(self, *args, **kwargs):
-        return self._wrapper(self.app.get, args, kwargs)
-
-    def post(self, *args, **kwargs):
-        return self._wrapper(self.app.post, args, kwargs)
-
-    def put(self, *args, **kwargs):
-        return self._wrapper(self.app.put, args, kwargs)
-
-    def delete(self, *args, **kwargs):
-        return self._wrapper(self.app.delete, args, kwargs)
-
-    def _wrapper(self, method, args, kwargs):
-        if "headers" not in kwargs:
-            kwargs['headers'] = {}
-        if "Authorization" not in kwargs['headers']:
-            kwargs['headers']['Authorization'] = self.token
-        return method(*args, **kwargs)
-
-class AppTestCase(unittest.TestCase):
+class AppTestCase(TestCase):
 
     def setUp(self):
-        app.testing = True
-        self.app = app.test_client()
-        with self.app:
-            db_reset()
+        super().setUp();
 
     def tearDown(self):
         pass
-
-    def login(self, email, password):
-        """
-        Attempt to generate a session token for the given user.
-        returns a new Application wrapper, which automatically
-        sends the authentication token with any request.
-        """
-        body = {
-            "email": email,
-            "password": password,
-        }
-        res = self.app.post('/api/user/login',
-                            data=json.dumps(body),
-                            content_type='application/json')
-        self.assertEqual(res.status_code, 200)
-        data = json.loads(res.data)
-        return AuthAppWrapper(self.app, data['token'])
 
     def test_sample(self):
         """
@@ -85,8 +39,8 @@ class AppTestCase(unittest.TestCase):
         body = json.loads(res.data)
         self.assertEqual(res.status_code, 200)
         self.assertTrue("email" in body['result'])
-        self.assertTrue("domain" in body['result'])
-        self.assertTrue("role" in body['result'])
+        self.assertTrue("domain_id" in body['result'])
+        self.assertTrue("role_id" in body['result'])
         self.assertTrue("password" not in body['result'])
 
         user = body['result']
@@ -106,3 +60,13 @@ class AppTestCase(unittest.TestCase):
                             data=json.dumps(body),
                             content_type='application/json')
         self.assertEqual(res.status_code, 403)
+
+    def test_get_song_by_id(self):
+
+        email = "user000"
+        password = "user000"
+        app = self.login(email, password)
+        url = "/api/library/%s"%self.SONG['id']
+        res = app.get(url);
+        body = json.loads(res.data)
+        print(body)

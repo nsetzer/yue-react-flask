@@ -39,22 +39,19 @@ def collect_test_suite(pkgName,pattern):
 
     pkg = __import__(pkgName)
     suite = unittest.TestSuite()
-    for importer, modname, ispkg in pkgutil.iter_modules(pkg.__path__):
-        if modname.startswith(file_prefix):
-            module = __import__(pkgName+'.'+modname, fromlist="dummy")
-            for clsName,cls in vars(module).items():
-                if clsName.endswith(cls_suffix):
-                    for testName in dir(cls):
-                      if fnmatch.fnmatch(testName,pattern):
-                        suite.addTest(cls(testName))
-                      elif testName.startswith(test_prefix):
-                        sys.stderr.write("skipping test %s.\n"%testName)
+    for importer, modname, ispkg in pkgutil.walk_packages(pkg.__path__):
+        module = __import__(pkgName+'.'+modname, fromlist="dummy")
+        for clsName, cls in vars(module).items():
+            if clsName.endswith(cls_suffix):
+                for testName in dir(cls):
+                  if fnmatch.fnmatch(testName,pattern):
+                    suite.addTest(cls(testName))
+                  elif testName.startswith(test_prefix):
+                    sys.stderr.write("skipping test %s.\n"%testName)
     return suite
 
 def main():
     """run server tests"""
-
-
 
     package = "server"
 

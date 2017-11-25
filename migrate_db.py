@@ -74,7 +74,7 @@ def migrate(username, domain_name, dbpath):
         new_song[Song.last_played] = datetime.datetime.utcfromtimestamp(new_song[Song.last_played])
         new_song[Song.date_added] = datetime.datetime.utcfromtimestamp(new_song[Song.date_added])
 
-        song_id = lib.insertOrUpdateByReferenceId(song['uid'], new_song)
+        song_id = lib.insertOrUpdateByReferenceId(song[YueSong.uid], new_song)
 
     end = time.time()
 
@@ -84,7 +84,6 @@ def migrate(username, domain_name, dbpath):
 def main():
 
     mode = sys.argv[1]
-
 
     username = 'nsetzer'
     domain_name = app.config['DEFAULT_DOMAIN']
