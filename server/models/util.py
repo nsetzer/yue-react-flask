@@ -22,6 +22,12 @@ except:
             return lru_cache_wrapper
         return lru_cache_decorator
 
+def parse_iso_format( dt_str ):
+    dt, _, us= dt_str.partition(".")
+    dt= datetime.datetime.strptime(dt.replace('T',' '), "%Y-%m-%d %H:%M:%S")
+    us= int(us.rstrip("Z"), 10)
+    return dt + datetime.timedelta(microseconds=us)
+
 def format_date( unixTime ):
     """ format epoch time stamp as string """
     return time.strftime("%Y/%m/%d %H:%M", time.gmtime(unixTime))

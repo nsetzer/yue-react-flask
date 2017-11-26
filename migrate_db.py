@@ -83,9 +83,11 @@ def migrate(username, domain_name, dbpath):
     t = end - start
     print("migrated %d songs in %.3f seconds" % (len(yueLib), t))
 
+
 def test():
 
     username = "nsetzer"
+    username = "user000"
     domain_name = app.config['DEFAULT_DOMAIN']
 
     domain = Domain.findDomainByName(domain_name)
@@ -98,26 +100,10 @@ def test():
     user = User.get_user_with_email(username)
     lib = Library(user.id, domain.id)
 
-    rule = g.ruleFromString("beast")
-    print( repr(rule) )
-    print( rule.sql() )
+    songs = lib.search("art=beast",limit=3, orderby="RANDOM")
 
-    columns = SongData.column_names() + SongUserData.column_names()
-    results = db.session.execute(
-       select("*")
-       .select_from(
-           SongData.__table__.join(SongUserData.__table__,
-                       and_(SongData.id == SongUserData.song_id,
-                            SongUserData.user_id == user.id),
-                       isouter=True))
-       .where(rule.sql())
-
-    )
-    for res in results.fetchall():
-        item = { k:v for k,v in zip(columns, res)}
-        print(item)
-
-
+    for song in songs:
+        print(song['title'])
 
 
 

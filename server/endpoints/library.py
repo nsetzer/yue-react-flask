@@ -17,10 +17,7 @@ def get_library():
 @requires_auth
 def get_song(song_id):
     """ return information about a specific song """
-
     song = g.library.findSongById(song_id)
-    song['last_played'] = song['last_played'].isoformat()
-    song['date_added'] = song['date_added'].isoformat()
     return jsonify(result=song)
 
 @app.route("/api/library/<song_id>", methods=["POST"])

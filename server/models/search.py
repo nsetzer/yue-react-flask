@@ -5,7 +5,7 @@ import calendar
 from datetime import datetime, timedelta
 import time
 
-from sqlalchemy import and_, or_, not_, select
+from sqlalchemy import and_, or_, not_, select, between
 
 import sys
 isPython3 = sys.version_info[0]==3
@@ -69,7 +69,7 @@ class Rule(object):
 class SearchRule(Rule):
     """Baseclass for search rules
 
-    The check()/sql() methods are a form of self documentation and ard
+    The check()/sql() methods are a form of self documentation and are
     database implementation dependent. For example the check method
     for the RangeSearchRule rule is implemented to match the BETWEEN condition
     in sqlite3.
@@ -145,7 +145,9 @@ class RegExpSearchRule(ColumnSearchRule):
         return "<%s =~ \"%s\""%(self.column,self.fmtval(self.value))
 
     def sql(self):
-        return "%s REGEXP ?"%(self.column,), (self.value,)
+        # TODO: this may not work for postgres, operator may instead be `~`
+        self.column.op("REGEXP")(self.value)
+
 
 class PartialStringSearchRule(ColumnSearchRule):
     """matches if a value contains the given text"""
@@ -171,7 +173,7 @@ class InvertedPartialStringSearchRule(ColumnSearchRule):
         return "<%s not in `%s`>"%(self.fmtval(self.value), self.column)
 
     def sql(self):
-        return "%s NOT LIKE ?"%(self.column,), ("%%%s%%"%self.value,)
+        return self.column.notilike("%%%s%%"%self.value)
 
 class ExactSearchRule(ColumnSearchRule):
     """matches if the a value is exactly equal to the given
@@ -187,7 +189,7 @@ class ExactSearchRule(ColumnSearchRule):
         return "<%s == %s>"%(self.column, self.fmtval(self.value))
 
     def sql(self):
-        return "%s = ?"%(self.column,), (self.value,)
+        return self.column.op("=")(self.value)
 
 class InvertedExactSearchRule(ColumnSearchRule):
     """matches as long as the value does not exactly equal the given"""
@@ -200,7 +202,7 @@ class InvertedExactSearchRule(ColumnSearchRule):
         return "<%s != %s>"%(self.column, self.fmtval(self.value))
 
     def sql(self):
-        return "%s != ?"%(self.column,), (self.value,)
+        return self.column.op("!=")(self.value)
 
 class LessThanSearchRule(ColumnSearchRule):
     """matches as long as the value is less than the given number"""
@@ -213,7 +215,7 @@ class LessThanSearchRule(ColumnSearchRule):
         return "<%s < %s>"%(self.column, self.fmtval(self.value))
 
     def sql(self):
-        return "%s < ?"%(self.column,), (self.value,)
+        return self.column.op("<")(self.value)
 
 class LessThanEqualSearchRule(ColumnSearchRule):
     """matches as long as the value is less than or equal to the given number"""
@@ -226,7 +228,7 @@ class LessThanEqualSearchRule(ColumnSearchRule):
         return "<%s <= %s>"%(self.column, self.fmtval(self.value))
 
     def sql(self):
-        return "%s <= ?"%(self.column,), (self.value,)
+        return self.column.op("<=")(self.value)
 
 class GreaterThanSearchRule(ColumnSearchRule):
     """matches as long as the value is greater than the given number"""
@@ -239,7 +241,7 @@ class GreaterThanSearchRule(ColumnSearchRule):
         return "<%s > %s>"%(self.column, self.fmtval(self.value))
 
     def sql(self):
-        return "%s > ?"%(self.column,), (self.value,)
+        return self.column.op(">")(self.value)
 
 class GreaterThanEqualSearchRule(ColumnSearchRule):
     """matches as long as the value is greater than or equal to the given number"""
@@ -252,7 +254,7 @@ class GreaterThanEqualSearchRule(ColumnSearchRule):
         return "<%s >= %s>"%(self.column, self.fmtval(self.value))
 
     def sql(self):
-        return "%s >= ?"%(self.column,), (self.value,)
+        return self.column.op(">=")(self.value)
 
 class RangeSearchRule(SearchRule):
     """matches if a value is within a rage of values
@@ -275,7 +277,7 @@ class RangeSearchRule(SearchRule):
         return "<%s >= %s && %s <= %s>"%(self.column,self.fmtval(self.value_low),self.column,self.fmtval(self.value_high))
 
     def sql(self):
-        return "%s BETWEEN ? AND ?"%(self.column,), (self.value_low,self.value_high)
+        return between(self.column, self.value_low, self.value_high)
 
 class NotRangeSearchRule(RangeSearchRule):
     """matches if a value is outside a specified range
@@ -292,9 +294,7 @@ class NotRangeSearchRule(RangeSearchRule):
         return "<`%s` not in range (%s,%s)>"%(self.column,self.fmtval(self.value_low),self.fmtval(self.value_high))
 
     def sql(self):
-        return "%s NOT BETWEEN ? AND ?"%(self.column,), (self.value_low,self.value_high)
-
-# -- update above this line
+        return ~between(self.column, self.value_low, self.value_high)
 
 class MetaSearchRule(SearchRule):
     """group one or more search rules"""

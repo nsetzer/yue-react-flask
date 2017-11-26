@@ -36,7 +36,11 @@ class AuthAppWrapper(object):
 class TestCase(unittest.TestCase):
 
     @classmethod
-    def setUpClass(cls):
+    def setUpTest(cls):
+        """
+        init database for tests.
+        this is run once before any test
+        """
         with app.test_client():
             db_reset()
 
@@ -59,9 +63,6 @@ class TestCase(unittest.TestCase):
             cls.SONGS = songs
             cls.SONG = cls.LIBRARY.findSongById(songs[0])
 
-            if cls.SONG is None:
-                raise Exception(songs[0])
-
     def setUp(self):
         app.testing = True
         self.app = app.test_client()
@@ -82,3 +83,5 @@ class TestCase(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         data = json.loads(res.data)
         return AuthAppWrapper(self.app, data['token'])
+
+TestCase.setUpTest()
