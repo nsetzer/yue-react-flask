@@ -6,8 +6,7 @@ from sqlalchemy import MetaData
 
 from .song import SongData
 
-meta_history = MetaData()
-SongHistory = Table('song_history', meta_history,
+SongHistory = Table('song_history', db.metadata,
     Column('user_id', Integer()),
     Column('song_id', String(), ForeignKey(SongData.id)),
     Column('date', DateTime()),
