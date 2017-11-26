@@ -74,7 +74,7 @@ class SongData(db.Model):
 class SongUserData(db.Model):
     data_id = db.Column(db.Integer(), primary_key=True)
 
-    song_id = db.Column(db.Integer(), db.ForeignKey("song.id"))
+    song_id = db.Column(db.String(), db.ForeignKey("song.id"))
     user_id = db.Column(db.Integer(), db.ForeignKey("user.id"))
 
     # text

@@ -34,7 +34,6 @@ class SongModelTestCase(TestCase):
         with self.assertRaises(LibraryException):
             lib.findSongById(self.SONG['id'])
 
-
     def test_all_text_search(self):
         songs = self.lib.search("Artist000")
 

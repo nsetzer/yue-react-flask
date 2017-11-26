@@ -7,6 +7,7 @@ from .index import db, app, cors
 from .models.user import Domain, Role, User
 from .models.test_message import TestMessage
 from .models.song import Song, SongUserData
+from .models.song_history import SongHistory
 
 from .endpoints import user
 from .endpoints import test
@@ -45,6 +46,7 @@ def db_init(*args):
     """initialize the database"""
     sys.stdout.write("Creating Database...\n")
     db.create_all()
+    SongHistory.create(db.engine)
 
     default_domain = Domain(app.config['DEFAULT_DOMAIN'])
     db.session.add(default_domain)
