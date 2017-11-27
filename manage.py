@@ -30,5 +30,6 @@ def routes():
     """List application endpoints"""
     list_routes()
 
+
 if __name__ == '__main__':
     manager.run()

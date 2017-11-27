@@ -10,7 +10,7 @@ from ..models.song import Song
 class LibraryTestCase(TestCase):
 
     def setUp(self):
-        super().setUp();
+        super().setUp()
 
     def tearDown(self):
         pass
@@ -20,8 +20,8 @@ class LibraryTestCase(TestCase):
         email = "user000"
         password = "user000"
         app = self.login(email, password)
-        url = "/api/library/%s"%self.SONG['id']
-        res = app.get(url);
+        url = "/api/library/%s" % self.SONG['id']
+        res = app.get(url)
         body = json.loads(res.data)
 
         song = body['result']

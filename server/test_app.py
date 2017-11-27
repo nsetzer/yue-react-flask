@@ -8,7 +8,7 @@ from .util import TestCase
 class AppTestCase(TestCase):
 
     def setUp(self):
-        super().setUp();
+        super().setUp()
 
     def tearDown(self):
         pass
@@ -24,7 +24,6 @@ class AppTestCase(TestCase):
         self.assertGreaterEqual(body['value'], 0)
 
     def test_login(self):
-
         """
         login in and authenticated apis
 

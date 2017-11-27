@@ -11,6 +11,7 @@ class EnvironmentConfig(object):
     """
     A configuration option which takes values from the current environment
     """
+
     def __init__(self):
         super(EnvironmentConfig, self).__init__()
 
@@ -35,6 +36,7 @@ class EnvironmentConfig(object):
             self.__dict__[env] = os.environ[env]
         else:
             self.__dict__[env] = default
+
 
 cfg = EnvironmentConfig()
 

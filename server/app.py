@@ -61,7 +61,7 @@ def db_init(*args):
 
     default_role = Role(app.config['DEFAULT_ROLE'])
     db.session.add(default_role)
-    sys.stdout.write("Creating Role: %s\n"%default_role.name)
+    sys.stdout.write("Creating Role: %s\n" % default_role.name)
 
     db.session.commit()
     db.session.refresh(default_domain)

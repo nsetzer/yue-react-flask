@@ -12,6 +12,7 @@ import random
 def random_int():
     return jsonify({"value": random.randint(0, 100)})
 
+
 """
 
 

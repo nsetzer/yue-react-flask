@@ -59,7 +59,7 @@ def migrate(username, domain_name, dbpath):
 
     domain = Domain.findDomainByName(domain_name)
     if domain is None:
-        sys.stdout.write("Domain with name `%s` not found"%domain_name)
+        sys.stdout.write("Domain with name `%s` not found" % domain_name)
         sys.exit(1)
 
     sqlstore = SQLStore(dbpath)
@@ -71,7 +71,7 @@ def migrate(username, domain_name, dbpath):
     print("Migrating Database:")
     start = time.time()
     for song in yueLib.search(None):
-        new_song = {v:song[k] for k,v in all_fields.items()}
+        new_song = {v: song[k] for k, v in all_fields.items()}
         new_song[Song.ref_id] = song[YueSong.uid]
         new_song[Song.last_played] = datetime.datetime.utcfromtimestamp(new_song[Song.last_played])
         new_song[Song.date_added] = datetime.datetime.utcfromtimestamp(new_song[Song.date_added])
@@ -92,7 +92,7 @@ def test():
 
     domain = Domain.findDomainByName(domain_name)
     if domain is None:
-        sys.stdout.write("Domain with name `%s` not found"%domain_name)
+        sys.stdout.write("Domain with name `%s` not found" % domain_name)
         sys.exit(1)
 
     g = SongSearchGrammar()
@@ -100,11 +100,10 @@ def test():
     user = User.get_user_with_email(username)
     lib = Library(user.id, domain.id)
 
-    songs = lib.search("art=beast",limit=3, orderby="RANDOM")
+    songs = lib.search("art=beast", limit=3, orderby="RANDOM")
 
     for song in songs:
         print(song['title'])
-
 
 
 def main():
@@ -126,11 +125,11 @@ def main():
 
         domain = Domain.findDomainByName(domain_name)
         if domain is None:
-            sys.stdout.write("Domain with name `%s` not found"%domain_name)
+            sys.stdout.write("Domain with name `%s` not found" % domain_name)
             sys.exit(1)
         role = Role.findRoleByName(role_name)
         if role is None:
-            sys.stdout.write("Role with name `%s` not found"%role_name)
+            sys.stdout.write("Role with name `%s` not found" % role_name)
             sys.exit(1)
         username = "nsetzer"
         password = "nsetzer"
@@ -144,6 +143,7 @@ def main():
 
     elif mode == "test":
         test()
+
 
 if __name__ == '__main__':
     main()

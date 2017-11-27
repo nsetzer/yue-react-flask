@@ -8,6 +8,7 @@ from .models.song import Song, Library
 
 class AuthAppWrapper(object):
     """docstring for AuthAppWrapper"""
+
     def __init__(self, app, token):
         super(AuthAppWrapper, self).__init__()
         self.app = app
@@ -54,9 +55,9 @@ class TestCase(unittest.TestCase):
                 for b in range(3):
                     for t in range(3):
                         song = {
-                            "artist" : "Artist%03d"%a,
-                            "album" : "Album%03d"%b,
-                            "title" : "Title%03d"%t,
+                            "artist": "Artist%03d" % a,
+                            "album": "Album%03d" % b,
+                            "title": "Title%03d" % t,
                         }
                     songs.append(cls.LIBRARY.insert(song))
 
@@ -83,5 +84,6 @@ class TestCase(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         data = json.loads(res.data)
         return AuthAppWrapper(self.app, data['token'])
+
 
 TestCase.setUpTest()
