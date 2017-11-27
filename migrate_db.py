@@ -1,5 +1,5 @@
 
-import sys
+import os, sys
 
 from yue.core.sqlstore import SQLStore
 from yue.core.library import Library as YueLibrary
@@ -8,7 +8,8 @@ from yue.core.song import Song as YueSong
 from server.app import app, db, db_init, Domain, Role, User
 
 from server.models.user import User
-from server.models.song import Song, SongData, SongUserData, SongSearchGrammar, Library
+from server.models.song import SongData, SongUserData,
+from server.dao.library import Song, SongSearchGrammar, Library
 
 import time
 import datetime
@@ -73,8 +74,8 @@ def migrate(username, domain_name, dbpath):
     for song in yueLib.search(None):
         new_song = {v: song[k] for k, v in all_fields.items()}
         new_song[Song.ref_id] = song[YueSong.uid]
-        new_song[Song.last_played] = datetime.datetime.utcfromtimestamp(new_song[Song.last_played])
-        new_song[Song.date_added] = datetime.datetime.utcfromtimestamp(new_song[Song.date_added])
+        # new_song[Song.last_played] = datetime.datetime.utcfromtimestamp(new_song[Song.last_played])
+        # new_song[Song.date_added] = datetime.datetime.utcfromtimestamp(new_song[Song.date_added])
 
         song_id = lib.insertOrUpdateByReferenceId(song[YueSong.uid], new_song)
 
@@ -114,7 +115,8 @@ def main():
     domain_name = app.config['DEFAULT_DOMAIN']
     role_name = "admin"
     dbpath = "/home/nsetzer/projects/android/YueMusicPlayer/yue.db"
-    #dbpath = "/Users/nsetzer/Music/Library/yue.db"
+    if not os.path.exists(dbpath):
+        dbpath = "/Users/nsetzer/Music/Library/yue.db"
 
     if mode == 'migrate':
         migrate(username, dbpath)

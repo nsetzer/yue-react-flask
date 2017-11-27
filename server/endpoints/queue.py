@@ -3,7 +3,7 @@ from flask import request, jsonify, g
 
 from ..index import app, db
 from ..models.user import User
-from ..models.song import Song, Library
+from ..dao.library import Song, Library
 from .util import requires_auth
 
 @app.route("/api/queue/head", methods=["GET"])

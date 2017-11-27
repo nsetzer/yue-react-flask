@@ -4,7 +4,7 @@ from flask import request, jsonify, g
 from flask_cors import cross_origin
 from sqlalchemy.exc import IntegrityError
 
-from ..models.song import Song, Library
+from ..dao.library import Song, Library
 
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
 from itsdangerous import SignatureExpired, BadSignature

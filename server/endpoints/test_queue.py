@@ -5,9 +5,10 @@ import json
 
 from ..util import TestCase
 
-from .song import Song, Library, LibraryException
-from .user import User
-from .queue import SongQueue
+from ..models.user import User
+
+from ..dao.library import Song, Library, LibraryException
+from ..dao.queue import SongQueue
 
 class SongQueueTestCase(TestCase):
 

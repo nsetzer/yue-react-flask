@@ -4,7 +4,7 @@ import json
 
 from .app import app, db, db_reset
 from .models.user import User
-from .models.song import Song, Library
+from .dao.library import Song, Library
 
 class AuthAppWrapper(object):
     """docstring for AuthAppWrapper"""

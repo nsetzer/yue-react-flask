@@ -5,8 +5,8 @@ import json
 
 from ..util import TestCase
 
-from .song import Song, Library, LibraryException
-from .user import User
+from .library import Song, Library, LibraryException
+from ..models.user import User
 
 class SongModelTestCase(TestCase):
 

@@ -5,7 +5,7 @@ import json
 
 from ..util import TestCase
 
-from ..models.song import Song
+from ..dao.library import Song
 
 class LibraryTestCase(TestCase):
 
