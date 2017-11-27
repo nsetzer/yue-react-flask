@@ -5,7 +5,7 @@ from flask import Flask, render_template, jsonify, url_for
 from .index import db, app, cors
 
 from .models.user import Domain, Role, User
-from .models.test_message import TestMessage
+from .models.message import TestMessage
 from .models.song import SongData, SongUserData
 from .models.song_history import SongHistory
 from .models.playlist import Playlist, PlaylistSongs
@@ -14,7 +14,7 @@ from .dao.queue import SongQueue
 from .dao.library import Song, SongSearchGrammar, Library
 
 from .endpoints import user
-from .endpoints import test
+from .endpoints import message
 from .endpoints import library
 from .endpoints import queue
 
