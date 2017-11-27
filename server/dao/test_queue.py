@@ -7,8 +7,8 @@ from ..util import TestCase
 
 from ..models.user import User
 
-from ..dao.library import Song, Library, LibraryException
-from ..dao.queue import SongQueue
+from .library import Song, Library, LibraryException
+from .queue import SongQueue
 
 class SongQueueTestCase(TestCase):
 
