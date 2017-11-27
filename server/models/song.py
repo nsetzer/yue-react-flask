@@ -13,18 +13,18 @@ import uuid
 # http://docs.sqlalchemy.org/en/latest/orm/tutorial.html
 
 def generate_uuid():
-   return str(uuid.uuid4())
+    return str(uuid.uuid4())
 
 def generate_null_timestamp():
-    return datetime.datetime.utcfromtimestamp(0);
+    return datetime.datetime.utcfromtimestamp(0)
 
 class SongData(db.Model):
-    __tablename__="song"
+    __tablename__ = "song"
     id = db.Column(db.String(),
                    primary_key=True,
                    default=generate_uuid)
     domain_id  = db.Column(db.Integer(), db.ForeignKey("domain.id"))
-    ref_id = db.Column(db.Integer(), default = None)
+    ref_id = db.Column(db.Integer(), default=None)
 
     # text
     file_path = db.Column(db.String(), default="")
@@ -47,10 +47,10 @@ class SongData(db.Model):
     song_user_data = db.relationship("SongUserData")
 
     def as_dict(self):
-       return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
 
     def as_export_dict(self):
-        data = self.as_dict();
+        data = self.as_dict()
         del data['file_path']
         del data['art_path']
         return data
@@ -61,7 +61,7 @@ class SongData(db.Model):
 
     @staticmethod
     def default(key):
-        default = getattr(SongData,key).default
+        default = getattr(SongData, key).default
         if default is None:
             return ""
 
@@ -78,7 +78,7 @@ class SongUserData(db.Model):
     user_id = db.Column(db.Integer(), db.ForeignKey("user.id"))
 
     # text
-    comment = db.Column(db.String(),default="")
+    comment = db.Column(db.String(), default="")
 
     # number
     rating = db.Column(db.Integer(), default=0)
@@ -100,7 +100,7 @@ class SongUserData(db.Model):
         if key in ['last_played', 'date_added']:
             return str(generate_null_timestamp())
 
-        default = getattr(SongUserData,key).default
+        default = getattr(SongUserData, key).default
         if default is None:
             return ""
 
@@ -115,6 +115,7 @@ class SongUserData(db.Model):
         for c in SongUserData.__table__.columns:
             if c.default is not None:
                 data[c.name] = c.default.arg
+
 
 _cols_song = SongData.column_names()
 _cols_user = SongUserData.column_names()
@@ -142,9 +143,9 @@ class Song(object):
     country     = 'country'     # contry of origin
     language    = 'language'    # primary language of the song
     comment     = 'comment'     # user information
-    album_index = 'album_index' # order of song in album
+    album_index = 'album_index'  # order of song in album
     length      = 'length'      # length of the song in seconds
-    last_played = 'last_played' # as unix time stamp
+    last_played = 'last_played'  # as unix time stamp
     play_count  = 'play_count'  # number of times song has been played
     skip_count  = 'skip_count'  # number of times song was skipped
     rating      = 'rating'      # from 0 - 10
@@ -161,59 +162,59 @@ class Song(object):
     desc = "DESC"
 
     abbreviations = {
-        "id"          : id,
-        "ref_id"      : ref_id,
-        "user_id"     : user_id,
-        "data_id"     : data_id,
-        "path"        : path,
-        "filepath"    : path,
-        "file_path"   : path,
-        "artpath"     : art_path,
-        "art_path"    : art_path,
-        "art"         : artist,
-        "artist"      : artist,
-        "composer"    : composer,
-        "abm"         : album,
-        "alb"         : album,
-        "album"       : album,
-        "ttl"         : title,
-        "tit"         : title,
-        "title"       : title,
-        "gen"         : genre,
-        "genre"       : genre,
-        "year"        : year,
-        "country"     : country,
-        "lang"        : language,
-        "language"    : language,
-        "com"         : comment,
-        "comm"        : comment,
-        "comment"     : comment,
-        "index"       : album_index,
-        "album_index" : album_index,
-        "len"         : length,
-        "length"      : length,
-        "date"        : last_played,
-        "last_played" : last_played,
-        "pcnt"        : play_count,
-        "count"       : play_count,
-        "play_count"  : play_count,
-        "playcount"   : play_count,
-        "skip"        : skip_count,
-        "scnt"        : skip_count,
-        "skip_count"  : skip_count,
-        "skipcount"  : skip_count,
-        "rate"        : rating,
-        "rating"      : rating,
-        "text"        : all_text,
-        "all_text"    : all_text,
-        "ban"         : blocked,
-        "banned"      : blocked,
-        "blocked"     : blocked,
-        "eq"          : equalizer,
-        "equalizer"   : equalizer,
-        "added"       : date_added,
-        "freq"        : frequency,
-        "frequency"   : frequency,
+        "id": id,
+        "ref_id": ref_id,
+        "user_id": user_id,
+        "data_id": data_id,
+        "path": path,
+        "filepath": path,
+        "file_path": path,
+        "artpath": art_path,
+        "art_path": art_path,
+        "art": artist,
+        "artist": artist,
+        "composer": composer,
+        "abm": album,
+        "alb": album,
+        "album": album,
+        "ttl": title,
+        "tit": title,
+        "title": title,
+        "gen": genre,
+        "genre": genre,
+        "year": year,
+        "country": country,
+        "lang": language,
+        "language": language,
+        "com": comment,
+        "comm": comment,
+        "comment": comment,
+        "index": album_index,
+        "album_index": album_index,
+        "len": length,
+        "length": length,
+        "date": last_played,
+        "last_played": last_played,
+        "pcnt": play_count,
+        "count": play_count,
+        "play_count": play_count,
+        "playcount": play_count,
+        "skip": skip_count,
+        "scnt": skip_count,
+        "skip_count": skip_count,
+        "skipcount": skip_count,
+        "rate": rating,
+        "rating": rating,
+        "text": all_text,
+        "all_text": all_text,
+        "ban": blocked,
+        "banned": blocked,
+        "blocked": blocked,
+        "eq": equalizer,
+        "equalizer": equalizer,
+        "added": date_added,
+        "freq": frequency,
+        "frequency": frequency,
     }
 
     def __init__(self, arg):
@@ -221,8 +222,8 @@ class Song(object):
         self.arg = arg
 
     @staticmethod
-    def column( abrv ):
-        return Song.abbreviations[ abrv ]
+    def column(abrv):
+        return Song.abbreviations[abrv]
 
     @staticmethod
     def textFields():
@@ -234,13 +235,13 @@ class Song(object):
         """ integer fields """
         # Song.last_played,  Song.date_added,
         return Song.id, Song.year, Song.album_index, Song.length, \
-               Song.play_count, Song.skip_count, \
-               Song.rating, Song.blocked, Song.equalizer, \
-               Song.frequency;
+            Song.play_count, Song.skip_count, \
+            Song.rating, Song.blocked, Song.equalizer, \
+            Song.frequency
 
     @staticmethod
     def dateFields():
-        return Song.last_played, Song.date_added;
+        return Song.last_played, Song.date_added
 
     @staticmethod
     def fields():
@@ -275,24 +276,24 @@ class SongSearchGrammar(SearchGrammar):
         # i still treat the path as a special case even though it really isnt
         self.text_fields.add(Song.path)
         self.date_fields = set(Song.dateFields())
-        self.time_fields = set([Song.length,])
-        self.year_fields = set([Song.year,])
+        self.time_fields = set([Song.length, ])
+        self.year_fields = set([Song.year, ])
 
         self.keys_song = set(SongData.column_names())
         self.keys_user = set(SongUserData.column_names())
 
-    def translateColumn(self,colid):
+    def translateColumn(self, colid):
         """
         translate the given colid to an internal column name
         e.g. user may type 'pcnt' which expands to 'play_count',
         """
         try:
-            return Song.column( colid );
+            return Song.column(colid)
         except KeyError:
-            if hasattr(colid,'pos'):
-                raise ParseError("Invalid column name `%s` at position %d"%(colid,colid.pos))
+            if hasattr(colid, 'pos'):
+                raise ParseError("Invalid column name `%s` at position %d" % (colid, colid.pos))
             else:
-                raise ParseError("Invalid column name `%s` at position %d"%(colid))
+                raise ParseError("Invalid column name `%s` at position %d" % (colid))
 
     def getColumnType(self, key):
         """
@@ -304,27 +305,28 @@ class SongSearchGrammar(SearchGrammar):
         elif key in self.keys_user:
             return getattr(SongUserData, key)
         else:
-            if hasattr(key,'pos'):
-                raise ParseError("Invalid column name `%s` at position %d"%(key,key.pos))
+            if hasattr(key, 'pos'):
+                raise ParseError("Invalid column name `%s` at position %d" % (key, key.pos))
             else:
-                raise ParseError("Invalid column name `%s`"%(key))
+                raise ParseError("Invalid column name `%s`" % (key))
 
 class LibraryException(Exception):
     pass
 
 class Library(object):
     """docstring for Library"""
+
     def __init__(self, user_id, domain_id):
         super(Library, self).__init__()
         self.user_id = user_id
-        self.domain_id = domain_id;
+        self.domain_id = domain_id
 
         self.grammar = SongSearchGrammar()
 
     def query(self):
         return db.session.query(SongData, SongUserData).join(SongUserData)
 
-    def insert(self,song):
+    def insert(self, song):
 
         if Song.artist not in song:
             raise LibraryException("artist key missing from song")
@@ -335,15 +337,15 @@ class Library(object):
         if Song.title not in song:
             raise LibraryException("title key missing from song")
 
-        if Song.artist_key not in  song:
+        if Song.artist_key not in song:
             song[Song.artist_key] = Song.getArtistKey(song[Song.artist])
 
         song_keys = set(SongData.column_names())
-        song_data = {k:song[k] for k in song.keys() if k in song_keys}
+        song_data = {k: song[k] for k in song.keys() if k in song_keys}
         song_data['domain_id'] = self.domain_id
 
         user_keys = set(SongUserData.column_names())
-        user_data = {k:song[k] for k in song.keys() if k in user_keys}
+        user_data = {k: song[k] for k in song.keys() if k in user_keys}
 
         new_song = SongData(**song_data)
         db.session.add(new_song)
@@ -369,30 +371,30 @@ class Library(object):
 
         return new_song.id
 
-    def update(self,song_id, song):
+    def update(self, song_id, song):
 
         song_keys = set(SongData.column_names())
-        song_data = {k:song[k] for k in song.keys() if k in song_keys}
+        song_data = {k: song[k] for k in song.keys() if k in song_keys}
 
         user_keys = set(SongUserData.column_names())
-        user_data = {k:song[k] for k in song.keys() if k in user_keys}
+        user_data = {k: song[k] for k in song.keys() if k in user_keys}
 
         if song_data:
             new_song = SongData \
                         .query \
-                        .filter_by(id = song_id) \
+                        .filter_by(id=song_id) \
                         .first()
-            for k,v in song_data.items():
+            for k, v in song_data.items():
                 setattr(new_song, k, v)
 
         if user_data:
             new_user = SongUserData \
                         .query \
-                        .filter_by(song_id = song_id,
-                                   user_id = self.user_id) \
+                        .filter_by(song_id=song_id,
+                                   user_id=self.user_id) \
                         .first()
             if new_user:
-                for k,v in user_data.items():
+                for k, v in user_data.items():
                     setattr(new_user, k, v)
 
         try:
@@ -406,7 +408,7 @@ class Library(object):
         defaults = Song.all_defaults()
 
         results = db.session.execute(
-           select([ column(c) for c in columns])
+           select([column(c) for c in columns])
            .select_from(
                SongData.__table__.join(SongUserData.__table__,
                            and_(SongData.id == SongUserData.song_id,
@@ -417,10 +419,9 @@ class Library(object):
         ).fetchall()
 
         if not results:
-            raise LibraryException("No song found with id=%s"%song_id)
+            raise LibraryException("No song found with id=%s" % song_id)
 
-        return { k:(v or d) for k,v,d in zip(columns, results[0], defaults)}
-
+        return {k: (v or d) for k, v, d in zip(columns, results[0], defaults)}
 
     def insertOrUpdateByReferenceId(self, ref_id, song):
 
@@ -433,7 +434,7 @@ class Library(object):
             self.update(result.id, song)
             return result.id
         else:
-            return self.insert( song )
+            return self.insert(song)
 
     def _search_get_order(self, case_insensitive, orderby):
 
@@ -453,19 +454,19 @@ class Library(object):
         if orderby == Song.random:
             return [func.random(), ]
 
-        if not isinstance(orderby,(tuple,list)):
-            orderby = [orderby,]
+        if not isinstance(orderby, (tuple, list)):
+            orderby = [orderby, ]
 
         order = []
         for item in orderby:
 
-            if isinstance(item,(tuple,list)):
+            if isinstance(item, (tuple, list)):
                 col_type = self.grammar.getColumnType(item[0])
 
                 if case_insensitive and item[0] in Song.textFields():
                     col_type = func.lower(col_type)
 
-                direction = asc if item[1].upper()==Song.asc else desc
+                direction = asc if item[1].upper() == Song.asc else desc
 
                 order.append(direction(col_type))
             else:
@@ -478,7 +479,7 @@ class Library(object):
 
         return order
 
-    def search(self, searchTerm, case_insensitive=True, orderby = None, limit=None, offset=None):
+    def search(self, searchTerm, case_insensitive=True, orderby=None, limit=None, offset=None):
 
         rule = self.grammar.ruleFromString(searchTerm)
 
@@ -494,14 +495,14 @@ class Library(object):
         columns = Song.all_columns()
         defaults = Song.all_defaults()
 
-        query = select([ column(c) for c in columns]) \
-                .select_from(
+        query = select([column(c) for c in columns]) \
+            .select_from(
                     SongData.__table__.join(
                         SongUserData.__table__,
                         and_(SongData.id == SongUserData.song_id,
                              SongUserData.user_id == self.user_id),
                         isouter=True)) \
-                .where(sql_rule)
+            .where(sql_rule)
 
         if orderby is not None:
             order = self._search_get_order(case_insensitive, orderby)
@@ -516,7 +517,7 @@ class Library(object):
         results = db.session.execute(query).fetchall()
 
         if not results:
-            raise LibraryException("No song found with id=%s"%song_id)
+            raise LibraryException("No song found with id=%s" % song_id)
 
-        return [{ k:(v or d) for k,v,d in zip(columns, res, defaults)} for res in results]
+        return [{k: (v or d) for k, v, d in zip(columns, res, defaults)} for res in results]
 

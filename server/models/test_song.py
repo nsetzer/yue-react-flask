@@ -11,7 +11,7 @@ from .user import User
 class SongModelTestCase(TestCase):
 
     def setUp(self):
-        super().setUp();
+        super().setUp()
 
         username = "user000"
         self.user = User.get_user_with_email(username)

@@ -8,19 +8,19 @@ import time
 from sqlalchemy import and_, or_, not_, select, between
 
 import sys
-isPython3 = sys.version_info[0]==3
+isPython3 = sys.version_info[0] == 3
 if isPython3:
     unicode = str
 
 class IntDate(int):
     """ integer tagged as an epoch-time, see SearchRule.fmtval()"""
     def __new__(cls, *args, **kwargs):
-        return  super(IntDate, cls).__new__(cls, args[0])
+        return super(IntDate, cls).__new__(cls, args[0])
 
 class IntTime(int):
     """ integer tagged as a time delta, see SearchRule.fmtval()"""
     def __new__(cls, *args, **kwargs):
-        return  super(IntTime, cls).__new__(cls, args[0])
+        return super(IntTime, cls).__new__(cls, args[0])
 
 class StrPos(str):
     """ A string tagged with a position value"""
@@ -36,7 +36,7 @@ class Rule(object):
     def __init__(self):
         super(Rule, self).__init__()
 
-    def __eq__(self,othr):
+    def __eq__(self, othr):
         return repr(self) == repr(othr)
 
     def sql(self):
@@ -52,16 +52,16 @@ class Rule(object):
         raise NotImplementedError()
 
     def __repr__(self):
-        return "<%s>"%self.__class__.__name__
+        return "<%s>" % self.__class__.__name__
 
-    def fmtval(self,v):
-        if isinstance(v,IntDate):
+    def fmtval(self, v):
+        if isinstance(v, IntDate):
             return string_quote(format_date(v))
-        elif isinstance(v,IntTime):
+        elif isinstance(v, IntTime):
             return string_quote(format_delta(v))
-        elif isinstance(v,str):
+        elif isinstance(v, str):
             return string_quote(v)
-        return v;
+        return v
 
     def sqlstr(self):
         raise NotImplementedError()
@@ -79,18 +79,18 @@ class SearchRule(Rule):
     def __init__(self):
         super(SearchRule, self).__init__()
 
-    def check(self,elem, ignoreCase=True):
+    def check(self, elem, ignoreCase=True):
         raise NotImplementedError(self.__class__.__name__)
 
     def sqlstr(self):
         """ like sql() but returns a single string representing the rule"""
-        s,v = self.sql()
-        return s.replace("?","{}").format(*map(self.fmtval,v))
+        s, v = self.sql()
+        return s.replace("?", "{}").format(*map(self.fmtval, v))
 
 class BlankSearchRule(SearchRule):
     """a rule that matches all values"""
 
-    def check(self,elem, ignoreCase=True):
+    def check(self, elem, ignoreCase=True):
         return True
 
     def sql(self):
@@ -101,6 +101,7 @@ class BlankSearchRule(SearchRule):
 
 class ColumnSearchRule(SearchRule):
     """Base class for applying a rule to a column in a table"""
+
     def __init__(self, column, value, type_=str):
         super(SearchRule, self).__init__()
         self.column = column
@@ -109,21 +110,22 @@ class ColumnSearchRule(SearchRule):
 
 @lru_cache(maxsize=128)
 def rexcmp(expr):
-    return re.compile(expr,re.IGNORECASE)
+    return re.compile(expr, re.IGNORECASE)
 
 def regexp(expr, item):
     reg = rexcmp(expr)
     return reg.search(item) is not None
 
-def case_(string,lower):
-    if lower and hasattr(string,"lower"):
+def case_(string, lower):
+    if lower and hasattr(string, "lower"):
         return string.lower()
     return string
 
 class RegExpSearchRule(ColumnSearchRule):
     """matches a value using a regular expression"""
+
     def __init__(self, column, value, type_=str):
-        super(RegExpSearchRule,self).__init__(column, value, type_)
+        super(RegExpSearchRule, self).__init__(column, value, type_)
 
         # test that this regular expression can compile
         # note that column, value are StrPos and we can determine
@@ -132,17 +134,17 @@ class RegExpSearchRule(ColumnSearchRule):
             rexcmp(value)
         except re.error as e:
             if isPython3:
-                msg = "Regular Expression Error: %s at position %d in `%s`"%(e.msg,e.colno,value)
+                msg = "Regular Expression Error: %s at position %d in `%s`" % (e.msg, e.colno, value)
             else:
-                msg = "Regular Expression Error: %s"%(e)
+                msg = "Regular Expression Error: %s" % (e)
             raise ParseError(msg)
 
-    def check(self,elem, ignoreCase=True):
+    def check(self, elem, ignoreCase=True):
         # TODO: use ignoreCase...
-        return regexp(self.value,elem[self.column])
+        return regexp(self.value, elem[self.column])
 
     def __repr__(self):
-        return "<%s =~ \"%s\""%(self.column,self.fmtval(self.value))
+        return "<%s =~ \"%s\"" % (self.column, self.fmtval(self.value))
 
     def sql(self):
         # TODO: this may not work for postgres, operator may instead be `~`
@@ -151,107 +153,115 @@ class RegExpSearchRule(ColumnSearchRule):
 
 class PartialStringSearchRule(ColumnSearchRule):
     """matches if a value contains the given text"""
-    def check(self,elem, ignoreCase=True):
-        v1 = self.type_(case_(self.value,ignoreCase))
-        v2 = self.type_(case_(elem[self.column],ignoreCase))
+
+    def check(self, elem, ignoreCase=True):
+        v1 = self.type_(case_(self.value, ignoreCase))
+        v2 = self.type_(case_(elem[self.column], ignoreCase))
         return v1 in v2
 
     def __repr__(self):
-        return "<%s in `%s`>"%(self.fmtval(self.value), self.column)
+        return "<%s in `%s`>" % (self.fmtval(self.value), self.column)
 
     def sql(self):
-        return self.column.ilike("%%%s%%"%self.value)
+        return self.column.ilike("%%%s%%" % self.value)
 
 class InvertedPartialStringSearchRule(ColumnSearchRule):
     """does not match if a value contains the given text"""
-    def check(self,elem, ignoreCase=True):
-        v1 = self.type_(case_(self.value,ignoreCase))
-        v2 = self.type_(case_(elem[self.column],ignoreCase))
+
+    def check(self, elem, ignoreCase=True):
+        v1 = self.type_(case_(self.value, ignoreCase))
+        v2 = self.type_(case_(elem[self.column], ignoreCase))
         return v1 not in v2
 
     def __repr__(self):
-        return "<%s not in `%s`>"%(self.fmtval(self.value), self.column)
+        return "<%s not in `%s`>" % (self.fmtval(self.value), self.column)
 
     def sql(self):
-        return self.column.notilike("%%%s%%"%self.value)
+        return self.column.notilike("%%%s%%" % self.value)
 
 class ExactSearchRule(ColumnSearchRule):
     """matches if the a value is exactly equal to the given
 
     this works for text or integers
     """
-    def check(self,elem, ignoreCase=True):
-        v1 = self.type_(case_(self.value,ignoreCase))
-        v2 = self.type_(case_(elem[self.column],ignoreCase))
+
+    def check(self, elem, ignoreCase=True):
+        v1 = self.type_(case_(self.value, ignoreCase))
+        v2 = self.type_(case_(elem[self.column], ignoreCase))
         return v1 == v2
 
     def __repr__(self):
-        return "<%s == %s>"%(self.column, self.fmtval(self.value))
+        return "<%s == %s>" % (self.column, self.fmtval(self.value))
 
     def sql(self):
         return self.column.op("=")(self.value)
 
 class InvertedExactSearchRule(ColumnSearchRule):
     """matches as long as the value does not exactly equal the given"""
-    def check(self,elem, ignoreCase=True):
-        v1 = self.type_(case_(self.value,ignoreCase))
-        v2 = self.type_(case_(elem[self.column],ignoreCase))
+
+    def check(self, elem, ignoreCase=True):
+        v1 = self.type_(case_(self.value, ignoreCase))
+        v2 = self.type_(case_(elem[self.column], ignoreCase))
         return v1 != v2
 
     def __repr__(self):
-        return "<%s != %s>"%(self.column, self.fmtval(self.value))
+        return "<%s != %s>" % (self.column, self.fmtval(self.value))
 
     def sql(self):
         return self.column.op("!=")(self.value)
 
 class LessThanSearchRule(ColumnSearchRule):
     """matches as long as the value is less than the given number"""
-    def check(self,elem, ignoreCase=True):
-        v1 = self.type_(case_(self.value,ignoreCase))
-        v2 = self.type_(case_(elem[self.column],ignoreCase))
+
+    def check(self, elem, ignoreCase=True):
+        v1 = self.type_(case_(self.value, ignoreCase))
+        v2 = self.type_(case_(elem[self.column], ignoreCase))
         return v2 < v1
 
     def __repr__(self):
-        return "<%s < %s>"%(self.column, self.fmtval(self.value))
+        return "<%s < %s>" % (self.column, self.fmtval(self.value))
 
     def sql(self):
         return self.column.op("<")(self.value)
 
 class LessThanEqualSearchRule(ColumnSearchRule):
     """matches as long as the value is less than or equal to the given number"""
-    def check(self,elem, ignoreCase=True):
-        v1 = self.type_(case_(self.value,ignoreCase))
-        v2 = self.type_(case_(elem[self.column],ignoreCase))
+
+    def check(self, elem, ignoreCase=True):
+        v1 = self.type_(case_(self.value, ignoreCase))
+        v2 = self.type_(case_(elem[self.column], ignoreCase))
         return v2 <= v1
 
     def __repr__(self):
-        return "<%s <= %s>"%(self.column, self.fmtval(self.value))
+        return "<%s <= %s>" % (self.column, self.fmtval(self.value))
 
     def sql(self):
         return self.column.op("<=")(self.value)
 
 class GreaterThanSearchRule(ColumnSearchRule):
     """matches as long as the value is greater than the given number"""
-    def check(self,elem, ignoreCase=True):
-        v1 = self.type_(case_(self.value,ignoreCase))
-        v2 = self.type_(case_(elem[self.column],ignoreCase))
+
+    def check(self, elem, ignoreCase=True):
+        v1 = self.type_(case_(self.value, ignoreCase))
+        v2 = self.type_(case_(elem[self.column], ignoreCase))
         return v2 > v1
 
     def __repr__(self):
-        return "<%s > %s>"%(self.column, self.fmtval(self.value))
+        return "<%s > %s>" % (self.column, self.fmtval(self.value))
 
     def sql(self):
         return self.column.op(">")(self.value)
 
 class GreaterThanEqualSearchRule(ColumnSearchRule):
     """matches as long as the value is greater than or equal to the given number"""
-    def check(self,elem, ignoreCase=True):
-        v1 = self.type_(case_(self.value,ignoreCase))
-        v2 = self.type_(case_(elem[self.column],ignoreCase))
+
+    def check(self, elem, ignoreCase=True):
+        v1 = self.type_(case_(self.value, ignoreCase))
+        v2 = self.type_(case_(elem[self.column], ignoreCase))
         return v2 >= v1
 
     def __repr__(self):
-        return "<%s >= %s>"%(self.column, self.fmtval(self.value))
+        return "<%s >= %s>" % (self.column, self.fmtval(self.value))
 
     def sql(self):
         return self.column.op(">=")(self.value)
@@ -260,6 +270,7 @@ class RangeSearchRule(SearchRule):
     """matches if a value is within a rage of values
     sqlite3: values are inclusive on the range specified
     """
+
     def __init__(self, column, value_low, value_high, type_=str):
         super(RangeSearchRule, self).__init__()
         self.column = column
@@ -267,14 +278,14 @@ class RangeSearchRule(SearchRule):
         self.value_high = value_high
         self.type_ = type_
 
-    def check(self,elem, ignoreCase=True):
-        a = self.type_(case_(self.value_low,ignoreCase))
-        b = self.type_(case_(self.value_high,ignoreCase))
-        c = case_(elem[self.column],ignoreCase)
+    def check(self, elem, ignoreCase=True):
+        a = self.type_(case_(self.value_low, ignoreCase))
+        b = self.type_(case_(self.value_high, ignoreCase))
+        c = case_(elem[self.column], ignoreCase)
         return a <= c <= b
 
     def __repr__(self):
-        return "<%s >= %s && %s <= %s>"%(self.column,self.fmtval(self.value_low),self.column,self.fmtval(self.value_high))
+        return "<%s >= %s && %s <= %s>" % (self.column, self.fmtval(self.value_low), self.column, self.fmtval(self.value_high))
 
     def sql(self):
         return between(self.column, self.value_low, self.value_high)
@@ -284,26 +295,28 @@ class NotRangeSearchRule(RangeSearchRule):
     sqlite3: values are inclusive on the range specified
     """
 
-    def check(self,elem, ignoreCase=True):
-        a = self.type_(case_(self.value_low,ignoreCase))
-        b = self.type_(case_(self.value_high,ignoreCase))
-        c = case_(elem[self.column],ignoreCase)
+    def check(self, elem, ignoreCase=True):
+        a = self.type_(case_(self.value_low, ignoreCase))
+        b = self.type_(case_(self.value_high, ignoreCase))
+        c = case_(elem[self.column], ignoreCase)
         return c < a or c > b
 
     def __repr__(self):
-        return "<`%s` not in range (%s,%s)>"%(self.column,self.fmtval(self.value_low),self.fmtval(self.value_high))
+        return "<`%s` not in range (%s,%s)>" % (self.column, self.fmtval(self.value_low), self.fmtval(self.value_high))
 
     def sql(self):
         return ~between(self.column, self.value_low, self.value_high)
 
 class MetaSearchRule(SearchRule):
     """group one or more search rules"""
+
     def __init__(self, rules):
         super(MetaSearchRule, self).__init__()
         self.rules = rules
 
 class AndSearchRule(MetaSearchRule):
     """MetaSearchRule which checks that all rules return true"""
+
     def check(self, elem, ignoreCase=True):
         for rule in self.rules:
             if not rule.check(elem, ignoreCase):
@@ -313,25 +326,26 @@ class AndSearchRule(MetaSearchRule):
         return False
 
     def __repr__(self):
-        return "<" + ' && '.join(map(repr,self.rules)) + ">"
+        return "<" + ' && '.join(map(repr, self.rules)) + ">"
 
     def sql(self):
-        return and_(*[ rule.sql() for rule in self.rules ])
+        return and_(*[rule.sql() for rule in self.rules])
 
     @staticmethod
     def join(*rules):
         """
         return a composite of a set of rules
         """
-        rules = [ rule for rule in rules if not isinstance(rule,BlankSearchRule) ]
-        if len(rules)==0:
+        rules = [rule for rule in rules if not isinstance(rule, BlankSearchRule)]
+        if len(rules) == 0:
             return BlankSearchRule()
-        if len(rules)==1:
+        if len(rules) == 1:
             return rules[0]
         return AndSearchRule(rules)
 
 class OrSearchRule(MetaSearchRule):
     """MetaSearchRule which checks that at least one rule returns true"""
+
     def check(self, elem, ignoreCase=True):
         for rule in self.rules:
             if rule.check(elem, ignoreCase):
@@ -339,34 +353,35 @@ class OrSearchRule(MetaSearchRule):
         return False
 
     def __repr__(self):
-        return "[" + ' || '.join(map(repr,self.rules))  + "]"
+        return "[" + ' || '.join(map(repr, self.rules))  + "]"
 
     def sql(self):
-        return or_(*[ rule.sql() for rule in self.rules ])
+        return or_(*[rule.sql() for rule in self.rules])
 
     @staticmethod
     def join(*rules):
         """
         return a composite of a set of rules
         """
-        rules = [ rule for rule in rules if not isinstance(rule,BlankSearchRule) ]
-        if len(rules)==0:
+        rules = [rule for rule in rules if not isinstance(rule, BlankSearchRule)]
+        if len(rules) == 0:
             return BlankSearchRule()
-        if len(rules)==1:
+        if len(rules) == 1:
             return rules[0]
         return OrSearchRule(rules)
 
 class NotSearchRule(MetaSearchRule):
     """MetaSearchRule which checks that inverts result from rule"""
+
     def check(self, elem, ignoreCase=True):
-        assert len(self.rules)==1
+        assert len(self.rules) == 1
         assert self.rules[0] is not BlankSearchRule
         if self.rules[0].check(elem, ignoreCase):
             return False
         return True
 
     def __repr__(self):
-        assert len(self.rules)==1
+        assert len(self.rules) == 1
         assert self.rules[0] is not BlankSearchRule
         return "<!" + repr(self.rules[0]) + ">"
 
@@ -380,6 +395,7 @@ class MultiColumnSearchRule(SearchRule):
     this exists only to make debug statements easier to read
         when printing all_text rules
     """
+
     def __init__(self, rule, columns, value, colid="multi"):
         super(SearchRule, self).__init__()
         self.columns = columns
@@ -392,18 +408,18 @@ class MultiColumnSearchRule(SearchRule):
             meta = AndSearchRule
             self.operator = "!="
 
-        self.rule = meta([ rule(col,value) for col in columns ])
+        self.rule = meta([rule(col, value) for col in columns])
 
     def __repr__(self):
-        return "< %s %s %s >"%(self.colid,self.operator,self.fmtval(self.value))
+        return "< %s %s %s >" % (self.colid, self.operator, self.fmtval(self.value))
 
-    def check(self,elem, ignoreCase=True):
+    def check(self, elem, ignoreCase=True):
         return self.rule.check(elem, ignoreCase)
 
     def sql(self):
         return self.rule.sql()
 
-def naive_search( seq, rule, case_insensitive=True, orderby=None, reverse = False, limit=None, offset=0, echo=False):
+def naive_search(seq, rule, case_insensitive=True, orderby=None, reverse=False, limit=None, offset=0, echo=False):
     """ return elements from seq which match the given rule
 
     seq can be any iterable data structure containing table data
@@ -413,18 +429,18 @@ def naive_search( seq, rule, case_insensitive=True, orderby=None, reverse = Fals
 
     """
     # filter the sequence using the rule
-    out = [ elem for elem in seq if rule.check(elem) ]
+    out = [elem for elem in seq if rule.check(elem)]
 
     if orderby is not None:
-        if not isinstance(orderby,(tuple,list)):
-            orderby = [ orderby, ]
+        if not isinstance(orderby, (tuple, list)):
+            orderby = [orderby, ]
 
         for item in reversed(orderby):
-            if isinstance(item,str):
-                out = sorted(out,key=lambda s:s[item],reverse=False)
+            if isinstance(item, str):
+                out = sorted(out, key=lambda s: s[item], reverse=False)
             else:
-                key,mode = item
-                out = sorted(out,key=lambda s:s[key],reverse=mode=="DESC")
+                key, mode = item
+                out = sorted(out, key=lambda s: s[key], reverse=mode == "DESC")
 
     if offset:
         out = out[offset:]
@@ -442,23 +458,24 @@ class TokenizeError(ParseError):
 
 class RHSError(ParseError):
     def __init__(self, tok, value=""):
-        msg = "Invalid Expression on RHS of `%s` at position %d"%(tok,tok.pos)
+        msg = "Invalid Expression on RHS of `%s` at position %d" % (tok, tok.pos)
         if value:
-            msg += " : %s"%value
-        super(RHSError, self).__init__( msg )
+            msg += " : %s" % value
+        super(RHSError, self).__init__(msg)
 
 class LHSError(ParseError):
     def __init__(self, tok, value=""):
-        msg = "Invalid Expression on LHS of `%s` at position %d"%(tok,tok.pos)
+        msg = "Invalid Expression on LHS of `%s` at position %d" % (tok, tok.pos)
         if value:
-            msg += " : %s"%value
-        super(LHSError, self).__init__( msg )
+            msg += " : %s" % value
+        super(LHSError, self).__init__(msg)
 
 class FormatConversion(object):
     """
     FormatConversion handles conversion from string to another type.
     Using Object Composition simplifies computation out of SearchGrammar
     """
+
     def __init__(self, dtn=None):
 
         # locale date parsing, by default
@@ -474,7 +491,7 @@ class FormatConversion(object):
 
         self.datetime_now = dtn or datetime.now()
 
-    def formatDateDelta( self, sValue ):
+    def formatDateDelta(self, sValue):
         """
         parse strings of the form
             "12d" (12 days)
@@ -484,27 +501,27 @@ class FormatConversion(object):
         """
 
         negate = False
-        num=""
-        dy=dm=dd=0
+        num = ""
+        dy = dm = dd = 0
         for c in sValue:
             if c == "-":
                 negate = not negate
             elif c == "y":
                 dy = int(num)
-                num=""
+                num = ""
             elif c == "m":
                 dm = int(num)
-                num=""
+                num = ""
             elif c == "w":
-                dd += 7*int(num)
-                num=""
+                dd += 7 * int(num)
+                num = ""
             elif c == "d":
                 dd += int(num)
-                num=""
+                num = ""
             else:
                 num += c
         if num:
-            dd += int(num) # make 'd' optional, and capture remainder
+            dd += int(num)  # make 'd' optional, and capture remainder
 
         if negate:
             # invert the direction of the date delta (past or future)
@@ -513,11 +530,11 @@ class FormatConversion(object):
             dd *= -1
 
         dtn = self.datetime_now
-        dt1 = self.computeDateDelta(dtn.year,dtn.month,dtn.day,dy,dm,dd)
-        dt2 = dt1 + timedelta( 1 )
+        dt1 = self.computeDateDelta(dtn.year, dtn.month, dtn.day, dy, dm, dd)
+        dt2 = dt1 + timedelta(1)
         return calendar.timegm(dt1.timetuple()), calendar.timegm(dt2.timetuple())
 
-    def computeDateDelta(self,y,m,d,dy,dm,dd=0):
+    def computeDateDelta(self, y, m, d, dy, dm, dd=0):
         """
             given (y,m,d) a valid date, add dy years, dm months, dd days.
 
@@ -528,37 +545,37 @@ class FormatConversion(object):
         if dm != 0:
             # add/sub 1 to convert range 1..12 to 0..11 for math reasons
             t = (m - 1 - dm)
-            y = y + t//12
-            m = t%12 + 1
+            y = y + t // 12
+            m = t % 12 + 1
 
         # modulo fix the day by rolling up, feb 29 to march 1
         # or july 32 to aug 1st, if needed
-        days = calendar.monthrange(y,m)[1]
-        if d>days:
+        days = calendar.monthrange(y, m)[1]
+        if d > days:
             d -= days
             m += 1
         # fix the year by rounding months that are out of bounds
         if m > 12:
-            m -= 12;
+            m -= 12
             y += 1
 
-        new_date = datetime(y,m,d)
-        if dd!=0:
-            new_date = new_date - timedelta( dd )
+        new_date = datetime(y, m, d)
+        if dd != 0:
+            new_date = new_date - timedelta(dd)
 
         return new_date
 
-    def adjustYear(self,y):
+    def adjustYear(self, y):
         """ convert an integer year into a 4-digit year
         guesses the century using the magnitude of small numbers
         """
-        if 50 < y < 100 :
+        if 50 < y < 100:
             y += 1900
         if y < 50:
             y += 2000
-        return y;
+        return y
 
-    def formatDate( self, sValue ):
+    def formatDate(self, sValue):
         """
         accepts strings of the following form:
             [YY]YY/
@@ -569,52 +586,52 @@ class FormatConversion(object):
         is parsed elsware as a day-delta
         """
         x = sValue.split('/')
-        x = [ y for y in x if y ] # remove empty sections
+        x = [y for y in x if y]  # remove empty sections
 
         if len(x) == 1:
             # return a range covering the whole year
             y = int(x[0])
             y = self.adjustYear(y)
             if y < 1900:
-                raise ParseError("Invalid Year `%s` at position %s."%(sValue,sValue.pos))
-            dt1 = datetime(y,1,1)
-            dt2 = self.computeDateDelta(y,1,1,-1,0)
+                raise ParseError("Invalid Year `%s` at position %s." % (sValue, sValue.pos))
+            dt1 = datetime(y, 1, 1)
+            dt2 = self.computeDateDelta(y, 1, 1, -1, 0)
         elif len(x) == 2:
             # return a range covering the whole month
             y = int(x[self.DATE_LOCALE_FMT_Y_2])
             m = int(x[self.DATE_LOCALE_FMT_M_2])
             y = self.adjustYear(y)
             if y < 1900:
-                raise ParseError("Invalid Year `%s` at position %s."%(sValue,sValue.pos))
-            dt1 = datetime(y,m,1)
-            dt2 = self.computeDateDelta(y,m,1,0,-1)
+                raise ParseError("Invalid Year `%s` at position %s." % (sValue, sValue.pos))
+            dt1 = datetime(y, m, 1)
+            dt2 = self.computeDateDelta(y, m, 1, 0, -1)
         else:
             # return a range covering the given day
             y = int(x[self.DATE_LOCALE_FMT_Y])
             m = int(x[self.DATE_LOCALE_FMT_M])
             d = int(x[self.DATE_LOCALE_FMT_D])
             y = self.adjustYear(y)
-            dt1 = datetime(y,m,d)
-            dt2 = dt1 + timedelta( 1 )
+            dt1 = datetime(y, m, d)
+            dt2 = dt1 + timedelta(1)
 
         result = calendar.timegm(dt1.timetuple()), calendar.timegm(dt2.timetuple())
         return result
 
-    def parseDuration( self, sValue ):
+    def parseDuration(self, sValue):
         # input as "123" or "3:21"
         # convert hours:minutes:seconds to seconds
-        m=1
+        m = 1
         t = 0
         try:
             for x in reversed(sValue.split(":")):
                 if x:
-                    t += int(x)*m
+                    t += int(x) * m
                 m *= 60
         except ValueError:
-            raise ParseError("Duration `%s` at position %d not well formed."%(sValue,sValue.pos))
+            raise ParseError("Duration `%s` at position %d not well formed." % (sValue, sValue.pos))
         return t
 
-    def parseYear( self, sValue ):
+    def parseYear(self, sValue):
         """ parse a string as a year
 
             90 => 1990
@@ -624,20 +641,19 @@ class FormatConversion(object):
         try:
             y = self.adjustYear(int(sValue))
         except ValueError:
-            raise ParseError("Year `%s` at position %d not well formed."%(sValue,sValue.pos))
+            raise ParseError("Year `%s` at position %d not well formed." % (sValue, sValue.pos))
         return y
 
-    def parseNLPDate( self, value ):
-
+    def parseNLPDate(self, value):
 
         #dt = NLPDateRange(self.datetime_now).parse( value )
-        #if dt:
+        # if dt:
         #    cf = calendar.timegm(dt[0].utctimetuple())
         #    if cf < 0:
         #        cf = 0
         #    rf = calendar.timegm(dt[1].utctimetuple())
         #    return cf,rf
-        #return None
+        # return None
         raise ParseError("unexpected natural language date")
 
 class Grammar(object):
@@ -689,17 +705,18 @@ class Grammar(object):
 
     class TokenState(object):
         """ state variables for tokenizer """
+
         def __init__(self):
             self.tokens = []
-            self.stack = [ self.tokens ]
+            self.stack = [self.tokens]
 
-            self.start = 0;
+            self.start = 0
             self.tok = ""
 
             self.quoted = False
-            self.join_special = False # join 'special' characters
+            self.join_special = False  # join 'special' characters
 
-        def append(self,idx, new_start, force=False):
+        def append(self, idx, new_start, force=False):
             """ append a token to the top of the stack
                 clear all special states
             """
@@ -708,13 +725,13 @@ class Grammar(object):
                 if self.join_special:
                     kind = "special"
 
-                self.stack[-1].append(StrPos(self.tok,self.start,idx,kind))
+                self.stack[-1].append(StrPos(self.tok, self.start, idx, kind))
 
             self.join_special = False
             self.quoted = False
 
             self.tok = ""
-            self.start=new_start
+            self.start = new_start
 
         def push(self):
             new_level = []
@@ -740,38 +757,38 @@ class Grammar(object):
         # and "not string". add text columns to text_fields. a column
         # not found in a field listed below is assumed to be an integer
         # there is no support for float at the momeny. (would be easy to add)
-        self.text_fields = set();
-        self.date_fields = set(); # column represents a date in seconds since jan 1st 1970
-        self.time_fields = set(); # column represents a duration, in seconds
-        self.year_fields = set(); # integer that represents a year
+        self.text_fields = set()
+        self.date_fields = set()  # column represents a date in seconds since jan 1st 1970
+        self.time_fields = set()  # column represents a duration, in seconds
+        self.year_fields = set()  # integer that represents a year
         self.number_fields = set()
 
-        self.compile_operators();
+        self.compile_operators()
 
         self.autoset_datetime = True
-        self.fc = FormatConversion( );
+        self.fc = FormatConversion()
 
     # public
 
-    def ruleFromString( self, string ):
+    def ruleFromString(self, string):
         """ return a rule AST from a given input string """
         if self.autoset_datetime:
-            self.fc.datetime_now =  datetime.now()
+            self.fc.datetime_now = datetime.now()
 
         # reset meta options
         self.meta_options = dict()
 
         if not string.strip():
             return BlankSearchRule()
-        tokens = self.tokenizeString( string )
-        rule = self.parseTokens( tokens );
+        tokens = self.tokenizeString(string)
+        rule = self.parseTokens(tokens)
         if self.getMetaValue(Grammar.META_DEBUG) == 1:
-            sys.stdout.write("%r\n"%(rule))
+            sys.stdout.write("%r\n" % (rule))
         elif self.getMetaValue(Grammar.META_DEBUG) == 2:
-            sys.stdout.write("%s\n"%(rule.sqlstr()))
-        return rule;
+            sys.stdout.write("%s\n" % (rule.sqlstr()))
+        return rule
 
-    def translateColumn(self,colid):
+    def translateColumn(self, colid):
         """ convert a column name, as input by the user to the internal name
 
             overload this function to provide shortcuts for different columns
@@ -784,19 +801,19 @@ class Grammar(object):
            colid not in self.year_fields and \
            colid not in self.number_fields and \
            colid != self.all_text:
-            raise ParseError("Invalid column name `%s` at position %d"%(colid,colid.pos))
+            raise ParseError("Invalid column name `%s` at position %d" % (colid, colid.pos))
         return colid
 
     def getColumnType(self, key):
         return key
 
-    def getMetaValue(self,colid,default=None):
+    def getMetaValue(self, colid, default=None):
         """ returns parsed value of a meta option, or default """
-        return self.meta_options.get(colid,default)
+        return self.meta_options.get(colid, default)
 
     # private
 
-    def tokenizeString(self, input ):
+    def tokenizeString(self, input):
         """
         split a string into tokens
         Supports nesting of parenthesis and quoted regions
@@ -806,10 +823,10 @@ class Grammar(object):
             "x && (y || z)" becomes ["x", "&&", ["y", "||", "Z"]]
 
         """
-        idx = 0;
-        state = Grammar.TokenState();
+        idx = 0
+        state = Grammar.TokenState()
 
-        while idx < len( input ) and len(state.stack)>0:
+        while idx < len(input) and len(state.stack) > 0:
             c = input[idx]
 
             if c == self.tok_escape:
@@ -819,55 +836,55 @@ class Grammar(object):
                 # first check that we are quoted here
                 # then look at the next character to decide
                 # mode (e.g. \\ -> \, \a -> bell \x00 -> 0x00, etc)
-                idx+=1
+                idx += 1
                 if idx >= len(input):
-                    raise TokenizeError("Escape sequence expected character at position %d"%idx)
+                    raise TokenizeError("Escape sequence expected character at position %d" % idx)
                 state.tok += input[idx]
 
             elif not state.quoted:
                 if c == self.tok_quote:
-                    state.append(idx,idx+1)
+                    state.append(idx, idx + 1)
                     state.quoted = True
                 elif c == self.tok_nest_begin:
-                    state.append(idx,idx+1)
+                    state.append(idx, idx + 1)
                     state.push()
                 elif c == self.tok_nest_end:
-                    state.append(idx,idx+1)
+                    state.append(idx, idx + 1)
                     state.pop()
                 elif c in self.tok_whitespace:
-                    state.append(idx,idx+1)
+                    state.append(idx, idx + 1)
                 else:
                     s = c in self.tok_special
                     if s != state.join_special:
-                        state.append(idx,idx)
+                        state.append(idx, idx)
                     state.join_special = s
                     state.tok += c
-            else: # is quoted
+            else:  # is quoted
                 if c == self.tok_quote:
-                    state.append(idx,idx+1,True)
+                    state.append(idx, idx + 1, True)
                 else:
                     state.tok += c
             idx += 1
 
-        state.check() # check the state machine for errors
-        state.append(idx,idx) # collect anything left over
+        state.check()  # check the state machine for errors
+        state.append(idx, idx)  # collect anything left over
 
         return state.tokens
 
-    def parseTokens( self, tokens, top=True ):
+    def parseTokens(self, tokens, top=True):
         """transforms the input tokens into an AST of SearchRules.
         """
-        i=0
+        i = 0
         while i < len(tokens):
             tok = tokens[i]
-            hasl = i>0
-            hasr = i<len(tokens)-1
+            hasl = i > 0
+            hasr = i < len(tokens) - 1
 
-            if isinstance(tok,list):
+            if isinstance(tok, list):
                 # recursively process nested levels
                 tokens[i] = self.parseTokens(tok, top=False)
                 # completely remove useless rules
-                if isinstance(tokens[i],BlankSearchRule):
+                if isinstance(tokens[i], BlankSearchRule):
                     tokens.pop(i)
                     continue
             elif tok.startswith(self.sigil):
@@ -876,11 +893,11 @@ class Grammar(object):
                 # intentionally ignores negate for legacy reasons
                 s = i
                 while i < len(tokens) and \
-                    not isinstance(tokens[i],list) and \
-                    tokens[i] not in self.operators_flow:
-                    i += 1;
+                        not isinstance(tokens[i], list) and \
+                        tokens[i] not in self.operators_flow:
+                    i += 1
                 toks = tokens[:s]
-                toks.append( self.parseTokensOldStyle( tokens[s:i] )  )
+                toks.append(self.parseTokensOldStyle(tokens[s:i]))
                 toks += tokens[i:]
                 tokens = toks
                 i = s + 1
@@ -888,170 +905,170 @@ class Grammar(object):
             elif tok in self.operators:
                 if not hasr:
                     raise RHSError(tok, "expected value [V01]")
-                r = tokens.pop(i+1)
-                if not isinstance(r,(str,unicode)):
+                r = tokens.pop(i + 1)
+                if not isinstance(r, (str, unicode)):
                     raise RHSError(tok, "expected string [S01]")
                 if r.kind == "special":
-                    raise RHSError(tok, "unexpected operator `%s` [U01]"%r)
+                    raise RHSError(tok, "unexpected operator `%s` [U01]" % r)
                 # left side is optional, defaults to all text
                 if not hasl or \
-                    (not isinstance(tokens[i-1],(str,unicode)) or tokens[i-1] in self.operators_flow):
+                        (not isinstance(tokens[i - 1], (str, unicode)) or tokens[i - 1] in self.operators_flow):
                     # no left side, or left side has been processed and is not a column label
-                    tokens[i] = self.buildRule(self.all_text,self.operators[tok],r)
+                    tokens[i] = self.buildRule(self.all_text, self.operators[tok], r)
                 else:
                     # left side token exists
-                    i-=1
+                    i -= 1
                     l = tokens.pop(i)
                     if l in self.meta_columns:
                         # and remove the column name
-                        tokens.pop(i) # remove the operator
-                        self.addMeta(l,tok,r,top)
+                        tokens.pop(i)  # remove the operator
+                        self.addMeta(l, tok, r, top)
                         continue
                     else:
                         # overwrite the operator with a rule
-                        tokens[i] = self.buildRule(l,self.operators[tok],r)
+                        tokens[i] = self.buildRule(l, self.operators[tok], r)
             elif tok in self.special:
                 if not hasr:
                     raise RHSError(tok, "expected value [V02]")
                 if not hasl:
                     raise LHSError(tok, "expected value [V03]")
-                r = tokens.pop(i+1)
-                if not isinstance(r,(str,unicode)):
+                r = tokens.pop(i + 1)
+                if not isinstance(r, (str, unicode)):
                     raise RHSError(tok, "expected string [S02]")
                 if r.kind == "special":
-                    raise RHSError(tok, "unexpected operator `%s` [U02]"%r)
-                i-=1
+                    raise RHSError(tok, "unexpected operator `%s` [U02]" % r)
+                i -= 1
                 l = tokens.pop(i)
-                if not isinstance(l,(str,unicode)):
+                if not isinstance(l, (str, unicode)):
                     raise LHSError(tok, "expected string [S03]")
                 if l in self.meta_columns:
                     # and remove the column name
-                    tokens.pop(i) # remove token
-                    self.parserMeta(l,tok,r,top)
+                    tokens.pop(i)  # remove token
+                    self.parserMeta(l, tok, r, top)
                     continue
-                tokens[i] = self.buildRule(l,self.special[tok],r)
+                tokens[i] = self.buildRule(l, self.special[tok], r)
 
             elif tok not in self.operators_flow and tok.kind == "special":
                 # check for malformed operators
-                raise ParseError("Unknown operator `%s` at position %d"%(tok,tok.pos))
+                raise ParseError("Unknown operator `%s` at position %d" % (tok, tok.pos))
             i += 1
 
         # collect any old style tokens, which did not use a sigil
-        self.parseTokensOldStyle( tokens )
+        self.parseTokensOldStyle(tokens)
 
         # conditionally process logical operators if defined by the grammar
-        optok = self.operators_flow_invert.get(NotSearchRule,None)
+        optok = self.operators_flow_invert.get(NotSearchRule, None)
         if optok is not None:
-            self.processLogicalNot(tokens,optok)
+            self.processLogicalNot(tokens, optok)
 
-        optok = self.operators_flow_invert.get(AndSearchRule,None)
+        optok = self.operators_flow_invert.get(AndSearchRule, None)
         if optok is not None:
-            self.processLogical(tokens,optok)
+            self.processLogical(tokens, optok)
 
-        optok = self.operators_flow_invert.get(OrSearchRule,None)
+        optok = self.operators_flow_invert.get(OrSearchRule, None)
         if optok is not None:
-            self.processLogical(tokens,optok)
+            self.processLogical(tokens, optok)
 
         if len(tokens) == 0:
             return BlankSearchRule()
 
         elif len(tokens) == 1:
-            if isinstance(tokens[0],(str,unicode)):
+            if isinstance(tokens[0], (str, unicode)):
                 # there should be no strings at this point
                 raise ParseError("unexpected error")
             return tokens[0]
 
-        return self.operators_flow_join( tokens )
+        return self.operators_flow_join(tokens)
 
-    def processLogical(self,tokens,operator):
+    def processLogical(self, tokens, operator):
         """ left to right """
-        i=0
+        i = 0
         while i < len(tokens):
             tok = tokens[i]
             if isinstance(tok, StrPos) and tok == operator:
-                hasl = i>0
-                hasr = i<len(tokens)-1
+                hasl = i > 0
+                hasr = i < len(tokens) - 1
                 if not hasr:
                     raise RHSError(tok, "expected value [V05]")
                 if not hasl:
                     raise LHSError(tok, "expected value [V06]")
-                r = tokens.pop(i+1)
+                r = tokens.pop(i + 1)
                 if isinstance(r, StrPos) and r in self.operators_flow:
-                    raise RHSError(tok, "unexpected operator `%s` [U03]"%r)
-                i-=1
+                    raise RHSError(tok, "unexpected operator `%s` [U03]" % r)
+                i -= 1
                 l = tokens.pop(i)
-                tokens[i] = self.operators_flow[tok]([l,r])
-            i+=1
+                tokens[i] = self.operators_flow[tok]([l, r])
+            i += 1
 
-    def processLogicalNot(self,tokens,operator):
+    def processLogicalNot(self, tokens, operator):
         """ right to left """
-        i=len(tokens)-1
+        i = len(tokens) - 1
         while i >= 0:
             tok = tokens[i]
-            if isinstance(tok, (str, unicode)) and tok ==  operator:
-                hasl = i>0
-                hasr = i<len(tokens)-1
+            if isinstance(tok, (str, unicode)) and tok == operator:
+                hasl = i > 0
+                hasr = i < len(tokens) - 1
                 if not hasr:
                     raise RHSError(tok, "expected value [V04]")
-                r = tokens.pop(i+1)
+                r = tokens.pop(i + 1)
                 if isinstance(r, (str, unicode)) and r in self.operators_flow:
-                    raise RHSError(tok, "unexpected operator `%s` [U03]"%r)
-                tokens[i] = NotSearchRule([r,]);
-            i-=1
+                    raise RHSError(tok, "unexpected operator `%s` [U03]" % r)
+                tokens[i] = NotSearchRule([r, ])
+            i -= 1
 
-    def parseTokensOldStyle( self, tokens ):
+    def parseTokensOldStyle(self, tokens):
 
         current_col = self.all_text
         current_opr = PartialStringSearchRule
 
-        i=0
+        i = 0
         while i < len(tokens):
             tok = tokens[i]
 
-            if isinstance(tokens[i],(str,unicode)):
+            if isinstance(tokens[i], (str, unicode)):
                 if tok.startswith(self.sigil):
-                    current_col = StrPos(tok[1:],tok.pos+1,tok.end,tok.kind)
+                    current_col = StrPos(tok[1:], tok.pos + 1, tok.end, tok.kind)
                     tokens.pop(i)
                     continue
                 elif tok not in self.operators_flow:
-                    tokens[i] = self.buildRule(current_col,current_opr,tok)
-            i+=1
+                    tokens[i] = self.buildRule(current_col, current_opr, tok)
+            i += 1
 
         # return the single rule of a meta rule of all rules
         if len(tokens) == 1:
             return tokens[0]
-        return self.operators_flow_join( tokens )
+        return self.operators_flow_join(tokens)
 
     def addMeta(self, colid, tok, value, top):
         """ meta options control sql parameters of the query
         They are independant of any database.
         """
         if not top:
-            raise ParseError("Option `%s` at position %d can only be provided at the top level."%(colid,colid.pos))
+            raise ParseError("Option `%s` at position %d can only be provided at the top level." % (colid, colid.pos))
 
         if colid in self.meta_options:
-            raise ParseError("Option `%s` at position %d can not be provided twice"%(colid,colid.pos))
+            raise ParseError("Option `%s` at position %d can not be provided twice" % (colid, colid.pos))
 
         if tok not in self.operators:
-            raise ParseError("Operator `%s` at position %d not valid in this context"%(tok,tok.pos))
+            raise ParseError("Operator `%s` at position %d not valid in this context" % (tok, tok.pos))
 
         rule = self.operators[tok]
 
         if colid == Grammar.META_DEBUG:
             self.meta_options[colid] = int(value)
-        elif colid in (Grammar.META_LIMIT,Grammar.META_OFFSET):
+        elif colid in (Grammar.META_LIMIT, Grammar.META_OFFSET):
 
             if rule in (PartialStringSearchRule, ExactSearchRule):
                 self.meta_options[colid] = int(value)
             else:
-                raise ParseError("Illegal operation `%s` at position %d for option `%s`"%(tok,tok.pos,colid))
+                raise ParseError("Illegal operation `%s` at position %d for option `%s`" % (tok, tok.pos, colid))
 
     # protected
 
     def compile_operators(self):
         raise NotImplementedError()
 
-    def buildRule(self, colid, rule ,value):
+    def buildRule(self, colid, rule, value):
         raise NotImplementedError()
 
 class SearchGrammar(Grammar):
@@ -1080,40 +1097,40 @@ class SearchGrammar(Grammar):
 
         # does not require left token
         self.operators = {
-            "=" :PartialStringSearchRule,
-            "~" :PartialStringSearchRule,
-            "==":ExactSearchRule,
-            "=~":RegExpSearchRule,
-            "!=":InvertedPartialStringSearchRule,
-            "!==":InvertedExactSearchRule,
+            "=": PartialStringSearchRule,
+            "~": PartialStringSearchRule,
+            "==": ExactSearchRule,
+            "=~": RegExpSearchRule,
+            "!=": InvertedPartialStringSearchRule,
+            "!==": InvertedExactSearchRule,
         }
 
         self.operators_invert = {
-            InvertedPartialStringSearchRule :PartialStringSearchRule,
-            InvertedExactSearchRule:ExactSearchRule,
-            PartialStringSearchRule:InvertedPartialStringSearchRule,
-            ExactSearchRule:InvertedExactSearchRule,
+            InvertedPartialStringSearchRule: PartialStringSearchRule,
+            InvertedExactSearchRule: ExactSearchRule,
+            PartialStringSearchRule: InvertedPartialStringSearchRule,
+            ExactSearchRule: InvertedExactSearchRule,
         }
 
         # require left/right token
         self.special = {
-            "<"  : LessThanSearchRule,
-            ">"  : GreaterThanSearchRule,
-            "<=" : LessThanEqualSearchRule,
-            ">=" : GreaterThanEqualSearchRule,
+            "<": LessThanSearchRule,
+            ">": GreaterThanSearchRule,
+            "<=": LessThanEqualSearchRule,
+            ">=": GreaterThanEqualSearchRule,
         }
 
         self.special_invert = {
-            GreaterThanSearchRule      : LessThanSearchRule,
-            LessThanSearchRule         : GreaterThanSearchRule,
-            GreaterThanEqualSearchRule : LessThanEqualSearchRule,
-            LessThanEqualSearchRule    : GreaterThanEqualSearchRule,
+            GreaterThanSearchRule: LessThanSearchRule,
+            LessThanSearchRule: GreaterThanSearchRule,
+            GreaterThanEqualSearchRule: LessThanEqualSearchRule,
+            LessThanEqualSearchRule: GreaterThanEqualSearchRule,
         }
 
         # meta optins can be used to control the query results
         # by default, limit could be used to limit the number of results
 
-        self.meta_columns = set([Grammar.META_LIMIT,Grammar.META_OFFSET,Grammar.META_DEBUG])
+        self.meta_columns = set([Grammar.META_LIMIT, Grammar.META_OFFSET, Grammar.META_DEBUG])
         self.meta_options = dict()
 
         self.old_style_operators = self.operators.copy()
@@ -1123,45 +1140,45 @@ class SearchGrammar(Grammar):
         self.old_style_operators_invert.update(self.special_invert)
 
         self.operators_flow = {
-            "&&" : AndSearchRule,
-            "||" : OrSearchRule,
-            "!"  : NotSearchRule,
+            "&&": AndSearchRule,
+            "||": OrSearchRule,
+            "!": NotSearchRule,
         }
 
-        self.operators_flow_invert = { v:k for k,v in self.operators_flow.items() }
+        self.operators_flow_invert = {v: k for k, v in self.operators_flow.items()}
 
         self.operators_flow_join = AndSearchRule
 
-    def buildRule(self, colid, rule ,value):
+    def buildRule(self, colid, rule, value):
         """
         this must be expanded to support new data formats.
         """
-        col = self.translateColumn( colid )
+        col = self.translateColumn(colid)
 
         if col == self.all_text:
             return self.allTextRule(rule, value)
         elif col in self.text_fields:
-            return rule(self.getColumnType( col ), value )
+            return rule(self.getColumnType(col), value)
         elif col in self.date_fields:
-            return self.buildDateRule(self.getColumnType( col ), rule, value)
+            return self.buildDateRule(self.getColumnType(col), rule, value)
         # numeric field
         # partial rules don't make sense, convert to exact rules
         if col in self.time_fields:
-            value = self.fc.parseDuration( value )
+            value = self.fc.parseDuration(value)
 
         if col in self.year_fields:
-            value = self.fc.parseYear( value )
+            value = self.fc.parseYear(value)
 
         type_ = str
         if col not in self.text_fields:
             type_ = int
         if rule is PartialStringSearchRule:
-            return ExactSearchRule(self.getColumnType( col ), value, type_=type_)
+            return ExactSearchRule(self.getColumnType(col), value, type_=type_)
         if rule is InvertedPartialStringSearchRule:
-            return InvertedExactSearchRule(self.getColumnType( col ), value, type_=type_)
-        return rule(self.getColumnType( col ), value, type_=type_)
+            return InvertedExactSearchRule(self.getColumnType(col), value, type_=type_)
+        return rule(self.getColumnType(col), value, type_=type_)
 
-    def buildDateRule( self, col, rule, value):
+    def buildDateRule(self, col, rule, value):
         """
         There are two date fields, 'last_played' and 'date_added'
 
@@ -1184,26 +1201,26 @@ class SearchGrammar(Grammar):
             if c > 0:
                 # if there are any slashes assume the user wants to
                 # parse the string as some form of YYYY/MM/DD
-                epochtime,epochtime2 = self.fc.formatDate( value )
+                epochtime, epochtime2 = self.fc.formatDate(value)
             elif c > 2:
                 # the user gave two many separators for the date to make sense
                 # TODO: create a special format for YY/MM/DD since that it can
                 # be modified for other orders
-                raise ParseError("Invalid Date format `%s` at position %d. Expected YY/MM/DD."%(value,value.pos))
+                raise ParseError("Invalid Date format `%s` at position %d. Expected YY/MM/DD." % (value, value.pos))
             else:
                 # parse the bare integer as a day-delta
-                epochtime,epochtime2 = self.fc.formatDateDelta( value )
+                epochtime, epochtime2 = self.fc.formatDateDelta(value)
                 invert = True
         except ValueError as e:
             # something went wrong trying to parse the date, try parsing
             # it as a natural string instead
-            result = self.fc.parseNLPDate( value )
+            result = self.fc.parseNLPDate(value)
 
             if result is None:
                 # failed to convert istr -> int
-                raise ParseError("Expected Integer or Date, found `%s` at position %d"%(value,value.pos))
+                raise ParseError("Expected Integer or Date, found `%s` at position %d" % (value, value.pos))
 
-            epochtime,epochtime2 = result
+            epochtime, epochtime2 = result
 
         # flip the context of '<' and '>'
         # for dates, '<' means closer to present day
@@ -1227,11 +1244,11 @@ class SearchGrammar(Grammar):
         # if invert is true, use less than equal
         # if invert is false, use greater than equal (i believe this is needed)
         if invert and rule is LessThanEqualSearchRule:
-            return rule( col, IntDate(epochtime2), type_=int)
+            return rule(col, IntDate(epochtime2), type_=int)
 
-        return rule( col, IntDate(epochtime), type_=int)
+        return rule(col, IntDate(epochtime), type_=int)
 
-    def allTextRule(self, rule, string ):
+    def allTextRule(self, rule, string):
         """
         returns a rule that will return true if
         any text field matches the given string

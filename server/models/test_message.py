@@ -5,7 +5,7 @@ class TestMessage(db.Model):
     text = db.Column(db.String(), unique=False)
 
     def __init__(self, text):
-        super(TestMessage, self).__init__();
+        super(TestMessage, self).__init__()
         self.text = text
 
     @staticmethod
@@ -16,4 +16,4 @@ class TestMessage(db.Model):
         return []
 
     def as_dict(self):
-       return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
