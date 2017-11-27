@@ -2,8 +2,12 @@ import time
 import os
 import sys
 from datetime import datetime
-
 from collections import OrderedDict
+import json
+from sqlalchemy.types import Integer, String, TypeDecorator
+from sqlalchemy.dialects.postgresql import ARRAY
+
+from sqlalchemy.dialects.sqlite.pysqlite import SQLiteDialect_pysqlite
 
 try:
     from functools import lru_cache
@@ -104,3 +108,36 @@ def string_quote(string):
 
 def stripIllegalChars(x):
     return ''.join([c for c in x if c not in "<>:\"/\\|?*"])
+
+class StringArrayType(TypeDecorator):
+    """
+    String Array for SQite and PostreSQL
+        http://docs.sqlalchemy.org/en/latest/core/custom_types.html#sqlalchemy.types.TypeDecorator
+    """
+
+    impl = String
+
+    # found sql bug related to this function
+    # def load_dialect_impl(self, dialect):
+    #    # dialect.name -> 'sqlite'
+    #    # dialect.dialect_description -> 'sqlite+pysqlite'
+    #    # dialect.encoding -> 'utf-8'
+    #    # dialect.driver -> 'pysqlite'
+    #    # if dialect.name == "sqlite":
+    #    if dialect.name == 'postgresql':
+    #        return ARRAY(String)
+    #    else:
+    #        return String
+
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            value = json.dumps(value)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            value = json.loads(value)
+        return value
+
+    def copy(self):
+        return StringArrayType(self.impl.length)
