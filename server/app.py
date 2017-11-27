@@ -15,6 +15,7 @@ from .models.queue import SongQueue
 from .endpoints import user
 from .endpoints import test
 from .endpoints import library
+from .endpoints import queue
 
 # serve the bundle
 @app.route('/', methods=['GET'])
