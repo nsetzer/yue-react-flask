@@ -1,11 +1,35 @@
 from ..index import db, bcrypt
 from sqlalchemy.orm import relationship
 
+from sqlalchemy.schema import Table, Column, ForeignKey
+from sqlalchemy.types import Integer, String
+
+def DomainTable(metadata):
+    return Table('domain2', metadata,
+        Column('id', Integer, primary_key=True),
+        Column('name', String),
+    )
+
+def RoleTable(metadata):
+    return Table('role2', metadata,
+        Column('id', Integer, primary_key=True),
+        Column('name', String),
+    )
+
+def UserTable(metadata):
+    return Table('user2', metadata,
+        Column('id', Integer, primary_key=True),
+        Column('email', String),
+        Column('password', String),
+        Column('domain_id', String, db.ForeignKey("domain.id")),
+        Column('role_id', String, db.ForeignKey("role.id"))
+    )
+
 class Domain(db.Model):
     id = db.Column(db.Integer(), primary_key=True)
     name = db.Column(db.String(), unique=True)
 
-    song_data = db.relationship("User")
+    user_data = db.relationship("User")
     song_data = db.relationship("SongData")
 
     def __init__(self, name):

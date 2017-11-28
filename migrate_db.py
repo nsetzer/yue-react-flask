@@ -1,6 +1,9 @@
 
 import os, sys
 
+if (sys.version_info[0] == 2):
+    raise RuntimeError("python2 not supported")
+
 from yue.core.sqlstore import SQLStore
 from yue.core.library import Library as YueLibrary
 from yue.core.song import Song as YueSong
