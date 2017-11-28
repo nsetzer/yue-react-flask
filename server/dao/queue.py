@@ -11,12 +11,15 @@ from ..index import db
 class SongQueue(object):
     """docstring for Queue"""
 
-    def __init__(self, user_id, domain_id):
+    def __init__(self, dbtables, user_id, domain_id):
         super(SongQueue, self).__init__()
         self.user_id = user_id
         self.domain_id = domain_id
+        self.dbtables = dbtables
 
     def set(self, songs):
+
+        SongQueueTable = self.dbtables.SongQueueTable
 
         # create the queue if it does not exist
         query = SongQueueTable.select() \
@@ -34,6 +37,8 @@ class SongQueue(object):
         db.session.execute(query)
 
     def get(self):
+
+        SongQueueTable = self.dbtables.SongQueueTable
 
         query = SongQueueTable.select() \
             .where(SongQueueTable.c.user_id == self.user_id)
@@ -70,6 +75,8 @@ class SongQueue(object):
 
     def head(self):
 
+        SongQueueTable = self.dbtables.SongQueueTable
+
         query = SongQueueTable.select() \
             .where(SongQueueTable.c.user_id == self.user_id)
         result = db.session.execute(query).fetchone()
@@ -99,6 +106,9 @@ class SongQueue(object):
         return {k: (v or d) for k, v, d in zip(columns, res, defaults)}
 
     def rest(self):
+
+        SongQueueTable = self.dbtables.SongQueueTable
+
         # session.query(SongData).filter(SongData.id.in_(seq)).all()
         query = SongQueueTable.select() \
             .where(SongQueueTable.c.user_id == self.user_id)

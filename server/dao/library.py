@@ -216,7 +216,6 @@ class Library(object):
         super(Library, self).__init__()
         self.user_id = user_id
         self.domain_id = domain_id
-
         self.grammar = SongSearchGrammar()
 
     def query(self):
