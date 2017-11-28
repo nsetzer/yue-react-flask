@@ -4,7 +4,7 @@ from flask_cors import cross_origin
 from sqlalchemy.exc import IntegrityError
 
 from ..index import app, db
-from ..models.message import TestMessage
+from ..dao.message import Message
 
 import random
 
@@ -39,34 +39,20 @@ def create_message():
         print(incoming)
         return jsonify(message="malformed request"), 400
 
-    msg = TestMessage(msg)
-    db.session.add(msg)
-
-    try:
-        db.session.commit()
-    except IntegrityError as e:
-        return jsonify(message="failed to insert message"), 409
-
-    res = TestMessage.get_all_messages()
-    res = [x.as_dict() for x in res]
+    msg = Message(db)
+    msg.add(msg)
+    res = msg.get_all_messages()
     return jsonify(messages=res)
 
 @app.route('/api/message', methods=['GET'])
 def get_all_messages():
-    res = TestMessage.get_all_messages()
-    res = [x.as_dict() for x in res]
+    msg = Message(db)
+    res = msg.get_all_messages()
     return jsonify(messages=res)
 
 @app.route('/api/message/<message_id>', methods=['DELETE'])
 def delete_message(message_id):
-
-    TestMessage.query.filter_by(id=message_id).delete()
-
-    try:
-        db.session.commit()
-    except IntegrityError as e:
-        return jsonify(message="failed to delete message"), 409
-
-    res = TestMessage.get_all_messages()
-    res = [x.as_dict() for x in res]
+    msg = Message(db)
+    msg.remove(message_id)
+    res = msg.get_all_messages()
     return jsonify(messages=res)

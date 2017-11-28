@@ -1,19 +1,10 @@
-from ..index import db, bcrypt
 
-class TestMessage(db.Model):
-    id = db.Column(db.Integer(), primary_key=True)
-    text = db.Column(db.String(), unique=False)
+from sqlalchemy.schema import Table, Column, ForeignKey
+from sqlalchemy.types import Integer, String
 
-    def __init__(self, text):
-        super(TestMessage, self).__init__()
-        self.text = text
+def MessageTable(metadata):
+    return Table('message', metadata,
+        Column('id', Integer, primary_key=True),
+        Column('text', String, unique=False)
+    )
 
-    @staticmethod
-    def get_all_messages():
-        result = TestMessage.query.all()
-        if result:
-            return result
-        return []
-
-    def as_dict(self):
-        return {c.name: getattr(self, c.name) for c in self.__table__.columns}

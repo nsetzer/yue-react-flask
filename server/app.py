@@ -5,11 +5,9 @@ from flask import Flask, render_template, jsonify, url_for
 from .index import db, app, cors
 
 from .models.user import Domain, Role, User
-from .models.message import TestMessage
 from .models.song import SongData, SongUserData
 from .models.song_history import SongHistory
 from .models.playlist import Playlist, PlaylistSongs
-from .models.queue import SongQueueTable
 from .models.tables import DatabaseTables
 
 from .dao.queue import SongQueue
@@ -20,7 +18,7 @@ from .endpoints import message
 from .endpoints import library
 from .endpoints import queue
 
-app.tables = DatabaseTables(db.metadata)
+db.tables = DatabaseTables(db.metadata)
 
 # serve the bundle
 @app.route('/', methods=['GET'])

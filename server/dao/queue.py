@@ -6,25 +6,23 @@ from ..models.queue import SongQueueTable
 
 from .library import Song, Library
 
-from ..index import db
-
 class SongQueue(object):
     """docstring for Queue"""
 
-    def __init__(self, dbtables, user_id, domain_id):
+    def __init__(self, db, user_id, domain_id):
         super(SongQueue, self).__init__()
         self.user_id = user_id
         self.domain_id = domain_id
-        self.dbtables = dbtables
+        self.db = db
 
     def set(self, songs):
 
-        SongQueueTable = self.dbtables.SongQueueTable
+        SongQueueTable = self.db.tables.SongQueueTable
 
         # create the queue if it does not exist
         query = SongQueueTable.select() \
             .where(SongQueueTable.c.user_id == self.user_id)
-        lst = db.session.execute(query).fetchall()
+        lst = self.db.session.execute(query).fetchall()
 
         if not lst:
             query = insert(SongQueueTable) \
@@ -34,15 +32,15 @@ class SongQueue(object):
                 .values({"songs": songs, }) \
                 .where(SongQueueTable.c.user_id == self.user_id)
 
-        db.session.execute(query)
+        self.db.session.execute(query)
 
     def get(self):
 
-        SongQueueTable = self.dbtables.SongQueueTable
+        SongQueueTable = self.db.tables.SongQueueTable
 
         query = SongQueueTable.select() \
             .where(SongQueueTable.c.user_id == self.user_id)
-        result = db.session.execute(query).fetchone()
+        result = self.db.session.execute(query).fetchone()
 
         if not result:
             return None
@@ -65,7 +63,7 @@ class SongQueue(object):
             .where(and_(SongData.domain_id == self.domain_id,
                         SongData.id.in_(lst)))
 
-        results = db.session.execute(query).fetchall()
+        results = self.db.session.execute(query).fetchall()
 
         songs = [{k: (v or d) for k, v, d in zip(columns, res, defaults)} for res in results]
 
@@ -75,11 +73,11 @@ class SongQueue(object):
 
     def head(self):
 
-        SongQueueTable = self.dbtables.SongQueueTable
+        SongQueueTable = self.db.tables.SongQueueTable
 
         query = SongQueueTable.select() \
             .where(SongQueueTable.c.user_id == self.user_id)
-        result = db.session.execute(query).fetchone()
+        result = self.db.session.execute(query).fetchone()
 
         if not result:
             return None
@@ -102,17 +100,17 @@ class SongQueue(object):
             .where(and_(SongData.domain_id == self.domain_id,
                         SongData.id == lst[0]))
 
-        res = db.session.execute(query).fetchone()
+        res = self.db.session.execute(query).fetchone()
         return {k: (v or d) for k, v, d in zip(columns, res, defaults)}
 
     def rest(self):
 
-        SongQueueTable = self.dbtables.SongQueueTable
+        SongQueueTable = self.db.tables.SongQueueTable
 
         # session.query(SongData).filter(SongData.id.in_(seq)).all()
         query = SongQueueTable.select() \
             .where(SongQueueTable.c.user_id == self.user_id)
-        result = db.session.execute(query).fetchone()
+        result = self.db.session.execute(query).fetchone()
 
         if not result:
             return None
@@ -137,7 +135,7 @@ class SongQueue(object):
             .where(and_(SongData.domain_id == self.domain_id,
                         SongData.id.in_(lst)))
 
-        results = db.session.execute(query).fetchall()
+        results = self.db.session.execute(query).fetchall()
 
         songs = [{k: (v or d) for k, v, d in zip(columns, res, defaults)} for res in results]
 
