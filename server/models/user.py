@@ -21,8 +21,8 @@ def UserTable(metadata):
         Column('id', Integer, primary_key=True),
         Column('email', String),
         Column('password', String),
-        Column('domain_id', String, db.ForeignKey("domain.id")),
-        Column('role_id', String, db.ForeignKey("role.id"))
+        Column('domain_id', Integer, db.ForeignKey("domain.id")),
+        Column('role_id', Integer, db.ForeignKey("role.id"))
     )
 
 class Domain(db.Model):
