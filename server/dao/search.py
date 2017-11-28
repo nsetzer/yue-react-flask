@@ -1,5 +1,5 @@
 
-# from .nlpdatesearch import NLPDateRange
+from .nlpdatesearch import NLPDateRange
 
 from .util import lru_cache, format_delta, format_date, string_quote
 import re
@@ -648,15 +648,14 @@ class FormatConversion(object):
 
     def parseNLPDate(self, value):
 
-        #dt = NLPDateRange(self.datetime_now).parse( value )
-        # if dt:
-        #    cf = calendar.timegm(dt[0].utctimetuple())
-        #    if cf < 0:
-        #        cf = 0
-        #    rf = calendar.timegm(dt[1].utctimetuple())
-        #    return cf,rf
-        # return None
-        raise ParseError("unexpected natural language date")
+        dt = NLPDateRange(self.datetime_now).parse(value)
+        if dt:
+            cf = calendar.timegm(dt[0].utctimetuple())
+            if cf < 0:
+                cf = 0
+            rf = calendar.timegm(dt[1].utctimetuple())
+            return cf, rf
+        return None
 
 class Grammar(object):
     """SearchGrammar is a generic class for building a db search engine
