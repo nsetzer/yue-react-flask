@@ -3,7 +3,7 @@ import unittest
 import json
 
 from .app import app, db, db_reset
-from .models.user import User
+from .dao.user import UserDao
 from .dao.library import Song, Library
 
 class AuthAppWrapper(object):
@@ -45,10 +45,12 @@ class TestCase(unittest.TestCase):
         with app.test_client():
             db_reset()
 
-            cls.USERNAME = "user000"
-            cls.USER = User.get_user_with_email(cls.USERNAME)
+            cls.userDao = UserDao(db)
 
-            cls.LIBRARY = Library(cls.USER.id, cls.USER.domain_id)
+            cls.USERNAME = "user000"
+            cls.USER = cls.userDao.findUserByEmail(cls.USERNAME)
+
+            cls.LIBRARY = Library(cls.USER['id'], cls.USER['domain_id'])
 
             songs = []
             for a in range(3):

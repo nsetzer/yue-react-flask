@@ -36,7 +36,7 @@ class UserDao(object):
         if bcrypt.checkpw(password.encode("utf-8"), crypt):
             return user
 
-        raise Exception("user not found")
+        return None
 
     def createDomain(self, domain):
         query = insert(self.db.tables.DomainTable).values(domain)
@@ -48,13 +48,19 @@ class UserDao(object):
         result = self.db.session.execute(query)
         return result.inserted_primary_key[0]
 
-    def createUser(self, user):
+    def createUser(self, email, password, domain_id, role_id):
 
         salt = bcrypt.gensalt(12)
-        crypt = bcrypt.hashpw(user['password'].encode("utf-8"), salt)
-        user['password'] = crypt
+        crypt = bcrypt.hashpw(password.encode("utf-8"), salt)
 
-        query = insert(self.db.tables.UserTable).values(user)
+        user_ = {
+            "email": email,
+            "password": crypt,
+            "domain_id": domain_id,
+            "role_id": role_id,
+        }
+
+        query = insert(self.db.tables.UserTable).values(user_)
 
         result = self.db.session.execute(query)
 

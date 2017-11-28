@@ -2,7 +2,7 @@
 from flask import request, jsonify, g
 
 from ..index import app, db
-from ..models.user import User
+from ..dao.user import UserDao
 from ..dao.library import Song, Library
 from .util import requires_auth
 

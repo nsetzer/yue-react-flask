@@ -5,9 +5,6 @@ import json
 
 from ..util import TestCase
 
-from ..models.user import User
-
-from .library import Song, Library, LibraryException
 from .queue import SongQueue
 
 from ..app import app, db
@@ -17,10 +14,7 @@ class SongQueueTestCase(TestCase):
     def setUp(self):
         super().setUp()
 
-        username = "user000"
-        self.user = User.get_user_with_email(username)
-        self.lib = Library(self.user.id, self.user.domain_id)
-        self.queue = SongQueue(db, self.user.id, self.user.domain_id)
+        self.queue = SongQueue(db, self.USER['id'], self.USER['domain_id'])
 
     def tearDown(self):
         pass

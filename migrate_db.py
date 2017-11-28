@@ -10,7 +10,7 @@ from yue.core.song import Song as YueSong
 
 from server.app import app, db, db_init, Domain, Role, User
 
-from server.models.user import User
+from server.dao.user import UserDao
 from server.models.song import SongData, SongUserData,
 from server.dao.library import Song, SongSearchGrammar, Library
 

@@ -6,16 +6,13 @@ import json
 from ..util import TestCase
 
 from .library import Song, Library, LibraryException
-from ..models.user import User
 
 class SongModelTestCase(TestCase):
 
     def setUp(self):
         super().setUp()
 
-        username = "user000"
-        self.user = User.get_user_with_email(username)
-        self.lib = Library(self.user.id, self.user.domain_id)
+        self.lib = Library(self.USER['id'], self.USER['domain_id'])
 
     def tearDown(self):
         pass
@@ -29,7 +26,7 @@ class SongModelTestCase(TestCase):
 
     def test_domain_filter(self):
         """return none when an unknown domain is used"""
-        lib = Library(self.user.id, -1)
+        lib = Library(self.USER['id'], -1)
 
         with self.assertRaises(LibraryException):
             lib.findSongById(self.SONG['id'])

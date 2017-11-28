@@ -10,9 +10,11 @@ import base64
 from bcrypt import gensalt
 from ..index import app, db
 
-from ..models.user import User
+from ..dao.user import UserDao
 
 from .util import requires_auth, verify_token, generate_token
+
+userDao = UserDao(db)
 
 @app.route("/api/user", methods=["GET"])
 @requires_auth
@@ -23,23 +25,22 @@ def get_user():
 @app.route("/api/user", methods=["POST"])
 def create_user():
     incoming = request.get_json()
-    user = User(
-        email=incoming["email"],
-        domain=app.config["DEFAULT_DOMAIN"],
-        role=app.config["DEFAULT_ROLE"],
-        password=incoming["password"]
-    )
-    db.session.add(user)
 
     try:
-        db.session.commit()
-    except IntegrityError:
+        user_id = userDao.createUser(
+            incoming["email"],
+            app.config["DEFAULT_DOMAIN"],
+            app.config["DEFAULT_ROLE"],
+            incoming["password"]
+        )
+
+    except:
         return jsonify(message="User with that email already exists"), 409
 
-    new_user = User.query.filter_by(email=incoming["email"]).first()
+    new_user = userDao.findUserByEmail(incoming["email"])
 
     return jsonify(
-        id=user.id,
+        id=user_id,
         token=generate_token(new_user)
     )
 
@@ -54,7 +55,7 @@ def get_token():
     if 'password' not in incoming:
         return jsonify(error="password not specified"), 400
 
-    user = User.get_user_with_email_and_password(
+    user = userDao.findUserByEmailAndPassword(
         incoming["email"], incoming["password"])
     if user:
         app.logger.info('%s logged in successfully', incoming["email"])

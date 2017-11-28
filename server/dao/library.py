@@ -5,7 +5,6 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import and_, or_, not_, select, column, func, asc, desc
 
-from ..models.user import User
 from ..models.song import SongData, SongUserData
 
 from .search import SearchGrammar, ParseError

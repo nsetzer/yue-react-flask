@@ -3,8 +3,6 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import and_, or_, not_, select, column, func, asc, desc
 
-from .user import User
-
 import datetime, time
 import uuid
 

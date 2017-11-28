@@ -7,7 +7,7 @@ from .user import UserDao
 
 from ..app import app, db
 
-class UserDaoTestCase(TestCase):
+class UserDaoTestCase(unittest.TestCase):
 
     def setUp(self):
         super().setUp()
@@ -22,16 +22,7 @@ class UserDaoTestCase(TestCase):
         domain_id = userDao.createDomain({'name': 'sample'})
         role_id = userDao.createRole({'name': 'sample'})
 
-        print(domain_id, role_id)
-
-        user_ = {
-            "email": "test",
-            "password": "password",
-            "domain_id": domain_id,
-            "role_id": role_id,
-        }
-
-        user_id = userDao.createUser(user_)
+        user_id = userDao.createUser("test", "password", domain_id, role_id)
 
         domain = userDao.findDomainByName("sample")
         self.assertEqual(domain['name'], "sample")
