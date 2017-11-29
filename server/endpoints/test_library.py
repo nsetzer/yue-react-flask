@@ -18,35 +18,13 @@ class xLibraryEndpointTestCasex(TestCase):
 
     def test_get_song_by_id(self):
 
-        user_id = self.USER['id']
-        domain_id = self.USER['domain_id']
+        app = self.login(self.USERNAME, self.PASSWORD)
+        url = "/api/library/%s" % self.SONG['id']
+        res = app.get(url)
+        body = json.loads(res.data)
+        song = body['result']
 
-        song = {
-            "artist": "test",
-            "title": "test",
-            "album": "test",
-            "comment": "test",
-        }
+        self.assertIsNotNone(song)
+        self.assertEqual(song['artist'], 'Artist000')
 
-        # uid = self.LIBRARY.insert(user_id, domain_id, song)
-
-        # song = self.LIBRARY.findSongById(user_id, domain_id, uid)
-        # print(song)
-        # songs = self.LIBRARY._query(user_id, domain_id)
-        # print("found: %s" % len(songs))
-
-        # app = self.login(self.USERNAME, self.PASSWORD)
-        # url = "/api/library/%s" % uid
-        # res = app.get(url)
-        # body = json.loads(res.data)
-        # song = body['result']
-
-        # songs = self.LIBRARY._query(user_id, domain_id)
-        # print("found: %s" % len(songs))
-
-        # self.assertIsNotNone(song)
-        # self.assertEqual(song['artist'], 'test')
-
-        # for field in Song.fields():
-        #     self.assertTrue(field in song, field)
 

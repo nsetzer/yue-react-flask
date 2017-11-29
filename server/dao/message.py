@@ -12,12 +12,14 @@ class Message(object):
         query = self.db.tables.MessageTable.insert() \
                 .values({"text": message, })
         result = self.db.session.execute(query)
+        self.db.session.commit()
         return result.inserted_primary_key[0]
 
     def remove(self, id):
         query = delete(self.db.tables.MessageTable) \
                 .where(self.db.tables.MessageTable.c.id == id)
         self.db.session.execute(query)
+        self.db.session.commit()
 
     def get_all_messages(self):
         query = self.db.tables.MessageTable.select()

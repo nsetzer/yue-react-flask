@@ -74,7 +74,8 @@ class TestCase(unittest.TestCase):
                     cls.USER['domain_id'],
                     songs[0])
             except Exception as e:
-                print(e)
+                sys.stderr.write("%s\n"%(e))
+            print("done")
 
     def setUp(self):
         app.testing = True

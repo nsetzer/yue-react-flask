@@ -40,6 +40,7 @@ class SongQueue(object):
                 .where(SongQueueTable.c.user_id == self.user_id)
 
         self.db.session.execute(query)
+        self.db.session.commit()
 
     def get(self):
 

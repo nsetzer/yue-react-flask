@@ -25,19 +25,11 @@ def create_song(song_id):
 @requires_auth
 def get_song(song_id):
     """ return information about a specific song """
-    """
-    print(db)
-    print(db.engine)
-    songs = libraryDao._query(g.current_user['id'], g.current_user['domain_id'])
-    print("(endpoint) found: %s" % len(songs))
-
-    print("\n\nget_song: ", g.current_user['id'], g.current_user['domain_id'], song_id)
     song = libraryDao.findSongById(
         g.current_user['id'],
         g.current_user['domain_id'],
         song_id)
-    """
-    return jsonify(result=None)
+    return jsonify(result=song)
 
 @app.route("/api/library/<song_id>/audio", methods=["GET"])
 @requires_auth

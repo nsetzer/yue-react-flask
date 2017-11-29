@@ -213,13 +213,15 @@ class LibraryDao(object):
 
     def insert(self, user_id, domain_id, song):
 
-        song_id = self.insertSongData(domain_id, song)
+        song_id = self.insertSongData(domain_id, song, False)
 
-        self.insertUserData(user_id, song_id, song)
+        self.insertUserData(user_id, song_id, song, False)
+
+        self.db.session.commit()
 
         return song_id
 
-    def insertSongData(self, domain_id, song):
+    def insertSongData(self, domain_id, song, commit=True):
 
         if Song.artist not in song:
             raise LibraryException("artist key missing from song")
@@ -244,9 +246,12 @@ class LibraryDao(object):
 
         song_id = result.inserted_primary_key[0]
 
+        if commit:
+            self.db.session.commit()
+
         return song_id
 
-    def insertUserData(self, user_id, song_id, song):
+    def insertUserData(self, user_id, song_id, song, commit=True):
 
         user_keys = set(self._SongUserDataColumnNames())
         user_data = {k: song[k] for k in song.keys() if k in user_keys}
@@ -261,12 +266,17 @@ class LibraryDao(object):
 
             self.db.session.execute(query)
 
+            if commit:
+                self.db.session.commit()
+
     def update(self, user_id, domain_id, song_id, song):
 
         self.updateSongData(domain_id, song_id, song)
         self.updateUserData(user_id, song_id, song)
 
-    def updateSongData(self, domain_id, song_id, song):
+        self.db.session.commit()
+
+    def updateSongData(self, domain_id, song_id, song, commit = True):
 
         song_keys = set(self._SongDataColumnNames())
         song_data = {k: song[k] for k in song.keys() if k in song_keys}
@@ -279,7 +289,10 @@ class LibraryDao(object):
                          self.dbtables.SongDataTable.c.domain_id == domain_id))
             self.db.session.execute(query)
 
-    def updateUserData(self, user_id, song_id, song):
+            if commit:
+                self.db.session.commit()
+
+    def updateUserData(self, user_id, song_id, song, commit = True):
         """ update only the user data portion of a song in the database """
         user_keys = set(self._SongUserDataColumnNames())
         user_data = {k: song[k] for k in song.keys() if k in user_keys}
@@ -292,6 +305,9 @@ class LibraryDao(object):
                          self.dbtables.SongDataTable.c.user_id == user_id))
             self.db.session.execute(query)
 
+            if commit:
+                self.db.session.commit()
+
     def findSongById(self, user_id, domain_id, song_id):
         results = self._query(user_id, domain_id,
                              self.dbtables.SongDataTable.c.id == song_id)
@@ -300,7 +316,7 @@ class LibraryDao(object):
             return results[0]
         return None
 
-    def insertOrUpdateByReferenceId(self, user_id, domain_id, ref_id, song):
+    def insertOrUpdateByReferenceId(self, user_id, domain_id, ref_id, song, commit = True):
 
         results = self._query(user_id, domain_id,
                              self.dbtables.SongDataTable.c.ref_id == ref_id)
@@ -309,7 +325,12 @@ class LibraryDao(object):
             self.update(user_id, domain_id, results[0]['id'], song)
             return results[0]['id']
 
-        return self.insert(user_id, domain_id, song)
+        result = self.insert(user_id, domain_id, song)
+
+        if commit:
+            self.db.session.commit()
+
+        return result.inserted_primary_key[0]
 
     def search(self,
         user_id,

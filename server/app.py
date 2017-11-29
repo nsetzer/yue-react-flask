@@ -42,7 +42,6 @@ def list_routes():
 
 def db_init(*args):
     """initialize the database"""
-    print("db_init")
     sys.stdout.write("Creating Database...\n")
     db.create_all()
     db.session.commit()
@@ -79,7 +78,6 @@ def db_init(*args):
 
 def db_drop():
     """ drop all tables from database """
-    print("db_drop")
     if input("drop tables? [yN] ")[:1] == "y":
         db.drop_all()
         db.session.commit()
@@ -89,7 +87,6 @@ def db_drop():
 
 def db_reset():
     """ drop all tables then create default database """
-    print("db_reset")
     db.drop_all()
     db_init()
 

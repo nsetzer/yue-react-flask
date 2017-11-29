@@ -43,11 +43,13 @@ class UserDao(object):
     def createDomain(self, domain):
         query = insert(self.db.tables.DomainTable).values(domain)
         result = self.db.session.execute(query)
+        self.db.session.commit()
         return result.inserted_primary_key[0]
 
     def createRole(self, role):
         query = insert(self.db.tables.RoleTable).values(role)
         result = self.db.session.execute(query)
+        self.db.session.commit()
         return result.inserted_primary_key[0]
 
     def createUser(self, email, password, domain_id, role_id):
@@ -65,6 +67,7 @@ class UserDao(object):
         query = insert(self.db.tables.UserTable).values(user_)
 
         result = self.db.session.execute(query)
+        self.db.session.commit()
 
         return result.inserted_primary_key[0]
 
@@ -80,5 +83,6 @@ class UserDao(object):
             .where(SongQueueTable.c.user_id == self.user_id)
 
         self.db.session.execute(query)
+        self.db.session.commit()
 
 
