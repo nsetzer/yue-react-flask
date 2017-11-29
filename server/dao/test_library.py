@@ -8,19 +8,19 @@ from ..util import TestCase
 from .user import UserDao
 from .library import Song, LibraryDao
 
-from ..app import app, db
+from ..app import app, db, dbtables
 
 class LibraryTestCase(unittest.TestCase):
 
     def setUp(self):
         super().setUp()
 
-        self.userDao = UserDao(db)
+        self.userDao = UserDao(db, dbtables)
 
         self.USERNAME = "user000"
         self.USER = self.userDao.findUserByEmail(self.USERNAME)
 
-        self.lib = LibraryDao(db, db.tables)
+        self.lib = LibraryDao(db, dbtables)
 
     def tearDown(self):
         pass

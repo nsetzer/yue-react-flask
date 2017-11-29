@@ -1,8 +1,9 @@
 
+import os, sys
 import unittest
 import json
 
-from .app import app, db, db_reset
+from .app import app, db, dbtables, db_reset
 from .dao.user import UserDao
 from .dao.library import Song, LibraryDao
 
@@ -45,7 +46,7 @@ class TestCase(unittest.TestCase):
         with app.test_client():
             db_reset()
 
-            cls.userDao = UserDao(db)
+            cls.userDao = UserDao(db, dbtables)
 
             cls.USERNAME = "user000"
             cls.PASSWORD = "user000"
@@ -98,7 +99,10 @@ class TestCase(unittest.TestCase):
         data = json.loads(res.data)
         return AuthAppWrapper(self.app, data['token'])
 
-TestCase.setUpTest()
+try:
+    TestCase.setUpTest()
+except Exception as e:
+    sys.stderr.write("TestCase Error: %s\n"%(e))
 
 
 

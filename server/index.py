@@ -66,7 +66,9 @@ db     = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 cors   = CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-db.tables = DatabaseTables(db.metadata)
+dbtables = DatabaseTables(db.metadata)
+
+db.tables = dbtables # TODO remove
 
 if not os.path.exists(cfg.build_dir):
     # only an error in production environments

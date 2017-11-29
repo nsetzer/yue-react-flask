@@ -5,7 +5,7 @@ from ..util import TestCase
 
 from .user import UserDao
 
-from ..app import app, db
+from ..app import app, db, dbtables
 
 class UserDaoTestCase(unittest.TestCase):
 
@@ -17,7 +17,7 @@ class UserDaoTestCase(unittest.TestCase):
 
     def test_queue_head(self):
 
-        userDao = UserDao(db)
+        userDao = UserDao(db, dbtables)
 
         domain_id = userDao.createDomain({'name': 'sample'})
         role_id = userDao.createRole({'name': 'sample'})

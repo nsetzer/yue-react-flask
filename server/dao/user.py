@@ -5,9 +5,10 @@ import bcrypt
 
 class UserDao(object):
     """docstring for UserDao"""
-    def __init__(self, db):
+    def __init__(self, db, dbtables):
         super(UserDao, self).__init__()
         self.db = db
+        self.dbtables = dbtables
 
     def findDomainByName(self, name):
         query = self.db.tables.DomainTable.select() \

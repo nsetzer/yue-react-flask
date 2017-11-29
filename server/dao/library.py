@@ -3,7 +3,7 @@
 from ..index import db
 from sqlalchemy.orm import relationship
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import and_, or_, not_, select, column, func, asc, desc
+from sqlalchemy import and_, or_, not_, select, update, column, func, asc, desc
 
 from .search import SearchGrammar, ParseError
 
@@ -329,6 +329,8 @@ class LibraryDao(object):
 
         if commit:
             self.db.session.commit()
+
+        print(dir(result))
 
         return result.inserted_primary_key[0]
 

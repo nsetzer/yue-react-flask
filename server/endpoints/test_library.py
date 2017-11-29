@@ -8,7 +8,7 @@ from ..util import TestCase
 from ..dao.library import Song
 from ..app import app, db
 
-class xLibraryEndpointTestCasex(TestCase):
+class LibraryEndpointTestCase(TestCase):
 
     def setUp(self):
         super().setUp()

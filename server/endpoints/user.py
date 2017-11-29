@@ -8,13 +8,13 @@ from itsdangerous import SignatureExpired, BadSignature
 
 import base64
 from bcrypt import gensalt
-from ..index import app, db
+from ..index import app, db, dbtables
 
 from ..dao.user import UserDao
 
 from .util import requires_auth, verify_token, generate_token
 
-userDao = UserDao(db)
+userDao = UserDao(db, dbtables)
 
 @app.route("/api/user", methods=["GET"])
 @requires_auth

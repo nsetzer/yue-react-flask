@@ -8,16 +8,19 @@ from yue.core.sqlstore import SQLStore
 from yue.core.library import Library as YueLibrary
 from yue.core.song import Song as YueSong
 
-from server.app import app, db, db_init, Domain, Role, User
+from server.app import app, db, dbtables, db_init
 
 from server.dao.user import UserDao
-from server.models.song import SongData, SongUserData,
-from server.dao.library import Song, SongSearchGrammar, Library
+from server.dao.library import Song, LibraryDao
 
 import time
 import datetime
 
 from sqlalchemy import and_, or_, select
+
+
+userDao = UserDao(db, dbtables)
+libraryDao = LibraryDao(db, dbtables)
 
 text_fields = {
     YueSong.path: Song.path,
@@ -61,7 +64,7 @@ all_fields.update(user_fields)
 
 def migrate(username, domain_name, dbpath):
 
-    domain = Domain.findDomainByName(domain_name)
+    domain = userDao.findDomainByName(domain_name)
     if domain is None:
         sys.stdout.write("Domain with name `%s` not found" % domain_name)
         sys.exit(1)
@@ -69,8 +72,8 @@ def migrate(username, domain_name, dbpath):
     sqlstore = SQLStore(dbpath)
     yueLib = YueLibrary(sqlstore)
 
-    user = User.get_user_with_email(username)
-    lib = Library(user.id, domain.id)
+
+    user = userDao.findUserByEmail(username)
 
     print("Migrating Database:")
     start = time.time()
@@ -80,7 +83,7 @@ def migrate(username, domain_name, dbpath):
         # new_song[Song.last_played] = datetime.datetime.utcfromtimestamp(new_song[Song.last_played])
         # new_song[Song.date_added] = datetime.datetime.utcfromtimestamp(new_song[Song.date_added])
 
-        song_id = lib.insertOrUpdateByReferenceId(song[YueSong.uid], new_song)
+        song_id = libraryDao.insertOrUpdateByReferenceId(user.id, domain.id, song[YueSong.uid], new_song)
 
     end = time.time()
 
@@ -128,21 +131,19 @@ def main():
 
         db_init()
 
-        domain = Domain.findDomainByName(domain_name)
+        domain = userDao.findDomainByName(domain_name)
         if domain is None:
             sys.stdout.write("Domain with name `%s` not found" % domain_name)
             sys.exit(1)
-        role = Role.findRoleByName(role_name)
+        role = userDao.findRoleByName(role_name)
         if role is None:
             sys.stdout.write("Role with name `%s` not found" % role_name)
             sys.exit(1)
         username = "nsetzer"
         password = "nsetzer"
 
-        user = User(username, password, domain.id, role.id)
+        user = userDao.createUser(username, password, domain.id, role.id)
         sys.stdout.write("Creating User: %s@%s/%s\n" % (username, domain.name, role.name))
-        db.session.add(user)
-        db.session.commit()
 
         migrate(username, domain_name, dbpath)
 
