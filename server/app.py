@@ -4,19 +4,12 @@ from flask import Flask, render_template, jsonify, url_for
 
 from .index import db, app, cors
 
-from .models.song import SongData, SongUserData
-from .models.tables import DatabaseTables
-
 from .dao.user import UserDao
-from .dao.queue import SongQueue
-from .dao.library import Song, SongSearchGrammar, Library
 
 from .endpoints import user
 from .endpoints import message
 from .endpoints import library
 from .endpoints import queue
-
-db.tables = DatabaseTables(db.metadata)
 
 # serve the bundle
 @app.route('/', methods=['GET'])
@@ -49,8 +42,10 @@ def list_routes():
 
 def db_init(*args):
     """initialize the database"""
+    print("db_init")
     sys.stdout.write("Creating Database...\n")
     db.create_all()
+    db.session.commit()
 
     userDao = UserDao(db)
 
@@ -82,10 +77,9 @@ def db_init(*args):
             sys.stdout.write("Creating User: %s@%s/%s\n" %
                 (username, domain, role))
 
-    db.session.commit()
-
 def db_drop():
     """ drop all tables from database """
+    print("db_drop")
     if input("drop tables? [yN] ")[:1] == "y":
         db.drop_all()
         db.session.commit()
@@ -95,6 +89,8 @@ def db_drop():
 
 def db_reset():
     """ drop all tables then create default database """
+    print("db_reset")
     db.drop_all()
     db_init()
+
 

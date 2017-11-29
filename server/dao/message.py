@@ -12,6 +12,7 @@ class Message(object):
         query = self.db.tables.MessageTable.insert() \
                 .values({"text": message, })
         result = self.db.session.execute(query)
+        return result.inserted_primary_key[0]
 
     def remove(self, id):
         query = delete(self.db.tables.MessageTable) \

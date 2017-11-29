@@ -4,8 +4,6 @@ from flask import request, jsonify, g
 from flask_cors import cross_origin
 from sqlalchemy.exc import IntegrityError
 
-from ..dao.library import Song, Library
-
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
 from itsdangerous import SignatureExpired, BadSignature
 
@@ -58,7 +56,6 @@ def _requires_token_auth_impl(f, args, kwargs, token):
         # all information is contained in the token
         # user = User.get_user_with_email(user_data['email'])
         g.current_user = user_data
-        g.library = Library(user_data['id'], user_data['domain_id'])
         return f(*args, **kwargs)
 
     return jsonify(

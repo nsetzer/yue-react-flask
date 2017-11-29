@@ -14,7 +14,7 @@ class SongQueueTestCase(TestCase):
     def setUp(self):
         super().setUp()
 
-        self.queue = SongQueue(db, self.USER['id'], self.USER['domain_id'])
+        self.queue = SongQueue(db, db.tables, self.USER['id'], self.USER['domain_id'])
 
     def tearDown(self):
         pass

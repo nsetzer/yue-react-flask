@@ -5,19 +5,10 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import and_, or_, not_, select, column, func, asc, desc
 
-from ..models.song import SongData, SongUserData
-
 from .search import SearchGrammar, ParseError
 
 import datetime, time
 import uuid
-
-_cols_song = SongData.column_names()
-_cols_user = SongUserData.column_names()
-_cols_user.remove("song_id")
-
-_defs_song = [SongData.default(col) for col in _cols_song]
-_defs_user = [SongUserData.default(col) for col in _cols_user]
 
 class Song(object):
     """docstring for Song"""
@@ -146,14 +137,6 @@ class Song(object):
         return result
 
     @staticmethod
-    def all_columns():
-        return _cols_song + _cols_user
-
-    @staticmethod
-    def all_defaults():
-        return _defs_song + _defs_user
-
-    @staticmethod
     def getArtistKey(artist_name):
         if artist_name.lower().startswith("the "):
             artist_name = artist_name[4:]
@@ -162,7 +145,7 @@ class Song(object):
 class SongSearchGrammar(SearchGrammar):
     """docstring for SongSearchGrammar"""
 
-    def __init__(self):
+    def __init__(self, cols_song, cols_user):
         super(SongSearchGrammar, self).__init__()
 
         # all_text is a meta-column name which is used to search all text fields
@@ -174,8 +157,8 @@ class SongSearchGrammar(SearchGrammar):
         self.time_fields = set([Song.length, ])
         self.year_fields = set([Song.year, ])
 
-        self.keys_song = set(SongData.column_names())
-        self.keys_user = set(SongUserData.column_names())
+        self.keys_song = set(cols_song)
+        self.keys_user = set(cols_user)
 
     def translateColumn(self, colid):
         """
@@ -208,19 +191,35 @@ class SongSearchGrammar(SearchGrammar):
 class LibraryException(Exception):
     pass
 
-class Library(object):
+class LibraryDao(object):
     """docstring for Library"""
 
-    def __init__(self, user_id, domain_id):
-        super(Library, self).__init__()
-        self.user_id = user_id
-        self.domain_id = domain_id
-        self.grammar = SongSearchGrammar()
+    def __init__(self, db, dbtables):
+        super(LibraryDao, self).__init__()
+        self.db = db
+        self.dbtables = dbtables
 
-    def query(self):
-        return db.session.query(SongData, SongUserData).join(SongUserData)
+        self.cols_song = self._SongDataColumnNames()
+        self.cols_user = self._SongUserDataColumnNames()
+        self.cols_user.remove('song_id')
 
-    def insert(self, song):
+        self.defs_song = [self._SongDefault(col) for col in self.cols_song]
+        self.defs_user = [self._UserDefault(col) for col in self.cols_user]
+
+        self.cols = self.cols_song + self.cols_user
+        self.defs = self.defs_song + self.defs_user
+
+        self.grammar = SongSearchGrammar(self.cols_song, self.cols_user)
+
+    def insert(self, user_id, domain_id, song):
+
+        song_id = self.insertSongData(domain_id, song)
+
+        self.insertUserData(user_id, song_id, song)
+
+        return song_id
+
+    def insertSongData(self, domain_id, song):
 
         if Song.artist not in song:
             raise LibraryException("artist key missing from song")
@@ -234,103 +233,141 @@ class Library(object):
         if Song.artist_key not in song:
             song[Song.artist_key] = Song.getArtistKey(song[Song.artist])
 
-        song_keys = set(SongData.column_names())
+        song_keys = set(self._SongDataColumnNames())
         song_data = {k: song[k] for k in song.keys() if k in song_keys}
-        song_data['domain_id'] = self.domain_id
+        song_data['domain_id'] = domain_id
 
-        user_keys = set(SongUserData.column_names())
+        query = self.dbtables.SongDataTable.insert() \
+            .values(song_data)
+
+        result = self.db.session.execute(query)
+
+        song_id = result.inserted_primary_key[0]
+
+        return song_id
+
+    def insertUserData(self, user_id, song_id, song):
+
+        user_keys = set(self._SongUserDataColumnNames())
         user_data = {k: song[k] for k in song.keys() if k in user_keys}
-
-        new_song = SongData(**song_data)
-        db.session.add(new_song)
-
-        try:
-            db.session.commit()
-        except IntegrityError:
-            raise LibraryException(str(e))
-
-        db.session.refresh(new_song)
 
         if user_data:
-            user_data["user_id"] = self.user_id
-            user_data["song_id"] = new_song.id
-            new_data = SongUserData(**user_data)
 
-            db.session.add(new_data)
+            user_data["user_id"] = user_id
+            user_data["song_id"] = song_id
 
-            try:
-                db.session.commit()
-            except IntegrityError:
-                raise LibraryException(str(e))
+            query = self.dbtables.SongUserDataTable.insert() \
+                .values(user_data)
 
-        return new_song.id
+            self.db.session.execute(query)
 
-    def update(self, song_id, song):
+    def update(self, user_id, domain_id, song_id, song):
 
-        song_keys = set(SongData.column_names())
+        self.updateSongData(domain_id, song_id, song)
+        self.updateUserData(user_id, song_id, song)
+
+    def updateSongData(self, domain_id, song_id, song):
+
+        song_keys = set(self._SongDataColumnNames())
         song_data = {k: song[k] for k in song.keys() if k in song_keys}
-
-        user_keys = set(SongUserData.column_names())
-        user_data = {k: song[k] for k in song.keys() if k in user_keys}
 
         if song_data:
-            new_song = SongData \
-                        .query \
-                        .filter_by(id=song_id) \
-                        .first()
-            for k, v in song_data.items():
-                setattr(new_song, k, v)
+            query = update(self.dbtables.SongDataTable) \
+                .values(song_data) \
+                .where(
+                    and_(self.dbtables.SongDataTable.c.song_id == song_id,
+                         self.dbtables.SongDataTable.c.domain_id == domain_id))
+            self.db.session.execute(query)
+
+    def updateUserData(self, user_id, song_id, song):
+        """ update only the user data portion of a song in the database """
+        user_keys = set(self._SongUserDataColumnNames())
+        user_data = {k: song[k] for k in song.keys() if k in user_keys}
 
         if user_data:
-            new_user = SongUserData \
-                        .query \
-                        .filter_by(song_id=song_id,
-                                   user_id=self.user_id) \
-                        .first()
-            if new_user:
-                for k, v in user_data.items():
-                    setattr(new_user, k, v)
+            query = update(self.dbtables.SongUserDataTable) \
+                .values(user_data) \
+                .where(
+                    and_(self.dbtables.SongDataTable.c.song_id == song_id,
+                         self.dbtables.SongDataTable.c.user_id == user_id))
+            self.db.session.execute(query)
 
-        try:
-            db.session.commit()
-        except IntegrityError:
-            raise LibraryException(str(e))
+    def findSongById(self, user_id, domain_id, song_id):
+        results = self._query(user_id, domain_id,
+                             self.dbtables.SongDataTable.c.id == song_id)
 
-    def findSongById(self, song_id):
+        if len(results) > 0:
+            return results[0]
+        return None
 
-        columns = Song.all_columns()
-        defaults = Song.all_defaults()
+    def insertOrUpdateByReferenceId(self, user_id, domain_id, ref_id, song):
 
-        results = db.session.execute(
-           select([column(c) for c in columns])
-           .select_from(
-               SongData.__table__.join(SongUserData.__table__,
-                           and_(SongData.id == SongUserData.song_id,
-                                SongUserData.user_id == self.user_id),
-                           isouter=True))
-           .where(and_(SongData.domain_id == self.domain_id,
-                       SongData.id == song_id))
-        ).fetchall()
+        results = self._query(user_id, domain_id,
+                             self.dbtables.SongDataTable.c.ref_id == ref_id)
 
-        if not results:
-            raise LibraryException("No song found with id=%s" % song_id)
+        if results:
+            self.update(user_id, domain_id, results[0]['id'], song)
+            return results[0]['id']
 
-        return {k: (v or d) for k, v, d in zip(columns, results[0], defaults)}
+        return self.insert(user_id, domain_id, song)
 
-    def insertOrUpdateByReferenceId(self, ref_id, song):
+    def search(self,
+        user_id,
+        domain_id,
+        searchTerm,
+        case_insensitive=True,
+        orderby=None,
+        limit=None,
+        offset=None):
 
-        result = db.session \
-                    .query(SongData) \
-                    .filter(SongData.ref_id == ref_id) \
-                    .first()
+        rule = self.grammar.ruleFromString(searchTerm)
 
-        if result:
-            self.update(result.id, song)
-            return result.id
+        sql_rule = rule.sql()
+
+        if orderby is not None:
+            orderby = self._getSearchOrder(case_insensitive, orderby)
+
+        return self._query(user_id, domain_id, sql_rule, orderby, limit, offset)
+
+    def _query(self,
+        user_id,
+        domain_id,
+        where=None,
+        orderby=None,
+        limit=None,
+        offset=None):
+        SongData = self.dbtables.SongDataTable
+        SongUserData = self.dbtables.SongUserDataTable
+
+        if where is not None:
+            where = and_(SongData.c.domain_id == domain_id, where)
         else:
-            return self.insert(song)
+            where = SongData.c.domain_id == domain_id
 
-    def _search_get_order(self, case_insensitive, orderby):
+        query = select([column(c) for c in self.cols]) \
+            .select_from(
+                    SongData.join(
+                        SongUserData,
+                        and_(SongData.c.id == SongUserData.c.song_id,
+                             SongUserData.c.user_id == user_id),
+                        isouter=True)) \
+            .where(where)
+
+        if orderby is not None:
+            query = query.order_by(*order)
+
+        if limit is not None:
+            query = query.limit(limit)
+
+        if offset is not None:
+            query = query.offset(offset)
+
+        results = db.session.execute(query).fetchall()
+
+        return [{k: (v or d) for k, v, d in zip(self.cols, res, self.defs)}
+                for res in results]
+
+    def _getSearchOrder(self, case_insensitive, orderby):
 
         # orderby can be:
         # random:
@@ -373,44 +410,31 @@ class Library(object):
 
         return order
 
-    def search(self, searchTerm, case_insensitive=True, orderby=None, limit=None, offset=None):
+    def _SongDefault(self, col):
+        default = getattr(self.dbtables.SongDataTable.c, col).default
 
-        rule = self.grammar.ruleFromString(searchTerm)
+        if default is None:
+            return ""
 
-        sql_rule = rule.sql()
+        return default.arg
 
-        # limit search results to a specific domain
-        if sql_rule is not None:
-            sql_rule = and_(SongData.domain_id == self.domain_id,
-                            sql_rule)
-        else:
-            sql_rule = SongData.domain_id == self.domain_id
+    def _UserDefault(self, col):
 
-        columns = Song.all_columns()
-        defaults = Song.all_defaults()
+        if col in ['last_played', 'date_added']:
+            return 0
 
-        query = select([column(c) for c in columns]) \
-            .select_from(
-                    SongData.__table__.join(
-                        SongUserData.__table__,
-                        and_(SongData.id == SongUserData.song_id,
-                             SongUserData.user_id == self.user_id),
-                        isouter=True)) \
-            .where(sql_rule)
+        default = getattr(self.dbtables.SongUserDataTable.c, col).default
+        if default is None:
+            return ""
 
-        if orderby is not None:
-            order = self._search_get_order(case_insensitive, orderby)
-            query = query.order_by(*order)
+        return default.arg
 
-        if limit is not None:
-            query = query.limit(limit)
+    def _SongDataColumnNames(self):
+        return [c.name for c in self.dbtables.SongDataTable.c]
 
-        if offset is not None:
-            query = query.offset(offset)
+    def _SongUserDataColumnNames(self):
+        return [c.name for c in self.dbtables.SongUserDataTable.c]
 
-        results = db.session.execute(query).fetchall()
 
-        if not results:
-            raise LibraryException("No song found with id=%s" % song_id)
 
-        return [{k: (v or d) for k, v, d in zip(columns, res, defaults)} for res in results]
+

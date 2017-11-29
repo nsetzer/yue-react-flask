@@ -7,6 +7,8 @@ from flask_cors import CORS
 import logging
 from logging.handlers import RotatingFileHandler
 
+from .models.tables import DatabaseTables
+
 class EnvironmentConfig(object):
     """
     A configuration option which takes values from the current environment
@@ -63,6 +65,8 @@ app.logger.info("database: %s", cfg.DATABASE_URL)
 db     = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 cors   = CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+db.tables = DatabaseTables(db.metadata)
 
 if not os.path.exists(cfg.build_dir):
     # only an error in production environments

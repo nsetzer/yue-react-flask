@@ -31,10 +31,12 @@ class UserDao(object):
         query = self.db.tables.UserTable.select() \
             .where(self.db.tables.UserTable.c.email == email)
         user = self.db.session.execute(query).fetchone()
-        crypt = user[self.db.tables.UserTable.c.password]
 
-        if bcrypt.checkpw(password.encode("utf-8"), crypt):
-            return user
+        if user:
+            crypt = user[self.db.tables.UserTable.c.password]
+
+            if bcrypt.checkpw(password.encode("utf-8"), crypt):
+                return user
 
         return None
 

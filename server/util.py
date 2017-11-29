@@ -4,7 +4,7 @@ import json
 
 from .app import app, db, db_reset
 from .dao.user import UserDao
-from .dao.library import Song, Library
+from .dao.library import Song, LibraryDao
 
 class AuthAppWrapper(object):
     """docstring for AuthAppWrapper"""
@@ -48,23 +48,33 @@ class TestCase(unittest.TestCase):
             cls.userDao = UserDao(db)
 
             cls.USERNAME = "user000"
+            cls.PASSWORD = "user000"
             cls.USER = cls.userDao.findUserByEmail(cls.USERNAME)
 
-            cls.LIBRARY = Library(cls.USER['id'], cls.USER['domain_id'])
+            try:
+                cls.LIBRARY = LibraryDao(db, db.tables)
 
-            songs = []
-            for a in range(3):
-                for b in range(3):
-                    for t in range(3):
-                        song = {
-                            "artist": "Artist%03d" % a,
-                            "album": "Album%03d" % b,
-                            "title": "Title%03d" % t,
-                        }
-                    songs.append(cls.LIBRARY.insert(song))
+                songs = []
+                for a in range(3):
+                    for b in range(3):
+                        for t in range(3):
+                            song = {
+                                "artist": "Artist%03d" % a,
+                                "album": "Album%03d" % b,
+                                "title": "Title%03d" % t,
+                            }
+                        songs.append(cls.LIBRARY.insert(
+                            cls.USER['id'],
+                            cls.USER['domain_id'],
+                            song))
 
-            cls.SONGS = songs
-            cls.SONG = cls.LIBRARY.findSongById(songs[0])
+                cls.SONGS = songs
+                cls.SONG = cls.LIBRARY.findSongById(
+                    cls.USER['id'],
+                    cls.USER['domain_id'],
+                    songs[0])
+            except Exception as e:
+                print(e)
 
     def setUp(self):
         app.testing = True
@@ -87,5 +97,10 @@ class TestCase(unittest.TestCase):
         data = json.loads(res.data)
         return AuthAppWrapper(self.app, data['token'])
 
-
 TestCase.setUpTest()
+
+
+
+
+
+

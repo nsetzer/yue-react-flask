@@ -2,8 +2,6 @@
 from flask import request, jsonify, g
 
 from ..index import app, db
-from ..dao.user import UserDao
-from ..dao.library import Song, Library
 from .util import requires_auth
 
 @app.route("/api/queue/head", methods=["GET"])

@@ -36,6 +36,7 @@ class AppTestCase(TestCase):
 
         res = app.get("/api/user")
         body = json.loads(res.data)
+
         self.assertEqual(res.status_code, 200)
         self.assertTrue("email" in body['result'])
         self.assertTrue("domain_id" in body['result'])
