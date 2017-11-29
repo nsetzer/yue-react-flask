@@ -2,7 +2,10 @@ import os, sys
 
 from flask import Flask, render_template, jsonify, url_for
 
-from .index import db, app, cors
+from .index import db, dbtables, app, cors
+from .service.audioService import AudioService
+
+AudioService.init(db, dbtables)
 
 from .dao.user import UserDao
 
@@ -46,7 +49,7 @@ def db_init(*args):
     db.create_all()
     db.session.commit()
 
-    userDao = UserDao(db)
+    userDao = UserDao(db, dbtables)
 
     default_domain = userDao.createDomain({'name': app.config['DEFAULT_DOMAIN']})
     sys.stdout.write("Creating Domain: %s\n" % app.config['DEFAULT_DOMAIN'])

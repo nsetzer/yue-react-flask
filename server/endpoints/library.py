@@ -2,12 +2,9 @@
 
 from flask import request, jsonify, g
 
-from ..index import app, db
-from ..dao.user import UserDao
-from ..dao.library import Song, LibraryDao
+from ..index import app
+from ..service.audioService import AudioService
 from .util import requires_auth
-
-libraryDao = LibraryDao(db, db.tables)
 
 @app.route("/api/library", methods=["GET"])
 @requires_auth
@@ -25,10 +22,7 @@ def create_song(song_id):
 @requires_auth
 def get_song(song_id):
     """ return information about a specific song """
-    song = libraryDao.findSongById(
-        g.current_user['id'],
-        g.current_user['domain_id'],
-        song_id)
+    song = AudioService.instance().findSongById(g.current_user, song_id)
     return jsonify(result=song)
 
 @app.route("/api/library/<song_id>/audio", methods=["GET"])
