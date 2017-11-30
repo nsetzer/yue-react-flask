@@ -3,7 +3,7 @@ import os, sys
 from flask import Flask, render_template, jsonify, url_for
 
 from .index import db, dbtables, app, cors
-from .service.audioService import AudioService
+from .service.audio_service import AudioService
 
 AudioService.init(db, dbtables)
 

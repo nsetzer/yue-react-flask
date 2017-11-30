@@ -3,6 +3,7 @@ from flask import request, jsonify, g
 
 from ..index import app, db
 from .util import requires_auth
+from ..service.audio_service import AudioService
 
 @app.route("/api/queue/head", methods=["GET"])
 @requires_auth

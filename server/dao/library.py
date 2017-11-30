@@ -325,14 +325,11 @@ class LibraryDao(object):
             self.update(user_id, domain_id, results[0]['id'], song)
             return results[0]['id']
 
-        result = self.insert(user_id, domain_id, song)
+        song_id = self.insert(user_id, domain_id, song)
 
         if commit:
             self.db.session.commit()
-
-        print(dir(result))
-
-        return result.inserted_primary_key[0]
+        return song_id
 
     def search(self,
         user_id,

@@ -4,16 +4,16 @@ import tempfile
 import json
 
 from ..util import TestCase
-from ..app import app, db
+from ..app import app, db, dbtables
 
-from .message import Message
+from .message import MessageDao
 
 class SongQueueTestCase(TestCase):
 
     def setUp(self):
         super().setUp()
 
-        self.msg = Message(db)
+        self.msg = MessageDao(db, dbtables)
 
     def tearDown(self):
         pass

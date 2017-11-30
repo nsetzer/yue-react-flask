@@ -2,6 +2,7 @@
 
 from ..dao.user import UserDao
 from ..dao.library import LibraryDao
+from ..dao.queue import SongQueueDao
 
 class AudioService(object):
     """docstring for AudioService"""
@@ -15,6 +16,7 @@ class AudioService(object):
 
         self.userDao = UserDao(db, dbtables)
         self.libraryDao = LibraryDao(db, dbtables)
+        self.queueDao = SongQueueDao(db, dbtables)
 
     @staticmethod
     def init(db, dbtables):

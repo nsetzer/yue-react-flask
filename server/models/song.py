@@ -8,6 +8,27 @@ import time
 # http://docs.sqlalchemy.org/en/latest/orm/tutorial.html
 
 def SongDataTable(metadata):
+    """
+    Construct a table representing a song
+
+    id: uuid4 song id
+    domain_id: domain this song belongs to (for multi tenant environments)
+    ref_id: reference id used for migration from legacy databases.
+    file_path: file path or url to song resource
+    art_path: file path or url to album artwork
+    artist: the name of artist for this song
+    artist_key: A naturally sortable artist name
+    composer: the composer for this piece
+    album: the title of the album for this song
+    title: the title of this song
+    genre: comma or semi-colon separated list of genres
+    country: origin country for this piece
+    language: primary language of the song (may be a comma or semi-colon list)
+    album_index: index of the song in the album
+    length: length of the song in seconds
+    equalizer: measure of volume of the song
+    year: year the track was released
+    """
     return Table('song_data', metadata,
         Column('id', String, primary_key=True, default=generate_uuid),
         Column('domain_id', Integer, ForeignKey("domain.id")),

@@ -4,7 +4,7 @@ from flask_cors import cross_origin
 from sqlalchemy.exc import IntegrityError
 
 from ..index import app, db
-from ..dao.message import Message
+from ..dao.message import MessageDao
 
 import random
 

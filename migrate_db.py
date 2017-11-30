@@ -83,7 +83,9 @@ def migrate(username, domain_name, dbpath):
         # new_song[Song.last_played] = datetime.datetime.utcfromtimestamp(new_song[Song.last_played])
         # new_song[Song.date_added] = datetime.datetime.utcfromtimestamp(new_song[Song.date_added])
 
-        song_id = libraryDao.insertOrUpdateByReferenceId(user.id, domain.id, song[YueSong.uid], new_song)
+        song_id = libraryDao.insertOrUpdateByReferenceId(
+            user.id, domain.id, song[YueSong.uid], new_song, commit=False)
+    db.session.commit()
 
     end = time.time()
 
