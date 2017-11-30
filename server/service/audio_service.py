@@ -36,3 +36,22 @@ class AudioService(object):
 
         return song
 
+    def getSongAudioPath(self, user, song_id):
+
+        song = self.libraryDao.findSongById(user['id'], user['domain_id'], song_id);
+
+        return song['file_path']
+
+    def search(self, user,
+        searchTerm,
+        case_insensitive=True,
+        orderby=None,
+        limit=None,
+        offset=None):
+
+        return self.libraryDao.search(
+            user['id'], user['domain_id'],
+            searchTerm, case_insensitive,
+            orderby, limit, offset)
+
+

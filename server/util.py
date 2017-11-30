@@ -6,6 +6,7 @@ import json
 from .app import app, db, dbtables, db_reset
 from .dao.user import UserDao
 from .dao.library import Song, LibraryDao
+from .endpoints.util import generate_basic_token
 
 class AuthAppWrapper(object):
     """docstring for AuthAppWrapper"""
@@ -98,6 +99,15 @@ class TestCase(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         data = json.loads(res.data)
         return AuthAppWrapper(self.app, data['token'])
+
+    def login_basic(self, email, password):
+        """
+        Attempt to generate a session token for the given user.
+        returns a new Application wrapper, which automatically
+        sends the authentication token with any request.
+        """
+        token = generate_basic_token(email, password)
+        return AuthAppWrapper(self.app, token)
 
 try:
     TestCase.setUpTest()

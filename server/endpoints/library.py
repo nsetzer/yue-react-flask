@@ -1,16 +1,19 @@
 
 
-from flask import request, jsonify, g
+from flask import request, jsonify, g, send_file
 
 from ..index import app
 from ..service.audio_service import AudioService
-from .util import requires_auth
+from .util import requires_auth, httpError
 
 @app.route("/api/library", methods=["GET"])
 @requires_auth
 def get_library():
     """ return song information from the library """
-    return jsonify(result="ok")
+
+    songs = AudioService.instance().search(g.current_user, song_id)
+
+    return jsonify(result=songs)
 
 @app.route("/api/library", methods=["POST"])
 @requires_auth
@@ -29,7 +32,10 @@ def get_song(song_id):
 @requires_auth
 def get_song_audio(song_id):
     """ stream audio for a specific song """
-    return jsonify(result="ok")
+
+    path = AudioService.instance().getSongAudioPath(g.current_user, song_id)
+
+    return send_file(path)
 
 @app.route("/api/library/<song_id>/audio", methods=["POST"])
 @requires_auth

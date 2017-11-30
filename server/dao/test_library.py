@@ -48,16 +48,22 @@ class LibraryTestCase(unittest.TestCase):
         song3 = self.lib.findSongById(user_id, -1, uid)
         self.assertIsNone(song3)
 
-    def xtest_all_text_search(self):
-        songs = self.lib.search("Artist000")
+    def test_all_text_search(self):
+        user_id = self.USER['id']
+        domain_id = self.USER['domain_id']
+
+        songs = self.lib.search(user_id, domain_id, "Artist000")
 
         self.assertEqual(len(songs), 3)
 
         for song in songs:
             self.assertEqual(song[Song.artist], "Artist000")
 
-    def xtest_simple_search(self):
-        songs = self.lib.search("art=Artist000")
+    def test_simple_search(self):
+        user_id = self.USER['id']
+        domain_id = self.USER['domain_id']
+
+        songs = self.lib.search(user_id, domain_id, "art=Artist000")
 
         self.assertEqual(len(songs), 3)
 

@@ -23,7 +23,7 @@ class AppTestCase(TestCase):
         self.assertLessEqual(body['value'], 100)
         self.assertGreaterEqual(body['value'], 0)
 
-    def test_login(self):
+    def test_token_login(self):
         """
         login in and authenticated apis
 
@@ -33,6 +33,29 @@ class AppTestCase(TestCase):
         email = "user000"
         password = "user000"
         app = self.login(email, password)
+
+        res = app.get("/api/user")
+        body = json.loads(res.data)
+
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue("email" in body['result'])
+        self.assertTrue("domain_id" in body['result'])
+        self.assertTrue("role_id" in body['result'])
+        self.assertTrue("password" not in body['result'])
+
+        user = body['result']
+        self.assertEqual(user['email'], email)
+
+    def test_basic_login(self):
+        """
+        login in and authenticated apis
+
+        A test which first logs the user in, and then
+        attempts to request information about the user
+        """
+        email = "user000"
+        password = "user000"
+        app = self.login_basic(email, password)
 
         res = app.get("/api/user")
         body = json.loads(res.data)

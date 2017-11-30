@@ -145,7 +145,7 @@ class Song(object):
 class SongSearchGrammar(SearchGrammar):
     """docstring for SongSearchGrammar"""
 
-    def __init__(self, cols_song, cols_user):
+    def __init__(self, dbtables, cols_song, cols_user):
         super(SongSearchGrammar, self).__init__()
 
         # all_text is a meta-column name which is used to search all text fields
@@ -157,6 +157,7 @@ class SongSearchGrammar(SearchGrammar):
         self.time_fields = set([Song.length, ])
         self.year_fields = set([Song.year, ])
 
+        self.dbtables = dbtables
         self.keys_song = set(cols_song)
         self.keys_user = set(cols_user)
 
@@ -179,9 +180,9 @@ class SongSearchGrammar(SearchGrammar):
         e.g. convert the string 'play_count' to `SongUserData.play_count`
         """
         if key in self.keys_song:
-            return getattr(SongData, key)
+            return getattr(self.dbtables.SongDataTable.c, key)
         elif key in self.keys_user:
-            return getattr(SongUserData, key)
+            return getattr(self.dbtables.SongUserDataTable.c, key)
         else:
             if hasattr(key, 'pos'):
                 raise ParseError("Invalid column name `%s` at position %d" % (key, key.pos))
@@ -209,7 +210,7 @@ class LibraryDao(object):
         self.cols = self.cols_song + self.cols_user
         self.defs = self.defs_song + self.defs_user
 
-        self.grammar = SongSearchGrammar(self.cols_song, self.cols_user)
+        self.grammar = SongSearchGrammar(dbtables, self.cols_song, self.cols_user)
 
     def insert(self, user_id, domain_id, song):
 

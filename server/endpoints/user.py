@@ -12,7 +12,7 @@ from ..index import app, db, dbtables
 
 from ..dao.user import UserDao
 
-from .util import requires_auth, verify_token, generate_token
+from .util import requires_auth, requires_no_auth, verify_token, generate_token
 
 userDao = UserDao(db, dbtables)
 
@@ -66,7 +66,22 @@ def get_token():
 
 @app.route("/api/user/token", methods=["POST"])
 @cross_origin(supports_credentials=True)
+@requires_no_auth
 def is_token_valid():
     incoming = request.get_json()
-    is_valid = verify_token(incoming["token"])
-    return jsonify(token_is_valid=is_valid)
+
+    is_valid = False
+    reason = ""
+    try:
+        if verify_token(incoming["token"]):
+            is_valid = True
+            reason = "OK"
+    except BadSignature:
+        is_valid = False
+        reason = "Bat Signature"
+    except SignatureExpired:
+        is_valid = False
+        reason = "Expired Signature"
+
+    return jsonify(token_is_valid=is_valid,
+                   reason=reason)
