@@ -14,8 +14,10 @@ from ..dao.user import UserDao
 
 TWO_WEEKS = 1209600
 
+import traceback
+
 def httpError(code, message):
-    return jsonify(result=message), code
+    return jsonify(error=message), code
 
 def generate_basic_token(username, password):
     """convert a username and possword into a basic token"""
@@ -47,7 +49,8 @@ def _handle_exceptions(f, args, kwargs):
     try:
         return f(*args, **kwargs)
     except Exception as e:
-        return httpError(400, str(e))
+        traceback.print_exc()
+        return httpError(400, "Unhandled Exception: " + str(e))
 
 def _requires_token_auth_impl(f, args, kwargs, token):
     """

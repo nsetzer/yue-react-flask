@@ -35,7 +35,10 @@ def get_song_audio(song_id):
 
     path = AudioService.instance().getSongAudioPath(g.current_user, song_id)
 
-    return send_file(path)
+    if path:
+        return send_file(path)
+
+    return httpError(404, "No Audio for %s" % song_id)
 
 @app.route("/api/library/<song_id>/audio", methods=["POST"])
 @requires_auth
@@ -47,7 +50,13 @@ def set_song_audio(song_id):
 @requires_auth
 def get_song_art(song_id):
     """ get album art for a specific song """
-    return jsonify(result="ok")
+
+    path = AudioService.instance().getSongArtPath(g.current_user, song_id)
+
+    if path:
+        return send_file(path)
+
+    return httpError(404, "No Art for %s" % song_id)
 
 @app.route("/api/library/<song_id>/art", methods=["POST"])
 @requires_auth

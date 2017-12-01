@@ -79,6 +79,8 @@ def db_init(*args):
             sys.stdout.write("Creating User: %s@%s/%s\n" %
                 (username, domain, role))
 
+    sys.stdout.write("Creating Database...done\n")
+
 def db_drop():
     """ drop all tables from database """
     if input("drop tables? [yN] ")[:1] == "y":
@@ -94,13 +96,5 @@ def db_reset():
     db_init()
 
 
-"""
-userDao = UserDao(db, dbtables)
-user = userDao.findUserByEmail("user000")
-results = AudioService.instance().search(user, "beast", limit=5)
-for song in results:
-    print("/api/library/%s/audio" % song['id'])
-curl -u user000:user000 \
-  http://localhost:4200/api/library/7a3068e5-cdb0-46ec-b330-388e57340c7c/audio
-  -o out.mp3
-"""
+
+

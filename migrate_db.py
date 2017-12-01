@@ -6,7 +6,7 @@ if (sys.version_info[0] == 2):
 
 from yue.core.sqlstore import SQLStore
 from yue.core.library import Library as YueLibrary
-from yue.core.song import Song as YueSong
+from yue.core.song import Song as YueSong, get_album_art, ArtNotFound
 
 from server.app import app, db, dbtables, db_init
 
@@ -18,6 +18,7 @@ import datetime
 
 from sqlalchemy import and_, or_, select
 
+from server.service.audio_service import AudioService
 
 userDao = UserDao(db, dbtables)
 libraryDao = LibraryDao(db, dbtables)
@@ -72,7 +73,6 @@ def migrate(username, domain_name, dbpath):
     sqlstore = SQLStore(dbpath)
     yueLib = YueLibrary(sqlstore)
 
-
     user = userDao.findUserByEmail(username)
 
     print("Migrating Database:")
@@ -80,8 +80,13 @@ def migrate(username, domain_name, dbpath):
     for song in yueLib.search(None):
         new_song = {v: song[k] for k, v in all_fields.items()}
         new_song[Song.ref_id] = song[YueSong.uid]
-        # new_song[Song.last_played] = datetime.datetime.utcfromtimestamp(new_song[Song.last_played])
-        # new_song[Song.date_added] = datetime.datetime.utcfromtimestamp(new_song[Song.date_added])
+
+        try:
+            temp_path = os.path.splitext(song[YueSong.path])[0] + ".jpg"
+            art_path = get_album_art(song[YueSong.path], temp_path)
+            new_song[Song.art_path] = art_path
+        except ArtNotFound as e:
+            pass
 
         song_id = libraryDao.insertOrUpdateByReferenceId(
             user.id, domain.id, song[YueSong.uid], new_song, commit=False)
@@ -91,7 +96,6 @@ def migrate(username, domain_name, dbpath):
 
     t = end - start
     print("migrated %d songs in %.3f seconds" % (len(yueLib), t))
-
 
 def test():
 
@@ -133,6 +137,8 @@ def main():
 
         db_init()
 
+        userDao = UserDao(db, dbtables)
+
         domain = userDao.findDomainByName(domain_name)
         if domain is None:
             sys.stdout.write("Domain with name `%s` not found" % domain_name)
@@ -150,9 +156,23 @@ def main():
         migrate(username, domain_name, dbpath)
 
     elif mode == "test":
-        test()
+        # test()
+        userDao = UserDao(db, dbtables)
+        user = userDao.findUserByEmail("user000")
+        results = AudioService.instance().search(user, "beast", limit=5)
+        for song in results:
+            print("/api/library/%s/audio" % song['id'])
+            uid = song['id']
 
+        print("""
+curl -u user000:user000 \\
+  http://localhost:4200/api/library/%s/audio \\
+  -o out.mp3
 
+curl -u user000:user000 \\
+  http://localhost:4200/api/library/%s/art \\
+  -o out.jpg
+        """ % (uid, uid))
 if __name__ == '__main__':
     main()
 

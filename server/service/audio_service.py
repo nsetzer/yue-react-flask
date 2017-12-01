@@ -40,7 +40,19 @@ class AudioService(object):
 
         song = self.libraryDao.findSongById(user['id'], user['domain_id'], song_id);
 
+        if not song:
+            raise Exception("not found")
+
         return song['file_path']
+
+    def getSongArtPath(self, user, song_id):
+
+        song = self.libraryDao.findSongById(user['id'], user['domain_id'], song_id);
+
+        if not song:
+            raise Exception("not found")
+
+        return song['art_path']
 
     def search(self, user,
         searchTerm,
