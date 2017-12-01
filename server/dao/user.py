@@ -86,4 +86,34 @@ class UserDao(object):
         self.db.session.execute(query)
         self.db.session.commit()
 
+    def grantDomain(self, user_id, domain_id):
+        pass
+
+    def revokeDomain(self, user_id, domain_id):
+        pass
+
+    def grantRole(self, user_id, role_id):
+        pass
+
+    def revokeRole(self, user_id, role_id):
+        pass
+
+    def addFeature(self, name):
+        pass
+
+    def removeFeature(self, name):
+        # ensure feature is not used for any role
+        pass
+
+    def addFeatureToRole(self, role_id, feature_id):
+        pass
+
+    def removeFeatureFromRole(self, role_id, feature_id):
+        pass
+
+    def roleHasFeature(self, role_id, feature_id):
+        pass
+
+
+
 
