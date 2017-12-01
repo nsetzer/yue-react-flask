@@ -7,14 +7,14 @@ from ..util import TestCase
 
 from .queue import SongQueueDao
 
-from ..app import app, db
+from ..app import app, db, dbtables
 
 class SongQueueTestCase(TestCase):
 
     def setUp(self):
         super().setUp()
 
-        self.queue = SongQueueDao(db, db.tables)
+        self.queue = SongQueueDao(db, dbtables)
 
     def tearDown(self):
         pass

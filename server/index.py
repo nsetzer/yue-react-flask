@@ -7,7 +7,7 @@ from flask_cors import CORS
 import logging
 from logging.handlers import RotatingFileHandler
 
-from .models.tables import DatabaseTables
+from .dao.tables.tables import DatabaseTables
 
 class EnvironmentConfig(object):
     """
@@ -67,8 +67,6 @@ bcrypt = Bcrypt(app)
 cors   = CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 dbtables = DatabaseTables(db.metadata)
-
-db.tables = dbtables # TODO remove
 
 if not os.path.exists(cfg.build_dir):
     # only an error in production environments

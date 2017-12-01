@@ -54,7 +54,7 @@ class TestCase(unittest.TestCase):
             cls.USER = cls.userDao.findUserByEmail(cls.USERNAME)
 
             try:
-                cls.LIBRARY = LibraryDao(db, db.tables)
+                cls.LIBRARY = LibraryDao(db, dbtables)
 
                 songs = []
                 for a in range(3):

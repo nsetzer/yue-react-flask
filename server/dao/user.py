@@ -11,30 +11,30 @@ class UserDao(object):
         self.dbtables = dbtables
 
     def findDomainByName(self, name):
-        query = self.db.tables.DomainTable.select() \
-            .where(self.db.tables.DomainTable.c.name == name)
+        query = self.dbtables.DomainTable.select() \
+            .where(self.dbtables.DomainTable.c.name == name)
         result = self.db.session.execute(query)
         return result.fetchone()
 
     def findRoleByName(self, name):
-        query = self.db.tables.RoleTable.select() \
-            .where(self.db.tables.RoleTable.c.name == name)
+        query = self.dbtables.RoleTable.select() \
+            .where(self.dbtables.RoleTable.c.name == name)
         result = self.db.session.execute(query)
         return result.fetchone()
 
     def findUserByEmail(self, email):
-        query = self.db.tables.UserTable.select() \
-            .where(self.db.tables.UserTable.c.email == email)
+        query = self.dbtables.UserTable.select() \
+            .where(self.dbtables.UserTable.c.email == email)
         result = self.db.session.execute(query)
         return result.fetchone()
 
     def findUserByEmailAndPassword(self, email, password):
-        query = self.db.tables.UserTable.select() \
-            .where(self.db.tables.UserTable.c.email == email)
+        query = self.dbtables.UserTable.select() \
+            .where(self.dbtables.UserTable.c.email == email)
         user = self.db.session.execute(query).fetchone()
 
         if user:
-            crypt = user[self.db.tables.UserTable.c.password]
+            crypt = user[self.dbtables.UserTable.c.password]
 
             if bcrypt.checkpw(password.encode("utf-8"), crypt):
                 return user
@@ -42,13 +42,13 @@ class UserDao(object):
         return None
 
     def createDomain(self, domain):
-        query = insert(self.db.tables.DomainTable).values(domain)
+        query = insert(self.dbtables.DomainTable).values(domain)
         result = self.db.session.execute(query)
         self.db.session.commit()
         return result.inserted_primary_key[0]
 
     def createRole(self, role):
-        query = insert(self.db.tables.RoleTable).values(role)
+        query = insert(self.dbtables.RoleTable).values(role)
         result = self.db.session.execute(query)
         self.db.session.commit()
         return result.inserted_primary_key[0]
@@ -65,7 +65,7 @@ class UserDao(object):
             "role_id": role_id,
         }
 
-        query = insert(self.db.tables.UserTable).values(user_)
+        query = insert(self.dbtables.UserTable).values(user_)
 
         result = self.db.session.execute(query)
         self.db.session.commit()
@@ -79,7 +79,7 @@ class UserDao(object):
             crypt = bcrypt.hashpw(user['password'].encode("utf-8"), salt)
             user['password'] = crypt
 
-        query = update(self.db.tables.UserTable) \
+        query = update(self.dbtables.UserTable) \
             .values(user) \
             .where(SongQueueTable.c.user_id == self.user_id)
 
