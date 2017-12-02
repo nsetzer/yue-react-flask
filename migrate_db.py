@@ -23,6 +23,8 @@ from server.service.audio_service import AudioService
 userDao = UserDao(db, dbtables)
 libraryDao = LibraryDao(db, dbtables)
 
+from server.cli.config import db_init as db_init_2
+
 text_fields = {
     YueSong.path: Song.path,
     YueSong.artist: Song.artist,
@@ -156,6 +158,10 @@ def main():
         migrate(username, domain_name, dbpath)
 
     elif mode == "test":
+
+        db_init_2(db, dbtables, "config/production/env.yml")
+
+    elif mode == "test-2":
         # test()
         userDao = UserDao(db, dbtables)
         user = userDao.findUserByEmail("user000")
@@ -163,7 +169,6 @@ def main():
         for song in results:
             print("/api/library/%s/audio" % song['id'])
             uid = song['id']
-
         print("""
 curl -u user000:user000 \\
   http://localhost:4200/api/library/%s/audio \\

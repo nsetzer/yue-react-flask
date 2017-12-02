@@ -22,7 +22,7 @@ def DomainTable(metadata):
     """
     return Table('user_domain', metadata,
         Column('id', Integer, primary_key=True),
-        Column('name', String, unique = True),
+        Column('name', String, unique = True, nullable=False),
     )
 
 def GrantedDomainTable(metadata):
@@ -30,8 +30,8 @@ def GrantedDomainTable(metadata):
     returns a table which maps users to domains they can access
     """
     return Table('user_granted_domain', metadata,
-        Column('user_id', ForeignKey("user.id")),
-        Column('domain_id', ForeignKey("user_domain.id")),
+        Column('user_id', ForeignKey("user.id"), nullable=False),
+        Column('domain_id', ForeignKey("user_domain.id"), nullable=False),
     )
 
 def RoleTable(metadata):
@@ -43,7 +43,7 @@ def RoleTable(metadata):
     """
     return Table('user_role', metadata,
         Column('id', Integer, primary_key=True),
-        Column('name', String, unique = True),
+        Column('name', String, unique = True, nullable=False),
     )
 
 def GrantedRoleTable(metadata):
@@ -51,8 +51,8 @@ def GrantedRoleTable(metadata):
     returns a table which maps users to roles they can access
     """
     return Table('user_granted_role', metadata,
-        Column('user_id', ForeignKey("user.id")),
-        Column('role_id', ForeignKey("user_role.id")),
+        Column('user_id', ForeignKey("user.id"), nullable=False),
+        Column('role_id', ForeignKey("user_role.id"), nullable=False),
     )
 
 def FeatureTable(metadata):
@@ -61,7 +61,7 @@ def FeatureTable(metadata):
     """
     return Table('user_feature', metadata,
         Column('id', Integer, primary_key=True),
-        Column('feature', String, unique = True),
+        Column('feature', String, unique = True, nullable=False),
     )
 
 def RoleFeatureTable(metadata):
@@ -69,8 +69,8 @@ def RoleFeatureTable(metadata):
     returns a table which indicates what features are enabled for a role
     """
     return Table('user_role_feature', metadata,
-        Column('role_id', ForeignKey("user_role.id")),
-        Column('feature_id', ForeignKey("user_feature.id")),
+        Column('role_id', ForeignKey("user_role.id"), nullable=False),
+        Column('feature_id', ForeignKey("user_feature.id"), nullable=False),
     )
 
 def UserTable(metadata):
@@ -81,8 +81,8 @@ def UserTable(metadata):
         Column('id', Integer, primary_key=True),
         Column('email', String),
         Column('password', String),
-        Column('domain_id', Integer, ForeignKey("user_domain.id")),
-        Column('role_id', Integer, ForeignKey("user_role.id"))
+        Column('domain_id', Integer, ForeignKey("user_domain.id"), nullable=False),
+        Column('role_id', Integer, ForeignKey("user_role.id"), nullable=False)
     )
 
 

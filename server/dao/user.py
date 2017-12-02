@@ -25,6 +25,11 @@ class UserDao(object):
         result = self.db.session.execute(query)
         return result.fetchone()
 
+    def listDomains(self):
+        query = self.dbtables.DomainTable.select()
+        result = self.db.session.execute(query)
+        return result.fetchall()
+
     def removeDomain(self, domain_id, commit = True):
         # TODO ensure domain is not used for any user
 
@@ -50,6 +55,11 @@ class UserDao(object):
         result = self.db.session.execute(query)
         return result.fetchone()
 
+    def listRoles(self):
+        query = self.dbtables.RoleTable.select()
+        result = self.db.session.execute(query)
+        return result.fetchall()
+
     def removeRole(self, role_id, commit = True):
         # TODO ensure role is not used for any user
 
@@ -74,6 +84,11 @@ class UserDao(object):
             .where(self.dbtables.FeatureTable.c.feature == name)
         result = self.db.session.execute(query)
         return result.fetchone()
+
+    def listFeatures(self):
+        query = self.dbtables.FeatureTable.select()
+        result = self.db.session.execute(query)
+        return result.fetchall()
 
     def removeFeature(self, feat_id, commit = True):
         # TODO ensure feature is not used for any role
@@ -131,7 +146,7 @@ class UserDao(object):
 
         return None
 
-    def updateUser(self, user):
+    def updateUser(self, user, commit = True):
 
         if 'password' in user:
             salt = bcrypt.gensalt(12)
@@ -143,9 +158,10 @@ class UserDao(object):
             .where(SongQueueTable.c.user_id == self.user_id)
 
         self.db.session.execute(query)
-        self.db.session.commit()
+        if commit:
+            self.db.session.commit()
 
-    def removeUser(self, user_id, commit = False):
+    def removeUser(self, user_id, commit = True):
 
         # remove user roles
         query = delete(self.dbtables.GrantedRoleTable) \
