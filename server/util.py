@@ -97,7 +97,7 @@ class TestCase(unittest.TestCase):
                             data=json.dumps(body),
                             content_type='application/json')
         self.assertEqual(res.status_code, 200)
-        data = json.loads(res.data)
+        data = json.loads(res.data.decode("utf-8"))
         return AuthAppWrapper(self.app, data['token'])
 
     def login_basic(self, email, password):

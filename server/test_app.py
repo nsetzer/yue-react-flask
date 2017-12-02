@@ -18,7 +18,7 @@ class AppTestCase(TestCase):
         check that the random api returns a random number correctly
         """
         res = self.app.get('/api/random')
-        body = json.loads(res.data)
+        body = json.loads(res.data.decode("utf-8"))
         self.assertEqual(res.status_code, 200)
         self.assertLessEqual(body['value'], 100)
         self.assertGreaterEqual(body['value'], 0)
@@ -35,7 +35,7 @@ class AppTestCase(TestCase):
         app = self.login(email, password)
 
         res = app.get("/api/user")
-        body = json.loads(res.data)
+        body = json.loads(res.data.decode("utf-8"))
 
         self.assertEqual(res.status_code, 200)
         self.assertTrue("email" in body['result'])
@@ -58,7 +58,7 @@ class AppTestCase(TestCase):
         app = self.login_basic(email, password)
 
         res = app.get("/api/user")
-        body = json.loads(res.data)
+        body = json.loads(res.data.decode("utf-8"))
 
         self.assertEqual(res.status_code, 200)
         self.assertTrue("email" in body['result'])

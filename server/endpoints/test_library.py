@@ -21,7 +21,7 @@ class LibraryEndpointTestCase(TestCase):
         app = self.login(self.USERNAME, self.PASSWORD)
         url = "/api/library/%s" % self.SONG['id']
         res = app.get(url)
-        body = json.loads(res.data)
+        body = json.loads(res.data.decode("utf-8"))
         song = body['result']
 
         self.assertIsNotNone(song)

@@ -1,12 +1,10 @@
 
 from .message import MessageTable
 from .user import DomainTable, RoleTable, UserTable, \
-                  GrandtedDomainTable, GrandtedRoleTable, \
+                  GrantedDomainTable, GrantedRoleTable, \
                   FeatureTable, RoleFeatureTable
-from .song import SongDataTable, SongUserDataTable
-from .queue import SongQueueTable
-from .song_history import SongHistoryTable
-from .playlist import SongPlaylistTable
+from .song import SongDataTable, SongUserDataTable, \
+                  SongQueueTable, SongHistoryTable, SongPlaylistTable
 
 
 class DatabaseTables(object):
@@ -19,8 +17,8 @@ class DatabaseTables(object):
         self.DomainTable = DomainTable(metadata)
         self.RoleTable = RoleTable(metadata)
         self.UserTable = UserTable(metadata)
-        self.GrandtedDomainTable = GrandtedDomainTable(metadata)
-        self.GrandtedRoleTable = GrandtedRoleTable(metadata)
+        self.GrantedDomainTable = GrantedDomainTable(metadata)
+        self.GrantedRoleTable = GrantedRoleTable(metadata)
         self.FeatureTable = FeatureTable(metadata)
         self.RoleFeatureTable = RoleFeatureTable(metadata)
 

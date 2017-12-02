@@ -1,6 +1,14 @@
 
 """
 tables for Role Based User Management
+
+User access is controlled by two basic features, the domain and role.
+The domain controls what set of data a user can access, while the role
+allows for fine tuning of CRUD operations to that data.
+
+The domain and role tables are designed in a way so that features
+can be added or removed per environment without requireing schema changes
+
 """
 from sqlalchemy.schema import Table, Column, ForeignKey
 from sqlalchemy.types import Integer, String
@@ -12,27 +20,18 @@ def DomainTable(metadata):
     Each user has a default and active domain. the active domain
     controls what data they are able to see.
     """
-    return Table('domain', metadata,
+    return Table('user_domain', metadata,
         Column('id', Integer, primary_key=True),
-        Column('name', String),
+        Column('name', String, unique = True),
     )
 
-def GrandtedDomainTable(metadata):
+def GrantedDomainTable(metadata):
     """
     returns a table which maps users to domains they can access
     """
-    return Table('granted_domain', metadata,
+    return Table('user_granted_domain', metadata,
         Column('user_id', ForeignKey("user.id")),
-        Column('domain_id', ForeignKey("domain.id")),
-    )
-
-def GrandtedRoleTable(metadata):
-    """
-    returns a table which maps users to roles they can access
-    """
-    return Table('granted_role', metadata,
-        Column('user_id', ForeignKey("user.id")),
-        Column('role_id', ForeignKey("role.id")),
+        Column('domain_id', ForeignKey("user_domain.id")),
     )
 
 def RoleTable(metadata):
@@ -42,27 +41,36 @@ def RoleTable(metadata):
     Each user has a default and active role. the active role
     controls what features are enabled for the user
     """
-    return Table('role', metadata,
+    return Table('user_role', metadata,
         Column('id', Integer, primary_key=True),
-        Column('name', String),
+        Column('name', String, unique = True),
+    )
+
+def GrantedRoleTable(metadata):
+    """
+    returns a table which maps users to roles they can access
+    """
+    return Table('user_granted_role', metadata,
+        Column('user_id', ForeignKey("user.id")),
+        Column('role_id', ForeignKey("user_role.id")),
     )
 
 def FeatureTable(metadata):
     """
     returns a table describing features in this environment
     """
-    return Table('feature', metadata,
+    return Table('user_feature', metadata,
         Column('id', Integer, primary_key=True),
-        Column('name', String),
+        Column('feature', String, unique = True),
     )
 
 def RoleFeatureTable(metadata):
     """
     returns a table which indicates what features are enabled for a role
     """
-    return Table('role_permission', metadata,
-        Column('feature_id', ForeignKey("feature.id")),
-        Column('role_id', ForeignKey("role.id")),
+    return Table('user_role_feature', metadata,
+        Column('role_id', ForeignKey("user_role.id")),
+        Column('feature_id', ForeignKey("user_feature.id")),
     )
 
 def UserTable(metadata):
@@ -73,8 +81,8 @@ def UserTable(metadata):
         Column('id', Integer, primary_key=True),
         Column('email', String),
         Column('password', String),
-        Column('domain_id', Integer, ForeignKey("domain.id")),
-        Column('role_id', Integer, ForeignKey("role.id"))
+        Column('domain_id', Integer, ForeignKey("user_domain.id")),
+        Column('role_id', Integer, ForeignKey("user_role.id"))
     )
 
 

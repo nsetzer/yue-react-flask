@@ -51,13 +51,13 @@ def db_init(*args):
 
     userDao = UserDao(db, dbtables)
 
-    default_domain = userDao.createDomain({'name': app.config['DEFAULT_DOMAIN']})
+    default_domain = userDao.createDomain(app.config['DEFAULT_DOMAIN'])
     sys.stdout.write("Creating Domain: %s\n" % app.config['DEFAULT_DOMAIN'])
 
-    admin_role = userDao.createRole({'name': 'admin'})
+    admin_role = userDao.createRole("admin")
     sys.stdout.write("Creating Role: admin\n")
 
-    user_role = userDao.createRole({'name': app.config['DEFAULT_ROLE']})
+    user_role = userDao.createRole(app.config['DEFAULT_ROLE'])
     sys.stdout.write("Creating Role: %s\n" % app.config['DEFAULT_ROLE'])
 
     username = "admin"
