@@ -128,9 +128,18 @@ def main():
     username = 'nsetzer'
     domain_name = app.config['DEFAULT_DOMAIN']
     role_name = "admin"
-    dbpath = "/home/nsetzer/projects/android/YueMusicPlayer/yue.db"
-    if not os.path.exists(dbpath):
-        dbpath = "/Users/nsetzer/Music/Library/yue.db"
+
+    path1 = "/home/nsetzer/projects/android/YueMusicPlayer/yue.db"
+    path2 = "/Users/nsetzer/Music/Library/yue.db"
+    path3 = "D:\\Dropbox\\ConsolePlayer\\yue.db"
+    for path in [path1, path2, path3]:
+        if os.path.exists(path):
+            dbpath = path
+            break;
+    else:
+        sys.stderr.write("cannot find source db")
+        sys.exit(1)
+
 
     if mode == 'migrate':
         migrate(username, dbpath)
