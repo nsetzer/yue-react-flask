@@ -4,6 +4,16 @@ from ..dao.user import UserDao
 from ..dao.library import LibraryDao
 from ..dao.queue import SongQueueDao
 
+class ServiceException(Exception):
+
+    def __init__(self, user, message):
+        name = "%s@%s/%s" % (user['email'], user['domain_id'], user['role_id'])
+        message = name + ": " + message
+        super(ServiceException, self).__init__(message)
+
+class AudioServiceException(ServiceException):
+    pass
+
 class AudioService(object):
     """docstring for AudioService"""
 
@@ -28,29 +38,30 @@ class AudioService(object):
     def instance():
         return AudioService._instance
 
+    def _getSongInfo(self, user, song_id):
+        song = self.libraryDao.findSongById(user['id'], user['domain_id'], song_id);
+
+        if not song:
+            raise AudioServiceException(user,
+                "song not found for id: %s" % song_id)
+
+        return song
+
     def findSongById(self, user, song_id):
 
         # TODO check user role permissions
 
-        song = self.libraryDao.findSongById(user['id'], user['domain_id'], song_id);
-
-        return song
+        return self._getSongInfo(user, song_id)
 
     def getSongAudioPath(self, user, song_id):
 
-        song = self.libraryDao.findSongById(user['id'], user['domain_id'], song_id);
-
-        if not song:
-            raise Exception("not found")
+        song = self._getSongInfo(user, song_id)
 
         return song['file_path']
 
     def getSongArtPath(self, user, song_id):
 
-        song = self.libraryDao.findSongById(user['id'], user['domain_id'], song_id);
-
-        if not song:
-            raise Exception("not found")
+        song = self._getSongInfo(user, song_id)
 
         return song['art_path']
 

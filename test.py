@@ -8,6 +8,17 @@ import argparse
 if (sys.version_info[0] == 2):
     raise RuntimeError("python2 not supported")
 
+
+def configure_test_database(env_config):
+    index = __import__("server.index").index
+    config = __import__("server.cli.config").cli.config
+
+    db = index.db
+    dbtables = index.dbtables
+
+    config.db_drop_all(db, dbtables)
+    config.db_init_test(db, dbtables, env_config)
+
 def main():
     """run server tests"""
 
@@ -25,6 +36,8 @@ def main():
     os.environ["DATABASE_URL"] = "sqlite:///" + path
     os.environ["ENV"] = "testing"
     os.environ["DEBUG"] = "True" if args.verbose else "False"
+
+    configure_test_database("config/test/env.yml")
 
     test_loader = unittest.defaultTestLoader
     test_runner = unittest.TextTestRunner(verbosity=2 if args.verbose else 1)

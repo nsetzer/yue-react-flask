@@ -212,13 +212,14 @@ class LibraryDao(object):
 
         self.grammar = SongSearchGrammar(dbtables, self.cols_song, self.cols_user)
 
-    def insert(self, user_id, domain_id, song):
+    def insert(self, user_id, domain_id, song, commit=True):
 
         song_id = self.insertSongData(domain_id, song, False)
 
         self.insertUserData(user_id, song_id, song, False)
 
-        self.db.session.commit()
+        if commit:
+            self.db.session.commit()
 
         return song_id
 
@@ -270,14 +271,15 @@ class LibraryDao(object):
             if commit:
                 self.db.session.commit()
 
-    def update(self, user_id, domain_id, song_id, song):
+    def update(self, user_id, domain_id, song_id, song, commit=True):
 
-        self.updateSongData(domain_id, song_id, song)
-        self.updateUserData(user_id, song_id, song)
+        self.updateSongData(domain_id, song_id, song, commit=False)
+        self.updateUserData(user_id, song_id, song, commit=False)
 
-        self.db.session.commit()
+        if commit:
+            self.db.session.commit()
 
-    def updateSongData(self, domain_id, song_id, song, commit = True):
+    def updateSongData(self, domain_id, song_id, song, commit=True):
 
         song_keys = set(self._SongDataColumnNames())
         song_data = {k: song[k] for k in song.keys() if k in song_keys}
@@ -293,7 +295,7 @@ class LibraryDao(object):
             if commit:
                 self.db.session.commit()
 
-    def updateUserData(self, user_id, song_id, song, commit = True):
+    def updateUserData(self, user_id, song_id, song, commit=True):
         """ update only the user data portion of a song in the database """
         user_keys = set(self._SongUserDataColumnNames())
         user_data = {k: song[k] for k in song.keys() if k in user_keys}
@@ -317,7 +319,7 @@ class LibraryDao(object):
             return results[0]
         return None
 
-    def insertOrUpdateByReferenceId(self, user_id, domain_id, ref_id, song, commit = True):
+    def insertOrUpdateByReferenceId(self, user_id, domain_id, ref_id, song, commit=True):
 
         results = self._query(user_id, domain_id,
                              self.dbtables.SongDataTable.c.ref_id == ref_id)
@@ -330,6 +332,7 @@ class LibraryDao(object):
 
         if commit:
             self.db.session.commit()
+
         return song_id
 
     def search(self,

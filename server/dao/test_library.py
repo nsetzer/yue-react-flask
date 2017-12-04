@@ -54,7 +54,7 @@ class LibraryTestCase(unittest.TestCase):
 
         songs = self.lib.search(user_id, domain_id, "Artist000")
 
-        self.assertEqual(len(songs), 3)
+        self.assertEqual(len(songs), 9)
 
         for song in songs:
             self.assertEqual(song[Song.artist], "Artist000")
@@ -65,7 +65,7 @@ class LibraryTestCase(unittest.TestCase):
 
         songs = self.lib.search(user_id, domain_id, "art=Artist000")
 
-        self.assertEqual(len(songs), 3)
+        self.assertEqual(len(songs), 9)
 
         for song in songs:
             self.assertEqual(song[Song.artist], "Artist000")

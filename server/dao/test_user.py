@@ -75,15 +75,15 @@ class UserDaoTestCase(unittest.TestCase):
 
         domain_id = self.userDao.createDomain('domain3')
         role_id = self.userDao.createRole('role3')
-        feat_id = self.userDao.createFeature('create_user')
+        feat_id = self.userDao.createFeature('<create_user>')
 
         user_id = self.userDao.createUser("user234", "password", domain_id, role_id)
 
         self.userDao.addFeatureToRole(role_id, feat_id)
 
-        self.assertTrue( self.userDao.roleHasFeature(role_id, feat_id) )
+        self.assertTrue(self.userDao.roleHasFeature(role_id, feat_id))
 
         self.userDao.removeFeatureFromRole(role_id, feat_id)
 
-        self.assertFalse( self.userDao.roleHasFeature(role_id, feat_id) )
+        self.assertFalse(self.userDao.roleHasFeature(role_id, feat_id))
 

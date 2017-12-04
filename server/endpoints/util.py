@@ -123,6 +123,24 @@ def requires_auth(f):
 
     return decorated
 
+def requires_auth_role(role=None):
+
+    def impl(f):
+
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if "Authorization" not in request.headers:
+                return httpError(401, "Authorization header not provided")
+
+            token = request.headers['Authorization']
+
+            bytes_token = token.encode('utf-8', 'ignore')
+            if token.startswith("Basic "):
+                return _requires_basic_auth_impl(f, args, kwargs, bytes_token)
+            return _requires_token_auth_impl(f, args, kwargs, bytes_token)
+        return decorated
+    return impl
+
 def requires_no_auth(f):
     """
     endpoint decorator which handles unhandled exceptions

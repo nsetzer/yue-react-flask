@@ -4,7 +4,7 @@ from flask import request, jsonify, g, send_file
 
 from ..index import app
 from ..service.audio_service import AudioService
-from .util import requires_auth, httpError
+from .util import requires_auth, requires_auth_role, httpError
 
 @app.route("/api/library", methods=["GET"])
 @requires_auth
@@ -22,7 +22,7 @@ def create_song(song_id):
     return jsonify(result="ok")
 
 @app.route("/api/library/<song_id>", methods=["GET"])
-@requires_auth
+@requires_auth_role('fizzbuzz')
 def get_song(song_id):
     """ return information about a specific song """
     song = AudioService.instance().findSongById(g.current_user, song_id)

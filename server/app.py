@@ -43,58 +43,5 @@ def list_routes():
 
         print(line)
 
-def db_init(*args):
-    """initialize the database"""
-    sys.stdout.write("Creating Database...\n")
-    db.create_all()
-    db.session.commit()
-
-    userDao = UserDao(db, dbtables)
-
-    default_domain = userDao.createDomain(app.config['DEFAULT_DOMAIN'])
-    sys.stdout.write("Creating Domain: %s\n" % app.config['DEFAULT_DOMAIN'])
-
-    admin_role = userDao.createRole("admin")
-    sys.stdout.write("Creating Role: admin\n")
-
-    user_role = userDao.createRole(app.config['DEFAULT_ROLE'])
-    sys.stdout.write("Creating Role: %s\n" % app.config['DEFAULT_ROLE'])
-
-    username = "admin"
-    password = "admin"
-    domain = app.config['DEFAULT_DOMAIN']
-    role = "admin"
-
-    userDao.createUser(username, password, default_domain, admin_role)
-    sys.stdout.write("Creating User: %s@%s/%s\n" % (username, domain, role))
-
-    if app.config['DEFAULT_DOMAIN'] == "test":
-        for i in range(3):
-            username = "user%03d" % i
-            password = username
-            domain = "test"
-            role = app.config['DEFAULT_ROLE']
-
-            userDao.createUser(username, password, default_domain, user_role)
-            sys.stdout.write("Creating User: %s@%s/%s\n" %
-                (username, domain, role))
-
-    sys.stdout.write("Creating Database...done\n")
-
-def db_drop():
-    """ drop all tables from database """
-    if input("drop tables? [yN] ")[:1] == "y":
-        db.drop_all()
-        db.session.commit()
-        sys.stderr.write("successfully dropped all tables")
-    else:
-        sys.stderr.write("user aborted.")
-
-def db_reset():
-    """ drop all tables then create default database """
-    db.drop_all()
-    db_init()
-
-
 
 

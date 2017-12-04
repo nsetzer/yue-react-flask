@@ -3,10 +3,11 @@ import os, sys
 import unittest
 import json
 
-from .app import app, db, dbtables, db_reset
+from .app import app, db, dbtables
 from .dao.user import UserDao
 from .dao.library import Song, LibraryDao
 from .endpoints.util import generate_basic_token
+import traceback
 
 class AuthAppWrapper(object):
     """docstring for AuthAppWrapper"""
@@ -35,7 +36,6 @@ class AuthAppWrapper(object):
             kwargs['headers']['Authorization'] = self.token
         return method(*args, **kwargs)
 
-
 class TestCase(unittest.TestCase):
 
     @classmethod
@@ -45,7 +45,6 @@ class TestCase(unittest.TestCase):
         this is run once before any test
         """
         with app.test_client():
-            db_reset()
 
             cls.userDao = UserDao(db, dbtables)
 
@@ -53,31 +52,17 @@ class TestCase(unittest.TestCase):
             cls.PASSWORD = "user000"
             cls.USER = cls.userDao.findUserByEmail(cls.USERNAME)
 
-            try:
-                cls.LIBRARY = LibraryDao(db, dbtables)
+            cls.LIBRARY = LibraryDao(db, dbtables)
 
-                songs = []
-                for a in range(3):
-                    for b in range(3):
-                        for t in range(3):
-                            song = {
-                                "artist": "Artist%03d" % a,
-                                "album": "Album%03d" % b,
-                                "title": "Title%03d" % t,
-                            }
-                        songs.append(cls.LIBRARY.insert(
-                            cls.USER['id'],
-                            cls.USER['domain_id'],
-                            song))
+            # , orderby=("artist", "album", "title")
+            cls.SONGS = [song['id'] for song in
+                cls.LIBRARY.search(cls.USER['id'], cls.USER['domain_id'],
+                    None)]
 
-                cls.SONGS = songs
-                cls.SONG = cls.LIBRARY.findSongById(
+            cls.SONG = cls.LIBRARY.findSongById(
                     cls.USER['id'],
                     cls.USER['domain_id'],
-                    songs[0])
-            except Exception as e:
-                sys.stderr.write("%s\n"%(e))
-            print("done")
+                    cls.SONGS[0])
 
     def setUp(self):
         app.testing = True
@@ -112,7 +97,7 @@ class TestCase(unittest.TestCase):
 try:
     TestCase.setUpTest()
 except Exception as e:
-    sys.stderr.write("TestCase Error: %s\n"%(e))
+    traceback.print_exc()
 
 
 

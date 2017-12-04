@@ -7,6 +7,7 @@ except ImportError:
     from yaml import Loader, Dumper
 
 from ..dao.user import UserDao
+from ..dao.library import LibraryDao
 
 class ConfigException(Exception):
     """docstring for ConfigException"""
@@ -51,6 +52,11 @@ def yaml_assert(data):
         yaml_assert_list_of_string(user, "domains")
         yaml_assert_list_of_string(user, "roles")
 
+def db_drop_all(db, dbtables):
+    """ drop all tables from database """
+    db.drop_all()
+    db.session.commit()
+
 def db_init(db, dbtables, config_path):
 
     with open(config_path, "r") as rf:
@@ -74,10 +80,12 @@ def db_init(db, dbtables, config_path):
             for name in child['features']:
                 if name == "all":
                     for feat in userDao.listFeatures():
-                        userDao.addFeatureToRole(role_id, feat['id'], commit=False)
+                        userDao.addFeatureToRole(
+                            role_id, feat['id'], commit=False)
                 else:
                     feat = userDao.findFeatureByName(name)
-                    userDao.addFeatureToRole(role_id, feat['id'], commit=False)
+                    userDao.addFeatureToRole(
+                        role_id, feat['id'], commit=False)
 
     for user in data['users']:
 
@@ -104,5 +112,28 @@ def db_init(db, dbtables, config_path):
 
     db.session.commit()
 
+def db_init_test(db, dbtables, config_path):
+
+    # create initial environment
+    db_init(db, dbtables, config_path)
+
+    userDao = UserDao(db, dbtables)
+    libDao = LibraryDao(db, dbtables)
+
+    user = userDao.findUserByEmail("user000")
+
+    # create additional resources for testing
+    for a in range(3):
+        for b in range(3):
+            for t in range(3):
+                song = {
+                    "artist": "Artist%03d" % a,
+                    "album": "Album%03d" % b,
+                    "title": "Title%03d" % t,
+                    "rating": int(10 * (a * b * t) / 27)
+                }
+                libDao.insert(user['id'], user['domain_id'],
+                    song, commit=False)
+    db.session.commit()
 
 

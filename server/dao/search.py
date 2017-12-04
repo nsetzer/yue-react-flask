@@ -779,7 +779,7 @@ class Grammar(object):
         # reset meta options
         self.meta_options = dict()
 
-        if not string.strip():
+        if string is None or not string.strip():
             return BlankSearchRule()
         tokens = self.tokenizeString(string)
         rule = self.parseTokens(tokens)
