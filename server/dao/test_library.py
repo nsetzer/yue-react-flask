@@ -70,5 +70,61 @@ class LibraryTestCase(unittest.TestCase):
         for song in songs:
             self.assertEqual(song[Song.artist], "Artist000")
 
+    def test_search_limit(self):
+        user_id = self.USER['id']
+        domain_id = self.USER['domain_id']
+        limit = 4
+
+        songs = self.lib.search(user_id, domain_id,
+            "Artist000", limit=limit)
+
+        self.assertEqual(len(songs), limit)
+
+        for song in songs:
+            self.assertEqual(song[Song.artist], "Artist000")
+
+    def test_search_order_string(self):
+
+        user_id = self.USER['id']
+        domain_id = self.USER['domain_id']
+
+        songs = self.lib.search(user_id, domain_id,
+            "Artist", orderby="artist")
+
+        songs2 = [s['artist'] for s in songs]
+        songs2.sort()
+
+        for s1, s2 in zip(songs, songs2):
+            self.assertEqual(s1['artist'], s2)
+
+    def test_search_order_forward(self):
+
+        user_id = self.USER['id']
+        domain_id = self.USER['domain_id']
+
+        songs = self.lib.search(user_id, domain_id,
+            "Artist", orderby=[("artist", "ASC")])
+
+        songs2 = [s['artist'] for s in songs]
+        songs2.sort()
+
+        for s1, s2 in zip(songs, songs2):
+            self.assertEqual(s1['artist'], s2)
+
+    def test_search_order_reverse(self):
+
+        user_id = self.USER['id']
+        domain_id = self.USER['domain_id']
+
+        songs = self.lib.search(user_id, domain_id,
+            "Artist", orderby=[("artist", "DESC")])
+
+        songs2 = [s['artist'] for s in songs]
+        songs2.sort(reverse=True)
+
+        for s1, s2 in zip(songs, songs2):
+            self.assertEqual(s1['artist'], s2)
+
+
 
 

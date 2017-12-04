@@ -55,6 +55,9 @@ def get_token():
     if 'password' not in incoming:
         return jsonify(error="password not specified"), 400
 
+    # TODO: decompose email from user@domain/role
+    # and set the domain and role correctly
+
     user = userDao.findUserByEmailAndPassword(
         incoming["email"], incoming["password"])
     if user:

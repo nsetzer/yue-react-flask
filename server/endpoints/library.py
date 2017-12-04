@@ -8,12 +8,23 @@ from .util import requires_auth, requires_auth_role, httpError
 
 @app.route("/api/library", methods=["GET"])
 @requires_auth
-def get_library():
+def search_library():
     """ return song information from the library """
 
-    songs = AudioService.instance().search(g.current_user, song_id)
+    text = request.args.get('text', None)
+    limit = max(1, min(100, int(request.args.get('limit', 50))))
+    page = max(0, int(request.args.get('page', 0)))
+    orderby = request.args.get('orderby', 'artist')
+    offset = limit * page
 
-    return jsonify(result=songs)
+    songs = AudioService.instance().search(g.current_user,
+        text, limit=limit, orderby=orderby, offset=offset)
+
+    return jsonify({
+        "result": songs,
+        "page": page,
+        "page_size": limit,
+    })
 
 @app.route("/api/library", methods=["POST"])
 @requires_auth

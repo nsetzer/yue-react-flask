@@ -11,9 +11,9 @@ class UserDao(object):
         self.db = db
         self.dbtables = dbtables
 
-    def createDomain(self, domainName, commit = True):
+    def createDomain(self, domainName, commit=True):
         query = insert(self.dbtables.DomainTable) \
-            .values({'name':domainName})
+            .values({'name': domainName})
         result = self.db.session.execute(query)
         if commit:
             self.db.session.commit()
@@ -30,7 +30,7 @@ class UserDao(object):
         result = self.db.session.execute(query)
         return result.fetchall()
 
-    def removeDomain(self, domain_id, commit = True):
+    def removeDomain(self, domain_id, commit=True):
         # TODO ensure domain is not used for any user
 
         query = delete(self.dbtables.DomainTable) \
@@ -41,9 +41,9 @@ class UserDao(object):
         if commit:
             self.db.session.commit()
 
-    def createRole(self, roleName, commit = True):
+    def createRole(self, roleName, commit=True):
         query = insert(self.dbtables.RoleTable) \
-            .values({'name':roleName})
+            .values({'name': roleName})
         result = self.db.session.execute(query)
         if commit:
             self.db.session.commit()
@@ -60,7 +60,7 @@ class UserDao(object):
         result = self.db.session.execute(query)
         return result.fetchall()
 
-    def removeRole(self, role_id, commit = True):
+    def removeRole(self, role_id, commit=True):
         # TODO ensure role is not used for any user
 
         query = delete(self.dbtables.RoleTable) \
@@ -71,9 +71,9 @@ class UserDao(object):
         if commit:
             self.db.session.commit()
 
-    def createFeature(self, featName, commit = True):
+    def createFeature(self, featName, commit=True):
         query = insert(self.dbtables.FeatureTable) \
-            .values({"feature":featName})
+            .values({"feature": featName})
         result = self.db.session.execute(query)
         if commit:
             self.db.session.commit()
@@ -90,7 +90,7 @@ class UserDao(object):
         result = self.db.session.execute(query)
         return result.fetchall()
 
-    def removeFeature(self, feat_id, commit = True):
+    def removeFeature(self, feat_id, commit=True):
         # TODO ensure feature is not used for any role
 
         query = delete(self.dbtables.FeatureTable) \
@@ -101,7 +101,7 @@ class UserDao(object):
         if commit:
             self.db.session.commit()
 
-    def createUser(self, email, password, domain_id, role_id, commit = True):
+    def createUser(self, email, password, domain_id, role_id, commit=True):
 
         salt = bcrypt.gensalt(12)
         crypt = bcrypt.hashpw(password.encode("utf-8"), salt)
@@ -146,7 +146,7 @@ class UserDao(object):
 
         return None
 
-    def updateUser(self, user, commit = True):
+    def updateUser(self, user, commit=True):
 
         if 'password' in user:
             salt = bcrypt.gensalt(12)
@@ -161,7 +161,7 @@ class UserDao(object):
         if commit:
             self.db.session.commit()
 
-    def removeUser(self, user_id, commit = True):
+    def removeUser(self, user_id, commit=True):
 
         # remove user roles
         query = delete(self.dbtables.GrantedRoleTable) \
@@ -181,17 +181,17 @@ class UserDao(object):
         if commit:
             self.db.session.commit()
 
-    def grantDomain(self, user_id, domain_id, commit = True):
+    def grantDomain(self, user_id, domain_id, commit=True):
 
         query = insert(self.dbtables.GrantedDomainTable) \
-            .values({"user_id":user_id, "domain_id": domain_id})
+            .values({"user_id": user_id, "domain_id": domain_id})
 
         result = self.db.session.execute(query)
 
         if commit:
             self.db.session.commit()
 
-    def revokeDomain(self, user_id, domain_id, commit = True):
+    def revokeDomain(self, user_id, domain_id, commit=True):
 
         query = delete(self.dbtables.GrantedDomainTable) \
             .where(
@@ -204,17 +204,17 @@ class UserDao(object):
         if commit:
             self.db.session.commit()
 
-    def grantRole(self, user_id, role_id, commit = True):
+    def grantRole(self, user_id, role_id, commit=True):
 
         query = insert(self.dbtables.GrantedRoleTable) \
-            .values({"user_id":user_id, "role_id": role_id})
+            .values({"user_id": user_id, "role_id": role_id})
 
         result = self.db.session.execute(query)
 
         if commit:
             self.db.session.commit()
 
-    def revokeRole(self, user_id, role_id, commit = True):
+    def revokeRole(self, user_id, role_id, commit=True):
 
         query = delete(self.dbtables.GrantedRoleTable) \
             .where(
@@ -227,16 +227,16 @@ class UserDao(object):
         if commit:
             self.db.session.commit()
 
-    def addFeatureToRole(self, role_id, feature_id, commit = True):
+    def addFeatureToRole(self, role_id, feature_id, commit=True):
         query = insert(self.dbtables.RoleFeatureTable) \
-            .values({"role_id":role_id, "feature_id": feature_id})
+            .values({"role_id": role_id, "feature_id": feature_id})
 
         result = self.db.session.execute(query)
 
         if commit:
             self.db.session.commit()
 
-    def removeFeatureFromRole(self, role_id, feature_id, commit = True):
+    def removeFeatureFromRole(self, role_id, feature_id, commit=True):
         query = delete(self.dbtables.RoleFeatureTable) \
             .where(
                 and_(self.dbtables.RoleFeatureTable.c.role_id == role_id,
@@ -248,13 +248,30 @@ class UserDao(object):
         if commit:
             self.db.session.commit()
 
-    def roleHasFeature(self, role_id, feature_id, commit = True):
+    def roleHasFeature(self, role_id, feature_id):
         query = self.dbtables.RoleFeatureTable.select() \
             .where(
                 and_(self.dbtables.RoleFeatureTable.c.role_id == role_id,
                      self.dbtables.RoleFeatureTable.c.feature_id == feature_id,
                     ))
         result = self.db.session.execute(query)
+        return len(result.fetchall()) != 0
+
+    def roleHasNamedFeature(self, role_id, feature_name):
+
+        FeatureTable = self.dbtables.FeatureTable
+        RoleFeatureTable = self.dbtables.RoleFeatureTable
+
+        query = select([column("feature"), ]) \
+            .select_from(
+                FeatureTable.join(
+                    RoleFeatureTable,
+                    and_(FeatureTable.c.id == RoleFeatureTable.c.feature_id),
+                    isouter=True)) \
+            .where(and_(RoleFeatureTable.c.role_id == role_id,
+                        FeatureTable.c.feature == feature_name))
+        result = self.db.session.execute(query)
+
         return len(result.fetchall()) != 0
 
 

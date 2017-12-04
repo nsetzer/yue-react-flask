@@ -83,7 +83,13 @@ class UserDaoTestCase(unittest.TestCase):
 
         self.assertTrue(self.userDao.roleHasFeature(role_id, feat_id))
 
+        self.assertTrue(self.userDao.roleHasNamedFeature(role_id,
+            '<create_user>'))
+
         self.userDao.removeFeatureFromRole(role_id, feat_id)
 
         self.assertFalse(self.userDao.roleHasFeature(role_id, feat_id))
+
+        self.assertFalse(self.userDao.roleHasNamedFeature(role_id,
+            '<create_user>'))
 

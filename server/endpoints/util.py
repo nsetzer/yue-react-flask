@@ -16,6 +16,8 @@ TWO_WEEKS = 1209600
 
 import traceback
 
+_userDao = UserDao(db, dbtables)
+
 def httpError(code, message):
     return jsonify(error=message), code
 
@@ -60,6 +62,7 @@ def _requires_token_auth_impl(f, args, kwargs, token):
         curl -H "Authorization: <token>" -X GET localhost:4200/api/user
 
     """
+
     try:
 
         user_data = verify_token(token)
@@ -78,7 +81,6 @@ def _requires_token_auth_impl(f, args, kwargs, token):
         return httpError(401,
             "Authentication is required to access this resource")
 
-
 def _requires_basic_auth_impl(f, args, kwargs, token):
     """
     basic auth enables easy testing
@@ -87,9 +89,12 @@ def _requires_basic_auth_impl(f, args, kwargs, token):
         curl -u username:password -X GET localhost:4200/api/user
 
     """
+    # TODO: decompose email from user@domain/role
+    # and set the domain and role correctly
+
     email, password = parse_basic_token(token)
 
-    user = UserDao(db, dbtables).findUserByEmailAndPassword(email, password)
+    user = _userDao.findUserByEmailAndPassword(email, password)
     if user:
         # basic auth requires a db lookup to validate the user
         # store the user information in the same way as the token auth
@@ -133,6 +138,7 @@ def requires_auth_role(role=None):
                 return httpError(401, "Authorization header not provided")
 
             token = request.headers['Authorization']
+            # TODO: check role for current user
 
             bytes_token = token.encode('utf-8', 'ignore')
             if token.startswith("Basic "):

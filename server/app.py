@@ -4,23 +4,25 @@ from flask import Flask, render_template, jsonify, url_for
 
 from .index import db, dbtables, app, cors
 from .service.audio_service import AudioService
+from .service.user_service import UserService
 
+# init services before endpoints
 AudioService.init(db, dbtables)
-
-from .dao.user import UserDao
+UserService.init(db, dbtables)
 
 from .endpoints import user
 from .endpoints import message
 from .endpoints import library
 from .endpoints import queue
 
-# serve the bundle
+# serve the bundle when requesting the default path
 @app.route('/', methods=['GET'])
 def index():
     return render_template('index.html')
 
+# serve the bundle when requesting the any path
 @app.route('/<path:path>', methods=['GET'])
-def any_root_path(path):
+def index_any(path):
     return render_template('index.html')
 
 def list_routes():

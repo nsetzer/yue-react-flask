@@ -378,7 +378,7 @@ class LibraryDao(object):
             .where(where)
 
         if orderby is not None:
-            query = query.order_by(*order)
+            query = query.order_by(*orderby)
 
         if limit is not None:
             query = query.limit(limit)
