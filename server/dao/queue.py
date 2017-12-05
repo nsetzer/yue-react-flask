@@ -20,7 +20,7 @@ class SongQueueDao(object):
         self.cols = self.cols_song + self.cols_user
         self.defs = self.defs_song + self.defs_user
 
-    def set(self, user_id, domain_id, songs):
+    def set(self, user_id, domain_id, song_ids):
 
         SongQueueTable = self.dbtables.SongQueueTable
 
@@ -31,10 +31,10 @@ class SongQueueDao(object):
 
         if not lst:
             query = insert(SongQueueTable) \
-                .values({"user_id": user_id, "songs": songs, })
+                .values({"user_id": user_id, "songs": song_ids, })
         else:
             query = update(SongQueueTable) \
-                .values({"songs": songs, }) \
+                .values({"songs": song_ids, }) \
                 .where(SongQueueTable.c.user_id == user_id)
 
         self.db.session.execute(query)
@@ -49,12 +49,12 @@ class SongQueueDao(object):
         result = self.db.session.execute(query).fetchone()
 
         if not result:
-            return None
+            return []
 
         id, lst = result
 
         if not lst:
-            return None
+            return []
 
         SongData = self.dbtables.SongDataTable
         SongUserData = self.dbtables.SongUserDataTable

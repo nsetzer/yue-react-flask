@@ -69,9 +69,16 @@ def SongUserDataTable(metadata):
     )
 
 def SongHistoryTable(metadata):
+    """
+    returns a table representing a users song queue
+
+    the queue is an ordered list of songs for playback. when
+    empty it is automatically populated using a default query.
+    """
     return Table('song_history', metadata,
         Column('user_id', Integer),
         Column('song_id', String, ForeignKey("song_data.id")),
+        Column('query', String, default=""),
         Column('date', Integer),
     )
 

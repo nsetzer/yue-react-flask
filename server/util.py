@@ -9,6 +9,8 @@ from .dao.library import Song, LibraryDao
 from .endpoints.util import generate_basic_token
 import traceback
 
+import json
+
 class AuthAppWrapper(object):
     """docstring for AuthAppWrapper"""
 
@@ -28,6 +30,18 @@ class AuthAppWrapper(object):
 
     def delete(self, *args, **kwargs):
         return self._wrapper(self.app.delete, args, kwargs)
+
+    def get_json(self, *args, **kwargs):
+        res = self._wrapper(self.app.get, args, kwargs)
+        body = json.loads(res.data.decode("utf-8"))
+        return body['result']
+
+    def post_json(self, url, data, *args, **kwargs):
+        args = list(args)
+        args.insert(0, url)
+        kwargs['data'] = json.dumps(data)
+        kwargs['content_type'] = 'application/json'
+        return self._wrapper(self.app.post, args, kwargs)
 
     def _wrapper(self, method, args, kwargs):
         if "headers" not in kwargs:
