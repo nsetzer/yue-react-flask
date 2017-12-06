@@ -1,6 +1,7 @@
 /* eslint camelcase: 0 */
 
 import axios from 'axios';
+var request = require('request-promise');
 
 import env from '../env'
 
@@ -54,53 +55,47 @@ export function delete_message(id) {
     return axios.delete(env.baseUrl + `/api/message/${id}`)
 }
 
-export function user_get_queue(token : string) {
+export function user_queue_get(token : string) {
     let url : string = env.baseUrl + '/api/queue'
-    return axios.get(url, tokenConfig(token))
+
+    var options = {
+        method: 'GET',
+        uri: url,
+        headers: {
+            'Authorization': token,
+        }
+    };
+
+    return request(options);
 }
 
-export function user_set_queue(token : string, song_ids: Array<string>) {
-    let url : string = env.baseUrl + '/api/queue'
-    let headers = {
-        'Authorization': token,
-        'Content-Type': 'application/json',
-    }
-    //JSON.stringify(song_ids)
-    /*
-    return axios.post(url, JSON.stringify(song_ids), {
-        headers: headers,
-        withCredentials: true,
-    })
-    */
-    /*
-    return fetch(url,
-    {
-        credentials: 'include',
-        mode: 'cors',
-        headers: {
-          'Authorization': token,
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
-        },
-        method: "POST",
-        body: JSON.stringify(song_ids)
-    })
-    */
+export function user_queue_populate(token : string) {
+    let url : string = env.baseUrl + '/api/queue/populate'
 
-    /*
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', url, true);
-    xhr.setRequestHeader('Content-type', 'application/json');
-    xhr.setRequestHeader('Authorization', token);
-    xhr.onreadystatechange = function () {
-        // do something to response
-        console.log(xhr);
+    var options = {
+        method: 'GET',
+        uri: url,
+        headers: {
+            'Authorization': token,
+        }
     };
-    xhr.onload = function () {
-        // do something to response
-        console.log("::" + xhr.responseText);
+
+    return request(options);
+}
+
+export function user_queue_set(token : string, song_ids: Array<string>) {
+    let url : string = env.baseUrl + '/api/queue'
+
+    var options = {
+        method: 'POST',
+        uri: url,
+        body: song_ids,
+        json: true // Automatically stringifies the body to JSON
+        headers: {
+            'Authorization': token,
+            'Content-Type': 'application/json',
+        }
     };
-    xhr.send();
-    */
+
+    return request(options);
 }

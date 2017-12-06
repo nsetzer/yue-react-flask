@@ -12,7 +12,11 @@ class SongQueueDao(object):
         self.dbtables = dbtables
 
         self.cols_song = self._SongDataColumnNames()
+        self.cols_song.remove("file_path")
+        self.cols_song.remove("art_path")
+
         self.cols_user = self._SongUserDataColumnNames()
+        self.cols_user.remove("song_id")
 
         self.defs_song = [self._SongDefault(col) for col in self.cols_song]
         self.defs_user = [self._UserDefault(col) for col in self.cols_user]
@@ -71,7 +75,24 @@ class SongQueueDao(object):
 
         results = self.db.session.execute(query).fetchall()
 
-        songs = [{k: (v or d) for k, v, d in zip(self.cols, res, self.defs)} for res in results]
+        # todo: anywhere that defs are used to populate the songs,
+        # if the uer does not have a record available, the user_id must be
+        # updated.
+
+        # todo: in addition, sanitize the output, remove:
+        #  - song_id : redundant information
+        #  - file_path
+        #  - art_path
+
+        # todo: the above changes have been made for this function
+        # tests need to be written and changes need to propogate
+        # into a common library
+
+        defs = self.defs[:]
+        index = self.cols.index("user_id")
+        defs[index] = user_id
+
+        songs = [{k: (v or d) for k, v, d in zip(self.cols, res, defs)} for res in results]
 
         map = {k: i for i, k in enumerate(lst)}
         songs.sort(key=lambda s: map[s['id']])

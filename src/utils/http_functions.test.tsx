@@ -1,8 +1,10 @@
 
 import { expect, assert } from 'chai';
 
-import { user_get_queue,
-         user_set_queue } from "./http_functions"
+import { user_queue_get,
+         user_queue_set,
+         user_queue_populate
+    } from "./http_functions"
 
 it('should get/set the queue', async function() {
 
@@ -12,15 +14,28 @@ it('should get/set the queue', async function() {
 
     console.log("test1 ")
 
+/*
     try {
-        let res = await user_set_queue("invalid", song_ids)
+        let res = await user_queue_set("invalid", song_ids)
     } catch(e) {
+        console.log(e)
         expect(e.request.status).to.eq(401)
     }
+    */
 
     console.log("test2 ")
     try {
-        res = await user_get_queue(token, song_ids)
+        let res = await user_queue_set(token, song_ids)
+        console.log(res)
+
+        let res = await user_queue_get(token)
+        console.log(res)
+
+        let res = await user_queue_populate(token)
+        console.log(res)
+
+        let res = await user_queue_get(token)
+        console.log(res)
         //expect(res.status).to.eq(200)
     } catch(e) {
         console.log(e)

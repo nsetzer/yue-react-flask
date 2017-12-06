@@ -41,8 +41,6 @@ class AudioService(object):
 
     def findSongById(self, user, song_id):
 
-        # TODO check user role permissions
-
         return self._getSongInfo(user, song_id)
 
     def getSongAudioPath(self, user, song_id):
