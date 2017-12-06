@@ -81,7 +81,7 @@ def is_token_valid():
             reason = "OK"
     except BadSignature:
         is_valid = False
-        reason = "Bat Signature"
+        reason = "Bad Signature"
     except SignatureExpired:
         is_valid = False
         reason = "Expired Signature"

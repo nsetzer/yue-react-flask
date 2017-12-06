@@ -8,7 +8,7 @@ from yue.core.sqlstore import SQLStore
 from yue.core.library import Library as YueLibrary
 from yue.core.song import Song as YueSong, get_album_art, ArtNotFound
 
-from server.app import app, db, dbtables, db_init
+from server.app import app, db, dbtables
 
 from server.dao.user import UserDao
 from server.dao.library import Song, LibraryDao
@@ -23,7 +23,7 @@ from server.service.audio_service import AudioService
 userDao = UserDao(db, dbtables)
 libraryDao = LibraryDao(db, dbtables)
 
-from server.cli.config import db_init as db_init_2
+from server.cli.config import db_init as db_init
 
 text_fields = {
     YueSong.path: Song.path,
@@ -146,7 +146,7 @@ def main():
 
     elif mode == "create":
 
-        db_init()
+        db_init(db, dbtables, "config/test/env.yml")
 
         userDao = UserDao(db, dbtables)
 
@@ -168,7 +168,7 @@ def main():
 
     elif mode == "test":
 
-        db_init_2(db, dbtables, "config/production/env.yml")
+        db_init(db, dbtables, "config/production/env.yml")
 
     elif mode == "test-2":
         # test()

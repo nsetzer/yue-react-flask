@@ -18,8 +18,23 @@ import traceback
 
 _userDao = UserDao(db, dbtables)
 
+class HttpException(Exception):
+    """docstring for HttpException"""
+    def __init__(self, message, code=400):
+        super(HttpException, self).__init__(message)
+        self.status = code
+
 def httpError(code, message):
     return jsonify(error=message), code
+
+def get_request_header(req, header):
+    if header in request.headers:
+        return request.headers[header]
+    elif header.lower() not in request.headers:
+        return request.headers[header.lower()]
+    else:
+        print(request.headers)
+        raise HttpException("%s header not provided" % header, 401)
 
 def generate_basic_token(username, password):
     """convert a username and possword into a basic token"""
@@ -50,6 +65,9 @@ def verify_token(token):
 def _handle_exceptions(f, args, kwargs):
     try:
         return f(*args, **kwargs)
+    except HttpException as e:
+        traceback.print_exc()
+        return httpError(e.status, str(e))
     except Exception as e:
         traceback.print_exc()
         return httpError(400, "Unhandled Exception: " + str(e))
@@ -65,6 +83,7 @@ def _requires_token_auth_impl(f, args, kwargs, token):
 
     try:
 
+        print("Verify %s" % token)
         user_data = verify_token(token)
 
         g.current_user = user_data
@@ -77,7 +96,7 @@ def _requires_token_auth_impl(f, args, kwargs, token):
     except SignatureExpired:
         return httpError(401,
             "Token has expired")
-    except Excpetion as e:
+    except Exception as e:
         return httpError(401,
             "Authentication is required to access this resource")
 
@@ -116,10 +135,10 @@ def requires_auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):
 
-        if "Authorization" not in request.headers:
-            return httpError(401, "Authorization header not provided")
-
-        token = request.headers['Authorization']
+        try:
+            token = get_request_header(request, "Authorization")
+        except HttpException as e:
+            return httpError(401, str(e))
 
         bytes_token = token.encode('utf-8', 'ignore')
         if token.startswith("Basic "):
@@ -134,8 +153,11 @@ def requires_auth_role(role=None):
 
         @wraps(f)
         def decorated(*args, **kwargs):
-            if "Authorization" not in request.headers:
-                return httpError(401, "Authorization header not provided")
+
+            try:
+                token = get_request_header(request, "Authorization")
+            except HttpException as e:
+                return httpError(401, str(e))
 
             token = request.headers['Authorization']
             # TODO: check role for current user

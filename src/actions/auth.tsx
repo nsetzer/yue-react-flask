@@ -24,7 +24,6 @@ export function loginUserSuccess(token) {
     };
 }
 
-
 export function loginUserFailure(error) {
     localStorage.removeItem('token');
     return {
@@ -90,7 +89,6 @@ export function loginUser(props, email, password, target) {
             });
     };
 }
-
 
 export function registerUserRequest() {
     return {

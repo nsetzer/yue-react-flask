@@ -1,14 +1,29 @@
 
 from flask import request, jsonify, g
-
+from flask_cors import cross_origin
 from ..index import app, db
 from .util import requires_auth
 from ..dao.library import Song
 from ..service.audio_service import AudioService
 
-from .util import httpError
+from .util import httpError, get_request_header
 
+"""
+curl -v \
+    -H "Origin: http://localhost:4100" \
+    -H 'Content-Type: application/json' \
+    -u user000:user000 \
+    -X POST -d "[]" localhost:4200/api/queue
+
+curl -v \
+    -H "Origin: http://localhost:4100" \
+    -H "Access-Control-Request-Method: POST" \
+    -H "Access-Control-Request-Headers: X-Requested-With" \
+    -X OPTIONS  http://localhost:4200/api/queue
+
+"""
 @app.route("/api/queue", methods=["GET"])
+@cross_origin(supports_credentials=True)
 @requires_auth
 def get_queue():
     """ return current song """
@@ -17,18 +32,26 @@ def get_queue():
     return jsonify(result=songs)
 
 @app.route("/api/queue", methods=["POST"])
+@cross_origin(supports_credentials=True)
 @requires_auth
 def set_queue():
     """ set the songs in the queue """
+    content_type = get_request_header(request, "Content-Type")
 
-    if request.headers['content-type'] != "application/json":
+    if content_type != "application/json":
         return httpError(400, "invalid content-type: %s" %
-            request.headeres['content-type'])
+            request.headers['content-type'])
 
     service = AudioService.instance()
     song_ids = request.get_json()
+    print(song_ids)
     service.setQueue(g.current_user, song_ids)
-    return jsonify(result="ok")
+
+    response = jsonify(result="OK")
+    # response.headers['access-control-allow-origin'] = '*'
+    # response.headers['access-control-allow-credentials'] = 'true'
+    response.headers['Access-Control-Allow-Headers'] = 'application/json'
+    return response
 
 @app.route("/api/queue/head", methods=["GET"])
 @requires_auth

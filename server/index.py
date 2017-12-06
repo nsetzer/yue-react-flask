@@ -53,6 +53,9 @@ app.config['DEBUG'] = cfg.DEBUG
 app.config['DEFAULT_ROLE'] = cfg.DEFAULT_ROLE
 app.config['DEFAULT_DOMAIN'] = cfg.DEFAULT_DOMAIN
 
+# app.config['CORS_HEADERS'] = 'Content-Type'
+# app.config['CORS_RESOURCES'] = {r"/api/*": {"origins": "*"}}
+
 # handler = RotatingFileHandler('foo.log', maxBytes=10000, backupCount=1)
 # handler.setLevel(logging.INFO)
 # app.logger.addHandler(handler)
@@ -62,9 +65,13 @@ app.config['DEFAULT_DOMAIN'] = cfg.DEFAULT_DOMAIN
 
 app.logger.info("database: %s", cfg.DATABASE_URL)
 
+ORIGINS = "*"
+# ORIGINS = "http://localhost:4100"
+
 db     = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
-cors   = CORS(app, resources={r"/api/*": {"origins": "*"}})
+cors = CORS(app, resources={r"/api/*": {"origins": ORIGINS}},
+            headers="Content-Type")
 
 dbtables = DatabaseTables(db.metadata)
 
