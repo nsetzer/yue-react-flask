@@ -43,5 +43,8 @@
     "redux-create-reducer": "^1.1.1",
     "source-map-loader": "^0.2.3",
     "typescript": "^2.6.1"
+  },
+  "jest": {
+    "watchPathIgnorePatterns": ["<rootDir>/node_modules/"]
   }
 }

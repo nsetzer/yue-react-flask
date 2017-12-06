@@ -90,7 +90,7 @@ export function user_queue_set(token : string, song_ids: Array<string>) {
         method: 'POST',
         uri: url,
         body: song_ids,
-        json: true // Automatically stringifies the body to JSON
+        json: true, // Automatically stringifies the body to JSON
         headers: {
             'Authorization': token,
             'Content-Type': 'application/json',
