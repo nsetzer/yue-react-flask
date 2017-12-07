@@ -50,39 +50,8 @@ def set_queue():
 
     return jsonify(result="OK")
 
-@app.route("/api/queue/head", methods=["GET"])
-@requires_auth
-def get_queue_head():
-    """ return current song """
-    service = AudioService.instance()
-    song = service.getQueueHead(g.current_user)
-    return jsonify(result=song)
-
-@app.route("/api/queue/rest", methods=["GET"])
-@requires_auth
-def get_queue_rest():
-    """ return queued songs, after the head """
-    service = AudioService.instance()
-    songs = service.getQueueRest(g.current_user)
-    return jsonify(result=songs)
-
-@app.route("/api/queue/next", methods=["GET"])
-@requires_auth
-def get_queue_next():
-    """ remove head from the queue, return the new head """
-
-    service = AudioService.instance()
-    songs = service.getQueue(g.current_user)
-    songs = songs[1:]
-
-    service.setQueue(g.current_user, songs)
-
-    if len(songs) == 0:
-        return httpError(404, "empty queue")
-
-    return jsonify(result=songs[0])
-
 @app.route("/api/queue/populate", methods=["GET"])
+@cross_origin(supports_credentials=True)
 @requires_auth
 def populate_queue():
     """ add songs to the queue using the default query """
@@ -91,5 +60,35 @@ def populate_queue():
     songs = service.populateQueue(g.current_user)
 
     return jsonify(result=songs)
+
+@app.route("/api/queue/query", methods=["GET"])
+@cross_origin(supports_credentials=True)
+@requires_auth
+def get_queue_query():
+    """ return the defualt query for the user """
+    # service = AudioService.instance()
+    # songs = service.getQueue(g.current_user)
+    return jsonify(result="")
+
+@app.route("/api/queue/query", methods=["POST"])
+@cross_origin(supports_credentials=True)
+@requires_auth
+def set_queue_query():
+    """ set the defualt query for the user """
+
+    if content_type != "application/json":
+        return httpError(400, "invalid content-type: %s" %
+            request.headers['content-type'])
+
+    req = request.get_json()
+
+    if 'text' not in req:
+        return httpError(400, "invalid request: missing `text`")
+
+    text = req['text']
+
+    # TODO: set default query to text
+
+    return jsonify(result="OK")
 
 

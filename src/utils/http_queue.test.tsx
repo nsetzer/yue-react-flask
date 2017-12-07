@@ -4,7 +4,7 @@ import { expect, assert } from 'chai';
 import { user_queue_get,
          user_queue_set,
          user_queue_populate
-    } from "./http_functions"
+    } from "./http_queue"
 
 it('should get/set/populate the queue', async function() {
 
