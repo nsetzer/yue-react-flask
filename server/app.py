@@ -1,6 +1,6 @@
 import os, sys
 
-from flask import Flask, render_template, jsonify, url_for
+from flask import Flask, request, render_template, jsonify, url_for
 
 from .index import db, dbtables, app, cors
 from .service.audio_service import AudioService
@@ -10,10 +10,22 @@ from .service.user_service import UserService
 AudioService.init(db, dbtables)
 UserService.init(db, dbtables)
 
+"""
+@app.before_request
+def csrf_protect():
+    if request.method == "POST":
+        token = request.headers.get('X-CSRF-TOKEN', None)
+        cookie = request.cookies.get('CSRF-TOKEN', None)
+        sys.stderr.write("TODO: ON-POST: validate X-CSRF-TOKEN %s %s\n" % (
+            token, cookie))
+"""
+
 from .endpoints import user
 from .endpoints import message
 from .endpoints import library
 from .endpoints import queue
+
+
 
 # serve the bundle when requesting the default path
 @app.route('/', methods=['GET'])

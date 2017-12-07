@@ -3,7 +3,7 @@ import * as ReactDOM from 'react-dom';
 
 import { Provider } from 'react-redux';
 import getMuiTheme from 'material-ui/styles/getMuiTheme';
-import MuiThemeProvider from 'material-ui/styles/MuiThemeProvider'
+//import MuiThemeProvider from 'material-ui/styles/MuiThemeProvider'
 
 import AppRouter from "../routes"
 
@@ -15,8 +15,6 @@ it('renders without crashing', () => {
   const div = document.createElement('div');
   ReactDOM.render(
     <Provider store={store}>
-        <MuiThemeProvider muiTheme={getMuiTheme()}>
-            <AppRouter/>
-        </MuiThemeProvider>
+        <AppRouter/>
     </Provider>, div);
 });

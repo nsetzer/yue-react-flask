@@ -25,17 +25,15 @@ it('should get/set the queue', async function() {
 
     console.log("test2 ")
     try {
-        let res = await user_queue_set(token, song_ids)
-        console.log(res)
+        let res : { "result" : any };
 
-        let res = await user_queue_get(token)
-        console.log(res)
+        res = await user_queue_set(token, song_ids)
 
-        let res = await user_queue_populate(token)
-        console.log(res)
+        res = await user_queue_get(token)
 
-        let res = await user_queue_get(token)
-        console.log(res)
+        res = await user_queue_populate(token)
+
+        res = await user_queue_get(token)
         //expect(res.status).to.eq(200)
     } catch(e) {
         console.log(e)

@@ -10,6 +10,8 @@ from .util import httpError, get_request_header
 
 """
 curl -v \
+    --cookie "CSRF-TOKEN=ANYSTRING" \
+    -H "X-CSRF-TOKEN: ANYSTRING" \
     -H "Origin: http://localhost:4100" \
     -H 'Content-Type: application/json' \
     -u user000:user000 \
@@ -44,14 +46,9 @@ def set_queue():
 
     service = AudioService.instance()
     song_ids = request.get_json()
-    print(song_ids)
     service.setQueue(g.current_user, song_ids)
 
-    response = jsonify(result="OK")
-    # response.headers['access-control-allow-origin'] = '*'
-    # response.headers['access-control-allow-credentials'] = 'true'
-    response.headers['Access-Control-Allow-Headers'] = 'application/json'
-    return response
+    return jsonify(result="OK")
 
 @app.route("/api/queue/head", methods=["GET"])
 @requires_auth
