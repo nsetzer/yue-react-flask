@@ -5,6 +5,8 @@ var request = require('request-promise');
 
 import env from '../env'
 
+// TODO: remove axios
+// https://github.com/request/request-promise
 
 const tokenConfig = (token) => ({
     headers: {
@@ -63,7 +65,8 @@ export function user_queue_get(token : string) {
         uri: url,
         headers: {
             'Authorization': token,
-        }
+        },
+        json: true
     };
 
     return request(options);
@@ -77,7 +80,8 @@ export function user_queue_populate(token : string) {
         uri: url,
         headers: {
             'Authorization': token,
-        }
+        },
+        json: true
     };
 
     return request(options);
@@ -94,7 +98,8 @@ export function user_queue_set(token : string, song_ids: Array<string>) {
         headers: {
             'Authorization': token,
             'Content-Type': 'application/json',
-        }
+        },
+        json: true
     };
 
     return request(options);
