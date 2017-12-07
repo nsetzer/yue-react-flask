@@ -1,28 +1,17 @@
 
 from sqlalchemy import and_, or_, not_, select, column, update, insert
 
-from .library import Song
+from .library import Song, SongQueryFormatter
 
 class SongQueueDao(object):
     """docstring for Queue"""
 
-    def __init__(self, db, dbtables):
+    def __init__(self, db, dbtables, sanitize=False):
         super(SongQueueDao, self).__init__()
         self.db = db
         self.dbtables = dbtables
 
-        self.cols_song = self._SongDataColumnNames()
-        self.cols_song.remove("file_path")
-        self.cols_song.remove("art_path")
-
-        self.cols_user = self._SongUserDataColumnNames()
-        self.cols_user.remove("song_id")
-
-        self.defs_song = [self._SongDefault(col) for col in self.cols_song]
-        self.defs_user = [self._UserDefault(col) for col in self.cols_user]
-
-        self.cols = self.cols_song + self.cols_user
-        self.defs = self.defs_song + self.defs_user
+        self.formatter = SongQueryFormatter(dbtables, sanitize)
 
     def set(self, user_id, domain_id, song_ids):
 
@@ -63,7 +52,7 @@ class SongQueueDao(object):
         SongData = self.dbtables.SongDataTable
         SongUserData = self.dbtables.SongUserDataTable
 
-        query = select([column(c) for c in self.cols]) \
+        query = select([column(c) for c in self.formatter.cols]) \
             .select_from(
                     SongData.join(
                         SongUserData,
@@ -88,11 +77,7 @@ class SongQueueDao(object):
         # tests need to be written and changes need to propogate
         # into a common library
 
-        defs = self.defs[:]
-        index = self.cols.index("user_id")
-        defs[index] = user_id
-
-        songs = [{k: (v or d) for k, v, d in zip(self.cols, res, defs)} for res in results]
+        songs = self.formatter.format(user_id, results)
 
         map = {k: i for i, k in enumerate(lst)}
         songs.sort(key=lambda s: map[s['id']])
@@ -117,7 +102,7 @@ class SongQueueDao(object):
         SongData = self.dbtables.SongDataTable
         SongUserData = self.dbtables.SongUserDataTable
 
-        query = select([column(c) for c in self.cols]) \
+        query = select([column(c) for c in self.formatter.cols]) \
             .select_from(
                     SongData.join(
                         SongUserData,
@@ -128,7 +113,7 @@ class SongQueueDao(object):
                         SongData.c.id == lst[0]))
 
         res = self.db.session.execute(query).fetchone()
-        return {k: (v or d) for k, v, d in zip(self.cols, res, self.defs)}
+        return self.formatter.format(user_id, [res, ])[0]
 
     def rest(self, user_id, domain_id):
 
@@ -152,7 +137,7 @@ class SongQueueDao(object):
         SongData = self.dbtables.SongDataTable
         SongUserData = self.dbtables.SongUserDataTable
 
-        query = select([column(c) for c in self.cols]) \
+        query = select([column(c) for c in self.formatter.cols]) \
             .select_from(
                     SongData.join(
                         SongUserData,
@@ -164,7 +149,7 @@ class SongQueueDao(object):
 
         results = self.db.session.execute(query).fetchall()
 
-        songs = [{k: (v or d) for k, v, d in zip(self.cols, res, self.defs)} for res in results]
+        songs = self.formatter.format(user_id, results)
 
         map = {k: i for i, k in enumerate(lst)}
         songs.sort(key=lambda s: map[s['id']])
@@ -172,29 +157,4 @@ class SongQueueDao(object):
 
     def next(self):
         pass
-
-    def _SongDefault(self, col):
-        default = getattr(self.dbtables.SongDataTable.c, col).default
-
-        if default is None:
-            return ""
-
-        return default.arg
-
-    def _UserDefault(self, col):
-
-        if col in ['last_played', 'date_added']:
-            return 0
-
-        default = getattr(self.dbtables.SongUserDataTable.c, col).default
-        if default is None:
-            return ""
-
-        return default.arg
-
-    def _SongDataColumnNames(self):
-        return [c.name for c in self.dbtables.SongDataTable.c]
-
-    def _SongUserDataColumnNames(self):
-        return [c.name for c in self.dbtables.SongUserDataTable.c]
 

@@ -189,20 +189,21 @@ class SongSearchGrammar(SearchGrammar):
             else:
                 raise ParseError("Invalid column name `%s`" % (key))
 
-class LibraryException(Exception):
-    pass
+class SongQueryFormatter(object):
+    """docstring for SongQueryFormatter
+    """
+    def __init__(self, dbtables, sanitize=False):
+        super(SongQueryFormatter, self).__init__()
 
-class LibraryDao(object):
-    """docstring for Library"""
-
-    def __init__(self, db, dbtables):
-        super(LibraryDao, self).__init__()
-        self.db = db
         self.dbtables = dbtables
 
         self.cols_song = self._SongDataColumnNames()
+        if sanitize:
+            self.cols_song.remove("file_path")
+            self.cols_song.remove("art_path")
+
         self.cols_user = self._SongUserDataColumnNames()
-        self.cols_user.remove('song_id')
+        self.cols_user.remove("song_id")
 
         self.defs_song = [self._SongDefault(col) for col in self.cols_song]
         self.defs_user = [self._UserDefault(col) for col in self.cols_user]
@@ -210,7 +211,54 @@ class LibraryDao(object):
         self.cols = self.cols_song + self.cols_user
         self.defs = self.defs_song + self.defs_user
 
-        self.grammar = SongSearchGrammar(dbtables, self.cols_song, self.cols_user)
+        self.user_index = self.cols.index("user_id")
+
+    def format(self, user_id, results):
+        defs = self.defs[:]
+        defs[self.user_index] = user_id
+        return [{k: (v or d) for k, v, d in zip(self.cols, res, defs)}
+            for res in results]
+
+    def _SongDefault(self, col):
+        default = getattr(self.dbtables.SongDataTable.c, col).default
+
+        if default is None:
+            return ""
+
+        return default.arg
+
+    def _UserDefault(self, col):
+
+        if col in ['last_played', 'date_added']:
+            return 0
+
+        default = getattr(self.dbtables.SongUserDataTable.c, col).default
+        if default is None:
+            return ""
+
+        return default.arg
+
+    def _SongDataColumnNames(self):
+        return [c.name for c in self.dbtables.SongDataTable.c]
+
+    def _SongUserDataColumnNames(self):
+        return [c.name for c in self.dbtables.SongUserDataTable.c]
+
+class LibraryException(Exception):
+    pass
+
+class LibraryDao(object):
+    """docstring for Library"""
+
+    def __init__(self, db, dbtables, sanitize=False):
+        super(LibraryDao, self).__init__()
+        self.db = db
+        self.dbtables = dbtables
+
+        self.formatter = SongQueryFormatter(dbtables, sanitize)
+
+        self.grammar = SongSearchGrammar(
+            dbtables, self.formatter.cols_song, self.formatter.cols_user)
 
     def insert(self, user_id, domain_id, song, commit=True):
 
@@ -237,7 +285,7 @@ class LibraryDao(object):
         if Song.artist_key not in song:
             song[Song.artist_key] = Song.getArtistKey(song[Song.artist])
 
-        song_keys = set(self._SongDataColumnNames())
+        song_keys = set(self.formatter.cols_song)
         song_data = {k: song[k] for k in song.keys() if k in song_keys}
         song_data['domain_id'] = domain_id
 
@@ -255,7 +303,7 @@ class LibraryDao(object):
 
     def insertUserData(self, user_id, song_id, song, commit=True):
 
-        user_keys = set(self._SongUserDataColumnNames())
+        user_keys = set(self.formatter.cols_user)
         user_data = {k: song[k] for k in song.keys() if k in user_keys}
 
         if user_data:
@@ -281,7 +329,7 @@ class LibraryDao(object):
 
     def updateSongData(self, domain_id, song_id, song, commit=True):
 
-        song_keys = set(self._SongDataColumnNames())
+        song_keys = set(self.formatter.cols_song)
         song_data = {k: song[k] for k in song.keys() if k in song_keys}
 
         if song_data:
@@ -297,7 +345,7 @@ class LibraryDao(object):
 
     def updateUserData(self, user_id, song_id, song, commit=True):
         """ update only the user data portion of a song in the database """
-        user_keys = set(self._SongUserDataColumnNames())
+        user_keys = set(self.formatter.cols_user)
         user_data = {k: song[k] for k in song.keys() if k in user_keys}
 
         if user_data:
@@ -368,7 +416,7 @@ class LibraryDao(object):
         else:
             where = SongData.c.domain_id == domain_id
 
-        query = select([column(c) for c in self.cols]) \
+        query = select([column(c) for c in self.formatter.cols]) \
             .select_from(
                     SongData.join(
                         SongUserData,
@@ -388,8 +436,7 @@ class LibraryDao(object):
 
         results = db.session.execute(query).fetchall()
 
-        return [{k: (v or d) for k, v, d in zip(self.cols, res, self.defs)}
-                for res in results]
+        return self.formatter.format(user_id, results)
 
     def _getSearchOrder(self, case_insensitive, orderby):
 
@@ -433,31 +480,6 @@ class LibraryDao(object):
                 order.append(direction(col_type))
 
         return order
-
-    def _SongDefault(self, col):
-        default = getattr(self.dbtables.SongDataTable.c, col).default
-
-        if default is None:
-            return ""
-
-        return default.arg
-
-    def _UserDefault(self, col):
-
-        if col in ['last_played', 'date_added']:
-            return 0
-
-        default = getattr(self.dbtables.SongUserDataTable.c, col).default
-        if default is None:
-            return ""
-
-        return default.arg
-
-    def _SongDataColumnNames(self):
-        return [c.name for c in self.dbtables.SongDataTable.c]
-
-    def _SongUserDataColumnNames(self):
-        return [c.name for c in self.dbtables.SongUserDataTable.c]
 
 
 
