@@ -4,7 +4,7 @@ from flask import request, jsonify, g, send_file
 
 from ..index import app
 from ..service.audio_service import AudioService
-from .util import requires_auth, requires_auth_role, httpError
+from .util import requires_auth, requires_no_auth, requires_auth_role, httpError
 
 @app.route("/api/library", methods=["GET"])
 @requires_auth
@@ -40,11 +40,31 @@ def get_song(song_id):
     return jsonify(result=song)
 
 @app.route("/api/library/<song_id>/audio", methods=["GET"])
-@requires_auth
+@requires_no_auth
 def get_song_audio(song_id):
-    """ stream audio for a specific song """
+    """ stream audio for a specific song
+    TODO: a user API token should be sent using a query parameter
 
-    path = AudioService.instance().getSongAudioPath(g.current_user, song_id)
+    this needs to accessable with a simple GET request, any auth parameters
+    must be passed as query parameters, not headers
+    """
+
+    user_id = request.args.get('user', None)
+    domain_id = request.args.get('domain', None)
+    apikey = request.args.get('apikey', None)
+
+    if user_id is None:
+        return httpError(400, "Domain not specified")
+
+    if domain_id is None:
+        return httpError(400, "Domain not specified")
+
+    user = {
+        "id": int(user_id),
+        "domain_id": int(domain_id)
+    }
+
+    path = AudioService.instance().getSongAudioPath(user, song_id)
 
     if path:
         return send_file(path)
@@ -58,9 +78,11 @@ def set_song_audio(song_id):
     return jsonify(result="ok")
 
 @app.route("/api/library/<song_id>/art", methods=["GET"])
-@requires_auth
+@requires_no_auth
 def get_song_art(song_id):
-    """ get album art for a specific song """
+    """ get album art for a specific song
+    TODO: a user API token should be sent using a query parameter
+    """
 
     path = AudioService.instance().getSongArtPath(g.current_user, song_id)
 

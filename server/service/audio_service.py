@@ -93,7 +93,7 @@ class AudioService(object):
         new_songs = self.search(user,
             query, limit=limit, orderby=Song.random)
 
-        songs = songs + new_songs
+        songs = (songs + new_songs)[:50]
 
         song_ids = [song['id'] for song in songs]
         self.queueDao.set(user['id'], user['domain_id'], song_ids)

@@ -34,11 +34,6 @@ export function messageSuccess(messages) {
 }
 
 export function messageFailure(error) {
-    console.log(error)
-    console.log(error.response)
-    console.log(error.responseText)
-    console.log(error.status)
-    console.log(error.message)
     return {
         type: TEST_MESSSAGE_FAILURE,
         payload: {

@@ -45,7 +45,6 @@ export function user_queue_set(token : string, song_ids: Array<string>) {
             'Authorization': token,
             'Content-Type': 'application/json',
         },
-        json: true
     };
 
     return request(options);
