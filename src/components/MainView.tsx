@@ -41,7 +41,8 @@ export interface MainViewProps {
 
 export interface MainViewState {
   open: boolean,
-  audioUrl: string
+  audioUrl: string,
+  currentSong: {artist: string, title: string},
 }
 
 const listRightStyle = {
@@ -53,7 +54,7 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
 
   constructor(props) {
     super(props);
-    this.state = {open:true, audioUrl: ""};
+    this.state = {open:true, audioUrl: "", currentSong: null};
     this.logout = this.logout.bind(this)
     this.componentWillReceiveProps = this.componentWillReceiveProps.bind(this)
   }
@@ -65,11 +66,12 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
   componentWillReceiveProps(nextProps) {
     let audioUrl = (nextProps.songs && nextProps.songs.length>0)?
                     getSongAudioUrl(nextProps.songs[0]):null
+    let song = (nextProps.songs && nextProps.songs.length>0)?
+                    nextProps.songs[0]:null
     this.setState({
           audioUrl: audioUrl,
+          currentSong: song
       });
-    console.log(audioUrl)
-    console.log(this.state.audioUrl)
   }
 
   logout(e) {
@@ -81,12 +83,18 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
   }
 
   render() {
+    let currentSong = this.state.currentSong;
+    let currentArtist = (currentSong)?currentSong.artist:"";
+    let currentTitle = (currentSong)?currentSong.title:"";
     return (
       <div>
       <div className="App">
         <header className="App-header">
-          <img src={logo} className="App-logo" alt="logo" />
-          <h1 className="App-title">Welcome, {this.props.userName}</h1>
+          <SoundView
+            url={this.state.audioUrl}
+            artist={currentArtist}
+            title={currentTitle}
+          />
         </header>
         <br/>
         <Button
@@ -103,16 +111,6 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
           <Send />
       </IconButton>
 
-      <br/>
-      {(this.props.songs && this.props.songs.length>0)?
-        getSongAudioUrl(this.props.songs[0]):null}
-      <br/>
-      {this.state.audioUrl}
-      <br/>
-
-        <SoundView
-          url={this.state.audioUrl}
-          />
         <List>
         {
           (this.props.songs && this.props.songs.length>0) ?
