@@ -13,6 +13,10 @@ import PlayArrow from 'material-ui-icons/PlayArrow';
 import Pause from 'material-ui-icons/Pause';
 import SkipNext from 'material-ui-icons/SkipNext';
 import SkipPrevious from 'material-ui-icons/SkipPrevious';
+import VolumeUp from 'material-ui-icons/VolumeUp';
+import VolumeDown from 'material-ui-icons/VolumeDown';
+import VolumeMute from 'material-ui-icons/VolumeMute';
+
 import IconButton from 'material-ui/IconButton';
 
 import Grid from 'material-ui/Grid';
@@ -80,11 +84,28 @@ const TextBottomRightStyle: React.CSSProperties = {
     position:"absolute",
 }
 
-const TextVerticalCenterStyle:React.CSSProperties = {
+const TextVerticalCenterStyle: React.CSSProperties = {
     display: "flex",
     aligmItems: "center",
     justifyContent: "center",
 }
+
+const VolumeIconCenterStyle: React.CSSProperties = {
+    right: "0px",
+    position:"absolute",
+    height:"32px",
+    width:"32px",
+    margin: "auto"
+}
+
+const VolumeBarCenterStyle: React.CSSProperties = {
+    top: "11px",
+    position:"absolute",
+    height:"100%",
+    width:"100%",
+    margin: "auto"
+}
+
 class ProgressBar extends React.Component<ProgressBarProps, ProgressBarState> {
 
     constructor(props) {
@@ -107,7 +128,6 @@ class ProgressBar extends React.Component<ProgressBarProps, ProgressBarState> {
         ProgressInnerStyle.width = p + "%"
         let innerStyle = Object.assign({}, ProgressInnerStyle, {width: `${p}%`});
 
-
         return (
           <div style={ProgressOuterStyle} onClick={this.onClick}>
             <div style={innerStyle}/>
@@ -115,7 +135,6 @@ class ProgressBar extends React.Component<ProgressBarProps, ProgressBarState> {
         );
     }
 }
-
 
 export interface SoundProps {
   url: string,
@@ -128,11 +147,10 @@ export interface SoundState {
   set_position: number,
   position: number,
   duration: number,
+  volume: number,
 }
 
 
-
-//https://www.npmjs.com/package/react-sound
 class SoundView extends React.Component<SoundProps,SoundState> {
 
   constructor(props) {
@@ -140,7 +158,8 @@ class SoundView extends React.Component<SoundProps,SoundState> {
     this.state = {status:Sound.status.PAUSED,
                   set_position: 0,
                   position:0,
-                  duration:120}
+                  duration:120,
+                  volume: 50}
     this.play = this.play.bind(this)
     this.pause = this.pause.bind(this)
     this.playPause = this.playPause.bind(this)
@@ -148,15 +167,14 @@ class SoundView extends React.Component<SoundProps,SoundState> {
     this.onLoading = this.onLoading.bind(this)
     this.onFinishedPlaying = this.onFinishedPlaying.bind(this)
     this.onSetPosition = this.onSetPosition.bind(this)
+    this.onSetVolume = this.onSetVolume.bind(this)
   }
 
   play() {
-    console.log("play" + this.props.url)
     this.setState({status:Sound.status.PLAYING});
   }
 
   pause() {
-    console.log("play")
     this.setState({status:Sound.status.PAUSED});
   }
 
@@ -188,66 +206,122 @@ class SoundView extends React.Component<SoundProps,SoundState> {
     this.setState({set_position: s});
   }
 
+  onSetVolume(v) {
+    if (v < 3) {
+        v = 0
+    } else if (v > 97) {
+        v = 100
+    }
+    this.setState({volume: v});
+  }
+
   render() {
     /*https://www.materialui.co/colors*/
+    let iconColor = "#607D8B"
+    let volumeIcon = <VolumeUp style={MediumIconStyle} color={iconColor}/>
+    if (this.state.volume == 0) {
+        volumeIcon = <VolumeMute style={MediumIconStyle} color={iconColor}/>
+    } else if (this.state.volume < 50) {
+        volumeIcon = <VolumeDown style={MediumIconStyle} color={iconColor}/>
+    }
+
     return <div>
 
-
-      <h2>{this.props.title}</h2>
-      <h3>{this.props.artist}</h3>
+      {/*https://www.npmjs.com/package/react-sound*/}
+      <Sound
+        url={this.props.url}
+        volume={this.state.volume}
+        playStatus={this.state.status}
+        onPlaying={this.onPlaying}
+        onLoading={this.onLoading}
+        onFinishedPlaying={this.onFinishedPlaying}
+        playFromPosition={this.state.set_position}
+      />
 
       <Grid container spacing={24}>
 
-        <Grid item xs={2}>
-          <div style={TextContainer}>
-          <div style={TextBottomLeftStyle}>
-            {fmtDuration(Math.round(this.state.position/1000))}
-          </div>
-          </div>
-        </Grid>
+      <Grid item sm={3} md={4}>
+      </Grid>
 
-        <Grid item xs={8}>
-          <div style={TextContainer}>
-          <div style={TextVerticalCenterStyle}>
-              <IconButton >
-                <SkipPrevious style={MediumIconStyle} color="#607D8B"/>
-              </IconButton>
+      <Grid item xs={12} sm={6} md={4}>
 
-              <IconButton onClick={(e) => this.playPause()}>
-              {(this.state.status == Sound.status.PAUSED)?
-                <PlayArrow style={LargeIconStyle} color="#607D8B"/>:
-                <Pause style={LargeIconStyle} color="#607D8B"/>}
-              </IconButton>
+          <b>{this.props.title}</b>
+          <br/>
+          {this.props.artist}
 
-              <IconButton >
-                <SkipNext style={MediumIconStyle} color="#607D8B"/>
-              </IconButton>
-          </div>
-          </div>
-        </Grid>
+          <Grid container spacing={24}>
 
-        <Grid item xs={2}>
-          <div style={TextContainer}>
-          <div style={TextBottomRightStyle}>
-            {fmtDuration(Math.round(this.state.duration/1000))}
-          </div>
-          </div>
+            <Grid item xs={2}>
+                <div style={TextContainer}>
+                <div style={TextBottomLeftStyle}>
+                    {fmtDuration(Math.round(this.state.position/1000))}
+                </div>
+                </div>
+            </Grid>
 
-        </Grid>
+            <Grid item xs={8}>
+                <div style={TextContainer}>
+                <div style={TextVerticalCenterStyle}>
+                    <IconButton >
+                      <SkipPrevious style={MediumIconStyle} color="#607D8B"/>
+                    </IconButton>
+
+                    <IconButton onClick={(e) => this.playPause()}>
+                    {(this.state.status == Sound.status.PAUSED)?
+                      <PlayArrow style={LargeIconStyle} color="#607D8B"/>:
+                      <Pause style={LargeIconStyle} color="#607D8B"/>}
+                    </IconButton>
+
+                    <IconButton >
+                      <SkipNext style={MediumIconStyle} color="#607D8B"/>
+                    </IconButton>
+                </div>
+                </div>
+            </Grid>
+
+            <Grid item xs={2}>
+               <div style={TextContainer}>
+               <div style={TextBottomRightStyle}>
+                 {fmtDuration(Math.round(this.state.duration/1000))}
+               </div>
+               </div>
+
+            </Grid>
+
+            </Grid>
+
+            <ProgressBar position={this.state.position}
+                         duration={this.state.duration}
+                         setPosition={this.onSetPosition}/>
+
+            <Grid container spacing={8} style={{height:"40px"}}>
+            <Grid item xs={3}>
+                <div style={TextContainer}>
+                <div style={VolumeIconCenterStyle}>
+                    {volumeIcon}
+                </div>
+                </div>
+            </Grid>
+            <Grid item xs={6}>
+                <div style={TextContainer}>
+                <div style={VolumeBarCenterStyle}>
+
+                <ProgressBar position={this.state.volume}
+                             duration={100}
+                             setPosition={this.onSetVolume}/>
+                </div>
+                </div>
+            </Grid>
+            <Grid item xs={3}>
+            </Grid>
+            </Grid>
 
       </Grid>
 
-      <ProgressBar position={this.state.position}
-                   duration={this.state.duration}
-                   setPosition={this.onSetPosition}/>
-      <Sound
-              url={this.props.url}
-              playStatus={this.state.status}
-              onPlaying={this.onPlaying}
-              onLoading={this.onLoading}
-              onFinishedPlaying={this.onFinishedPlaying}
-              playFromPosition={this.state.set_position}
-      />
+      <Grid item sm={3} md={4}>
+      </Grid>
+
+      </Grid>
       </div>;
   }
 }
