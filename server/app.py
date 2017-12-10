@@ -5,10 +5,12 @@ from flask import Flask, request, render_template, jsonify, url_for
 from .index import db, dbtables, app, cors
 from .service.audio_service import AudioService
 from .service.user_service import UserService
+from .service.transcode_service import TranscodeService
 
 # init services before endpoints
 AudioService.init(db, dbtables)
 UserService.init(db, dbtables)
+TranscodeService.init(db, dbtables)
 
 """
 @app.before_request
@@ -24,8 +26,6 @@ from .endpoints import user
 from .endpoints import message
 from .endpoints import library
 from .endpoints import queue
-
-
 
 # serve the bundle when requesting the default path
 @app.route('/', methods=['GET'])

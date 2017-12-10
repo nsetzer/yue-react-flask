@@ -3,6 +3,8 @@ var request = require('request-promise');
 
 import env from '../env'
 
+
+
 export function user_queue_get(token : string) {
     let url : string = env.baseUrl + '/api/queue'
 
@@ -12,7 +14,7 @@ export function user_queue_get(token : string) {
         headers: {
             'Authorization': token,
         },
-        json: true
+        json: true,
     };
 
     return request(options);
@@ -27,7 +29,7 @@ export function user_queue_populate(token : string) {
         headers: {
             'Authorization': token,
         },
-        json: true
+        json: true,
     };
 
     return request(options);

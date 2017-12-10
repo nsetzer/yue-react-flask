@@ -42,12 +42,15 @@ export function fmtDuration(s) {
 
 export function getSongAudioUrl(song) {
     // in the future, the url may be on a different server
-    var params = "?user=" + song.user_id +"&domain=" + song.domain_id
+    var token = localStorage.getItem('token');
+    var params = "?token=" + token
     return env.baseUrl + "/api/library/" + song.id + "/audio" + params
 }
 
 export function getSongArtUrl(song) {
-    return env.baseUrl + "/api/library/" + song.id + "/art"
+    var token = localStorage.getItem('token');
+    var params = "?token=" + token
+    return env.baseUrl + "/api/library/" + song.id + "/art" + params
 }
 
 export function getSongDisplayTitle(song) {

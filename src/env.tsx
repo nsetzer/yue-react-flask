@@ -1,6 +1,5 @@
 
 
-
 let env = { 'baseUrl': "" }
 
 // NODE_ENV is either "development" or "production"
@@ -8,7 +7,10 @@ if (process.env.NODE_ENV === "development" ||
     process.env.NODE_ENV === "test") {
     env.baseUrl = "http://localhost:4200"
 } else {
-    env.baseUrl = ""
+    // production
+    if (window && window.location) {
+        env.baseUrl = window.location.origin
+    }
 }
 
 if (process.env.REACT_APP_BACKEND_PATH) {

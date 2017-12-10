@@ -1,10 +1,14 @@
 
-
+import os
 from flask import request, jsonify, g, send_file
 
 from ..index import app
 from ..service.audio_service import AudioService
-from .util import requires_auth, requires_no_auth, requires_auth_role, httpError
+from ..service.transcode_service import TranscodeService
+from .util import requires_auth, requires_no_auth, requires_auth_role, \
+                  httpError, verify_token
+from itsdangerous import SignatureExpired, BadSignature
+from ..dao.library import Song
 
 @app.route("/api/library", methods=["GET"])
 @requires_auth
@@ -49,27 +53,35 @@ def get_song_audio(song_id):
     must be passed as query parameters, not headers
     """
 
-    user_id = request.args.get('user', None)
-    domain_id = request.args.get('domain', None)
-    apikey = request.args.get('apikey', None)
+    token = request.args.get('token', None)
 
-    if user_id is None:
-        return httpError(400, "Domain not specified")
+    if token is None:
+        return httpError(400, "Authorization token not specified")
 
-    if domain_id is None:
-        return httpError(400, "Domain not specified")
+    try:
+        user = verify_token(token)
 
-    user = {
-        "id": int(user_id),
-        "domain_id": int(domain_id)
-    }
+    except BadSignature:
+        return httpError(401,
+            "Bad token encountered")
+    except SignatureExpired:
+        return httpError(401,
+            "Token has expired")
 
-    path = AudioService.instance().getSongAudioPath(user, song_id)
+    song = AudioService.instance().findSongById(user, song_id)
 
-    if path:
-        return send_file(path)
+    if not song or not song[Song.path]:
+        return httpError(404, "No Audio for %s" % song_id)
 
-    return httpError(404, "No Audio for %s" % song_id)
+    path = song[Song.path]
+    if TranscodeService.instance().shouldTranscodeSong(song):
+        path = TranscodeService.instance().transcodeSong(song)
+
+    if not os.path.exists(path):
+        return httpError(404, "No Audio for %s" % song_id)
+
+    return send_file(path)
+
 
 @app.route("/api/library/<song_id>/audio", methods=["POST"])
 @requires_auth
@@ -84,9 +96,24 @@ def get_song_art(song_id):
     TODO: a user API token should be sent using a query parameter
     """
 
+    token = request.args.get('token', None)
+
+    if token is None:
+        return httpError(400, "Authorization token not specified")
+
+    try:
+        user = verify_token(token)
+
+    except BadSignature:
+        return httpError(401,
+            "Bad token encountered")
+    except SignatureExpired:
+        return httpError(401,
+            "Token has expired")
+
     path = AudioService.instance().getSongArtPath(g.current_user, song_id)
 
-    if path:
+    if path or not os.path.exists(path):
         return send_file(path)
 
     return httpError(404, "No Art for %s" % song_id)

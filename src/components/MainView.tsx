@@ -23,6 +23,8 @@ import Delete from 'material-ui-icons/Delete';
 
 import SoundView from "./SoundView"
 
+import Grid from 'material-ui/Grid';
+
 import {
   fmtDuration,
   getSongAudioUrl,
@@ -35,14 +37,17 @@ export interface MainViewProps {
   userName: PropTypes.string,
   queueStatus: string,
   songs: Array<any>,
+  history: Array<any>,
   getQueue: () => any,
   populateQueue: () => any,
+  nextSongInQueue: PropTypes.func,
+  previousSongInQueue: PropTypes.func,
 };
 
 export interface MainViewState {
   open: boolean,
   audioUrl: string,
-  currentSong: {artist: string, title: string},
+  currentSong: {id: string, artist: string, title: string},
 }
 
 const listRightStyle = {
@@ -56,6 +61,8 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
     super(props);
     this.state = {open:true, audioUrl: "", currentSong: null};
     this.logout = this.logout.bind(this)
+    this.onSongNext = this.onSongNext.bind(this)
+    this.onSongPrevious = this.onSongPrevious.bind(this)
     this.componentWillReceiveProps = this.componentWillReceiveProps.bind(this)
   }
 
@@ -72,6 +79,7 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
           audioUrl: audioUrl,
           currentSong: song
       });
+    console.log("new song received")
   }
 
   logout(e) {
@@ -82,6 +90,15 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
       });
   }
 
+  onSongNext(auto) {
+    // auto: true if the song completed normally
+    this.props.nextSongInQueue(this.props.songs)
+  }
+
+  onSongPrevious() {
+    this.props.previousSongInQueue(this.props.history, this.props.songs)
+  }
+
   render() {
     let currentSong = this.state.currentSong;
     let currentArtist = (currentSong)?currentSong.artist:"";
@@ -90,18 +107,35 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
       <div>
       <div className="App">
         <header className="App-header">
+
+        <Grid container spacing={24}>
+
+        <Grid item sm={3} md={4}>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={4}>
           <SoundView
             url={this.state.audioUrl}
             artist={currentArtist}
             title={currentTitle}
+            nextSong={this.onSongNext}
+            previousSong={this.onSongPrevious}
           />
-        </header>
-        <br/>
+        </Grid>
+
+        <Grid item sm={3} md={4}>
         <Button
           style={{ marginTop: 50 }}
           onClick={(e) => this.logout(e)}
           raised={true}
         >Logout</Button>
+        </Grid>
+
+        </Grid>
+
+        </header>
+        <br/>
+
 
 
       </div>
@@ -141,6 +175,7 @@ function mapStateToProps(state) {
   return {
       queueStatus: state.queue.statusText,
       songs: state.queue.songs,
+      history: state.queue.history,
     };
 }
 

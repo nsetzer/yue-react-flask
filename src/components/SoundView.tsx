@@ -140,6 +140,8 @@ export interface SoundProps {
   url: string,
   artist: string,
   title: string,
+  nextSong: (boolean) => any,
+  previousSong: () => any,
 }
 
 export interface SoundState {
@@ -168,6 +170,8 @@ class SoundView extends React.Component<SoundProps,SoundState> {
     this.onFinishedPlaying = this.onFinishedPlaying.bind(this)
     this.onSetPosition = this.onSetPosition.bind(this)
     this.onSetVolume = this.onSetVolume.bind(this)
+    this.onClickNext = this.onClickNext.bind(this)
+    this.onClickPrevious = this.onClickPrevious.bind(this)
   }
 
   play() {
@@ -199,7 +203,7 @@ class SoundView extends React.Component<SoundProps,SoundState> {
   }
 
   onFinishedPlaying() {
-    console.log("playback finished")
+    this.props.nextSong(true)
   }
 
   onSetPosition(s) {
@@ -213,6 +217,14 @@ class SoundView extends React.Component<SoundProps,SoundState> {
         v = 100
     }
     this.setState({volume: v});
+  }
+
+  onClickNext() {
+    this.props.nextSong(false)
+  }
+
+  onClickPrevious() {
+    this.props.previousSong()
   }
 
   render() {
@@ -238,16 +250,14 @@ class SoundView extends React.Component<SoundProps,SoundState> {
         playFromPosition={this.state.set_position}
       />
 
-      <Grid container spacing={24}>
 
-      <Grid item sm={3} md={4}>
-      </Grid>
 
-      <Grid item xs={12} sm={6} md={4}>
+
 
           <b>{this.props.title}</b>
           <br/>
           {this.props.artist}
+          <br/>
 
           <Grid container spacing={24}>
 
@@ -262,7 +272,7 @@ class SoundView extends React.Component<SoundProps,SoundState> {
             <Grid item xs={8}>
                 <div style={TextContainer}>
                 <div style={TextVerticalCenterStyle}>
-                    <IconButton >
+                    <IconButton onClick={(e) => this.onClickPrevious()}>
                       <SkipPrevious style={MediumIconStyle} color="#607D8B"/>
                     </IconButton>
 
@@ -272,7 +282,7 @@ class SoundView extends React.Component<SoundProps,SoundState> {
                       <Pause style={LargeIconStyle} color="#607D8B"/>}
                     </IconButton>
 
-                    <IconButton >
+                    <IconButton onClick={(e) => this.onClickNext()}>
                       <SkipNext style={MediumIconStyle} color="#607D8B"/>
                     </IconButton>
                 </div>
@@ -316,12 +326,7 @@ class SoundView extends React.Component<SoundProps,SoundState> {
             </Grid>
             </Grid>
 
-      </Grid>
 
-      <Grid item sm={3} md={4}>
-      </Grid>
-
-      </Grid>
       </div>;
   }
 }

@@ -9,6 +9,12 @@ import {
     QUEUE_SET,
     QUEUE_SET_SUCCESS,
     QUEUE_SET_FAILURE,
+    QUEUE_NEXT,
+    QUEUE_NEXT_SUCCESS,
+    QUEUE_NEXT_FAILURE,
+    QUEUE_PREVIOUS,
+    QUEUE_PREVIOUS_SUCCESS,
+    QUEUE_PREVIOUS_FAILURE,
 } from '../constants/index'
 
 import {
@@ -25,7 +31,7 @@ export function queueRequest(queueType) {
 // a success type which contains the list of song_ids
 // presently in the queue
 export function queueSuccess(song_ids, successType) {
-    console.log(song_ids)
+    console.log(successType)
     return {
         type: successType,
         payload: song_ids,
@@ -41,7 +47,7 @@ export function queueSuccessVoid(successType) {
 }
 
 export function queueError(error, errorType) {
-    console.error(error)
+    console.error(errorType + " : " +error)
     return {
         type: errorType,
         payload: {
@@ -95,5 +101,25 @@ export function populateQueue() {
                 dispatch(queueError(error,
                                     QUEUE_POPULATE_FAILURE));
             })
+    }
+}
+
+export function nextSongInQueue() {
+    return function (dispatch) {
+        dispatch(queueRequest(QUEUE_NEXT));
+        dispatch(queueSuccess(null,
+                               QUEUE_NEXT_SUCCESS));
+        return null
+    }
+}
+
+export function previousSongInQueue() {
+    return function (dispatch) {
+        dispatch(queueRequest(QUEUE_NEXT));
+
+        dispatch(queueSuccess(null,
+                              QUEUE_PREVIOUS_SUCCESS));
+        return null
+
     }
 }
