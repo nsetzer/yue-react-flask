@@ -13,7 +13,7 @@ import Paper from 'material-ui/Paper';
 import Grid from 'material-ui/Grid';
 
 export interface RegisterViewProps {
-    registerUser: (a,b,c,d) => any,
+    registerUser: (email,password,redirect) => any,
     registerStatusText: PropTypes.string,
 };
 
@@ -126,7 +126,7 @@ class RegisterView extends React.Component<RegisterViewProps,RegisterViewState> 
         this.setState(state)
         return
       }
-      this.props.registerUser(this.props, this.state.email, this.state.password, this.state.redirectSuccess);
+      this.props.registerUser(this.state.email, this.state.password, this.state.redirectSuccess);
   }
 
   render() {

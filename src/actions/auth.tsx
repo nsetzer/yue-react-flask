@@ -13,6 +13,8 @@ import {
 import { parseJSON } from '../utils/misc';
 import { get_token, create_user } from '../utils/http_functions';
 
+import History from '../history'
+
 
 export function loginUserSuccess(token) {
     localStorage.setItem('token', token);
@@ -48,9 +50,9 @@ export function logout() {
     };
 }
 
-export function logoutAndRedirect(props) {
+export function logoutAndRedirect() {
     return (dispatch) => {
-        props.history.push('/');
+        History.push('/');
         return dispatch(logout());
     };
 }
@@ -61,14 +63,14 @@ export function redirectToRoute(route) {
     };
 }
 */
-export function loginUser(props, email, password, target) {
+export function loginUser(email, password, target) {
     return function (dispatch) {
         dispatch(loginUserRequest());
         return get_token(email, password)
             .then(parseJSON)
             .then(response => {
                 try {
-                    props.history.push(target);
+                    History.push(target);
                     return dispatch(loginUserSuccess(response.token));
                 } catch (e) {
                     dispatch(loginUserFailure({
@@ -117,7 +119,7 @@ export function registerUserFailure(error) {
     };
 }
 
-export function registerUser(props, email, password, target) {
+export function registerUser(email, password, target) {
     return function (dispatch) {
         dispatch(registerUserRequest());
         return create_user(email, password)
@@ -125,7 +127,7 @@ export function registerUser(props, email, password, target) {
             .then(response => {
                 try {
                     dispatch(registerUserSuccess(response.token));
-                    props.history.push(target);
+                    History.push(target);
                 } catch (e) {
                     dispatch(registerUserFailure({
                         response: {

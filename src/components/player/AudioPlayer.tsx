@@ -8,7 +8,7 @@ import Sound from 'react-sound';
 
 import Button from 'material-ui/Button';
 
-import * as actionCreators from '../actions/queue';
+import * as actionCreators from '../../actions/queue';
 import PlayArrow from 'material-ui-icons/PlayArrow';
 import Pause from 'material-ui-icons/Pause';
 import SkipNext from 'material-ui-icons/SkipNext';
@@ -23,7 +23,7 @@ import Grid from 'material-ui/Grid';
 
 import {
   fmtDuration,
-} from '../utils/misc'
+} from '../../utils/misc'
 
 export interface ProgressBarProps {
   position: number, // seconds
@@ -136,7 +136,7 @@ class ProgressBar extends React.Component<ProgressBarProps, ProgressBarState> {
     }
 }
 
-export interface SoundProps {
+export interface AudioPlayerProps {
   url: string,
   artist: string,
   title: string,
@@ -144,7 +144,7 @@ export interface SoundProps {
   previousSong: () => any,
 }
 
-export interface SoundState {
+export interface AudioPlayerState {
   status: any,
   set_position: number,
   position: number,
@@ -153,7 +153,7 @@ export interface SoundState {
 }
 
 
-class SoundView extends React.Component<SoundProps,SoundState> {
+class AudioPlayer extends React.Component<AudioPlayerProps,AudioPlayerState> {
 
   constructor(props) {
     super(props);
@@ -240,24 +240,11 @@ class SoundView extends React.Component<SoundProps,SoundState> {
     return <div>
 
       {/*https://www.npmjs.com/package/react-sound*/}
-      <Sound
-        url={this.props.url}
-        volume={this.state.volume}
-        playStatus={this.state.status}
-        onPlaying={this.onPlaying}
-        onLoading={this.onLoading}
-        onFinishedPlaying={this.onFinishedPlaying}
-        playFromPosition={this.state.set_position}
-      />
-
-
-
 
 
           <b>{this.props.title}</b>
           <br/>
           {this.props.artist}
-          <br/>
 
           <Grid container spacing={24}>
 
@@ -326,22 +313,19 @@ class SoundView extends React.Component<SoundProps,SoundState> {
             </Grid>
             </Grid>
 
-
+            <Sound
+        url={this.props.url}
+        volume={this.state.volume}
+        playStatus={this.state.status}
+        onPlaying={this.onPlaying}
+        onLoading={this.onLoading}
+        onFinishedPlaying={this.onFinishedPlaying}
+        playFromPosition={this.state.set_position}
+      />
       </div>;
   }
 }
 
-function mapStateToProps(state) {
-  return {
-    };
-}
+export default AudioPlayer
 
-function mapDispatchToProps(dispatch) {
-  return bindActionCreators(actionCreators, dispatch);
-}
-export default SoundView
 
-/*connect(
-  mapStateToProps,
-  mapDispatchToProps
-)(SoundView);*/

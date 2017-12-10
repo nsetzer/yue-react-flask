@@ -12,7 +12,7 @@ import Paper from 'material-ui/Paper';
 import Grid from 'material-ui/Grid';
 
 export interface LoginViewProps {
-    loginUser: (a,b,c,d) => any,
+    loginUser: (email,password,redirect) => any,
     statusText: string,
 };
 
@@ -118,7 +118,7 @@ class LoginView extends React.Component<LoginViewProps,LoginViewState> {
         this.setState(state)
         return
       }
-      this.props.loginUser(this.props, this.state.email, this.state.password, this.state.redirectSuccess);
+      this.props.loginUser(this.state.email, this.state.password, this.state.redirectSuccess);
   }
 
   render() {
