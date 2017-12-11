@@ -63,7 +63,14 @@ class LibraryEndpointTestCase(TestCase):
             for songa in songs_a:
                 self.assertNotEqual(songb['id'], songa['id'])
 
+    def test_domain_info(self):
 
+        app = self.login(self.USERNAME, self.PASSWORD)
 
+        url = "/api/library/info"
+        res = app.get(url)
+        data = json.loads(res.data.decode("utf-8"))['result']
 
-
+        self.assertTrue('artists' in data)
+        self.assertTrue('genres' in data)
+        self.assertTrue('num_songs' in data)

@@ -1,5 +1,8 @@
 #! cd ../.. && python migrate_db.py test
 
+import random
+import time
+
 import yaml
 try:
     from yaml import CLoader as Loader, CDumper as Dumper
@@ -136,4 +139,56 @@ def db_init_test(db, dbtables, config_path):
                     song, commit=False)
     db.session.commit()
 
+def db_init_generate(db, dbtables, config_path):
+
+    # create initial environment
+    db_init(db, dbtables, config_path)
+
+    # generate 500 artists with an average of 4 albums and 6 songs per album
+    # generate ~10,000 songs to simulate a "large" database
+
+    n_artists = 500
+    n_mean_albums = 4
+    n_mean_songs = 6
+    n_genres = 16
+    n_max_genres_per_song = 3
+
+    # ----------------
+    userDao = UserDao(db, dbtables)
+    libraryDao = LibraryDao(db, dbtables)
+
+    user = userDao.findUserByEmail("user000")
+
+    genres = ["Genre%03d" % i for i in range(n_genres)]
+
+    na = n_mean_albums * 2
+    ns = n_mean_songs * 2
+
+    count = 0
+    s = time.time()
+    for a in range(500):
+        for b in range(int(random.triangular(1, na))):
+
+            k = random.randint(1, n_max_genres_per_song + 1)
+            g = ', '.join(random.sample(genres, k))
+
+            for t in range(int(random.triangular(1, ns))):
+
+                song = {
+                    "artist": "Artist%03d" % a,
+                    "album": "Album%03d" % b,
+                    "title": "Title%03d" % count,
+                    "length": random.randint(30, 360),
+                    "genre": g,
+                }
+                libraryDao.insertSongData(user.domain_id, song)
+
+                # 25% chance of rating 0-10
+                # r = 0 if random.random() < .25 else random.randint(0, 11)
+
+                count += 1
+    e = time.time()
+
+    db.session.commit()
+    print("count: %d created in %s" % (count, e - s))
 

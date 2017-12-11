@@ -67,6 +67,10 @@ class AudioService(object):
             searchTerm, case_insensitive,
             orderby, limit, offset)
 
+    def getDomainSongInfo(self, domain_id):
+
+        return self.libraryDao.domainSongInfo(domain_id)
+
     def getQueue(self, user):
         return self.queueDao.get(user['id'], user['domain_id'])
 
