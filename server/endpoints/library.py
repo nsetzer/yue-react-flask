@@ -6,6 +6,14 @@ from ..index import app
 from ..service.audio_service import AudioService
 from .util import requires_auth, requires_no_auth, requires_auth_role, httpError
 
+@app.route("/api/library/info", methods=["GET"])
+@requires_auth
+def get_domain_info():
+
+    domain_id = g.current_user['domain_id']
+    data = AudioService.instance().getDomainSongInfo(domain_id)
+    return jsonify(result=data)
+
 @app.route("/api/library", methods=["GET"])
 @requires_auth
 def search_library():
