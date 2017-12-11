@@ -383,6 +383,61 @@ class LibraryDao(object):
 
         return song_id
 
+    def domainSongInfo(self, domain_id):
+        """
+        generate a document describing artists, albums, and genres in the
+        database for a given domain.
+
+        in testing, this takes about 1/4 of the time of calling search()
+        """
+        columns = [column('artist'), column('album'), column('genre')]
+
+        query = select(columns) \
+            .select_from(self.dbtables.SongDataTable) \
+            .where(self.dbtables.SongDataTable.c.domain_id == domain_id)
+
+        artists = {}
+        genres = {}
+        total = 0
+
+        for record in db.session.execute(query).fetchall():
+            art = record['artist']
+            alb = record['album']
+            # genres are comma or colon deliminated
+            gen = record['genre'].replace(",", ";").strip()
+            # attempt to de-duplicate genre names
+            if not gen:
+                gen  = ["Unknown", ]
+            else:
+                gen = [g.strip().title() for g in gen.split(";")]
+
+            # count genres for the record
+            for g in gen:
+                if g not in genres:
+                    genres[g] = 0
+                genres[g] += 1
+
+            # count artist and album
+            if art not in artists:
+                artists[art] = {"count": 0, "albums": {}}
+
+            artists[art]['count'] += 1
+            albums = artists[art]['albums']
+
+            if alb not in albums:
+                albums[alb] = 0
+            albums[alb] += 1
+
+            total += 1
+
+        data = {
+            "artists": artists,
+            "genres": genres,
+            "num_songs": total
+        }
+
+        return data
+
     def search(self,
         user_id,
         domain_id,

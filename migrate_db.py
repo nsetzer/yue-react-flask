@@ -20,10 +20,12 @@ from sqlalchemy import and_, or_, select
 
 from server.service.audio_service import AudioService
 
+import json
+
 userDao = UserDao(db, dbtables)
 libraryDao = LibraryDao(db, dbtables)
 
-from server.cli.config import db_init as db_init
+from server.cli.config import db_init, db_init_generate
 
 text_fields = {
     YueSong.path: Song.path,
@@ -125,7 +127,7 @@ def main():
 
     mode = sys.argv[1]
 
-    username = 'nsetzer'
+    username = 'admin'
     domain_name = app.config['DEFAULT_DOMAIN']
     role_name = "admin"
 
@@ -135,11 +137,10 @@ def main():
     for path in [path1, path2, path3]:
         if os.path.exists(path):
             dbpath = path
-            break;
+            break
     else:
         sys.stderr.write("cannot find source db")
         sys.exit(1)
-
 
     if mode == 'migrate':
         migrate(username, dbpath)
@@ -148,31 +149,41 @@ def main():
 
         db_init(db, dbtables, "config/test/env.yml")
 
-        userDao = UserDao(db, dbtables)
+        domain = userDao.findDomainByName(domain_name)
+        if domain is None:
+            sys.stdout.write("Domain with name `%s` not found" % domain_name)
+            sys.exit(1)
+
+        role = userDao.findRoleByName(role_name)
+        if role is None:
+            sys.stdout.write("Role with name `%s` not found" % role_name)
+            sys.exit(1)
+
+        migrate(username, domain_name, dbpath)
+
+    elif mode == "generate":
+        """ create a database and populate it with dummy data"""
+
+        db_init_generate(db, dbtables, "config/test/env.yml")
+
+    elif mode == "domain_info":
 
         domain = userDao.findDomainByName(domain_name)
         if domain is None:
             sys.stdout.write("Domain with name `%s` not found" % domain_name)
             sys.exit(1)
-        role = userDao.findRoleByName(role_name)
-        if role is None:
-            sys.stdout.write("Role with name `%s` not found" % role_name)
-            sys.exit(1)
-        username = "nsetzer"
-        password = "nsetzer"
 
-        user = userDao.createUser(username, password, domain.id, role.id)
-        sys.stdout.write("Creating User: %s@%s/%s\n" % (username, domain.name, role.name))
+        s = time.time()
+        data = libraryDao.domainSongInfo(domain.id)
+        e = time.time()
+        print("completed in %s" % (e - s))
 
-        migrate(username, domain_name, dbpath)
-
-    elif mode == "test":
-
-        db_init(db, dbtables, "config/production/env.yml")
+        with open("library.JSON", "w") as wf:
+            wf.write(json.dumps(data, sort_keys=True, indent=2))
 
     elif mode == "test-2":
         # test()
-        userDao = UserDao(db, dbtables)
+        #userDao = UserDao(db, dbtables)
         user = userDao.findUserByEmail("user000")
         results = AudioService.instance().search(user, "beast", limit=5)
         for song in results:
