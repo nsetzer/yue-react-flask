@@ -1,7 +1,7 @@
 
 import * as React from 'react';
 import PropTypes from 'prop-types';
-//import { Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { bindActionCreators } from 'redux';
 import { connect } from 'react-redux';
 
@@ -17,8 +17,7 @@ import Delete from 'material-ui-icons/Delete';
 
 import * as actionCreators from '../actions/library';
 
-export interface DomainArtistViewProps {
-  match: any
+export interface DomainViewProps {
   libraryStatus: string,
   libraryGetDomainInfo: () => any,
   domain_artists: {}
@@ -26,10 +25,10 @@ export interface DomainArtistViewProps {
   domain_song_count: number
 };
 
-export interface DomainArtistViewState {
+export interface DomainViewState {
 }
 
-class DomainArtistView extends React.Component<DomainArtistViewProps,DomainArtistViewState> {
+class DomainView extends React.Component<DomainViewProps,DomainViewState> {
 
   constructor(props) {
     super(props);
@@ -46,10 +45,26 @@ class DomainArtistView extends React.Component<DomainArtistViewProps,DomainArtis
   }
 
   render() {
+    let da = this.props.domain_artists
+    let artists = Object.keys(da);
+    // TODO: the alternative here is to pre-sort server side
+    // and return a list of elements, instead of a map
+    artists.sort((a,b) => da[a].sort_key.localeCompare(da[b].sort_key));
+
     return (
         <div>
-        <h1>{this.props.match.params.artist}</h1>
+        <List>
+            {
+              (artists.length>0) ?
+                artists.map( (artist) => {
+                  return <ListItem key={artist}>
+                           <Link to={"/main/library/"+artist}>{artist}</Link>
+                         </ListItem>
+                }) : <div>No Artists To Display</div>
+            }
+         </List>
         </div>
+
     )
   }
 }
@@ -69,4 +84,4 @@ function mapDispatchToProps(dispatch) {
 export default connect(
   mapStateToProps,
   mapDispatchToProps
-)(DomainArtistView);
+)(DomainView);

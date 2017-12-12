@@ -332,6 +332,9 @@ class LibraryDao(object):
         song_keys = set(self.formatter.cols_song)
         song_data = {k: song[k] for k in song.keys() if k in song_keys}
 
+        # TODO: do I need to update the Song.artist_key here
+        # if the artist is given and the key is not?
+
         if song_data:
             query = update(self.dbtables.SongDataTable) \
                 .values(song_data) \
@@ -390,7 +393,10 @@ class LibraryDao(object):
 
         in testing, this takes about 1/4 of the time of calling search()
         """
-        columns = [column('artist'), column('album'), column('genre')]
+        columns = [column(Song.artist),
+                   column(Song.artist_key),
+                   column(Song.album),
+                   column(Song.genre)]
 
         query = select(columns) \
             .select_from(self.dbtables.SongDataTable) \
@@ -401,14 +407,15 @@ class LibraryDao(object):
         total = 0
 
         for record in db.session.execute(query).fetchall():
-            art = record['artist']
-            alb = record['album']
+            key = record[Song.artist_key]
+            art = record[Song.artist]
+            alb = record[Song.album]
             # genres are comma or colon deliminated
-            gen = record['genre'].replace(",", ";").strip()
-            # attempt to de-duplicate genre names
+            gen = record[Song.genre].replace(",", ";").strip()
             if not gen:
-                gen  = ["Unknown", ]
+                gen  = [ ]
             else:
+                # attempt to de-duplicate genre names
                 gen = [g.strip().title() for g in gen.split(";")]
 
             # count genres for the record
@@ -419,7 +426,9 @@ class LibraryDao(object):
 
             # count artist and album
             if art not in artists:
-                artists[art] = {"count": 0, "albums": {}}
+                artists[art] = {"count": 0,
+                                "albums": {},
+                                "sort_key": key}
 
             artists[art]['count'] += 1
             albums = artists[art]['albums']

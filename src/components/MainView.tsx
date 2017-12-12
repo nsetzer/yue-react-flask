@@ -17,6 +17,7 @@ const ListIcon = ListIcons.default
 
 import SoundView from "./player/SoundView"
 import QueueView from "./QueueView"
+import DomainView from "./DomainView"
 import DomainArtistView from "./DomainArtistView"
 
 import Grid from 'material-ui/Grid';
@@ -44,7 +45,7 @@ const style : Dictionary<React.CSSProperties> = {
     textAlign: "center",
   },
   header_content: {
-    padding: "20px",
+    padding: "5px",
     color: "white"
   }
 
@@ -115,7 +116,8 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
 
         <Switch>
         <Route path={`/main/queue`} component={QueueView}/>
-        <Route path={`/main/library`} component={DomainArtistView}/>
+        <Route exact path={`/main/library`} component={DomainView}/>
+        <Route exact path={`/main/library/:artist`} component={DomainArtistView}/>
         <Route path={"/main"} render={() => (
           <h3>View Not Implemented</h3>
         )}/>
