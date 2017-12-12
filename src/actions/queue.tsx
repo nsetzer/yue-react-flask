@@ -31,7 +31,6 @@ export function queueRequest(queueType) {
 // a success type which contains the list of song_ids
 // presently in the queue
 export function queueSuccess(song_ids, successType) {
-    console.log(successType)
     return {
         type: successType,
         payload: song_ids,

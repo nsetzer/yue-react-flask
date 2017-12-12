@@ -17,6 +17,7 @@ const ListIcon = ListIcons.default
 
 import SoundView from "./player/SoundView"
 import QueueView from "./QueueView"
+import DomainArtistView from "./DomainArtistView"
 
 import Grid from 'material-ui/Grid';
 
@@ -114,6 +115,7 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
 
         <Switch>
         <Route path={`/main/queue`} component={QueueView}/>
+        <Route path={`/main/library`} component={DomainArtistView}/>
         <Route path={"/main"} render={() => (
           <h3>View Not Implemented</h3>
         )}/>

@@ -56,7 +56,6 @@ class SoundView extends React.Component<SoundViewProps,SoundViewState> {
           audioUrl: audioUrl,
           currentSong: song
       });
-    console.log("new song received")
   }
 
   onSongNext(auto) {

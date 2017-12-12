@@ -1,4 +1,9 @@
 
+
+
+import 'raf/polyfill';
+
+
 import { expect, assert } from 'chai';
 
 import * as authActions from "./auth"
@@ -22,7 +27,6 @@ window.localStorage = {
 
 it('should login the user, then out', async function() {
 
-    let props = {history:[]}
     let email = "user000"
     let password = "user000"
 
@@ -33,7 +37,7 @@ it('should login the user, then out', async function() {
     }
 
     // result is set to the final dispatched value
-    let result = await authActions.loginUser(props, email, password, "/main")(dispatch);
+    let result = await authActions.loginUser(email, password, "/main")(dispatch);
 
     expect(result.type).to.eq(LOGIN_USER_SUCCESS)
     //assert.typeOf(result.payload.token, 'string')
@@ -42,6 +46,6 @@ it('should login the user, then out', async function() {
     expect(states[0].type).to.eq(LOGIN_USER_REQUEST)
     expect(states[1].type).to.eq(LOGIN_USER_SUCCESS)
 
-    result = await authActions.logoutAndRedirect(props)(dispatch);
+    result = await authActions.logoutAndRedirect()(dispatch);
     expect(result.type).to.eq(LOGOUT_USER)
 });

@@ -6,9 +6,6 @@ import PropTypes from 'prop-types';
 import { bindActionCreators } from 'redux';
 import { connect } from 'react-redux';
 
-const logo = require('../svg/logo.svg');
-import './App.css';
-
 import Button from 'material-ui/Button';
 
 import * as actionCreators from '../actions/queue';

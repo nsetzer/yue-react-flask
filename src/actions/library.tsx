@@ -1,0 +1,63 @@
+
+import {
+    LIBRARY_REQUEST,
+    LIBRARY_FAILURE,
+    LIBRARY_SEARCH,
+    LIBRARY_DOMAIN_INFO,
+} from '../constants/index'
+
+import { user_library_search,
+         user_library_domain_info,
+    } from "../utils/http_library"
+
+
+export function libraryRequest() {
+    return {type: LIBRARY_REQUEST}
+}
+
+export function librarySuccess(payload, successType) {
+    return {
+        type: successType,
+        payload: payload,
+    };
+}
+
+export function libraryError(error) {
+    console.error(error)
+    return {
+        type: LIBRARY_FAILURE,
+        payload: {
+            status: error.statusCode,
+            statusText: error.statusText,
+        },
+    };
+}
+
+export function librarySearch(term) {
+    return function (dispatch) {
+        dispatch(libraryRequest());
+        var token = localStorage.getItem('token');
+        return user_library_search(token, term)
+            .then(response => {
+                dispatch(librarySuccess(response.result,
+                                      LIBRARY_SEARCH));
+            })
+            .catch(error => {
+                dispatch(libraryError(error));
+            })
+    }
+}
+export function libraryGetDomainInfo() {
+    return function (dispatch) {
+        dispatch(libraryRequest());
+        var token = localStorage.getItem('token');
+        return user_library_domain_info(token)
+            .then(response => {
+                dispatch(librarySuccess(response.result,
+                                      LIBRARY_DOMAIN_INFO));
+            })
+            .catch(error => {
+                dispatch(libraryError(error));
+            })
+    }
+}
