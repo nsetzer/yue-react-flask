@@ -1,8 +1,11 @@
 
 from functools import wraps
-from flask import request, jsonify, g
+from flask import after_this_request, request, jsonify, g
 from flask_cors import cross_origin
 from sqlalchemy.exc import IntegrityError
+
+from io import BytesIO
+import gzip
 
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
 from itsdangerous import SignatureExpired, BadSignature
@@ -175,6 +178,42 @@ def requires_no_auth(f):
     def decorated(*args, **kwargs):
         return _handle_exceptions(f, args, kwargs)
     return decorated
+
+def compressed(f):
+    """
+    compress the output using gzip if the client supports it.
+    """
+    @wraps(f)
+    def view_func(*args, **kwargs):
+        @after_this_request
+        def zipper(response):
+            accept_encoding = request.headers.get('Accept-Encoding', '')
+
+            if 'gzip' not in accept_encoding.lower():
+                return response
+
+            response.direct_passthrough = False
+
+            if (response.status_code < 200 or
+               response.status_code >= 300):
+                return response
+
+            gzip_buffer = BytesIO()
+            gzip_file = gzip.GzipFile(mode='wb',
+                                      fileobj=gzip_buffer)
+            gzip_file.write(response.data)
+            gzip_file.close()
+
+            response.data = gzip_buffer.getvalue()
+            response.headers['Content-Encoding'] = 'gzip'
+            response.headers['Vary'] = 'Accept-Encoding'
+            response.headers['Content-Length'] = len(response.data)
+
+            return response
+
+        return f(*args, **kwargs)
+
+    return view_func
 
 
 

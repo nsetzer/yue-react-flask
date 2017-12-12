@@ -20,8 +20,8 @@ import * as actionCreators from '../actions/library';
 export interface DomainViewProps {
   libraryStatus: string,
   libraryGetDomainInfo: () => any,
-  domain_artists: {}
-  domain_genres: {}
+  domain_artists: Array<any>,
+  domain_genres: Array<any>,
   domain_song_count: number
 };
 
@@ -45,20 +45,14 @@ class DomainView extends React.Component<DomainViewProps,DomainViewState> {
   }
 
   render() {
-    let da = this.props.domain_artists
-    let artists = Object.keys(da);
-    // TODO: the alternative here is to pre-sort server side
-    // and return a list of elements, instead of a map
-    artists.sort((a,b) => da[a].sort_key.localeCompare(da[b].sort_key));
-
     return (
         <div>
         <List>
             {
-              (artists.length>0) ?
-                artists.map( (artist) => {
-                  return <ListItem key={artist}>
-                           <Link to={"/main/library/"+artist}>{artist}</Link>
+              (this.props.domain_artists.length>0) ?
+                this.props.domain_artists.map( (artist) => {
+                  return <ListItem key={artist.name}>
+                           <Link to={"/main/library/"+artist.name}>{artist.name}</Link>
                          </ListItem>
                 }) : <div>No Artists To Display</div>
             }

@@ -402,6 +402,7 @@ class LibraryDao(object):
             .select_from(self.dbtables.SongDataTable) \
             .where(self.dbtables.SongDataTable.c.domain_id == domain_id)
 
+        keys = {}
         artists = {}
         genres = {}
         total = 0
@@ -421,14 +422,15 @@ class LibraryDao(object):
             # count genres for the record
             for g in gen:
                 if g not in genres:
-                    genres[g] = 0
-                genres[g] += 1
+                    genres[g] = {"name": g, "count": 0}
+                genres[g]['count'] += 1
 
             # count artist and album
             if art not in artists:
                 artists[art] = {"count": 0,
                                 "albums": {},
-                                "sort_key": key}
+                                "name": art}
+                keys[art] = key
 
             artists[art]['count'] += 1
             albums = artists[art]['albums']
@@ -438,6 +440,9 @@ class LibraryDao(object):
             albums[alb] += 1
 
             total += 1
+
+        artists = sorted(artists.values(), key=lambda x: keys[x['name']])
+        genres = sorted(genres.values(), key=lambda x: x['name'])
 
         data = {
             "artists": artists,

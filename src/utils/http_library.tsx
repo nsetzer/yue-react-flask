@@ -1,5 +1,6 @@
 
 var request = require('request-promise');
+var zlib = require('zlib');
 
 import env from '../env'
 
@@ -30,8 +31,9 @@ export function user_library_domain_info(token : string) {
         headers: {
             'Authorization': token,
         },
-        json: true,
+        json: false,
+        gzip: true,
     };
 
-    return request(options);
+    return request(options).then( response => JSON.parse(response))
 }

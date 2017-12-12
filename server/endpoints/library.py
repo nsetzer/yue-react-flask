@@ -6,12 +6,13 @@ from ..index import app
 from ..service.audio_service import AudioService
 from ..service.transcode_service import TranscodeService
 from .util import requires_auth, requires_no_auth, requires_auth_role, \
-                  httpError, verify_token
+                  httpError, verify_token, compressed
 from itsdangerous import SignatureExpired, BadSignature
 from ..dao.library import Song
 
 @app.route("/api/library/info", methods=["GET"])
 @requires_auth
+@compressed
 def get_domain_info():
 
     domain_id = g.current_user['domain_id']

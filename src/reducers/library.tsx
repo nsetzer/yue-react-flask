@@ -14,8 +14,8 @@ const initialState = {
     search_results: [],
     search_result_page: 0,
     search_result_page_size: 0,
-    domain_artists: {},
-    domain_genres: {},
+    domain_artists: [],
+    domain_genres: [],
     domain_song_count: 0,
 }
 

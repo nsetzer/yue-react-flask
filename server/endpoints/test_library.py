@@ -8,6 +8,11 @@ from ..util import TestCase
 from ..dao.library import Song
 from ..app import app, db
 
+
+from io import BytesIO
+import gzip
+
+
 class LibraryEndpointTestCase(TestCase):
 
     def setUp(self):
@@ -63,14 +68,35 @@ class LibraryEndpointTestCase(TestCase):
             for songa in songs_a:
                 self.assertNotEqual(songb['id'], songa['id'])
 
+    def test_domain_info_compressed(self):
+
+        app = self.login(self.USERNAME, self.PASSWORD)
+
+        url = "/api/library/info"
+        res = app.get(url, headers={"Accept-Encoding": "gzip"})
+
+        data = gzip.decompress(res.data)
+        result = json.loads(data.decode("utf-8"))['result']
+
+        self.assertTrue('artists' in result)
+        self.assertTrue('genres' in result)
+        self.assertTrue('num_songs' in result)
+
     def test_domain_info(self):
 
         app = self.login(self.USERNAME, self.PASSWORD)
 
         url = "/api/library/info"
         res = app.get(url)
-        data = json.loads(res.data.decode("utf-8"))['result']
 
-        self.assertTrue('artists' in data)
-        self.assertTrue('genres' in data)
-        self.assertTrue('num_songs' in data)
+        result = json.loads(res.data.decode("utf-8"))['result']
+
+        self.assertTrue('artists' in result)
+        self.assertTrue('genres' in result)
+        self.assertTrue('num_songs' in result)
+
+
+
+
+
+
