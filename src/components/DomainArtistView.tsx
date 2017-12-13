@@ -1,9 +1,10 @@
 
 import * as React from 'react';
 import PropTypes from 'prop-types';
-//import { Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { bindActionCreators } from 'redux';
 import { connect } from 'react-redux';
+import Button from 'material-ui/Button';
 
 import * as UiList  from 'material-ui/List';
 const List = UiList.default
@@ -17,12 +18,14 @@ import Delete from 'material-ui-icons/Delete';
 
 import * as actionCreators from '../actions/library';
 
+import History from '../history'
+
 export interface DomainArtistViewProps {
   match: any
   libraryStatus: string,
   libraryGetDomainInfo: () => any,
-  domain_artists: {}
-  domain_genres: {}
+  domain_artists: Array<any>,
+  domain_genres: Array<any>,
   domain_song_count: number
 };
 
@@ -46,9 +49,46 @@ class DomainArtistView extends React.Component<DomainArtistViewProps,DomainArtis
   }
 
   render() {
+
+    let artist_name = this.props.match.params.artist
+    let albums = {}
+    for (let i=0; i < this.props.domain_artists.length; i++) {
+      let artist = this.props.domain_artists[i]
+      if (artist.name == artist_name) {
+        albums = artist.albums;
+        console.log(artist)
+        break;
+      }
+    }
+
+    let names = Object.keys(albums)
+    names.sort()
+
+    console.log(window.location)
+
     return (
         <div>
         <h1>{this.props.match.params.artist}</h1>
+        <Button
+            onClick={(e) => History.goBack()}
+          >Go Back</Button>
+
+        <List>
+            <ListItem>
+                <Link to={"/main/library/"+artist_name +"/$all"}>All Songs</Link>
+            </ListItem>
+
+            {
+
+              (names.length>0) ?
+                names.map( (album) => {
+                  return <ListItem key={album}>
+                           <Link to={"/main/library/"+artist_name +"/" + album}>{album}</Link>
+                         </ListItem>
+                }) : <div>No Artists To Display</div>
+            }
+         </List>
+
         </div>
     )
   }

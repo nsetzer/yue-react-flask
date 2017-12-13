@@ -19,6 +19,7 @@ import SoundView from "./player/SoundView"
 import QueueView from "./QueueView"
 import DomainView from "./DomainView"
 import DomainArtistView from "./DomainArtistView"
+import DomainAlbumView from "./DomainAlbumView"
 
 import Grid from 'material-ui/Grid';
 
@@ -30,6 +31,48 @@ interface Dictionary<T> {
     [Key: string]: T;
 }
 
+import Drawer from 'material-ui/Drawer';
+
+const drawerWidth = 240;
+
+const navStyles : Dictionary<React.CSSProperties> = {
+  drawerPaper: {
+    position: 'relative',
+    height: '100%',
+    width: drawerWidth,
+  },
+}
+
+export interface AppSideNavProps {
+  permanent: boolean,
+  open: boolean,
+  onRequestClose: (event) => void
+};
+
+export interface AppSideNavState {
+}
+class AppSideNav extends React.Component<AppSideNavProps,AppSideNavState> {
+  constructor(props) {
+    super(props);
+  }
+  render() {
+    return (
+      <Drawer
+      open={this.props.open}
+      onRequestClose={this.props.onRequestClose}
+      type={this.props.permanent?"permanent":"temporary"}
+
+      anchor={"left"}>
+
+      <div style={{width:drawerWidth}}>
+      hello world
+      </div>
+      </Drawer>
+    );
+  }
+}
+
+
 export interface MainViewProps {
   logoutAndRedirect: PropTypes.func,
   userName: PropTypes.string,
@@ -38,6 +81,8 @@ export interface MainViewProps {
 export interface MainViewState {
   open: boolean,
   currentTabIndex: number,
+  screenWidth: number,
+  screenHeight: number
 }
 
 const style : Dictionary<React.CSSProperties> = {
@@ -56,9 +101,13 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
   constructor(props) {
     super(props);
     this.state = {open:true,
-                  currentTabIndex: 0};
+                  currentTabIndex: 0,
+                  screenWidth: 0,
+                  screenHeight: 0};
     this.logout = this.logout.bind(this)
     this.onTabIndexChange = this.onTabIndexChange.bind(this)
+    this.onResize = this.onResize.bind(this)
+
   }
 
   logout(e) {
@@ -80,11 +129,26 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
     }
   }
 
+  componentDidMount() {
+    this.onResize()
+    window.addEventListener('resize', this.onResize)
+  }
+
+  componentWillUnmount() {
+    window.removeEventListener('resize', this.onResize)
+  }
+
+  onResize() {
+    this.setState({screenWidth:window.innerWidth,
+                   screenHeight: window.innerHeight})
+  }
+
   render() {
 
     return (
       <div>
 
+      <div style={{marginLeft: drawerWidth}}>
       <AppBar style={{ position: "fixed", height:"160px" }} >
         <div style={style.header}>
           <header style={style.header_content}>
@@ -94,8 +158,15 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
           <br/>
         </div>
       </AppBar>
-      <div style={{ paddingTop: 160 }}>
+      </div>
+      {/*<AppSideNav open={false}
+                  permanent={true}
+                  onRequestClose={(e) => {}}
+                  />*/}
 
+      <main style={{ paddingTop: 160, marginLeft: drawerWidth }}>
+
+      <h2>{this.state.screenWidth} x {this.state.screenHeight}</h2>
        <Button
             style={{ marginTop: 50 }}
             onClick={(e) => this.logout(e)}
@@ -118,11 +189,17 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
         <Route path={`/main/queue`} component={QueueView}/>
         <Route exact path={`/main/library`} component={DomainView}/>
         <Route exact path={`/main/library/:artist`} component={DomainArtistView}/>
+        <Route exact path={`/main/library/:artist/:album`} component={DomainAlbumView}/>
         <Route path={"/main"} render={() => (
+          <div>
           <h3>View Not Implemented</h3>
+          <Button
+            onClick={(e) => History.goBack()}
+          >Go Back</Button>
+          </div>
         )}/>
         </Switch>
-      </div>
+      </main>
 
       </div>
     );

@@ -39,7 +39,7 @@ export function librarySearch(term) {
         var token = localStorage.getItem('token');
         return user_library_search(token, term)
             .then(response => {
-                dispatch(librarySuccess(response.result,
+                dispatch(librarySuccess(response,
                                       LIBRARY_SEARCH));
             })
             .catch(error => {
@@ -47,6 +47,19 @@ export function librarySearch(term) {
             })
     }
 }
+
+export function libraryGetArtistSongs(artist) {
+    // todo, be default there is a limit on search results
+    // create a work around for this special case
+    return librarySearch(`artist="${artist}"`);
+}
+
+export function libraryGetAlbumSongs(artist, album) {
+    // todo, be default there is a limit on search results
+    // create a work around for this special case
+    return librarySearch(`artist="${artist}" && album="${album}"`);
+}
+
 export function libraryGetDomainInfo() {
     return function (dispatch) {
         dispatch(libraryRequest());
