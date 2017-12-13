@@ -47,7 +47,9 @@ def SongDataTable(metadata):
         Column('album_index', Integer, default=0),
         Column('length', Integer, default=0),
         Column('equalizer', Integer, default=0),
-        Column('year', Integer, default=0)
+        Column('year', Integer, default=0),
+        # date
+        Column('date_added', Integer, default=time.time)
     )
 
 def SongUserDataTable(metadata):
@@ -64,8 +66,7 @@ def SongUserDataTable(metadata):
         Column('blocked', Integer, default=0),
         Column('frequency', Integer, default=0),
         # date
-        Column('last_played', Integer, default=0),
-        Column('date_added', Integer, default=time.time)
+        Column('last_played', Integer, default=0)
     )
 
 def SongHistoryTable(metadata):
