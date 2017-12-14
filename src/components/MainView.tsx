@@ -11,9 +11,18 @@ import Tabs, { Tab } from 'material-ui/Tabs';
 import AppBar from 'material-ui/AppBar';
 
 import Settings from 'material-ui-icons/Settings';
+import ExitToApp from 'material-ui-icons/ExitToApp';
 import LibraryMusic from 'material-ui-icons/LibraryMusic';
 import * as ListIcons from 'material-ui-icons/List';
 const ListIcon = ListIcons.default
+
+
+import Divider from 'material-ui/Divider';
+import * as UiList  from 'material-ui/List';
+const List = UiList.default
+const ListItem = UiList.ListItem
+const ListItemIcon = UiList.ListItemIcon
+const ListItemText = UiList.ListItemText
 
 import SoundView from "./player/SoundView"
 import QueueView from "./QueueView"
@@ -33,7 +42,7 @@ interface Dictionary<T> {
 
 import Drawer from 'material-ui/Drawer';
 
-const drawerWidth = 320;
+const drawerWidth = 260;
 
 const navStyles : Dictionary<React.CSSProperties> = {
   drawerPaper: {
@@ -47,6 +56,7 @@ export interface AppSideNavProps {
   permanent: boolean,
   open: boolean,
   onRequestClose: (event) => void
+  onLogout: (event) => void
 };
 
 export interface AppSideNavState {
@@ -54,7 +64,15 @@ export interface AppSideNavState {
 class AppSideNav extends React.Component<AppSideNavProps,AppSideNavState> {
   constructor(props) {
     super(props);
+    this.openPage = this.openPage.bind(this)
   }
+
+  openPage(url) {
+    History.push(url);
+    window.scrollTo(0, 0)
+    this.props.onRequestClose(null);
+  }
+
   render() {
     return (
       <Drawer
@@ -65,7 +83,60 @@ class AppSideNav extends React.Component<AppSideNavProps,AppSideNavState> {
       anchor={"left"}>
 
       <div style={{width:drawerWidth}}>
-      hello world
+      <div>
+      <List>
+        <ListItem button
+                  onClick={()=>{this.openPage("/main/queue")}}>
+          <ListItemIcon>
+            <ListIcon />
+          </ListItemIcon>
+          <ListItemText primary="Now Playing" />
+        </ListItem>
+        <ListItem button
+                  onClick={()=>{this.openPage("/main/library")}}>
+          <ListItemIcon>
+            <LibraryMusic />
+          </ListItemIcon>
+          <ListItemText primary="Library" />
+        </ListItem>
+        <ListItem button
+                  onClick={()=>{this.openPage("/main/settings")}}>
+          <ListItemIcon>
+            <Settings />
+          </ListItemIcon>
+          <ListItemText primary="Settings" />
+        </ListItem>
+      <Divider />
+        <ListItem button
+                  onClick={this.props.onLogout}>
+          <ListItemIcon>
+            <ExitToApp />
+          </ListItemIcon>
+          <ListItemText primary="Logout" />
+        </ListItem>
+      </List>
+      <Divider />
+      <List>
+        <ListItem button>
+          <ListItemIcon>
+            <Settings />
+          </ListItemIcon>
+          <ListItemText primary="Dummy 1" />
+        </ListItem>
+        <ListItem button>
+          <ListItemIcon>
+            <Settings />
+          </ListItemIcon>
+          <ListItemText primary="Dummy 2" />
+        </ListItem>
+        <ListItem button>
+          <ListItemIcon>
+            <Settings />
+          </ListItemIcon>
+          <ListItemText primary="Dummy 3" />
+        </ListItem>
+      </List>
+  </div>
       </div>
       </Drawer>
     );
@@ -111,7 +182,6 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
                   pinNavBar: true,
                   showNavBar: false};
     this.logout = this.logout.bind(this)
-    this.onTabIndexChange = this.onTabIndexChange.bind(this)
     this.onResize = this.onResize.bind(this)
     this.openNavBar = this.openNavBar.bind(this)
 
@@ -123,17 +193,6 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
       this.setState({
           open: false,
       });
-  }
-
-  onTabIndexChange(event, value) {
-    this.setState({ currentTabIndex: value });
-    if (value==0) {
-      History.push("/main/queue");
-    } else if (value==1) {
-      History.push("/main/library");
-    } else if (value==2) {
-      History.push("/main/settings");
-    }
   }
 
   componentDidMount() {
@@ -167,18 +226,18 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
     let navBar = <AppSideNav open={this.state.showNavBar}
                   permanent={this.state.pinNavBar}
                   onRequestClose={(e) => {this.openNavBar(false)}}
+                  onLogout={(e)=>{this.logout(e)}}
                   />
 
     return (
       <div>
 
-    {/*          <div style={style.header}>
-            <header style={style.header_content}>*/}
       <div id="AppHeader" style={{ position: "fixed",
                     height:{headerHeight},
                     width: "calc(100% - " +_drawerWidth+ "px)",
                     marginLeft: _drawerWidth,
-                    background:"#455A64"}} >
+                    background:"#455A64",
+                    zIndex: 1000}} >
             <SoundView showMenuIcon={!this.state.pinNavBar}
                        openMenu={()=>{this.openNavBar(true)}}
                        />
@@ -190,30 +249,6 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
 
       <h2>({this.state.headerHeight}) :: {this.state.screenWidth} x {this.state.screenHeight}
       {this.state.pinNavBar?"true":"false"}</h2>
-
-      <Button
-            style={{ marginTop: 50 }}
-            onClick={(e) => this.openNavBar(true)}
-            raised={true}
-          >show nac</Button>
-
-       <Button
-            style={{ marginTop: 50 }}
-            onClick={(e) => this.logout(e)}
-            raised={true}
-          >Logout</Button>
-
-        <Tabs
-            value={this.state.currentTabIndex}
-            onChange={this.onTabIndexChange}
-            fullWidth
-            indicatorColor="accent"
-            textColor="accent"
-          >
-          <Tab icon={<ListIcon />} label="Queue" />
-          <Tab icon={<LibraryMusic />} label="Library" />
-          <Tab icon={<Settings />} label="Settings" />
-        </Tabs>
 
         <Switch>
         <Route path={`/main/queue`} component={QueueView}/>
