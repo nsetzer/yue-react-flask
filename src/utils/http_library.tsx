@@ -30,7 +30,7 @@ export function user_library_domain_info(token : string) {
         headers: {
             'Authorization': token,
         },
-        gzip: true,
+        /*gzip: true,*/
         json: true
     };
 

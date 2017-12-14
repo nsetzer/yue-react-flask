@@ -21,6 +21,7 @@ def get_domain_info():
 
 @app.route("/api/library", methods=["GET"])
 @requires_auth
+@compressed
 def search_library():
     """ return song information from the library """
 

@@ -6,7 +6,7 @@ from .util import requires_auth
 from ..dao.library import Song
 from ..service.audio_service import AudioService
 
-from .util import httpError, get_request_header
+from .util import httpError, get_request_header, compressed
 
 """
 curl -v \
@@ -27,6 +27,7 @@ curl -v \
 @app.route("/api/queue", methods=["GET"])
 @cross_origin(supports_credentials=True)
 @requires_auth
+@compressed
 def get_queue():
     """ return current song """
     service = AudioService.instance()
