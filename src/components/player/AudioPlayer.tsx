@@ -142,6 +142,7 @@ export interface AudioPlayerProps {
   title: string,
   nextSong: (boolean) => any,
   previousSong: () => any,
+  iconColor: string,
 }
 
 export interface AudioPlayerState {
@@ -229,7 +230,7 @@ class AudioPlayer extends React.Component<AudioPlayerProps,AudioPlayerState> {
 
   render() {
     /*https://www.materialui.co/colors*/
-    let iconColor = "#607D8B"
+    let iconColor = this.props.iconColor;
     let volumeIcon = <VolumeUp style={MediumIconStyle} color={iconColor}/>
     if (this.state.volume == 0) {
         volumeIcon = <VolumeMute style={MediumIconStyle} color={iconColor}/>
@@ -260,17 +261,17 @@ class AudioPlayer extends React.Component<AudioPlayerProps,AudioPlayerState> {
                 <div style={TextContainer}>
                 <div style={TextVerticalCenterStyle}>
                     <IconButton onClick={(e) => this.onClickPrevious()}>
-                      <SkipPrevious style={MediumIconStyle} color="#607D8B"/>
+                      <SkipPrevious style={MediumIconStyle} color={iconColor}/>
                     </IconButton>
 
                     <IconButton onClick={(e) => this.playPause()}>
                     {(this.state.status == Sound.status.PAUSED)?
-                      <PlayArrow style={LargeIconStyle} color="#607D8B"/>:
-                      <Pause style={LargeIconStyle} color="#607D8B"/>}
+                      <PlayArrow style={LargeIconStyle} color={iconColor}/>:
+                      <Pause style={LargeIconStyle} color={iconColor}/>}
                     </IconButton>
 
                     <IconButton onClick={(e) => this.onClickNext()}>
-                      <SkipNext style={MediumIconStyle} color="#607D8B"/>
+                      <SkipNext style={MediumIconStyle} color={iconColor}/>
                     </IconButton>
                 </div>
                 </div>

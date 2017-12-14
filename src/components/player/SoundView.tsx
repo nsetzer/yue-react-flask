@@ -9,12 +9,21 @@ import Grid from 'material-ui/Grid';
 import * as actionCreators from '../../actions/queue';
 import AudioPlayer from "./AudioPlayer"
 
+import IconButton from 'material-ui/IconButton';
+import * as _MenuIcon from 'material-ui-icons/Menu';
+const MenuIcon = _MenuIcon.default
+
 import {
   fmtDuration,
   getSongAudioUrl,
   getSongArtUrl,
   getSongDisplayTitle,
 } from '../../utils/misc'
+
+const MediumIconStyle = {
+    width: "32px",
+    height: "32px",
+}
 
 export interface SoundViewProps {
   queueStatus: string,
@@ -24,6 +33,8 @@ export interface SoundViewProps {
   populateQueue: () => any,
   nextSongInQueue: PropTypes.func,
   previousSongInQueue: PropTypes.func,
+  showMenuIcon: boolean,
+  openMenu: () => any
 }
 
 export interface SoundViewState {
@@ -68,41 +79,57 @@ class SoundView extends React.Component<SoundViewProps,SoundViewState> {
   }
 
   render() {
+    let iconColor = "#607D8B"
     let currentSong = this.state.currentSong;
     let currentArtist = (currentSong)?currentSong.artist:"";
     let currentTitle = (currentSong)?currentSong.title:"";
 
+
+
     return (
-      <Grid container spacing={24}>
+      <div style={{paddingLeft:10,
+                   paddingRight:10,
+                   paddingTop:5,
+                   paddingBottom: 5}}>
+        <div style={{position:"absolute",
+                     left: 5,
+                     top: 5}}>
+        {this.props.showMenuIcon?
+                <IconButton aria-label="Menu"
+                            onClick={this.props.openMenu}>
+                    <MenuIcon style={MediumIconStyle} color={iconColor}/>
+                </IconButton>:null}
+        </div>
 
-          <Grid item sm={3} md={4}>
-          </Grid>
 
-          <Grid item xs={12} sm={6} md={4}>
-            <AudioPlayer
-              url={this.state.audioUrl}
-              artist={currentArtist}
-              title={currentTitle}
-              nextSong={this.onSongNext}
-              previousSong={this.onSongPrevious}
-            />
+          <Grid container spacing={24} justify="center">
+            <Grid item  xs={12} sm={6} md={4}>
+              <div style={{textAlign:"center"}}>
+              <AudioPlayer
+                url={this.state.audioUrl}
+                artist={currentArtist}
+                title={currentTitle}
+                nextSong={this.onSongNext}
+                previousSong={this.onSongPrevious}
+                iconColor={iconColor}
+              />
+              </div>
+            </Grid>
           </Grid>
-
-          <Grid item sm={3} md={4}>
-          </Grid>
-
-          </Grid>
+      </div>
 
 
     );
   }
 }
 
-function mapStateToProps(state) {
+function mapStateToProps(state, ownProps) {
   return {
       queueStatus: state.queue.statusText,
       songs: state.queue.songs,
       song_history: state.queue.history,
+      showMenuIcon: ownProps.showMenuIcon,
+      openMenu: ownProps.openMenu,
     };
 }
 

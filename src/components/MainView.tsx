@@ -33,7 +33,7 @@ interface Dictionary<T> {
 
 import Drawer from 'material-ui/Drawer';
 
-const drawerWidth = 240;
+const drawerWidth = 320;
 
 const navStyles : Dictionary<React.CSSProperties> = {
   drawerPaper: {
@@ -82,7 +82,10 @@ export interface MainViewState {
   open: boolean,
   currentTabIndex: number,
   screenWidth: number,
-  screenHeight: number
+  screenHeight: number,
+  headerHeight: number,
+  pinNavBar: boolean
+  showNavBar: boolean
 }
 
 const style : Dictionary<React.CSSProperties> = {
@@ -103,10 +106,14 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
     this.state = {open:true,
                   currentTabIndex: 0,
                   screenWidth: 0,
-                  screenHeight: 0};
+                  screenHeight: 0,
+                  headerHeight: 0,
+                  pinNavBar: true,
+                  showNavBar: false};
     this.logout = this.logout.bind(this)
     this.onTabIndexChange = this.onTabIndexChange.bind(this)
     this.onResize = this.onResize.bind(this)
+    this.openNavBar = this.openNavBar.bind(this)
 
   }
 
@@ -132,6 +139,9 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
   componentDidMount() {
     this.onResize()
     window.addEventListener('resize', this.onResize)
+
+    const height = document.getElementById('AppHeader').clientHeight;
+    this.setState({headerHeight:height})
   }
 
   componentWillUnmount() {
@@ -139,34 +149,54 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
   }
 
   onResize() {
+    // https://material.io/guidelines/layout/responsive-ui.html#responsive-ui-breakpoints
+
     this.setState({screenWidth:window.innerWidth,
-                   screenHeight: window.innerHeight})
+                   screenHeight: window.innerHeight,
+                   pinNavBar: window.innerWidth > 960})
+  }
+
+  openNavBar(open) {
+    this.setState({showNavBar: open})
   }
 
   render() {
 
+    let headerHeight = this.state.headerHeight;
+    let _drawerWidth = this.state.pinNavBar?drawerWidth:0
+    let navBar = <AppSideNav open={this.state.showNavBar}
+                  permanent={this.state.pinNavBar}
+                  onRequestClose={(e) => {this.openNavBar(false)}}
+                  />
+
     return (
       <div>
 
-      <div style={{marginLeft: drawerWidth}}>
-      <AppBar style={{ position: "fixed", height:"160px" }} >
-        <div style={style.header}>
-          <header style={style.header_content}>
-
-            <SoundView/>
-          </header>
-          <br/>
-        </div>
-      </AppBar>
+    {/*          <div style={style.header}>
+            <header style={style.header_content}>*/}
+      <div id="AppHeader" style={{ position: "fixed",
+                    height:{headerHeight},
+                    width: "calc(100% - " +_drawerWidth+ "px)",
+                    marginLeft: _drawerWidth,
+                    background:"#455A64"}} >
+            <SoundView showMenuIcon={!this.state.pinNavBar}
+                       openMenu={()=>{this.openNavBar(true)}}
+                       />
       </div>
-      {/*<AppSideNav open={false}
-                  permanent={true}
-                  onRequestClose={(e) => {}}
-                  />*/}
 
-      <main style={{ paddingTop: 160, marginLeft: drawerWidth }}>
+      {navBar}
 
-      <h2>{this.state.screenWidth} x {this.state.screenHeight}</h2>
+      <main style={{ paddingTop: headerHeight, marginLeft: _drawerWidth }}>
+
+      <h2>({this.state.headerHeight}) :: {this.state.screenWidth} x {this.state.screenHeight}
+      {this.state.pinNavBar?"true":"false"}</h2>
+
+      <Button
+            style={{ marginTop: 50 }}
+            onClick={(e) => this.openNavBar(true)}
+            raised={true}
+          >show nac</Button>
+
        <Button
             style={{ marginTop: 50 }}
             onClick={(e) => this.logout(e)}
