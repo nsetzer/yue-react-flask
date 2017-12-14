@@ -103,6 +103,23 @@ class LibraryEndpointTestCase(TestCase):
         self.assertTrue('genres' in result)
         self.assertTrue('num_songs' in result)
 
+    def test_post_history(self):
+        """
+        test that a user can send data records to update plaback history
+        """
+        records = [
+            {"song_id": self.SONGS[0],
+             "timestamp": 0},
+        ]
+
+        app = self.login(self.USERNAME, self.PASSWORD)
+        url = "/api/library/history"
+        result = app.post_json(url, records)
+
+        self.assertEqual(result.status_code, 200)
+
+
+
 
 
 

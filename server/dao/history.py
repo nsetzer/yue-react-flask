@@ -18,7 +18,7 @@ class HistoryDao(object):
         query = insert(SongHistoryTable) \
                 .values({"user_id": user_id,
                          "song_id": song_id,
-                         "date": timestamp})
+                         "timestamp": timestamp})
 
         self.db.session.execute(query)
 
@@ -38,10 +38,10 @@ class HistoryDao(object):
         SongHistoryTable = self.dbtables.SongHistoryTable
 
         terms = [SongHistoryTable.c.user_id == user_id,
-                 SongHistoryTable.c.date > start, ]
+                 SongHistoryTable.c.timestamp > start, ]
 
         if end is not None:
-            terms.append(SongHistoryTable.c.date < end)
+            terms.append(SongHistoryTable.c.timestamp < end)
 
         query = SongHistoryTable.select() \
             .where(and_(*terms))

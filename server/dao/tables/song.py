@@ -79,7 +79,7 @@ def SongHistoryTable(metadata):
     return Table('song_history', metadata,
         Column('user_id', Integer),
         Column('song_id', String, ForeignKey("song_data.id")),
-        Column('date', Integer),
+        Column('timestamp', Integer),
     )
 
 def SongQueueTable(metadata):

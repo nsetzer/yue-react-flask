@@ -133,3 +133,30 @@ def get_song_art(song_id):
 def set_song_art(song_id):
     """ upload album art for a specific song """
     return jsonify(result="ok")
+
+@app.route("/api/library/history", methods=["GET"])
+@requires_auth
+def get_history():
+    # TODO: unsure how to represent a date range query
+    return jsonify(result="ok")
+
+@app.route("/api/library/history", methods=["POST"])
+@requires_auth
+def post_history():
+
+    records = request.json
+    AudioService.instance().insertPlayHistory(g.current_user, records)
+
+    return jsonify(result="ok")
+
+
+
+
+
+
+
+
+
+
+
+

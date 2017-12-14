@@ -3,6 +3,7 @@
 from ..dao.user import UserDao
 from ..dao.library import LibraryDao, Song
 from ..dao.queue import SongQueueDao
+from ..dao.history import HistoryDao
 
 from .util import AudioServiceException
 class AudioService(object):
@@ -18,6 +19,7 @@ class AudioService(object):
         self.userDao = UserDao(db, dbtables)
         self.libraryDao = LibraryDao(db, dbtables)
         self.queueDao = SongQueueDao(db, dbtables)
+        self.historyDao = HistoryDao(db, dbtables)
 
     @staticmethod
     def init(db, dbtables):
@@ -103,6 +105,27 @@ class AudioService(object):
         self.queueDao.set(user['id'], user['domain_id'], song_ids)
 
         return songs
+
+    def updatePlayCount(self, user, records, updateHistory=True):
+        """
+        update the playcount for a list of songs, and record history.
+
+        records: a list of objects containing a `song_id`, and `timestamp`.
+        """
+        raise NotImplementedError()
+
+    def insertPlayHistory(self, user, records):
+        """
+        update play history for a user given a list of records
+
+        records: a list of objects containing a `song_id`, and `timestamp`.
+        """
+        for record in records:
+            self.historyDao.insert(user['id'],
+                                   record['song_id'],
+                                   record['timestamp'],
+                                   commit=False)
+        self.db.session.commit()
 
 
 
