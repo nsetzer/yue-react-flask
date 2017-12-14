@@ -23,10 +23,17 @@ except:
         return lru_cache_decorator
 
 def parse_iso_format(dt_str):
+    """
+    as returned from datetime.datetime.now().isoformat()
+    or in javascript: new Date().toISOString();
+    """
     dt, _, us = dt_str.partition(".")
-    dt = datetime.datetime.strptime(dt.replace('T', ' '), "%Y-%m-%d %H:%M:%S")
-    us = int(us.rstrip("Z"), 10)
-    return dt + datetime.timedelta(microseconds=us)
+    dt = datetime.strptime(dt.replace('T', ' '), "%Y-%m-%d %H:%M:%S")
+    us = us.rstrip("Z")
+    if us:
+        us = int(us.rstrip("Z"), 10)
+        dt += datetime.timedelta(microseconds=us)
+    return dt
 
 def format_date(unixTime):
     """ format epoch time stamp as string """

@@ -9,6 +9,7 @@ from .util import requires_auth, requires_no_auth, requires_auth_role, \
                   httpError, verify_token, compressed
 from itsdangerous import SignatureExpired, BadSignature
 from ..dao.library import Song
+from ..dao.util import parse_iso_format
 
 @app.route("/api/library/info", methods=["GET"])
 @requires_auth
@@ -137,8 +138,39 @@ def set_song_art(song_id):
 @app.route("/api/library/history", methods=["GET"])
 @requires_auth
 def get_history():
-    # TODO: unsure how to represent a date range query
-    return jsonify(result="ok")
+    """
+    returns playback records for the logged in user
+
+    query arguments:
+    start: the begining date to return records from
+    end: (optional) the last date to return records from , or now.
+
+    start and end time can be in iso format, or unix time stamp
+    """
+    start = request.args.get('start', None)
+    if start is None:
+        return httpError(400, "start time must be provided")
+    try:
+        try:
+            start = int(start)
+        except ValueError:
+            start = int(parse_iso_format(start).timestamp())
+    except:
+        return httpError(400, "start timestamp not integer or iso date")
+
+    end = request.args.get('end', None)
+    if end is not None:
+        try:
+            try:
+                end = int(end)
+            except ValueError:
+                end = int(parse_iso_format(end).timestamp())
+        except:
+            return httpError(400, "end timestamp not integer or iso date")
+
+    records = AudioService.instance().getPlayHistory(
+        g.current_user, start, end)
+    return jsonify(result=records)
 
 @app.route("/api/library/history", methods=["POST"])
 @requires_auth

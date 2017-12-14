@@ -46,4 +46,8 @@ class HistoryDao(object):
         query = SongHistoryTable.select() \
             .where(and_(*terms))
         lst = self.db.session.execute(query).fetchall()
-        return lst
+
+        records = [{"song_id": r['song_id'],
+                   "timestamp": r['timestamp']} for r in lst]
+
+        return records

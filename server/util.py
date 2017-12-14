@@ -33,6 +33,8 @@ class AuthAppWrapper(object):
 
     def get_json(self, *args, **kwargs):
         res = self._wrapper(self.app.get, args, kwargs)
+        if res.status_code < 200 or res.status_code >= 300:
+            raise Exception(res.data)
         body = json.loads(res.data.decode("utf-8"))
         return body['result']
 

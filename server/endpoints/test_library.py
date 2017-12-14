@@ -11,6 +11,7 @@ from ..app import app, db
 
 from io import BytesIO
 import gzip
+import datetime
 
 """
 
@@ -109,7 +110,7 @@ class LibraryEndpointTestCase(TestCase):
         """
         records = [
             {"song_id": self.SONGS[0],
-             "timestamp": 0},
+             "timestamp": 1000},
         ]
 
         app = self.login(self.USERNAME, self.PASSWORD)
@@ -117,6 +118,20 @@ class LibraryEndpointTestCase(TestCase):
         result = app.post_json(url, records)
 
         self.assertEqual(result.status_code, 200)
+
+        # attempt a query using unix epoch time stamps
+        start = 0
+        end = 2000
+        records = app.get_json(url + "?start=%d&end=%d" % (start, end))
+        self.assertTrue(len(records) > 0)
+
+        # attempt a query usingiso date format
+        start = datetime.datetime.fromtimestamp(start).isoformat()
+        end = datetime.datetime.fromtimestamp(end).isoformat()
+        records = app.get_json(url + "?start=%s&end=%s" % (start, end))
+        self.assertTrue(len(records) > 0)
+
+
 
 
 
