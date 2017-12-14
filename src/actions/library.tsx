@@ -19,6 +19,7 @@ export function librarySuccess(payload, successType) {
     return {
         type: successType,
         payload: payload,
+        statusText: "success"
     };
 }
 
@@ -28,7 +29,7 @@ export function libraryError(error) {
         type: LIBRARY_FAILURE,
         payload: {
             status: error.statusCode,
-            statusText: error.statusText,
+            statusText: error.toString(),
         },
     };
 }
@@ -67,7 +68,7 @@ export function libraryGetDomainInfo() {
         return user_library_domain_info(token)
             .then(response => {
                 dispatch(librarySuccess(response.result,
-                                      LIBRARY_DOMAIN_INFO));
+                                        LIBRARY_DOMAIN_INFO));
             })
             .catch(error => {
                 dispatch(libraryError(error));

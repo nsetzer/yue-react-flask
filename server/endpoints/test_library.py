@@ -12,6 +12,14 @@ from ..app import app, db
 from io import BytesIO
 import gzip
 
+"""
+
+curl -u admin:admin
+     -H"Accept-Encoding: gzip"
+     http://localhost:4200/api/library/info
+     -o out.zip
+
+"""
 
 class LibraryEndpointTestCase(TestCase):
 

@@ -47,6 +47,7 @@ class DomainView extends React.Component<DomainViewProps,DomainViewState> {
   render() {
     return (
         <div>
+        <h2>status:</h2> {this.props.libraryStatus}
         <List>
             {
               (this.props.domain_artists.length>0) ?

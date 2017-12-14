@@ -21,7 +21,11 @@
     "redux-logger": "^3.0.6",
     "redux-thunk": "^2.2.0",
     "request": "^2.83.0",
-    "request-promise": "^4.2.2"
+    "request-promise": "^4.2.2",
+    "react-router-dom": "^4.2.2",
+    "redux-create-reducer": "^1.1.1",
+    "source-map-loader": "^0.2.3",
+    "typescript": "^2.6.1"
   },
   "scripts": {
     "start": "PORT=4100 react-scripts-ts start",
@@ -41,10 +45,6 @@
     "@types/webpack-env": "^1.13.2",
     "babel-jest": "^21.2.0",
     "chai": "^4.1.2",
-    "jest-cli": "^21.2.1",
-    "react-router-dom": "^4.2.2",
-    "redux-create-reducer": "^1.1.1",
-    "source-map-loader": "^0.2.3",
-    "typescript": "^2.6.1"
+    "jest-cli": "^21.2.1"
   }
 }

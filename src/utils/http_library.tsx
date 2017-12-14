@@ -1,4 +1,3 @@
-
 var request = require('request-promise');
 var zlib = require('zlib');
 
@@ -31,9 +30,12 @@ export function user_library_domain_info(token : string) {
         headers: {
             'Authorization': token,
         },
-        json: false,
         gzip: true,
+        json: true
     };
 
-    return request(options).then( response => JSON.parse(response))
+    return request(options)/*.then( response => {
+        console.log(response)
+        return JSON.parse(response)
+    })*/
 }

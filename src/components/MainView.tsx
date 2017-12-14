@@ -247,8 +247,9 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
 
       <main style={{ paddingTop: headerHeight, marginLeft: _drawerWidth }}>
 
-      <h2>({this.state.headerHeight}) :: {this.state.screenWidth} x {this.state.screenHeight}
-      {this.state.pinNavBar?"true":"false"}</h2>
+      {/*({this.state.headerHeight}) ::
+          {this.state.screenWidth} x {this.state.screenHeight} ::
+          {this.state.pinNavBar?"true":"false"}*/}
 
         <Switch>
         <Route path={`/main/queue`} component={QueueView}/>

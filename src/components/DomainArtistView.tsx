@@ -64,8 +64,6 @@ class DomainArtistView extends React.Component<DomainArtistViewProps,DomainArtis
     let names = Object.keys(albums)
     names.sort()
 
-    console.log(window.location)
-
     return (
         <div>
         <h1>{this.props.match.params.artist}</h1>

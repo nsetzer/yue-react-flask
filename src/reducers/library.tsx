@@ -22,24 +22,29 @@ const initialState = {
 export default createReducer(initialState, {
     [LIBRARY_REQUEST]: (state) =>
         Object.assign({}, state, {
-            statusText: null,
+            statusText: "make request",
         }),
     [LIBRARY_FAILURE]: (state, payload) =>
         Object.assign({}, state, {
-            statusText: payload.statusText
+            statusText: payload.status + ": " + payload.statusText
         }),
-    [LIBRARY_SEARCH]: (state, payload) =>
-        Object.assign({}, state, {
-            statusText: null,
+    [LIBRARY_SEARCH]: (state, payload) => {
+
+        return Object.assign({}, state, {
+            statusText: "success",
             search_results: payload.result,
             search_result_page: payload.page,
             search_result_page_size: payload.page_index,
-        }),
-    [LIBRARY_DOMAIN_INFO]: (state, payload) =>
-        Object.assign({}, state, {
-            statusText: null,
+        })
+    },
+    [LIBRARY_DOMAIN_INFO]: (state, payload) => {
+        console.log(LIBRARY_DOMAIN_INFO)
+        console.log(payload)
+        return Object.assign({}, state, {
+            statusText: `result length ${payload.num_songs} ${payload.artists.length}`,
             domain_artists: payload.artists,
             domain_genres: payload.genres,
             domain_song_count: payload.num_songs,
-        }),
+        })
+    },
 });
