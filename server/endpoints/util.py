@@ -206,7 +206,6 @@ def compressed(f):
 
             response.data = gzip_buffer.getvalue()
 
-            print("compressed output", len(response.data), response.data[:16])
             response.headers['Content-Encoding'] = 'gzip'
             response.headers['Vary'] = 'Accept-Encoding'
             response.headers['Content-Length'] = len(response.data)

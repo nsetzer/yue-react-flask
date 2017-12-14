@@ -1,6 +1,6 @@
 import * as React from 'react';
 import PropTypes from 'prop-types';
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router-dom';
 import { bindActionCreators } from 'redux';
 import { connect } from 'react-redux';
 
@@ -19,22 +19,22 @@ const ListIcon = ListIcons.default
 
 import Divider from 'material-ui/Divider';
 import * as UiList  from 'material-ui/List';
-const List = UiList.default
-const ListItem = UiList.ListItem
-const ListItemIcon = UiList.ListItemIcon
-const ListItemText = UiList.ListItemText
+const List = UiList.default;
+const ListItem = UiList.ListItem;
+const ListItemIcon = UiList.ListItemIcon;
+const ListItemText = UiList.ListItemText;
 
-import SoundView from "./player/SoundView"
-import QueueView from "./QueueView"
-import DomainView from "./DomainView"
-import DomainArtistView from "./DomainArtistView"
-import DomainAlbumView from "./DomainAlbumView"
+import SoundView from './player/SoundView';
+import QueueView from './QueueView';
+import DomainView from './DomainView';
+import DomainArtistView from './DomainArtistView';
+import DomainAlbumView from './DomainAlbumView';
 
 import Grid from 'material-ui/Grid';
 
 import { Route, Switch } from 'react-router-dom';
 
-import History from '../history'
+import History from '../history';
 
 interface Dictionary<T> {
     [Key: string]: T;

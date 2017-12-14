@@ -44,7 +44,7 @@ class SongQueueDao(object):
         if not result:
             return []
 
-        id, lst = result
+        id, lst, _ = result
 
         if not lst:
             return []
@@ -94,7 +94,7 @@ class SongQueueDao(object):
         if not result:
             return None
 
-        id, lst = result
+        id, lst, _ = result
 
         if not lst:
             return None
@@ -127,7 +127,7 @@ class SongQueueDao(object):
         if not result:
             return None
 
-        id, lst = result
+        id, lst, _ = result
 
         lst = lst[1:]
 

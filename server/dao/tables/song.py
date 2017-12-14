@@ -71,22 +71,28 @@ def SongUserDataTable(metadata):
 
 def SongHistoryTable(metadata):
     """
+    returns a table represnting playback date of songs by users
+
+    when playback completes normally (the song is not skipped) an entry
+    is added recording the song, user, and date of completion
+    """
+    return Table('song_history', metadata,
+        Column('user_id', Integer),
+        Column('song_id', String, ForeignKey("song_data.id")),
+        Column('date', Integer),
+    )
+
+def SongQueueTable(metadata):
+    """
     returns a table representing a users song queue
 
     the queue is an ordered list of songs for playback. when
     empty it is automatically populated using a default query.
     """
-    return Table('song_history', metadata,
-        Column('user_id', Integer),
-        Column('song_id', String, ForeignKey("song_data.id")),
-        Column('query', String, default=""),
-        Column('date', Integer),
-    )
-
-def SongQueueTable(metadata):
     return Table('song_queue', metadata,
         Column('user_id', Integer, ForeignKey('user.id'), unique=True),
         Column('songs', StringArrayType),
+        Column('query', String, default=""),
     )
 
 def SongPlaylistTable(metadata):
