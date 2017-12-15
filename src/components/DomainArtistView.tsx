@@ -15,10 +15,12 @@ const ListItemSecondaryAction = UiList.ListItemSecondaryAction
 import IconButton from 'material-ui/IconButton';
 import Send from 'material-ui-icons/Send';
 import Delete from 'material-ui-icons/Delete';
+import NavigateBefore from 'material-ui-icons/NavigateBefore';
 
 import * as actionCreators from '../actions/library';
 
 import History from '../history'
+import MoreVert from 'material-ui-icons/MoreVert';
 
 export interface DomainArtistViewProps {
   match: any
@@ -66,10 +68,10 @@ class DomainArtistView extends React.Component<DomainArtistViewProps,DomainArtis
 
     return (
         <div>
-        <h1>{this.props.match.params.artist}</h1>
-        <Button
-            onClick={(e) => History.goBack()}
-          >Go Back</Button>
+        <IconButton onClick={(e) => History.goBack()}>
+          <NavigateBefore />
+        </IconButton>
+        {this.props.match.params.artist}
 
         <List>
             <ListItem>
@@ -80,8 +82,15 @@ class DomainArtistView extends React.Component<DomainArtistViewProps,DomainArtis
 
               (names.length>0) ?
                 names.map( (album) => {
-                  return <ListItem key={album}>
-                           <Link to={"/main/library/"+artist_name +"/" + album}>{album}</Link>
+                  return <ListItem key={album}
+                                   button
+                                   onClick={()=>{History.push("/main/library/"+artist_name +"/" + album)}}>
+                            <ListItemText primary={album} />
+                            <ListItemSecondaryAction>
+                              <IconButton onClick={() => {}}>
+                                <MoreVert />
+                              </IconButton>
+                            </ListItemSecondaryAction>
                          </ListItem>
                 }) : <div>No Artists To Display</div>
             }

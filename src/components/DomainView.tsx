@@ -14,8 +14,11 @@ const ListItemSecondaryAction = UiList.ListItemSecondaryAction
 import IconButton from 'material-ui/IconButton';
 import Send from 'material-ui-icons/Send';
 import Delete from 'material-ui-icons/Delete';
+import MoreVert from 'material-ui-icons/MoreVert';
 
 import * as actionCreators from '../actions/library';
+
+import History from '../history';
 
 export interface DomainViewProps {
   libraryStatus: string,
@@ -47,13 +50,19 @@ class DomainView extends React.Component<DomainViewProps,DomainViewState> {
   render() {
     return (
         <div>
-        <h2>status:</h2> {this.props.libraryStatus}
         <List>
             {
               (this.props.domain_artists.length>0) ?
                 this.props.domain_artists.map( (artist) => {
-                  return <ListItem key={artist.name}>
-                           <Link to={"/main/library/"+artist.name}>{artist.name}</Link>
+                  return <ListItem key={artist.name}
+                                   button
+                                   onClick={()=>{History.push("/main/library/"+artist.name)}}>
+                            <ListItemText primary={artist.name} />
+                            <ListItemSecondaryAction>
+                              <IconButton onClick={() => {}}>
+                                <MoreVert />
+                              </IconButton>
+                            </ListItemSecondaryAction>
                          </ListItem>
                 }) : <div>No Artists To Display</div>
             }

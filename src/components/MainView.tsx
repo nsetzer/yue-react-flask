@@ -85,6 +85,8 @@ class AppSideNav extends React.Component<AppSideNavProps,AppSideNavState> {
       <div style={{width:drawerWidth}}>
       <div>
       <List>
+        <ListItem />
+
         <ListItem button
                   onClick={()=>{this.openPage("/main/queue")}}>
           <ListItemIcon>
@@ -200,6 +202,7 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
     window.addEventListener('resize', this.onResize)
 
     const height = document.getElementById('AppHeader').clientHeight;
+    console.log(document.getElementById('AppHeader'))
     this.setState({headerHeight:height})
   }
 
@@ -245,8 +248,9 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
 
       {navBar}
 
-      <main style={{ paddingTop: headerHeight, marginLeft: _drawerWidth }}>
+      <main style={{ paddingTop: headerHeight+30, marginLeft: _drawerWidth }}>
 
+      {headerHeight}
       {/*({this.state.headerHeight}) ::
           {this.state.screenWidth} x {this.state.screenHeight} ::
           {this.state.pinNavBar?"true":"false"}*/}

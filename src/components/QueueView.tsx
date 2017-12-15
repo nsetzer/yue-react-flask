@@ -19,6 +19,8 @@ const ListItemSecondaryAction = UiList.ListItemSecondaryAction
 import IconButton from 'material-ui/IconButton';
 import Send from 'material-ui-icons/Send';
 import Delete from 'material-ui-icons/Delete';
+import MoreVert from 'material-ui-icons/MoreVert';
+import Menu, { MenuItem } from 'material-ui/Menu';
 
 import {
   fmtDuration,
@@ -26,6 +28,12 @@ import {
   getSongArtUrl,
   getSongDisplayTitle,
 } from '../utils/misc'
+
+export interface MenuOpts {
+  open: boolean,
+  anchorEl: any,
+  song: any
+}
 
 export interface QueueViewProps {
   queueStatus: string,
@@ -37,6 +45,7 @@ export interface QueueViewProps {
 };
 
 export interface QueueViewState {
+  menuOpts: MenuOpts
 }
 
 const listRightStyle = {
@@ -47,6 +56,46 @@ class QueueView extends React.Component<QueueViewProps,QueueViewState> {
 
   constructor(props) {
     super(props);
+    this.state = {menuOpts:{open:false, anchorEl:null, song: null}}
+
+    this.onOpenMenu = this.onOpenMenu.bind(this)
+    this.onMenuClose = this.onMenuClose.bind(this)
+    this.onMenuPlay = this.onMenuPlay.bind(this)
+    this.onMenuPlayNext = this.onMenuPlayNext.bind(this)
+    this.onMenuRemove = this.onMenuRemove.bind(this)
+  }
+
+
+  onOpenMenu(event, song) {
+    let menuOpts = this.state.menuOpts;
+    menuOpts.open = true;
+    menuOpts.anchorEl = event.currentTarget
+    menuOpts.song = song
+    this.setState({menuOpts: menuOpts});
+  }
+
+  onMenuClose() {
+    let menuOpts = this.state.menuOpts;
+    menuOpts.open = false;
+    this.setState({menuOpts: menuOpts});
+  }
+
+  onMenuPlay() {
+    let menuOpts = this.state.menuOpts;
+    menuOpts.open = false;
+    this.setState({menuOpts: menuOpts});
+  }
+
+  onMenuPlayNext() {
+    let menuOpts = this.state.menuOpts;
+    menuOpts.open = false;
+    this.setState({menuOpts: menuOpts});
+  }
+
+  onMenuRemove() {
+    let menuOpts = this.state.menuOpts;
+    menuOpts.open = false;
+    this.setState({menuOpts: menuOpts});
   }
 
   render() {
@@ -66,15 +115,25 @@ class QueueView extends React.Component<QueueViewProps,QueueViewState> {
                            <ListItemText style={listRightStyle} primary={fmtDuration(song.length)}/>
                            <ListItemSecondaryAction>
                              <IconButton aria-label="Delete"
-                                         onClick={() => {}}>
-                              <Delete />
+                                         onClick={(e) => {this.onOpenMenu(e,song)}}>
+                              <MoreVert />
                              </IconButton>
                            </ListItemSecondaryAction>
                          </ListItem>
                 }) : <div>No Songs To Display</div>
             }
-         </List>
-         </div>
+        </List>
+        <Menu
+          id="simple-menu"
+          anchorEl={this.state.menuOpts.anchorEl}
+          open={this.state.menuOpts.open}
+          onRequestClose={this.onMenuClose}>
+          <MenuItem onClick={this.onMenuPlay}>Play</MenuItem>
+          <MenuItem onClick={this.onMenuPlayNext}>Play Next</MenuItem>
+          <MenuItem onClick={this.onMenuRemove}>Remove</MenuItem>
+        </Menu>
+
+        </div>
     );
   }
 }
