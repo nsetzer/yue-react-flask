@@ -1,8 +1,6 @@
 
-
 import * as React from 'react';
 import PropTypes from 'prop-types';
-//import { Link } from 'react-router-dom'
 import { bindActionCreators } from 'redux';
 import { connect } from 'react-redux';
 
@@ -29,13 +27,13 @@ import {
   getSongDisplayTitle,
 } from '../utils/misc'
 
-export interface MenuOpts {
+export interface IMenuOpts {
   open: boolean,
   anchorEl: any,
   song: any
 }
 
-export interface QueueViewProps {
+export interface IQueueViewProps {
   queueStatus: string,
   songs: Array<any>,
   history: Array<any>,
@@ -44,15 +42,15 @@ export interface QueueViewProps {
   populateQueue: () => any,
 };
 
-export interface QueueViewState {
-  menuOpts: MenuOpts
+export interface IQueueViewState {
+  menuOpts: IMenuOpts
 }
 
 const listRightStyle = {
-   textAlign: "right",
+   textAlign: 'right',
 };
 
-class QueueView extends React.Component<QueueViewProps,QueueViewState> {
+class QueueView extends React.Component<IQueueViewProps,IQueueViewState> {
 
   constructor(props) {
     super(props);
@@ -65,8 +63,7 @@ class QueueView extends React.Component<QueueViewProps,QueueViewState> {
     this.onMenuRemove = this.onMenuRemove.bind(this)
   }
 
-
-  onOpenMenu(event, song) {
+  public onOpenMenu(event, song) {
     let menuOpts = this.state.menuOpts;
     menuOpts.open = true;
     menuOpts.anchorEl = event.currentTarget
@@ -74,31 +71,31 @@ class QueueView extends React.Component<QueueViewProps,QueueViewState> {
     this.setState({menuOpts: menuOpts});
   }
 
-  onMenuClose() {
+  public onMenuClose() {
     let menuOpts = this.state.menuOpts;
     menuOpts.open = false;
     this.setState({menuOpts: menuOpts});
   }
 
-  onMenuPlay() {
+  public onMenuPlay() {
     let menuOpts = this.state.menuOpts;
     menuOpts.open = false;
     this.setState({menuOpts: menuOpts});
   }
 
-  onMenuPlayNext() {
+  public onMenuPlayNext() {
     let menuOpts = this.state.menuOpts;
     menuOpts.open = false;
     this.setState({menuOpts: menuOpts});
   }
 
-  onMenuRemove() {
+  public onMenuRemove() {
     let menuOpts = this.state.menuOpts;
     menuOpts.open = false;
     this.setState({menuOpts: menuOpts});
   }
 
-  render() {
+  public render() {
     return (
         <div>
         <IconButton aria-label="Populate"
@@ -137,7 +134,6 @@ class QueueView extends React.Component<QueueViewProps,QueueViewState> {
     );
   }
 }
-
 
 function mapStateToProps(state) {
   return {

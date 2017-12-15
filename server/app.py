@@ -23,7 +23,6 @@ def csrf_protect():
 """
 
 from .endpoints import user
-from .endpoints import message
 from .endpoints import library
 from .endpoints import queue
 

@@ -14,8 +14,7 @@ import Settings from 'material-ui-icons/Settings';
 import ExitToApp from 'material-ui-icons/ExitToApp';
 import LibraryMusic from 'material-ui-icons/LibraryMusic';
 import * as ListIcons from 'material-ui-icons/List';
-const ListIcon = ListIcons.default
-
+const ListIcon = ListIcons.default;
 
 import Divider from 'material-ui/Divider';
 import * as UiList  from 'material-ui/List';
@@ -36,7 +35,7 @@ import { Route, Switch } from 'react-router-dom';
 
 import History from '../history';
 
-interface Dictionary<T> {
+interface IDictionary<T> {
     [Key: string]: T;
 }
 
@@ -44,7 +43,7 @@ import Drawer from 'material-ui/Drawer';
 
 const drawerWidth = 260;
 
-const navStyles : Dictionary<React.CSSProperties> = {
+const navStyles: IDictionary<React.CSSProperties> = {
   drawerPaper: {
     position: 'relative',
     height: '100%',
@@ -52,35 +51,35 @@ const navStyles : Dictionary<React.CSSProperties> = {
   },
 }
 
-export interface AppSideNavProps {
+export interface IAppSideNavProps {
   permanent: boolean,
   open: boolean,
   onRequestClose: (event) => void
   onLogout: (event) => void
 };
 
-export interface AppSideNavState {
+export interface IAppSideNavState {
 }
-class AppSideNav extends React.Component<AppSideNavProps,AppSideNavState> {
+class AppSideNav extends React.Component<IAppSideNavProps,IAppSideNavState> {
   constructor(props) {
     super(props);
     this.openPage = this.openPage.bind(this)
   }
 
-  openPage(url) {
+  public openPage(url) {
     History.push(url);
     window.scrollTo(0, 0)
     this.props.onRequestClose(null);
   }
 
-  render() {
+  public render() {
     return (
       <Drawer
       open={this.props.open}
       onRequestClose={this.props.onRequestClose}
-      type={this.props.permanent?"permanent":"temporary"}
+      type={this.props.permanent?'permanent':'temporary'}
 
-      anchor={"left"}>
+      anchor={'left'}>
 
       <div style={{width:drawerWidth}}>
       <div>
@@ -88,21 +87,21 @@ class AppSideNav extends React.Component<AppSideNavProps,AppSideNavState> {
         <ListItem />
 
         <ListItem button
-                  onClick={()=>{this.openPage("/main/queue")}}>
+                  onClick={() => {this.openPage('/main/queue')}}>
           <ListItemIcon>
             <ListIcon />
           </ListItemIcon>
           <ListItemText primary="Now Playing" />
         </ListItem>
         <ListItem button
-                  onClick={()=>{this.openPage("/main/library")}}>
+                  onClick={() => {this.openPage('/main/library');}}>
           <ListItemIcon>
             <LibraryMusic />
           </ListItemIcon>
           <ListItemText primary="Library" />
         </ListItem>
         <ListItem button
-                  onClick={()=>{this.openPage("/main/settings")}}>
+                  onClick={() => {this.openPage('/main/settings');}}>
           <ListItemIcon>
             <Settings />
           </ListItemIcon>
@@ -145,36 +144,34 @@ class AppSideNav extends React.Component<AppSideNavProps,AppSideNavState> {
   }
 }
 
-
-export interface MainViewProps {
-  logoutAndRedirect: PropTypes.func,
-  userName: PropTypes.string,
-};
-
-export interface MainViewState {
-  open: boolean,
-  currentTabIndex: number,
-  screenWidth: number,
-  screenHeight: number,
-  headerHeight: number,
-  pinNavBar: boolean
-  showNavBar: boolean
+export interface IMainViewProps {
+  logoutAndRedirect: PropTypes.func;
+  userName: PropTypes.string;
 }
 
-const style : Dictionary<React.CSSProperties> = {
+export interface IMainViewState {
+  open: boolean;
+  currentTabIndex: number;
+  screenWidth: number;
+  screenHeight: number;
+  headerHeight: number;
+  pinNavBar: boolean;
+  showNavBar: boolean;
+}
+
+const style: IDictionary<React.CSSProperties> = {
   header: {
-    textAlign: "center",
+    textAlign: 'center',
   },
   header_content: {
-    padding: "5px",
-    color: "white"
-  }
+    padding: '5px',
+    color: 'white'
+  },
+};
 
-}
+class MainView extends React.Component<IMainViewProps,IMainViewState> {
 
-class MainView extends React.Component<MainViewProps,MainViewState> {
-
-  constructor(props) {
+  constructor(props: any) {
     super(props);
     this.state = {open:true,
                   currentTabIndex: 0,
@@ -183,13 +180,13 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
                   headerHeight: 0,
                   pinNavBar: true,
                   showNavBar: false};
-    this.logout = this.logout.bind(this)
-    this.onResize = this.onResize.bind(this)
-    this.openNavBar = this.openNavBar.bind(this)
+    this.logout = this.logout.bind(this);
+    this.onResize = this.onResize.bind(this);
+    this.openNavBar = this.openNavBar.bind(this);
 
   }
 
-  logout(e) {
+  public logout(e) {
       e.preventDefault();
       this.props.logoutAndRedirect();
       this.setState({
@@ -197,82 +194,78 @@ class MainView extends React.Component<MainViewProps,MainViewState> {
       });
   }
 
-  componentDidMount() {
-    this.onResize()
-    window.addEventListener('resize', this.onResize)
+  public componentDidMount() {
+    this.onResize();
+    window.addEventListener('resize', this.onResize);
 
     const height = document.getElementById('AppHeader').clientHeight;
-    console.log(document.getElementById('AppHeader'))
-    this.setState({headerHeight:height})
+    console.log(document.getElementById('AppHeader'));
+    this.setState({headerHeight:height});
   }
 
-  componentWillUnmount() {
-    window.removeEventListener('resize', this.onResize)
+  public componentWillUnmount() {
+    window.removeEventListener('resize', this.onResize);
   }
 
-  onResize() {
+  public onResize() {
     // https://material.io/guidelines/layout/responsive-ui.html#responsive-ui-breakpoints
 
     this.setState({screenWidth:window.innerWidth,
                    screenHeight: window.innerHeight,
-                   pinNavBar: window.innerWidth > 960})
+                   pinNavBar: window.innerWidth > 960});
   }
 
-  openNavBar(open) {
-    this.setState({showNavBar: open})
+  public openNavBar(open) {
+    this.setState({showNavBar: open});
   }
 
-  render() {
+  public render() {
 
     let headerHeight = this.state.headerHeight;
-    let _drawerWidth = this.state.pinNavBar?drawerWidth:0
+    let _drawerWidth = this.state.pinNavBar?drawerWidth:0;
     let navBar = <AppSideNav open={this.state.showNavBar}
                   permanent={this.state.pinNavBar}
-                  onRequestClose={(e) => {this.openNavBar(false)}}
-                  onLogout={(e)=>{this.logout(e)}}
-                  />
+                  onRequestClose={(e) => {this.openNavBar(false);}}
+                  onLogout={(e) => {this.logout(e);}}
+                  />;
 
     return (
       <div>
 
-      <div id="AppHeader" style={{ position: "fixed",
+      <div id="AppHeader" style={{ position: 'fixed',
                     height:{headerHeight},
-                    width: "calc(100% - " +_drawerWidth+ "px)",
+                    width: 'calc(100% - ' + _drawerWidth + 'px)',
                     marginLeft: _drawerWidth,
-                    background:"#455A64",
+                    background:'#455A64',
                     zIndex: 1000}} >
             <SoundView showMenuIcon={!this.state.pinNavBar}
-                       openMenu={()=>{this.openNavBar(true)}}
+                       openMenu={() => {this.openNavBar(true);}}
                        />
-      </div>
+      </div>;
 
-      {navBar}
+      { navBar }
 
       <main style={{ paddingTop: headerHeight+30, marginLeft: _drawerWidth }}>
+          {headerHeight}
 
-      {headerHeight}
-      {/*({this.state.headerHeight}) ::
-          {this.state.screenWidth} x {this.state.screenHeight} ::
-          {this.state.pinNavBar?"true":"false"}*/}
-
-        <Switch>
-        <Route path={`/main/queue`} component={QueueView}/>
-        <Route exact path={`/main/library`} component={DomainView}/>
-        <Route exact path={`/main/library/:artist`} component={DomainArtistView}/>
-        <Route exact path={`/main/library/:artist/:album`} component={DomainAlbumView}/>
-        <Route path={"/main"} render={() => (
-          <div>
-          <h3>View Not Implemented</h3>
-          <Button
-            onClick={(e) => History.goBack()}
-          >Go Back</Button>
-          </div>
-        )}/>
-        </Switch>
+          <Switch>
+          <Route path={`/main/queue`} component={QueueView}/>
+          <Route exact path={`/main/library`} component={DomainView}/>
+          <Route exact path={`/main/library/:artist`} component={DomainArtistView}/>
+          <Route exact path={`/main/library/:artist/:album`} component={DomainAlbumView}/>
+          <Route path={'/main'} render={() => (
+            <div>
+            <h3>View Not Implemented</h3>
+            <Button
+              onClick={(e) => History.goBack()}
+            >Go Back</Button>
+            </div>
+          )}/>
+          </Switch>
       </main>
 
       </div>
-    );
+    )
   }
 }
 

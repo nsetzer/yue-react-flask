@@ -1,5 +1,4 @@
 import * as React from 'react';
-//import PropTypes from 'prop-types';
 import { Link } from 'react-router-dom'
 
 import { connect } from 'react-redux';
@@ -9,15 +8,12 @@ import './App.css';
 
 class App extends React.Component {
 
-  static propTypes = {
-  };
-
   constructor(props) {
     super(props);
     this.state = {value: 0};
   }
 
-  render() {
+  public render() {
     return (
       <div className="App">
         <header className="App-header">
@@ -28,8 +24,6 @@ class App extends React.Component {
         <p>
         <Link to="/login">&nbsp;Login&nbsp;</Link>
         <Link to="/register">&nbsp;Register&nbsp;</Link>
-        <Link to="/test">&nbsp;Test&nbsp;</Link>
-        <Link to="/about/React">&nbsp;About&nbsp;</Link>
         </p>
         <p className="App-intro">
           Your App is Now Running<br/>
