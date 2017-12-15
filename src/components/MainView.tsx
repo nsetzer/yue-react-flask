@@ -29,6 +29,8 @@ import DomainView from './DomainView';
 import DomainArtistView from './DomainArtistView';
 import DomainAlbumView from './DomainAlbumView';
 
+import Paper from 'material-ui/Paper';
+
 import Grid from 'material-ui/Grid';
 
 import { Route, Switch } from 'react-router-dom';
@@ -245,9 +247,10 @@ class MainView extends React.Component<IMainViewProps,IMainViewState> {
 
       { navBar }
 
-      <main style={{ paddingTop: headerHeight+30, marginLeft: _drawerWidth }}>
-          {headerHeight}
-
+      <Paper style={{ paddingTop: headerHeight+30,
+                      marginLeft: _drawerWidth,
+                      width:'100%',
+                      height:'100%'}}>
           <Switch>
           <Route path={`/main/queue`} component={QueueView}/>
           <Route exact path={`/main/library`} component={DomainView}/>
@@ -262,7 +265,7 @@ class MainView extends React.Component<IMainViewProps,IMainViewState> {
             </div>
           )}/>
           </Switch>
-      </main>
+      </Paper>
 
       </div>
     )

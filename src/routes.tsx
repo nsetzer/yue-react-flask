@@ -12,27 +12,45 @@ import { requireAuthentication } from './components/auth/AuthenticatedComponent'
 import { requireNoAuthentication } from './components/auth/NotAuthenticatedComponent';
 import { DetermineAuth } from './components/auth/DetermineAuth';
 
+import MuiThemeProvider from 'material-ui/styles/MuiThemeProvider';
+import createMuiTheme from 'material-ui/styles/createMuiTheme'
+import createPalette, { Palette } from 'material-ui/styles/createPalette'
+import * as Colors from 'material-ui/colors';
+import { fade } from 'material-ui/styles/colorManipulator'
+
 import History from './history'
 
+function getTheme() {
+  let palette: Palette = createPalette({
+        'type': 'dark',
+        /*'primary': Colors.green500,
+        'secondary': Colors.green800,*/
+    });
+  return createMuiTheme({
+    'palette': palette
+  });
+};
+
+const theme = getTheme();
 // https://github.com/reactjs/react-router-tutorial/tree/master/lessons/06-params
 
 class AppRouter extends React.Component {
 
   public render() {
   return (
-    <Router history={History}>
-      <Switch>
-      <Route exact path="/" component={App} />
-      <Route exact path="/login" component={requireNoAuthentication(LoginView)} />
-      <Route exact path="/register" component={requireNoAuthentication(RegisterView)} />
-      <Route path="/main" component={requireAuthentication(MainView)}/>
-      <Route component={DetermineAuth(NotFoundView)} />
-      </Switch>
-    </Router>
+    <MuiThemeProvider theme={theme}>
+      <Router history={History}>
+        <Switch>
+        <Route exact path="/" component={App} />
+        <Route exact path="/login" component={requireNoAuthentication(LoginView)} />
+        <Route exact path="/register" component={requireNoAuthentication(RegisterView)} />
+        <Route path="/main" component={requireAuthentication(MainView)}/>
+        <Route component={DetermineAuth(NotFoundView)} />
+        </Switch>
+      </Router>
+    </MuiThemeProvider>
   )}
 
 }
 
 export default AppRouter;
-
-
