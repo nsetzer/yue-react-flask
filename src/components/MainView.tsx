@@ -30,6 +30,7 @@ import QueueView from './QueueView';
 import DomainView from './DomainView';
 import DomainArtistView from './DomainArtistView';
 import DomainAlbumView from './DomainAlbumView';
+import DomainGenreView from './DomainGenreView';
 
 import Paper from 'material-ui/Paper';
 
@@ -104,6 +105,13 @@ class AppSideNav extends React.Component<IAppSideNavProps,IAppSideNavState> {
             <LibraryMusic />
           </ListItemIcon>
           <ListItemText primary="Library" />
+        </ListItem>
+        <ListItem button
+                  onClick={() => {this.openPage('/main/genres');}}>
+          <ListItemIcon>
+            <LibraryMusic />
+          </ListItemIcon>
+          <ListItemText primary="Genres" />
         </ListItem>
         <ListItem button
                   onClick={() => {this.openPage('/main/settings');}}>
@@ -277,6 +285,8 @@ class MainView extends React.Component<IMainViewProps,IMainViewState> {
           <Switch>
           <Route path={`/main/queue`} component={QueueView}/>
           <Route exact path={`/main/library`} component={DomainView}/>
+          <Route exact path={`/main/genres`} component={DomainGenreView}/>
+          <Route exact path={`/main/genres/view`} component={DomainView}/>
           <Route exact path={`/main/library/:artist`} component={DomainArtistView}/>
           <Route exact path={`/main/library/:artist/:album`} component={DomainAlbumView}/>
           <Redirect from="/main" to="/main/queue" />

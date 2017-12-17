@@ -23,7 +23,9 @@ import History from '../history';
 import * as UiCard from 'material-ui/Card';
 const Card = UiCard.default
 
-export interface DomainViewProps {
+export interface IDomainViewProps {
+  match: any
+  location: any
   libraryStatus: string,
   libraryGetDomainInfo: () => any,
   domain_artists: Array<any>,
@@ -31,32 +33,71 @@ export interface DomainViewProps {
   domain_song_count: number
 };
 
-export interface DomainViewState {
+export interface IDomainViewState {
+  filter_genres: Array<any>;
 }
 
-class DomainView extends React.Component<DomainViewProps,DomainViewState> {
+function parseQuery(queryString) {
+    let query = {genre: null};
+    let pairs = (queryString[0] === '?' ? queryString.substr(1) : queryString).split('&');
+    for (let i = 0; i < pairs.length; i++) {
+        let pair = pairs[i].split('=');
+        query[decodeURIComponent(pair[0])] = decodeURIComponent(pair[1] || '');
+    }
+    return query;
+}
+
+class DomainView extends React.Component<IDomainViewProps,IDomainViewState> {
 
   constructor(props) {
     super(props);
+    this.state = {filter_genres: []}
     this.componentDidMount = this.componentDidMount.bind(this)
   }
 
-  componentDidMount() {
+  public componentWillMount() {
+    let query_params: {genre:string} = parseQuery(this.props.location.search);
+    console.log(query_params);
+    if (query_params.genre !== null) {
+      this.setState({filter_genres: [query_params.genre, ]})
+    }
+  }
+
+  public componentDidMount() {
 
     // TODO: this query only needs to run once, find a better
     // way to gate that behavior
+    // console.log(this.props.match.params)
+
+    // let genre = this.props.match.params.genre
+
     if(this.props.domain_song_count==0) {
       this.props.libraryGetDomainInfo();
     }
   }
 
-  render() {
+  public render() {
+
+    let artists = (this.props.domain_artists.length>0)?
+                  this.props.domain_artists:[]
+    console.log(artists.length)
+
+    let genres = this.state.filter_genres;
+    if (genres && genres.length > 0) {
+      artists = artists.filter( (art) => {
+        return art.genres.includes(genres[0])
+      });
+    }
+
+    console.log(artists.length)
+    console.log(genres)
+
     return (
         <div>
         <List>
             {
-              (this.props.domain_artists.length>0) ?
-                this.props.domain_artists.map( (artist) => {
+              (artists.length>0)?
+                artists.map( (artist) => {
                   return <Card style={{marginLeft:"8px",
                                        marginRight:"8px",
                                        marginTop:"5px",

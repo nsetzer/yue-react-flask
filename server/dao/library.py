@@ -407,6 +407,8 @@ class LibraryDao(object):
         genres = {}
         total = 0
 
+        genre_artists = {}
+
         for record in db.session.execute(query).fetchall():
             key = record[Song.artist_key]
             art = record[Song.artist]
@@ -418,8 +420,6 @@ class LibraryDao(object):
             else:
                 # attempt to de-duplicate genre names
                 gen = [g.strip().title() for g in gen.split(";")]
-
-
 
             # count artist and album
             if art not in artists:
@@ -435,11 +435,17 @@ class LibraryDao(object):
             # count genres for the record
             for g in gen:
                 if g not in genres:
-                    genres[g] = {"name": g, "count": 0}
+                    genres[g] = {"name": g, "count": 0, "artist_count": 0}
                 genres[g]['count'] += 1
                 if g not in artists[art]['genres']:
                     artists[art]['genres'].append(g)
 
+                if g not in genre_artists:
+                    genre_artists[g] = set()
+                genre_artists[g].add(art)
+
+            for g, items in genre_artists.items():
+                genres[g]['artist_count'] = len(items)
             if alb not in albums:
                 albums[alb] = 0
             albums[alb] += 1

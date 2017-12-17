@@ -25,7 +25,7 @@ import * as actionCreators from '../actions/library';
 import History from '../history'
 import MoreVert from 'material-ui-icons/MoreVert';
 
-export interface DomainArtistViewProps {
+export interface IDomainArtistViewProps {
   match: any
   libraryStatus: string,
   libraryGetDomainInfo: () => any,
@@ -34,17 +34,17 @@ export interface DomainArtistViewProps {
   domain_song_count: number
 };
 
-export interface DomainArtistViewState {
+export interface IDomainArtistViewState {
 }
 
-class DomainArtistView extends React.Component<DomainArtistViewProps,DomainArtistViewState> {
+class DomainGenreView extends React.Component<IDomainArtistViewProps,IDomainArtistViewState> {
 
   constructor(props) {
     super(props);
     this.componentDidMount = this.componentDidMount.bind(this)
   }
 
-  componentDidMount() {
+  public componentDidMount() {
 
     // TODO: this query only needs to run once, find a better
     // way to gate that behavior
@@ -53,20 +53,9 @@ class DomainArtistView extends React.Component<DomainArtistViewProps,DomainArtis
     }
   }
 
-  render() {
+  public render() {
 
-    let artist_name = this.props.match.params.artist
-    let albums = {}
-    for (let i=0; i < this.props.domain_artists.length; i++) {
-      let artist = this.props.domain_artists[i]
-      if (artist.name == artist_name) {
-        albums = artist.albums;
-        break;
-      }
-    }
-
-    let names = Object.keys(albums)
-    names.sort()
+    let genres = this.props.domain_genres
 
     return (
         <div>
@@ -77,34 +66,19 @@ class DomainArtistView extends React.Component<DomainArtistViewProps,DomainArtis
 
         <List>
 
-            <Card style={{marginLeft:"8px",
-                                       marginRight:"8px",
-                                       marginTop:"5px",
-                                       marginBottom:"5px"}}>
-            <ListItem
-                      button
-                      onClick={()=>{History.push("/main/library/"+artist_name +"/$all")}}>
-               <ListItemText primary={"All Songs"} />
-               <ListItemSecondaryAction>
-                 <IconButton onClick={() => {}}>
-                   <MoreVert />
-                 </IconButton>
-               </ListItemSecondaryAction>
-            </ListItem>
-            </Card>
-
             {
 
-              (names.length>0) ?
-                names.map( (album) => {
+              (genres.length>0) ?
+                genres.map( (genre) => {
                   return <Card style={{marginLeft:"8px",
                                        marginRight:"8px",
                                        marginTop:"5px",
                                        marginBottom:"5px"}}>
-                            <ListItem key={album}
+                            <ListItem key={genre.name}
                                      button
-                                     onClick={()=>{History.push("/main/library/"+artist_name +"/" + album)}}>
-                              <ListItemText primary={album} />
+                                     onClick={()=>{History.push("/main/genres/view?genre="+genre.name)}}>
+                              <ListItemText primary={genre.name}
+                                            secondary={genre.artist_count + " Artists. " +genre.count + " Songs"} />
                               <ListItemSecondaryAction>
                                 <IconButton onClick={() => {}}>
                                   <MoreVert />
@@ -112,7 +86,7 @@ class DomainArtistView extends React.Component<DomainArtistViewProps,DomainArtis
                               </ListItemSecondaryAction>
                            </ListItem>
                           </Card>
-                }) : <div>No Artists To Display</div>
+                }) : <div>No Genres To Display</div>
             }
          </List>
 
@@ -136,4 +110,4 @@ function mapDispatchToProps(dispatch) {
 export default connect(
   mapStateToProps,
   mapDispatchToProps
-)(DomainArtistView);
+)(DomainGenreView);
