@@ -18,6 +18,8 @@ import MoreVert from 'material-ui-icons/MoreVert';
 
 import * as actionCreators from '../actions/library';
 
+import Typography from 'material-ui/Typography';
+
 import History from '../history';
 
 import * as UiCard from 'material-ui/Card';
@@ -45,6 +47,16 @@ function parseQuery(queryString) {
         query[decodeURIComponent(pair[0])] = decodeURIComponent(pair[1] || '');
     }
     return query;
+}
+
+function navigateTo(url) {
+  History.push(url)
+  window.scrollTo(0,0)
+}
+
+function navigateBack() {
+  History.goBack()
+  window.scrollTo(0,0)
 }
 
 class DomainView extends React.Component<IDomainViewProps,IDomainViewState> {
@@ -94,6 +106,10 @@ class DomainView extends React.Component<IDomainViewProps,IDomainViewState> {
 
     return (
         <div>
+        <Typography type="title" align="center" gutterBottom>
+          Artists
+        </Typography>
+
         <List>
             {
               (artists.length>0)?
@@ -104,7 +120,7 @@ class DomainView extends React.Component<IDomainViewProps,IDomainViewState> {
                                        marginBottom:"5px"}}>
                             <ListItem key={artist.name}
                                      button
-                                     onClick={()=>{History.push("/main/library/"+artist.name)}}>
+                                     onClick={()=>{navigateTo("/main/library/"+artist.name)}}>
                               <ListItemText primary={artist.name} />
                               <ListItemSecondaryAction>
                                 <IconButton onClick={() => {}}>

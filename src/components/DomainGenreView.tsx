@@ -25,6 +25,8 @@ import * as actionCreators from '../actions/library';
 import History from '../history'
 import MoreVert from 'material-ui-icons/MoreVert';
 
+import Typography from 'material-ui/Typography';
+
 export interface IDomainArtistViewProps {
   match: any
   libraryStatus: string,
@@ -35,6 +37,16 @@ export interface IDomainArtistViewProps {
 };
 
 export interface IDomainArtistViewState {
+}
+
+function navigateTo(url) {
+  History.push(url)
+  window.scrollTo(0,0)
+}
+
+function navigateBack() {
+  History.goBack()
+  window.scrollTo(0,0)
 }
 
 class DomainGenreView extends React.Component<IDomainArtistViewProps,IDomainArtistViewState> {
@@ -59,10 +71,12 @@ class DomainGenreView extends React.Component<IDomainArtistViewProps,IDomainArti
 
     return (
         <div>
-        <IconButton onClick={(e) => History.goBack()}>
+        <IconButton onClick={(e) => navigateBack()}>
           <NavigateBefore />
         </IconButton>
-        <h2>{this.props.match.params.artist}</h2>
+        <Typography type="title" align="center" gutterBottom>
+          Genres
+        </Typography>
 
         <List>
 
@@ -76,7 +90,7 @@ class DomainGenreView extends React.Component<IDomainArtistViewProps,IDomainArti
                                        marginBottom:"5px"}}>
                             <ListItem key={genre.name}
                                      button
-                                     onClick={()=>{History.push("/main/genres/view?genre="+genre.name)}}>
+                                     onClick={()=>{navigateTo("/main/genres/view?genre="+genre.name)}}>
                               <ListItemText primary={genre.name}
                                             secondary={genre.artist_count + " Artists. " +genre.count + " Songs"} />
                               <ListItemSecondaryAction>

@@ -6,6 +6,8 @@ import { bindActionCreators } from 'redux';
 import { connect } from 'react-redux';
 import Button from 'material-ui/Button';
 
+import Grid from 'material-ui/Grid';
+
 import * as UiCard from 'material-ui/Card';
 const Card = UiCard.default
 
@@ -27,6 +29,8 @@ const actionCreators = Object.assign({},
                                      libraryActionCreators,
                                      queueActionCreators);
 import History from '../history'
+
+import Typography from 'material-ui/Typography';
 
 import {
   fmtDuration,
@@ -59,6 +63,20 @@ const listRightStyle = {
    textAlign: "right",
 };
 
+const MediumIconStyle = {
+    width: "32px",
+    height: "32px",
+}
+
+function navigateTo(url) {
+  History.push(url)
+  window.scrollTo(0,0)
+}
+
+function navigateBack() {
+  History.goBack()
+  window.scrollTo(0,0)
+}
 
 class DomainAlbumView extends React.Component<IDomainAlbumViewProps,IDomainAlbumViewState> {
 
@@ -120,14 +138,31 @@ class DomainAlbumView extends React.Component<IDomainAlbumViewProps,IDomainAlbum
 
   public render() {
 
+    let this_album = this.props.match.params.album;
+    if (this_album==="$all") {
+      this_album = "All Songs"
+    }
 
     return (
         <div>
-        <IconButton onClick={(e) => History.goBack()}>
-          <NavigateBefore />
-        </IconButton>
-
-        <h2>{this.props.match.params.artist} - {this.props.match.params.album}</h2>
+        <Grid container spacing={24} justify="center">
+            <Grid item  xs={2}>
+              <IconButton onClick={(e) => navigateBack()}>
+                <NavigateBefore style={MediumIconStyle} />
+              </IconButton>
+            </Grid>
+            <Grid item  xs={8}>
+            <Typography type="title" align="center" gutterBottom noWrap>
+              {this.props.match.params.artist}<br/>
+              {this_album}
+            </Typography>
+            </Grid>
+            <Grid item  xs={2}>
+            <IconButton onClick={(e) => {}}>
+                <MoreVert style={MediumIconStyle} />
+              </IconButton>
+            </Grid>
+        </Grid>
 
         <List>
             {
@@ -139,7 +174,7 @@ class DomainAlbumView extends React.Component<IDomainAlbumViewProps,IDomainAlbum
                                        marginBottom:"5px"}}>
                            <ListItem key={song.id}>
                              <ListItemText primary={song.title}
-                                           secondary={song.artist}/>
+                                           secondary={song.artist + " - " + song.album}/>
                              <ListItemText style={listRightStyle} primary={fmtDuration(song.length)}/>
                              <ListItemSecondaryAction>
                                <IconButton aria-label="Delete"

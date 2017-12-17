@@ -6,6 +6,8 @@ import { bindActionCreators } from 'redux';
 import { connect } from 'react-redux';
 import Button from 'material-ui/Button';
 
+import Grid from 'material-ui/Grid';
+
 import * as UiCard from 'material-ui/Card';
 const Card = UiCard.default
 
@@ -25,6 +27,8 @@ import * as actionCreators from '../actions/library';
 import History from '../history'
 import MoreVert from 'material-ui-icons/MoreVert';
 
+import Typography from 'material-ui/Typography';
+
 export interface DomainArtistViewProps {
   match: any
   libraryStatus: string,
@@ -35,6 +39,21 @@ export interface DomainArtistViewProps {
 };
 
 export interface DomainArtistViewState {
+}
+
+const MediumIconStyle = {
+    width: "32px",
+    height: "32px",
+}
+
+function navigateTo(url) {
+  History.push(url)
+  window.scrollTo(0,0)
+}
+
+function navigateBack() {
+  History.goBack()
+  window.scrollTo(0,0)
 }
 
 class DomainArtistView extends React.Component<DomainArtistViewProps,DomainArtistViewState> {
@@ -70,10 +89,24 @@ class DomainArtistView extends React.Component<DomainArtistViewProps,DomainArtis
 
     return (
         <div>
-        <IconButton onClick={(e) => History.goBack()}>
-          <NavigateBefore />
-        </IconButton>
-        <h2>{this.props.match.params.artist}</h2>
+
+        <Grid container spacing={24} justify="center">
+            <Grid item  xs={2}>
+              <IconButton onClick={(e) => navigateBack()}>
+                <NavigateBefore style={MediumIconStyle} />
+              </IconButton>
+            </Grid>
+            <Grid item  xs={8}>
+            <Typography type="title" align="center" gutterBottom noWrap>
+              {this.props.match.params.artist}
+            </Typography>
+            </Grid>
+            <Grid item  xs={2}>
+            <IconButton onClick={(e) => {}}>
+                <MoreVert style={MediumIconStyle} />
+              </IconButton>
+            </Grid>
+        </Grid>
 
         <List>
 
@@ -83,7 +116,7 @@ class DomainArtistView extends React.Component<DomainArtistViewProps,DomainArtis
                                        marginBottom:"5px"}}>
             <ListItem
                       button
-                      onClick={()=>{History.push("/main/library/"+artist_name +"/$all")}}>
+                      onClick={()=>{navigateTo("/main/library/"+artist_name +"/$all")}}>
                <ListItemText primary={"All Songs"} />
                <ListItemSecondaryAction>
                  <IconButton onClick={() => {}}>
@@ -103,7 +136,7 @@ class DomainArtistView extends React.Component<DomainArtistViewProps,DomainArtis
                                        marginBottom:"5px"}}>
                             <ListItem key={album}
                                      button
-                                     onClick={()=>{History.push("/main/library/"+artist_name +"/" + album)}}>
+                                     onClick={()=>{navigateTo("/main/library/"+artist_name +"/" + album)}}>
                               <ListItemText primary={album} />
                               <ListItemSecondaryAction>
                                 <IconButton onClick={() => {}}>
