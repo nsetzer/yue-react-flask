@@ -17,6 +17,8 @@ import VolumeUp from 'material-ui-icons/VolumeUp';
 import VolumeDown from 'material-ui-icons/VolumeDown';
 import VolumeMute from 'material-ui-icons/VolumeMute';
 
+import Typography from 'material-ui/Typography';
+
 import IconButton from 'material-ui/IconButton';
 
 import Grid from 'material-ui/Grid';
@@ -243,16 +245,21 @@ class AudioPlayer extends React.Component<AudioPlayerProps,AudioPlayerState> {
       {/*https://www.npmjs.com/package/react-sound*/}
 
 
-          <b>{this.props.title}</b>
-          <br/>
+          <Typography type="subheading">
+          {this.props.title}
+          </Typography>
+          <Typography type="body2">
           {this.props.artist}
+          </Typography>
 
           <Grid container spacing={24}>
 
             <Grid item xs={2}>
                 <div style={TextContainer}>
                 <div style={TextBottomLeftStyle}>
+                <Typography type="caption">
                     {fmtDuration(Math.round(this.state.position/1000))}
+                </Typography>
                 </div>
                 </div>
             </Grid>
@@ -280,7 +287,9 @@ class AudioPlayer extends React.Component<AudioPlayerProps,AudioPlayerState> {
             <Grid item xs={2}>
                <div style={TextContainer}>
                <div style={TextBottomRightStyle}>
+               <Typography type="caption">
                  {fmtDuration(Math.round(this.state.duration/1000))}
+               </Typography>
                </div>
                </div>
 

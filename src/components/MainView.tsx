@@ -16,6 +16,8 @@ import LibraryMusic from 'material-ui-icons/LibraryMusic';
 import * as ListIcons from 'material-ui-icons/List';
 const ListIcon = ListIcons.default;
 
+import { withTheme } from 'material-ui/styles';
+
 import Divider from 'material-ui/Divider';
 import * as UiList  from 'material-ui/List';
 const List = UiList.default;
@@ -33,7 +35,7 @@ import Paper from 'material-ui/Paper';
 
 import Grid from 'material-ui/Grid';
 
-import { Route, Switch } from 'react-router-dom';
+import { Route, Redirect, Switch } from 'react-router-dom';
 
 import History from '../history';
 
@@ -44,6 +46,7 @@ interface IDictionary<T> {
 import Drawer from 'material-ui/Drawer';
 
 const drawerWidth = 260;
+const headerHeight = 148; // no clue how to get this dynamically
 
 const navStyles: IDictionary<React.CSSProperties> = {
   drawerPaper: {
@@ -149,6 +152,7 @@ class AppSideNav extends React.Component<IAppSideNavProps,IAppSideNavState> {
 export interface IMainViewProps {
   logoutAndRedirect: PropTypes.func;
   userName: PropTypes.string;
+  theme: any;
 }
 
 export interface IMainViewState {
@@ -159,6 +163,7 @@ export interface IMainViewState {
   headerHeight: number;
   pinNavBar: boolean;
   showNavBar: boolean;
+  divElement: any;
 }
 
 const style: IDictionary<React.CSSProperties> = {
@@ -173,6 +178,8 @@ const style: IDictionary<React.CSSProperties> = {
 
 class MainView extends React.Component<IMainViewProps,IMainViewState> {
 
+  public divElement = null
+
   constructor(props: any) {
     super(props);
     this.state = {open:true,
@@ -181,7 +188,9 @@ class MainView extends React.Component<IMainViewProps,IMainViewState> {
                   screenHeight: 0,
                   headerHeight: 0,
                   pinNavBar: true,
-                  showNavBar: false};
+                  showNavBar: false,
+                  divElement: null};
+    this.divElement = null
     this.logout = this.logout.bind(this);
     this.onResize = this.onResize.bind(this);
     this.openNavBar = this.openNavBar.bind(this);
@@ -200,9 +209,17 @@ class MainView extends React.Component<IMainViewProps,IMainViewState> {
     this.onResize();
     window.addEventListener('resize', this.onResize);
 
-    const height = document.getElementById('AppHeader').clientHeight;
-    console.log(document.getElementById('AppHeader'));
+    // const height = document.getElementById('AppHeader').clientHeight;
+    const height = this.divElement.clientHeight;
     this.setState({headerHeight:height});
+  }
+
+  public componentDidUpdate() {
+
+    // const height = document.getElementById('AppHeader').clientHeight;
+    const height = this.divElement.clientHeight;
+    console.log(height)
+    // this.setState({headerHeight:height});
   }
 
   public componentWillUnmount() {
@@ -223,7 +240,11 @@ class MainView extends React.Component<IMainViewProps,IMainViewState> {
 
   public render() {
 
-    let headerHeight = this.state.headerHeight;
+    // get the default header height, or the computed height,
+    // which ever is greater
+    let _headerHeight = (this.divElement)?this.divElement.clientHeight:0
+    _headerHeight = (_headerHeight>headerHeight)?_headerHeight:headerHeight
+
     let _drawerWidth = this.state.pinNavBar?drawerWidth:0;
     let navBar = <AppSideNav open={this.state.showNavBar}
                   permanent={this.state.pinNavBar}
@@ -231,39 +252,42 @@ class MainView extends React.Component<IMainViewProps,IMainViewState> {
                   onLogout={(e) => {this.logout(e);}}
                   />;
 
+    const { theme } = this.props;
+
     return (
       <div>
 
-      <div id="AppHeader" style={{ position: 'fixed',
-                    height:{headerHeight},
+      <div id="AppHeader"
+           ref={(divElement) => this.divElement = divElement}
+           style={{ position: 'fixed',
                     width: 'calc(100% - ' + _drawerWidth + 'px)',
                     marginLeft: _drawerWidth,
-                    background:'#455A64',
+                    background: theme.palette.primary.A200,
                     zIndex: 1000}} >
             <SoundView showMenuIcon={!this.state.pinNavBar}
                        openMenu={() => {this.openNavBar(true);}}
+                       theme={theme}
                        />
-      </div>;
+      </div>
 
       { navBar }
 
-      <Paper style={{ paddingTop: headerHeight+30,
-                      marginLeft: _drawerWidth,
-                      width:'100%',
-                      height:'100%'}}>
+      <Paper style={{ paddingTop: _headerHeight,
+                      marginLeft: _drawerWidth}}>
           <Switch>
           <Route path={`/main/queue`} component={QueueView}/>
           <Route exact path={`/main/library`} component={DomainView}/>
           <Route exact path={`/main/library/:artist`} component={DomainArtistView}/>
           <Route exact path={`/main/library/:artist/:album`} component={DomainAlbumView}/>
-          <Route path={'/main'} render={() => (
+          <Redirect from="/main" to="/main/queue" />
+          {/*<Route path={'/main'} render={() => (
             <div>
             <h3>View Not Implemented</h3>
             <Button
               onClick={(e) => History.goBack()}
             >Go Back</Button>
             </div>
-          )}/>
+          )}/>*/}
           </Switch>
       </Paper>
 
@@ -284,4 +308,4 @@ function mapDispatchToProps(dispatch) {
 export default connect(
   mapStateToProps,
   mapDispatchToProps
-)(MainView);
+)(withTheme()(MainView));

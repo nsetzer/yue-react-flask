@@ -17,6 +17,9 @@ import {
     QUEUE_PREVIOUS,
     QUEUE_PREVIOUS_SUCCESS,
     QUEUE_PREVIOUS_FAILURE,
+    QUEUE_PLAY_INDEX,
+    QUEUE_PLAY_NEXT,
+    QUEUE_DELETE_INDEX,
 } from '../constants/index'
 
 const initialState = {
@@ -113,6 +116,56 @@ export default createReducer(initialState, {
         } else {
             return Object.assign({}, state, {
                 statusText: "no previous song",
+            })
+        }
+    },
+    [QUEUE_PLAY_INDEX]: (state, payload) => {
+        let index = payload.index
+        if (index < state.songs.length) {
+
+            let new_history = state.history.slice(0,state.history.length)
+            new_history.concat(state.songs.slice(0,index))
+            let new_songs = state.songs.slice(index,state.songs.length)
+            return Object.assign({}, state, {
+                    statusText: null,
+                    songs: new_songs,
+                    history: new_history,
+                })
+        } else {
+            return Object.assign({}, state, {
+                statusText: "invalid index",
+            })
+        }
+
+    },
+    [QUEUE_PLAY_NEXT]: (state, payload) => {
+        let index = payload.index
+        if (index < state.songs.length) {
+            let new_songs = state.songs.slice(0,state.songs.length)
+            let songs = new_songs.splice(index,1)
+            new_songs.splice(1,0,...songs)
+            return Object.assign({}, state, {
+                    statusText: null,
+                    songs: new_songs,
+                })
+        } else {
+            return Object.assign({}, state, {
+                statusText: "invalid index",
+            })
+        }
+    },
+    [QUEUE_DELETE_INDEX]: (state, payload) => {
+        let index = payload.index
+        if (index < state.songs.length) {
+            let new_songs = state.songs.slice(0,state.songs.length)
+            new_songs.splice(index,1)
+            return Object.assign({}, state, {
+                    statusText: null,
+                    songs: new_songs,
+                })
+        } else {
+            return Object.assign({}, state, {
+                statusText: "invalid index",
             })
         }
     },

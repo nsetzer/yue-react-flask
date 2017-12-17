@@ -15,16 +15,16 @@ import { DetermineAuth } from './components/auth/DetermineAuth';
 import MuiThemeProvider from 'material-ui/styles/MuiThemeProvider';
 import createMuiTheme from 'material-ui/styles/createMuiTheme'
 import createPalette, { Palette } from 'material-ui/styles/createPalette'
-import * as Colors from 'material-ui/colors';
+import * as Color from 'material-ui/colors';
 import { fade } from 'material-ui/styles/colorManipulator'
 
 import History from './history'
 
 function getTheme() {
   let palette: Palette = createPalette({
-        'type': 'dark',
-        /*'primary': Colors.green500,
-        'secondary': Colors.green800,*/
+        'type': 'light',
+        'primary': Color.blue
+        /*'secondary': Colors.green800,*/
     });
   return createMuiTheme({
     'palette': palette
@@ -32,6 +32,8 @@ function getTheme() {
 };
 
 const theme = getTheme();
+
+console.log(theme)
 // https://github.com/reactjs/react-router-tutorial/tree/master/lessons/06-params
 
 class AppRouter extends React.Component {

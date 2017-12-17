@@ -6,6 +6,9 @@ import { bindActionCreators } from 'redux';
 import { connect } from 'react-redux';
 import Button from 'material-ui/Button';
 
+import * as UiCard from 'material-ui/Card';
+const Card = UiCard.default
+
 import * as UiList  from 'material-ui/List';
 const List = UiList.default
 const ListItem = UiList.ListItem
@@ -71,27 +74,45 @@ class DomainArtistView extends React.Component<DomainArtistViewProps,DomainArtis
         <IconButton onClick={(e) => History.goBack()}>
           <NavigateBefore />
         </IconButton>
-        {this.props.match.params.artist}
+        <h2>{this.props.match.params.artist}</h2>
 
         <List>
-            <ListItem>
-                <Link to={"/main/library/"+artist_name +"/$all"}>All Songs</Link>
+
+            <Card style={{marginLeft:"8px",
+                                       marginRight:"8px",
+                                       marginTop:"5px",
+                                       marginBottom:"5px"}}>
+            <ListItem
+                      button
+                      onClick={()=>{History.push("/main/library/"+artist_name +"/$all")}}>
+               <ListItemText primary={"All Songs"} />
+               <ListItemSecondaryAction>
+                 <IconButton onClick={() => {}}>
+                   <MoreVert />
+                 </IconButton>
+               </ListItemSecondaryAction>
             </ListItem>
+            </Card>
 
             {
 
               (names.length>0) ?
                 names.map( (album) => {
-                  return <ListItem key={album}
-                                   button
-                                   onClick={()=>{History.push("/main/library/"+artist_name +"/" + album)}}>
-                            <ListItemText primary={album} />
-                            <ListItemSecondaryAction>
-                              <IconButton onClick={() => {}}>
-                                <MoreVert />
-                              </IconButton>
-                            </ListItemSecondaryAction>
-                         </ListItem>
+                  return <Card style={{marginLeft:"8px",
+                                       marginRight:"8px",
+                                       marginTop:"5px",
+                                       marginBottom:"5px"}}>
+                            <ListItem key={album}
+                                     button
+                                     onClick={()=>{History.push("/main/library/"+artist_name +"/" + album)}}>
+                              <ListItemText primary={album} />
+                              <ListItemSecondaryAction>
+                                <IconButton onClick={() => {}}>
+                                  <MoreVert />
+                                </IconButton>
+                              </ListItemSecondaryAction>
+                           </ListItem>
+                          </Card>
                 }) : <div>No Artists To Display</div>
             }
          </List>

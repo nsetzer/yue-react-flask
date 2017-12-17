@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom'
 import { bindActionCreators } from 'redux';
 import { connect } from 'react-redux';
 
+import { withTheme } from 'material-ui/styles';
+
 import Grid from 'material-ui/Grid';
 
 import * as actionCreators from '../../actions/queue';
@@ -26,15 +28,16 @@ const MediumIconStyle = {
 }
 
 export interface SoundViewProps {
-  queueStatus: string,
-  songs: Array<any>,
-  song_history: Array<any>,
-  getQueue: () => any,
-  populateQueue: () => any,
-  nextSongInQueue: PropTypes.func,
-  previousSongInQueue: PropTypes.func,
-  showMenuIcon: boolean,
-  openMenu: () => any
+  queueStatus: string;
+  songs: Array<any>;
+  song_history: Array<any>;
+  getQueue: () => any;
+  populateQueue: () => any;
+  nextSongInQueue: PropTypes.func;
+  previousSongInQueue: PropTypes.func;
+  showMenuIcon: boolean;
+  openMenu: () => any;
+  theme: any;
 }
 
 export interface SoundViewState {
@@ -79,12 +82,12 @@ class SoundView extends React.Component<SoundViewProps,SoundViewState> {
   }
 
   render() {
-    let iconColor = "#607D8B"
     let currentSong = this.state.currentSong;
     let currentArtist = (currentSong)?currentSong.artist:"";
     let currentTitle = (currentSong)?currentSong.title:"";
 
-
+    const { theme } = this.props;
+    let iconColor = theme.palette.text.primary;
 
     return (
       <div style={{paddingLeft:10,
@@ -103,7 +106,7 @@ class SoundView extends React.Component<SoundViewProps,SoundViewState> {
 
 
           <Grid container spacing={24} justify="center">
-            <Grid item  xs={12} sm={6} md={4}>
+            <Grid item  xs={12} sm={6} md={6}>
               <div style={{textAlign:"center"}}>
               <AudioPlayer
                 url={this.state.audioUrl}
@@ -130,6 +133,7 @@ function mapStateToProps(state, ownProps) {
       song_history: state.queue.history,
       showMenuIcon: ownProps.showMenuIcon,
       openMenu: ownProps.openMenu,
+      theme: ownProps.theme,
     };
 }
 
@@ -137,6 +141,7 @@ function mapDispatchToProps(dispatch) {
   return bindActionCreators(actionCreators, dispatch);
 }
 
+// TODO: withTheme does not work with this class...
 export default connect(
   mapStateToProps,
   mapDispatchToProps

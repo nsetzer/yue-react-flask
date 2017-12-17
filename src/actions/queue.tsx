@@ -15,6 +15,9 @@ import {
     QUEUE_PREVIOUS,
     QUEUE_PREVIOUS_SUCCESS,
     QUEUE_PREVIOUS_FAILURE,
+    QUEUE_PLAY_INDEX,
+    QUEUE_PLAY_NEXT,
+    QUEUE_DELETE_INDEX,
 } from '../constants/index'
 
 import {
@@ -122,3 +125,25 @@ export function previousSongInQueue() {
 
     }
 }
+
+export function playIndexInQueue(index) {
+    return function (dispatch) {
+        dispatch(queueSuccess({index: index}, QUEUE_PLAY_INDEX));
+        return null;
+    }
+}
+
+export function playNextInQueue(index) {
+    return function (dispatch) {
+        dispatch(queueSuccess({index: index}, QUEUE_PLAY_NEXT));
+        return null;
+    }
+}
+
+export function deleteIndexInQueue(index) {
+    return function (dispatch) {
+        dispatch(queueSuccess({index: index}, QUEUE_DELETE_INDEX));
+        return null;
+    }
+}
+

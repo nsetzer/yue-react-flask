@@ -4,6 +4,11 @@ import PropTypes from 'prop-types';
 import { bindActionCreators } from 'redux';
 import { connect } from 'react-redux';
 
+import * as UiCard from 'material-ui/Card';
+const Card = UiCard.default
+
+import Typography from 'material-ui/Typography';
+
 import Button from 'material-ui/Button';
 
 import * as actionCreators from '../actions/queue';
@@ -30,6 +35,7 @@ import {
 export interface IMenuOpts {
   open: boolean,
   anchorEl: any,
+  index: number,
   song: any
 }
 
@@ -40,21 +46,25 @@ export interface IQueueViewProps {
   getQueue: () => any,
   setQueue: () => any,
   populateQueue: () => any,
+  playIndexInQueue: (index: number) => any,
+  playNextInQueue: (index: number) => any,
+  deleteIndexInQueue: (index: number) => any,
 };
 
 export interface IQueueViewState {
   menuOpts: IMenuOpts
 }
 
-const listRightStyle = {
-   textAlign: 'right',
+const listRightStyle: React.CSSProperties = {
+  position: "absolute",
+  right: "32px",
 };
 
 class QueueView extends React.Component<IQueueViewProps,IQueueViewState> {
 
   constructor(props) {
     super(props);
-    this.state = {menuOpts:{open:false, anchorEl:null, song: null}}
+    this.state = {menuOpts:{open:false, anchorEl:null, song: null, index: -1}}
 
     this.onOpenMenu = this.onOpenMenu.bind(this)
     this.onMenuClose = this.onMenuClose.bind(this)
@@ -63,10 +73,11 @@ class QueueView extends React.Component<IQueueViewProps,IQueueViewState> {
     this.onMenuRemove = this.onMenuRemove.bind(this)
   }
 
-  public onOpenMenu(event, song) {
+  public onOpenMenu(event, index, song) {
     let menuOpts = this.state.menuOpts;
     menuOpts.open = true;
     menuOpts.anchorEl = event.currentTarget
+    menuOpts.index = index
     menuOpts.song = song
     this.setState({menuOpts: menuOpts});
   }
@@ -79,20 +90,27 @@ class QueueView extends React.Component<IQueueViewProps,IQueueViewState> {
 
   public onMenuPlay() {
     let menuOpts = this.state.menuOpts;
+    let index = menuOpts.index;
     menuOpts.open = false;
     this.setState({menuOpts: menuOpts});
+    this.props.playIndexInQueue(index)
   }
 
   public onMenuPlayNext() {
+
     let menuOpts = this.state.menuOpts;
+    let index = menuOpts.index;
     menuOpts.open = false;
     this.setState({menuOpts: menuOpts});
+    this.props.playNextInQueue(index)
   }
 
   public onMenuRemove() {
     let menuOpts = this.state.menuOpts;
+    let index = menuOpts.index;
     menuOpts.open = false;
     this.setState({menuOpts: menuOpts});
+    this.props.deleteIndexInQueue(index)
   }
 
   public render() {
@@ -102,32 +120,47 @@ class QueueView extends React.Component<IQueueViewProps,IQueueViewState> {
              onClick={() => {this.props.populateQueue()}}>
               <Send />
         </IconButton>
+        <Typography noWrap>
         <List>
             {
               (this.props.songs && this.props.songs.length>0) ?
-                this.props.songs.map( (song) => {
-                  return <ListItem key={song.id}>
+                this.props.songs.map( (song, index) => {
+                  return <Card style={{marginLeft:"8px",
+                                       marginRight:"8px",
+                                       marginTop:"5px",
+                                       marginBottom:"5px"}}>
+                           <ListItem key={song.id}>
                            <ListItemText primary={song.title}
                                          secondary={song.artist}/>
-                           <ListItemText style={listRightStyle} primary={fmtDuration(song.length)}/>
+                           <ListItemText style={listRightStyle}
+                                         primary={fmtDuration(song.length)}/>
                            <ListItemSecondaryAction>
                              <IconButton aria-label="Delete"
-                                         onClick={(e) => {this.onOpenMenu(e,song)}}>
+                                         onClick={(e) => {this.onOpenMenu(e,index,song)}}>
                               <MoreVert />
                              </IconButton>
                            </ListItemSecondaryAction>
-                         </ListItem>
+                           </ListItem>
+                          </Card>
                 }) : <div>No Songs To Display</div>
             }
         </List>
+        </Typography>
+
         <Menu
           id="simple-menu"
           anchorEl={this.state.menuOpts.anchorEl}
           open={this.state.menuOpts.open}
           onRequestClose={this.onMenuClose}>
-          <MenuItem onClick={this.onMenuPlay}>Play</MenuItem>
-          <MenuItem onClick={this.onMenuPlayNext}>Play Next</MenuItem>
-          <MenuItem onClick={this.onMenuRemove}>Remove</MenuItem>
+          {(this.state.menuOpts.index>0)?
+            <MenuItem onClick={this.onMenuPlay}>Play</MenuItem>
+            :null}
+          {(this.state.menuOpts.index>1)?
+            <MenuItem onClick={this.onMenuPlayNext}>Play Next</MenuItem>
+            :null}
+          {(this.state.menuOpts.index>0)?
+            <MenuItem onClick={this.onMenuRemove}>Remove</MenuItem>
+            :null}
         </Menu>
 
         </div>

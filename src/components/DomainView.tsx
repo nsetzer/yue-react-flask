@@ -20,6 +20,9 @@ import * as actionCreators from '../actions/library';
 
 import History from '../history';
 
+import * as UiCard from 'material-ui/Card';
+const Card = UiCard.default
+
 export interface DomainViewProps {
   libraryStatus: string,
   libraryGetDomainInfo: () => any,
@@ -54,16 +57,21 @@ class DomainView extends React.Component<DomainViewProps,DomainViewState> {
             {
               (this.props.domain_artists.length>0) ?
                 this.props.domain_artists.map( (artist) => {
-                  return <ListItem key={artist.name}
-                                   button
-                                   onClick={()=>{History.push("/main/library/"+artist.name)}}>
-                            <ListItemText primary={artist.name} />
-                            <ListItemSecondaryAction>
-                              <IconButton onClick={() => {}}>
-                                <MoreVert />
-                              </IconButton>
-                            </ListItemSecondaryAction>
-                         </ListItem>
+                  return <Card style={{marginLeft:"8px",
+                                       marginRight:"8px",
+                                       marginTop:"5px",
+                                       marginBottom:"5px"}}>
+                            <ListItem key={artist.name}
+                                     button
+                                     onClick={()=>{History.push("/main/library/"+artist.name)}}>
+                              <ListItemText primary={artist.name} />
+                              <ListItemSecondaryAction>
+                                <IconButton onClick={() => {}}>
+                                  <MoreVert />
+                                </IconButton>
+                              </ListItemSecondaryAction>
+                           </ListItem>
+                        </Card>
                 }) : <div>No Artists To Display</div>
             }
          </List>
