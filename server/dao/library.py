@@ -419,21 +419,26 @@ class LibraryDao(object):
                 # attempt to de-duplicate genre names
                 gen = [g.strip().title() for g in gen.split(";")]
 
-            # count genres for the record
-            for g in gen:
-                if g not in genres:
-                    genres[g] = {"name": g, "count": 0}
-                genres[g]['count'] += 1
+
 
             # count artist and album
             if art not in artists:
                 artists[art] = {"count": 0,
                                 "albums": {},
-                                "name": art}
+                                "name": art,
+                                "genres": []}
                 keys[art] = key
 
             artists[art]['count'] += 1
             albums = artists[art]['albums']
+
+            # count genres for the record
+            for g in gen:
+                if g not in genres:
+                    genres[g] = {"name": g, "count": 0}
+                genres[g]['count'] += 1
+                if g not in artists[art]['genres']:
+                    artists[art]['genres'].append(g)
 
             if alb not in albums:
                 albums[alb] = 0
