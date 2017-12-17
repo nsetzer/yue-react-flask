@@ -18,6 +18,7 @@ import {
     QUEUE_PLAY_INDEX,
     QUEUE_PLAY_NEXT,
     QUEUE_DELETE_INDEX,
+    QUEUE_INSERT_NEXT,
 } from '../constants/index'
 
 import {
@@ -136,6 +137,13 @@ export function playIndexInQueue(index) {
 export function playNextInQueue(index) {
     return function (dispatch) {
         dispatch(queueSuccess({index: index}, QUEUE_PLAY_NEXT));
+        return null;
+    }
+}
+
+export function insertNextInQueue(song) {
+    return function (dispatch) {
+        dispatch(queueSuccess({songs: song}, QUEUE_INSERT_NEXT));
         return null;
     }
 }

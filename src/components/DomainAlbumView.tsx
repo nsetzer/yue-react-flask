@@ -19,9 +19,13 @@ import IconButton from 'material-ui/IconButton';
 import Send from 'material-ui-icons/Send';
 import MoreVert from 'material-ui-icons/MoreVert';
 import NavigateBefore from 'material-ui-icons/NavigateBefore';
+import Menu, { MenuItem } from 'material-ui/Menu';
 
-import * as actionCreators from '../actions/library';
-
+import * as libraryActionCreators from '../actions/library';
+import * as queueActionCreators from '../actions/queue';
+const actionCreators = Object.assign({},
+                                     libraryActionCreators,
+                                     queueActionCreators);
 import History from '../history'
 
 import {
@@ -31,15 +35,24 @@ import {
   getSongDisplayTitle,
 } from '../utils/misc'
 
-export interface DomainAlbumViewProps {
+export interface IMenuOpts {
+  open: boolean,
+  anchorEl: any,
+  index: number,
+  song: any
+}
+
+export interface IDomainAlbumViewProps {
   match: any
   libraryStatus: string,
   libraryGetArtistSongs: (a) => any,
   libraryGetAlbumSongs: (a,b) => any,
   search_results: Array<any>,
+  insertNextInQueue: (s) => any
 };
 
-export interface DomainAlbumViewState {
+export interface IDomainAlbumViewState {
+  menuOpts: IMenuOpts
 }
 
 const listRightStyle = {
@@ -47,17 +60,19 @@ const listRightStyle = {
 };
 
 
-class DomainAlbumView extends React.Component<DomainAlbumViewProps,DomainAlbumViewState> {
+class DomainAlbumView extends React.Component<IDomainAlbumViewProps,IDomainAlbumViewState> {
 
   constructor(props) {
     super(props);
+    this.state = {menuOpts:{open:false, anchorEl:null, song: null, index: -1}}
     this.componentDidMount = this.componentDidMount.bind(this)
+    this.onOpenMenu = this.onOpenMenu.bind(this)
+    this.onMenuClose = this.onMenuClose.bind(this)
+    this.onQueueSong = this.onQueueSong.bind(this)
   }
 
-  componentDidMount() {
+  public componentDidMount() {
 
-    // TODO: this query only needs to run once, find a better
-    // way to gate that behavior
     let artist = this.props.match.params.artist
     let album = this.props.match.params.album
 
@@ -66,6 +81,22 @@ class DomainAlbumView extends React.Component<DomainAlbumViewProps,DomainAlbumVi
     } else {
       this.props.libraryGetAlbumSongs(artist, album);
     }
+
+  }
+
+  public onOpenMenu(event, index, song) {
+    let menuOpts = this.state.menuOpts;
+    menuOpts.open = true;
+    menuOpts.anchorEl = event.currentTarget
+    menuOpts.index = index
+    menuOpts.song = song
+    this.setState({menuOpts: menuOpts});
+  }
+
+  public onMenuClose() {
+    let menuOpts = this.state.menuOpts;
+    menuOpts.open = false;
+    this.setState({menuOpts: menuOpts});
   }
 
   /*
@@ -80,10 +111,15 @@ class DomainAlbumView extends React.Component<DomainAlbumViewProps,DomainAlbumVi
       });
   }*/
 
-  render() {
+  public onQueueSong() {
+    let menuOpts = this.state.menuOpts;
+    menuOpts.open = false;
+    this.setState({menuOpts: menuOpts});
+    this.props.insertNextInQueue([ menuOpts.song, ])
+  }
 
-    console.log(this.props.search_results)
-    console.log(window.location)
+  public render() {
+
 
     return (
         <div>
@@ -96,7 +132,7 @@ class DomainAlbumView extends React.Component<DomainAlbumViewProps,DomainAlbumVi
         <List>
             {
               (this.props.search_results && this.props.search_results.length>0) ?
-                this.props.search_results.map( (song) => {
+                this.props.search_results.map( (song, index) => {
                   return <Card style={{marginLeft:"8px",
                                        marginRight:"8px",
                                        marginTop:"5px",
@@ -107,7 +143,7 @@ class DomainAlbumView extends React.Component<DomainAlbumViewProps,DomainAlbumVi
                              <ListItemText style={listRightStyle} primary={fmtDuration(song.length)}/>
                              <ListItemSecondaryAction>
                                <IconButton aria-label="Delete"
-                                           onClick={() => {}}>
+                                           onClick={(e) => {this.onOpenMenu(e,index,song)}}>
                                 <MoreVert />
                                </IconButton>
                              </ListItemSecondaryAction>
@@ -116,6 +152,14 @@ class DomainAlbumView extends React.Component<DomainAlbumViewProps,DomainAlbumVi
                 }) : <div>No Songs To Display</div>
             }
          </List>
+
+         <Menu
+          id="simple-menu"
+          anchorEl={this.state.menuOpts.anchorEl}
+          open={this.state.menuOpts.open}
+          onRequestClose={this.onMenuClose}>
+          <MenuItem onClick={this.onQueueSong}>Queue Song</MenuItem>
+        </Menu>
 
         </div>
     )

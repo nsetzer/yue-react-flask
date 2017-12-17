@@ -20,6 +20,7 @@ import {
     QUEUE_PLAY_INDEX,
     QUEUE_PLAY_NEXT,
     QUEUE_DELETE_INDEX,
+    QUEUE_INSERT_NEXT,
 } from '../constants/index'
 
 const initialState = {
@@ -169,10 +170,21 @@ export default createReducer(initialState, {
             })
         }
     },
+    [QUEUE_INSERT_NEXT]: (state, payload) => {
+        let index = (state.songs.length>0)?1:0
+
+        let new_songs = state.songs.slice(0,state.songs.length)
+        new_songs.splice(index,0,...payload.songs)
+        console.log("insert to " + index)
+
+        return Object.assign({}, state, {
+                statusText: null,
+                songs: new_songs,
+            })
+    },
     [QUEUE_PREVIOUS_FAILURE]: (state, payload) =>
         Object.assign({}, state, {
             statusText: payload.statusText
         }),
-
 
 });
