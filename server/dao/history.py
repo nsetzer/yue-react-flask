@@ -16,16 +16,16 @@ class HistoryDao(object):
         SongHistoryTable = self.dbtables.SongHistoryTable
 
         query = insert(SongHistoryTable) \
-                .values({"user_id": user_id,
-                         "song_id": song_id,
-                         "timestamp": timestamp})
+            .values({"user_id": user_id,
+                     "song_id": song_id,
+                     "timestamp": timestamp})
 
         self.db.session.execute(query)
 
         if commit:
             self.db.session.commit()
 
-    def retrieve(self, user_id, start, end=None):
+    def retrieve(self, user_id, start, end=None, offset=None, limit=None):
         """
         retrieve all history records between the given start and end time
 
@@ -45,6 +45,15 @@ class HistoryDao(object):
 
         query = SongHistoryTable.select() \
             .where(and_(*terms))
+
+        query = query.order_by(SongHistoryTable.c.timestamp)
+
+        if limit is not None:
+            query = query.limit(limit)
+
+        if offset is not None:
+            query = query.offset(offset)
+
         lst = self.db.session.execute(query).fetchall()
 
         records = [{"song_id": r['song_id'],

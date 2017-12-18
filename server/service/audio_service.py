@@ -140,11 +140,11 @@ class AudioService(object):
                                        commit=False)
         self.db.session.commit()
 
-    def getPlayHistory(self, user, start, end=None):
+    def getPlayHistory(self, user, start, end=None, offset=None, limit=None):
         """
         return records playback history records for a user.
         """
-        return self.historyDao.retrieve(user['id'], start, end)
+        return self.historyDao.retrieve(user['id'], start, end, offset, limit)
 
 
 

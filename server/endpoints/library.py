@@ -26,14 +26,16 @@ def get_domain_info():
 def search_library():
     """ return song information from the library """
 
-    text = request.args.get('text', None)
+    query = request.args.get('query', None)
+    if query is None:
+        print("warning: received null query")
     limit = max(1, min(100, int(request.args.get('limit', 50))))
     page = max(0, int(request.args.get('page', 0)))
     orderby = request.args.get('orderby', 'artist')
     offset = limit * page
 
     songs = AudioService.instance().search(g.current_user,
-        text, limit=limit, orderby=orderby, offset=offset)
+        query, limit=limit, orderby=orderby, offset=offset)
 
     return jsonify({
         "result": songs,
@@ -145,9 +147,17 @@ def get_history():
         except:
             return httpError(400, "end timestamp not integer or iso date")
 
+    page = int(request.args.get('page', "0"))
+    page_size = int(request.args.get('page_size', "500"))
+    offset = page * page_size
+
     records = AudioService.instance().getPlayHistory(
-        g.current_user, start, end)
-    return jsonify(result=records)
+        g.current_user, start, end, offset=offset, limit=page_size)
+    return jsonify({
+        "result": records,
+        "page": page,
+        "page_size": page_size
+    })
 
 @app.route("/api/library/history", methods=["POST"])
 @requires_auth

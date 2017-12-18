@@ -1,16 +1,16 @@
-var request = require('request-promise');
-var zlib = require('zlib');
+let request = require('request-promise');
+let zlib = require('zlib');
 
 import env from '../env'
 
-export function user_library_search(token : string, searchTerm: string) {
-    let url : string = env.baseUrl + '/api/library'
+export function user_library_search(token: string, searchTerm: string) {
+    let url: string = env.baseUrl + '/api/library'
 
-    var options = {
+    let options = {
         method: 'GET',
         uri: url,
         qs: {
-            text: searchTerm,
+            query: searchTerm,
         },
         headers: {
             'Authorization': token,
@@ -21,10 +21,10 @@ export function user_library_search(token : string, searchTerm: string) {
     return request(options);
 }
 
-export function user_library_domain_info(token : string) {
-    let url : string = env.baseUrl + '/api/library/info'
+export function user_library_domain_info(token: string) {
+    let url: string = env.baseUrl + '/api/library/info'
 
-    var options = {
+    let options = {
         method: 'GET',
         uri: url,
         headers: {

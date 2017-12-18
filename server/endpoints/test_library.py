@@ -50,21 +50,21 @@ class LibraryEndpointTestCase(TestCase):
         # first run a query determining all songs
         # (assumes fewer songs than the default query limit)
         # this should be 29
-        url = "/api/library?text=Artist"
+        url = "/api/library?query=Artist"
         res = app.get(url)
         songs = json.loads(res.data.decode("utf-8"))['result']
 
         # slightly more than half of the documents...
         page_size = 1 + len(songs) // 2
 
-        url = "/api/library?text=Artist&limit=%d" % page_size
+        url = "/api/library?query=Artist&limit=%d" % page_size
         res = app.get(url)
         body = json.loads(res.data.decode("utf-8"))
         self.assertEqual(body['page_size'], page_size)
         songs_a = body['result']
         self.assertEqual(len(songs_a), page_size)
 
-        url = "/api/library?text=Artist&limit=%d&page=1" % page_size
+        url = "/api/library?query=Artist&limit=%d&page=1" % page_size
         res = app.get(url)
         body = json.loads(res.data.decode("utf-8"))
         self.assertEqual(body['page_size'], page_size)
