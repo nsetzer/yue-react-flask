@@ -164,6 +164,8 @@ def get_history():
 def post_history():
 
     records = request.json
+    if records is None or len(records) == 0:
+        return httpError(400, "no data sent")
     AudioService.instance().insertPlayHistory(g.current_user, records)
 
     return jsonify(result="ok")

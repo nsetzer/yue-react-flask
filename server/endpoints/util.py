@@ -1,4 +1,5 @@
 
+import os, sys
 from functools import wraps
 from flask import after_this_request, request, jsonify, g
 from flask_cors import cross_origin
@@ -28,6 +29,8 @@ class HttpException(Exception):
         self.status = code
 
 def httpError(code, message):
+    # TODO: this should be at loglevel debug
+    sys.stderr.write("[%3d] %s\n" % (code, message))
     return jsonify(error=message), code
 
 def get_request_header(req, header):
