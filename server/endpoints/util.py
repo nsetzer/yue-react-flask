@@ -36,7 +36,6 @@ def get_request_header(req, header):
     elif header.lower() not in request.headers:
         return request.headers[header.lower()]
     else:
-        print(request.headers)
         raise HttpException("%s header not provided" % header, 401)
 
 def generate_basic_token(username, password):
@@ -49,6 +48,17 @@ def parse_basic_token(token):
     if not token.startswith(b"Basic "):
         raise Exception("Invalid Basic Token")
     return base64.b64decode(token[6:]).decode("utf-8").split(":")
+
+def generate_apikey_token(apikey):
+    """convert a username and possword into a basic token"""
+    enc = apikey.encode("utf-8", "ignore")
+    return b"APIKEY " + enc
+
+def parse_apikey_token(token):
+    """return the username and password given a token"""
+    if not token.startswith(b"APIKEY "):
+        raise Exception("Invalid ApiKey Token")
+    return token[7:].decode("utf-8")
 
 def generate_token(user, expiration=TWO_WEEKS):
     s = Serializer(app.config['SECRET_KEY'], expires_in=expiration)
@@ -80,7 +90,7 @@ def _requires_token_auth_impl(f, args, kwargs, token):
     token based authentication for client side state management
 
     example:
-        curl -H "Authorization: <token>" -X GET localhost:4200/api/user
+        curl -H "Authorization: TOKEN <token>" -X GET localhost:4200/api/user
 
     """
 
@@ -107,6 +117,7 @@ def _requires_basic_auth_impl(f, args, kwargs, token):
 
     example:
         curl -u username:password -X GET localhost:4200/api/user
+        curl -H "Authorization: BASIC <token>" -X GET localhost:4200/api/user
 
     """
     # TODO: decompose email from user@domain/role
@@ -128,6 +139,32 @@ def _requires_basic_auth_impl(f, args, kwargs, token):
 
     return httpError(401, "failed to authenticate user %s" % email)
 
+def _requires_apikey_auth_impl(f, args, kwargs, token):
+    """
+    basic auth enables easy testing
+
+    example:
+        curl -H "Authorization: APIKEY <apikey>" -X GET localhost:4200/api/user
+
+    """
+
+    apikey = parse_apikey_token(token)
+
+    user = _userDao.findUserByApiKey(apikey)
+
+    if user:
+        # basic auth requires a db lookup to validate the user
+        # store the user information in the same way as the token auth
+        g.current_user = {
+            "id": user.id,
+            "email": user.email,
+            "domain_id": user.domain_id,
+            "role_id": user.role_id
+        }
+        return _handle_exceptions(f, args, kwargs)
+
+    return httpError(401, "failed to authenticate user by apikey")
+
 def requires_auth(f):
     """
     endpoint decorator requiring authorization,
@@ -144,7 +181,37 @@ def requires_auth(f):
         bytes_token = token.encode('utf-8', 'ignore')
         if token.startswith("Basic "):
             return _requires_basic_auth_impl(f, args, kwargs, bytes_token)
+        elif token.startswith("APIKEY "):
+                return _requires_apikey_auth_impl(f, args, kwargs, bytes_token)
         return _requires_token_auth_impl(f, args, kwargs, bytes_token)
+
+    return decorated
+
+def requires_auth_query(f):
+    """
+    endpoint decorator requiring authorization,
+
+    Use for GET requests, with use cases that may not allow setting
+    custom headers. For example urls handed to <img> or <audio> tags.
+
+    basic auth is not supported to prevent sending the user password
+    in plain text as a query string, which may be saved to logs.
+    the token or apikey can be easily invalidated if compromised.
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+
+        token = request.args.get('token', None)
+        if token is not None:
+            bytes_token = ("TOKEN " + token).encode("utf-8")
+            return _requires_token_auth_impl(f, args, kwargs, bytes_token)
+
+        token = request.args.get('apikey', None)
+        if token is not None:
+            bytes_token = ("APIKEY " + token).encode("utf-8")
+            return _requires_apikey_auth_impl(f, args, kwargs, bytes_token)
+
+        return httpError(401, "no token or apikey provided to authenticate")
 
     return decorated
 
@@ -166,6 +233,8 @@ def requires_auth_role(role=None):
             bytes_token = token.encode('utf-8', 'ignore')
             if token.startswith("Basic "):
                 return _requires_basic_auth_impl(f, args, kwargs, bytes_token)
+            elif token.startswith("APIKEY "):
+                return _requires_apikey_auth_impl(f, args, kwargs, bytes_token)
             return _requires_token_auth_impl(f, args, kwargs, bytes_token)
         return decorated
     return impl

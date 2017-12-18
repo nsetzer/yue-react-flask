@@ -6,7 +6,7 @@ import json
 from .app import app, db, dbtables
 from .dao.user import UserDao
 from .dao.library import Song, LibraryDao
-from .endpoints.util import generate_basic_token
+from .endpoints.util import generate_basic_token, generate_apikey_token
 import traceback
 
 import json
@@ -108,6 +108,10 @@ class TestCase(unittest.TestCase):
         sends the authentication token with any request.
         """
         token = generate_basic_token(email, password)
+        return AuthAppWrapper(self.app, token)
+
+    def login_apikey(self, apikey):
+        token = generate_apikey_token(apikey)
         return AuthAppWrapper(self.app, token)
 
 try:

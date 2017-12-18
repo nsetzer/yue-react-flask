@@ -64,6 +64,10 @@ class UserDaoTestCase(unittest.TestCase):
         user = self.userDao.findUserByEmailAndPassword("user123", "password")
         self.assertEqual(user['email'], "user123")
 
+        apikey = user['apikey']
+        user = self.userDao.findUserByApiKey(apikey)
+        self.assertEqual(user['email'], "user123")
+
         self.userDao.removeUser(user_id)
         user = self.userDao.findUserByEmail("user123")
         self.assertIsNone(user)

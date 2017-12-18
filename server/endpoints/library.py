@@ -6,7 +6,7 @@ from ..index import app
 from ..service.audio_service import AudioService
 from ..service.transcode_service import TranscodeService
 from .util import requires_auth, requires_no_auth, requires_auth_role, \
-                  httpError, verify_token, compressed
+                  httpError, verify_token, compressed, requires_auth_query
 from itsdangerous import SignatureExpired, BadSignature
 from ..dao.library import Song
 from ..dao.util import parse_iso_format
@@ -55,7 +55,7 @@ def get_song(song_id):
     return jsonify(result=song)
 
 @app.route("/api/library/<song_id>/audio", methods=["GET"])
-@requires_no_auth
+@requires_auth_query
 def get_song_audio(song_id):
     """ stream audio for a specific song
     TODO: a user API token should be sent using a query parameter
@@ -64,22 +64,7 @@ def get_song_audio(song_id):
     must be passed as query parameters, not headers
     """
 
-    token = request.args.get('token', None)
-
-    if token is None:
-        return httpError(400, "Authorization token not specified")
-
-    try:
-        user = verify_token(token)
-
-    except BadSignature:
-        return httpError(401,
-            "Bad token encountered")
-    except SignatureExpired:
-        return httpError(401,
-            "Token has expired")
-
-    song = AudioService.instance().findSongById(user, song_id)
+    song = AudioService.instance().findSongById(g.current_user, song_id)
 
     if not song or not song[Song.path]:
         return httpError(404, "No Audio for %s" % song_id)
@@ -93,7 +78,6 @@ def get_song_audio(song_id):
 
     return send_file(path)
 
-
 @app.route("/api/library/<song_id>/audio", methods=["POST"])
 @requires_auth
 def set_song_audio(song_id):
@@ -101,33 +85,26 @@ def set_song_audio(song_id):
     return jsonify(result="ok")
 
 @app.route("/api/library/<song_id>/art", methods=["GET"])
-@requires_no_auth
+@requires_auth_query
 def get_song_art(song_id):
     """ get album art for a specific song
-    TODO: a user API token should be sent using a query parameter
+
+    TODO: query options should be used to specify
+        large: a standardized square image (e.g. 512 x 512)
+        medium: a standardized square image (eg 256 x 256)
+        small: a standardized square image (eg 128 x 128)
+        half: a standardized 16x9 image (e.g. 256 x 144)
+
+    Note: the art path should always point to the original file
+        the transcode service can be used to generate alternatives on demand
     """
-
-    token = request.args.get('token', None)
-
-    if token is None:
-        return httpError(400, "Authorization token not specified")
-
-    try:
-        user = verify_token(token)
-
-    except BadSignature:
-        return httpError(401,
-            "Bad token encountered")
-    except SignatureExpired:
-        return httpError(401,
-            "Token has expired")
 
     path = AudioService.instance().getSongArtPath(g.current_user, song_id)
 
-    if path or not os.path.exists(path):
-        return send_file(path)
+    if not os.path.exists(path):
+        return httpError(404, "No Art for %s" % song_id)
 
-    return httpError(404, "No Art for %s" % song_id)
+    return send_file(path)
 
 @app.route("/api/library/<song_id>/art", methods=["POST"])
 @requires_auth

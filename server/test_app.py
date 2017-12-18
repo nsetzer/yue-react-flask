@@ -13,16 +13,6 @@ class AppTestCase(TestCase):
     def tearDown(self):
         pass
 
-    def test_sample(self):
-        """
-        check that the random api returns a random number correctly
-        """
-        res = self.app.get('/api/random')
-        body = json.loads(res.data.decode("utf-8"))
-        self.assertEqual(res.status_code, 200)
-        self.assertLessEqual(body['value'], 100)
-        self.assertGreaterEqual(body['value'], 0)
-
     def test_token_login(self):
         """
         login in and authenticated apis
@@ -56,6 +46,29 @@ class AppTestCase(TestCase):
         email = "user000"
         password = "user000"
         app = self.login_basic(email, password)
+
+        res = app.get("/api/user")
+        body = json.loads(res.data.decode("utf-8"))
+
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue("email" in body['result'])
+        self.assertTrue("domain_id" in body['result'])
+        self.assertTrue("role_id" in body['result'])
+        self.assertTrue("password" not in body['result'])
+
+        user = body['result']
+        self.assertEqual(user['email'], email)
+
+    def test_apikey_login(self):
+        """
+        login in and authenticated apis
+
+        A test which first logs the user in, and then
+        attempts to request information about the user
+        """
+        email = self.USER['email']
+        apikey = self.USER['apikey']
+        app = self.login_apikey(apikey)
 
         res = app.get("/api/user")
         body = json.loads(res.data.decode("utf-8"))

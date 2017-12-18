@@ -131,6 +131,37 @@ class LibraryEndpointTestCase(TestCase):
         records = app.get_json(url + "?start=%s&end=%s" % (start, end))
         self.assertTrue(len(records) > 0)
 
+    def test_get_audio(self):
+        """
+        test getting audio for a song, this will 404 since the audio path
+        is not set. It should not fail with 401 or some other error.
+
+        TODO: consider setting default audio path to /dev/null
+        """
+
+        apikey = self.USER['apikey']
+        songid = self.SONGS[0]
+
+        url = "/api/library/%s/audio?apikey=%s" % (songid, apikey)
+        res = self.app.get(url)
+
+        self.assertEqual(res.status_code, 404)
+
+    def test_get_art(self):
+        """
+        test getting audio for a song, this will 404 since the audio path
+        is not set. It should not fail with 401 or some other error.
+
+        TODO: consider setting default audio path to /dev/null
+        """
+
+        apikey = self.USER['apikey']
+        songid = self.SONGS[0]
+
+        url = "/api/library/%s/art?apikey=%s" % (songid, apikey)
+        res = self.app.get(url)
+
+        self.assertEqual(res.status_code, 404)
 
 
 

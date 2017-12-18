@@ -12,6 +12,7 @@ can be added or removed per environment without requireing schema changes
 """
 from sqlalchemy.schema import Table, Column, ForeignKey
 from sqlalchemy.types import Integer, String
+from .util import generate_uuid
 
 def DomainTable(metadata):
     """
@@ -22,7 +23,7 @@ def DomainTable(metadata):
     """
     return Table('user_domain', metadata,
         Column('id', Integer, primary_key=True),
-        Column('name', String, unique = True, nullable=False),
+        Column('name', String, unique=True, nullable=False),
     )
 
 def GrantedDomainTable(metadata):
@@ -43,7 +44,7 @@ def RoleTable(metadata):
     """
     return Table('user_role', metadata,
         Column('id', Integer, primary_key=True),
-        Column('name', String, unique = True, nullable=False),
+        Column('name', String, unique=True, nullable=False),
     )
 
 def GrantedRoleTable(metadata):
@@ -61,7 +62,7 @@ def FeatureTable(metadata):
     """
     return Table('user_feature', metadata,
         Column('id', Integer, primary_key=True),
-        Column('feature', String, unique = True, nullable=False),
+        Column('feature', String, unique=True, nullable=False),
     )
 
 def RoleFeatureTable(metadata):
@@ -76,13 +77,24 @@ def RoleFeatureTable(metadata):
 def UserTable(metadata):
     """
     returns a table describing basic information of a user
+
+    email:
+    password: a bcrypt password hash
+    apikey: serves as a username and password
+            can be null to prevent api based authentication
+    domain_id: id for the users default domain
+    role_id: id for the users default role
     """
     return Table('user', metadata,
         Column('id', Integer, primary_key=True),
         Column('email', String),
         Column('password', String),
-        Column('domain_id', Integer, ForeignKey("user_domain.id"), nullable=False),
-        Column('role_id', Integer, ForeignKey("user_role.id"), nullable=False)
+        Column('apikey', String, default=generate_uuid,
+               unique=True, nullable=True),
+        Column('domain_id', Integer, ForeignKey("user_domain.id"),
+               nullable=False),
+        Column('role_id', Integer, ForeignKey("user_role.id"),
+               nullable=False)
     )
 
 

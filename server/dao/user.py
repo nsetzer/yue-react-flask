@@ -146,6 +146,12 @@ class UserDao(object):
 
         return None
 
+    def findUserByApiKey(self, apikey):
+        query = self.dbtables.UserTable.select() \
+            .where(self.dbtables.UserTable.c.apikey == apikey)
+        result = self.db.session.execute(query)
+        return result.fetchone()
+
     def updateUser(self, user, commit=True):
 
         if 'password' in user:
