@@ -118,13 +118,26 @@ class AudioService(object):
         """
         update play history for a user given a list of records
 
+        this merges the records with the existing database, allowing
+        a user to double push without creating duplicates
+
         records: a list of objects containing a `song_id`, and `timestamp`.
         """
+
+        # get a set of existing records for the same time span
+        # as the records that are given in the request
+        start = min((r['timestamp'] for r in records))
+        end   = max((r['timestamp'] for r in records))
+        db_records = self.historyDao.retrieve(user['id'], start, end)
+        record_set = set((r['timestamp'] for r in db_records))
+
+        # only insert records if they are unique
         for record in records:
-            self.historyDao.insert(user['id'],
-                                   record['song_id'],
-                                   record['timestamp'],
-                                   commit=False)
+            if record['timestamp'] not in record_set:
+                self.historyDao.insert(user['id'],
+                                       record['song_id'],
+                                       record['timestamp'],
+                                       commit=False)
         self.db.session.commit()
 
     def getPlayHistory(self, user, start, end=None):

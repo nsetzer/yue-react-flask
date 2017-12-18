@@ -122,14 +122,27 @@ class LibraryEndpointTestCase(TestCase):
         # attempt a query using unix epoch time stamps
         start = 0
         end = 2000
-        records = app.get_json(url + "?start=%d&end=%d" % (start, end))
-        self.assertTrue(len(records) > 0)
+        _records = app.get_json(url + "?start=%d&end=%d" % (start, end))
+        n_records = len(_records)
+        self.assertTrue(n_records > 0)
 
-        # attempt a query usingiso date format
+        # attempt a query using iso date format
         start = datetime.datetime.fromtimestamp(start).isoformat()
         end = datetime.datetime.fromtimestamp(end).isoformat()
-        records = app.get_json(url + "?start=%s&end=%s" % (start, end))
-        self.assertTrue(len(records) > 0)
+        _records = app.get_json(url + "?start=%s&end=%s" % (start, end))
+        self.assertEqual(len(_records), n_records)
+
+        # perform a double post
+        app = self.login(self.USERNAME, self.PASSWORD)
+        url = "/api/library/history"
+        result = app.post_json(url, records)
+
+        # this should return the same number of records as before
+        # the double post should de-duplicate
+        start = 0
+        end = 2000
+        _records = app.get_json(url + "?start=%d&end=%d" % (start, end))
+        self.assertEqual(len(_records), n_records)
 
     def test_get_audio(self):
         """
