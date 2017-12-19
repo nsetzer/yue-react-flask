@@ -20,6 +20,8 @@ userDao = UserDao(db, dbtables)
 @requires_auth
 def get_user():
     user = g.current_user
+    user['features'] = userDao.listFeaturesByName(user['role_id'])
+    user['apikey'] = userDao.getUserApiKey(user['id'])
     return jsonify(result=user)
 
 @app.route("/api/user", methods=["POST"])

@@ -85,7 +85,7 @@ class UserDao(object):
         result = self.db.session.execute(query)
         return result.fetchone()
 
-    def listFeatures(self):
+    def listAllFeatures(self):
         query = self.dbtables.FeatureTable.select()
         result = self.db.session.execute(query)
         return result.fetchall()
@@ -151,6 +151,12 @@ class UserDao(object):
             .where(self.dbtables.UserTable.c.apikey == apikey)
         result = self.db.session.execute(query)
         return result.fetchone()
+
+    def getUserApiKey(self, user_id):
+        query = self.dbtables.UserTable.select() \
+            .where(self.dbtables.UserTable.c.id == user_id)
+        result = self.db.session.execute(query)
+        return result.fetchone()['apikey']
 
     def updateUser(self, user, commit=True):
 
@@ -280,5 +286,18 @@ class UserDao(object):
 
         return len(result.fetchall()) != 0
 
+    def listFeaturesByName(self, role_id):
 
+        FeatureTable = self.dbtables.FeatureTable
+        RoleFeatureTable = self.dbtables.RoleFeatureTable
+
+        query = select([column("feature"), ]) \
+            .select_from(
+                FeatureTable.join(
+                    RoleFeatureTable,
+                    and_(FeatureTable.c.id == RoleFeatureTable.c.feature_id),
+                    isouter=True)) \
+            .where(and_(RoleFeatureTable.c.role_id == role_id))
+        result = self.db.session.execute(query)
+        return [r['feature'] for r in result.fetchall()]
 

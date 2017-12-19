@@ -1,0 +1,10 @@
+server:
+
+  env: production
+  secret_key: ""
+  database_url: ""
+
+  ssl:
+    private_key: "privkey.pem"
+    certificate: "fullchain.pem"
+

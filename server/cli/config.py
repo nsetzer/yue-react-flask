@@ -82,7 +82,7 @@ def db_init(db, dbtables, config_path):
             role_id = userDao.createRole(role, commit=False)
             for name in child['features']:
                 if name == "all":
-                    for feat in userDao.listFeatures():
+                    for feat in userDao.listAllFeatures():
                         userDao.addFeatureToRole(
                             role_id, feat['id'], commit=False)
                 else:

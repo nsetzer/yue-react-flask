@@ -11,6 +11,8 @@ from itsdangerous import SignatureExpired, BadSignature
 from ..dao.library import Song
 from ..dao.util import parse_iso_format
 
+QUERY_LIMIT_MAX = 500
+
 @app.route("/api/library/info", methods=["GET"])
 @requires_auth
 @compressed
@@ -29,7 +31,7 @@ def search_library():
     query = request.args.get('query', None)
     if query is None:
         print("warning: received null query")
-    limit = max(1, min(100, int(request.args.get('limit', 50))))
+    limit = max(1, min(QUERY_LIMIT_MAX, int(request.args.get('limit', 50))))
     page = max(0, int(request.args.get('page', 0)))
     orderby = request.args.get('orderby', 'artist')
     offset = limit * page
