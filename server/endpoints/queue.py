@@ -8,6 +8,8 @@ from ..service.audio_service import AudioService
 
 from .util import httpError, get_request_header, compressed
 
+QUERY_LIMIT_MAX = 200
+
 """
 curl -v \
     --cookie "CSRF-TOKEN=ANYSTRING" \
@@ -24,6 +26,7 @@ curl -v \
     -X OPTIONS  http://localhost:4200/api/queue
 
 """
+
 @app.route("/api/queue", methods=["GET"])
 @cross_origin(supports_credentials=True)
 @requires_auth
@@ -59,6 +62,27 @@ def populate_queue():
 
     service = AudioService.instance()
     songs = service.populateQueue(g.current_user)
+
+    return jsonify(result=songs)
+
+@app.route("/api/queue/create", methods=["GET"])
+@cross_origin(supports_credentials=True)
+@requires_auth
+def create_queue_from_query():
+    """ create a new queue using a query, return the new song list """
+
+    def_query = AudioService.instance().defaultQuery(g.current_user)
+    query = request.args.get('query', def_query)
+    limit = max(1, min(QUERY_LIMIT_MAX, int(request.args.get('limit', 50))))
+    page = max(0, int(request.args.get('page', 0)))
+    orderby = request.args.get('orderby', 'artist')
+    offset = limit * page
+
+    songs = AudioService.instance().search(g.current_user,
+        query, limit=limit, orderby=orderby, offset=offset)
+
+    song_ids = [song['id'] for song in songs]
+    AudioService.instance().setQueue(g.current_user, song_ids)
 
     return jsonify(result=songs)
 

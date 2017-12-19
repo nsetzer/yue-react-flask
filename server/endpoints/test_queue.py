@@ -49,6 +49,20 @@ class LibraryEndpointTestCase(TestCase):
         for a, b in zip(song_ids1, song_ids2):
             self.assertEqual(a, b)
 
+    def test_queue_create(self):
+
+        app = self.login(self.USERNAME, self.PASSWORD)
+
+        url = "/api/queue/create"
+        songs = app.get_json(url)
+        self.assertGreater(len(songs), 0)
+
+        url = "/api/queue/create?query=artist=Artist000&limit=5"
+        songs = app.get_json(url)
+        self.assertEqual(len(songs), 5)
+
+
+
 
 
 

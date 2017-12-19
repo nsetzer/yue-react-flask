@@ -158,3 +158,13 @@ class SongQueueDao(object):
     def next(self):
         pass
 
+    def getDefaultQuery(self, user_id):
+        SongQueueTable = self.dbtables.SongQueueTable
+        query = SongQueueTable.select() \
+            .where(SongQueueTable.c.user_id == user_id)
+        result = self.db.session.execute(query).fetchone()
+        return result['query']
+
+
+
+

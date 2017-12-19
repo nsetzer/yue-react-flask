@@ -86,7 +86,7 @@ class AudioService(object):
         return self.queueDao.rest(user['id'], user['domain_id'])
 
     def defaultQuery(self, user):
-        return None
+        return self.queueDao.getDefaultQuery(user['id'])
 
     def populateQueue(self, user):
         songs = self.queueDao.get(user['id'], user['domain_id'])
