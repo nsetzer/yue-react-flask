@@ -22,7 +22,11 @@ import Send from 'material-ui-icons/Send';
 import Delete from 'material-ui-icons/Delete';
 import NavigateBefore from 'material-ui-icons/NavigateBefore';
 
-import * as actionCreators from '../actions/library';
+import * as libraryActionCreators from '../actions/library';
+import * as queueActionCreators from '../actions/queue';
+const actionCreators = Object.assign({},
+                                     libraryActionCreators,
+                                     queueActionCreators);
 
 import History from '../history'
 import MoreVert from 'material-ui-icons/MoreVert';
@@ -33,6 +37,7 @@ export interface DomainArtistViewProps {
   match: any
   libraryStatus: string,
   libraryGetDomainInfo: () => any,
+  createQueue: (q,m) => any,
   domain_artists: Array<any>,
   domain_genres: Array<any>,
   domain_song_count: number
@@ -102,11 +107,20 @@ class DomainArtistView extends React.Component<DomainArtistViewProps,DomainArtis
             </Typography>
             </Grid>
             <Grid item  xs={2}>
-            <IconButton onClick={(e) => {}}>
+            <IconButton onClick={(e) => navigateBack()}>
                 <MoreVert style={MediumIconStyle} />
               </IconButton>
             </Grid>
         </Grid>
+
+        <Button
+          raised
+          color="accent"
+          onClick={(e) => {
+            this.props.createQueue(`artist="${artist_name}"`, 'random')}
+        }>
+          Random Play All
+        </Button>
 
         <List>
 

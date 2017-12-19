@@ -8,6 +8,9 @@ import {
     QUEUE_POPULATE,
     QUEUE_POPULATE_SUCCESS,
     QUEUE_POPULATE_FAILURE,
+    QUEUE_CREATE,
+    QUEUE_CREATE_SUCCESS,
+    QUEUE_CREATE_FAILURE,
     QUEUE_SET,
     QUEUE_SET_SUCCESS,
     QUEUE_SET_FAILURE,
@@ -67,6 +70,20 @@ export default createReducer(initialState, {
             songs: payload,
         }),
     [QUEUE_POPULATE_FAILURE]: (state, payload) =>
+        Object.assign({}, state, {
+            statusText: payload.statusText
+        }),
+
+    [QUEUE_CREATE]: (state) =>
+        Object.assign({}, state, {
+            statusText: null,
+        }),
+    [QUEUE_CREATE_SUCCESS]: (state, payload) =>
+        Object.assign({}, state, {
+            statusText: null,
+            songs: payload,
+        }),
+    [QUEUE_CREATE_FAILURE]: (state, payload) =>
         Object.assign({}, state, {
             statusText: payload.statusText
         }),
