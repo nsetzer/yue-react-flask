@@ -151,7 +151,8 @@ class DomainArtistView extends React.Component<DomainArtistViewProps,DomainArtis
                             <ListItem key={album}
                                      button
                                      onClick={()=>{navigateTo("/main/library/"+artist_name +"/" + album)}}>
-                              <ListItemText primary={album} />
+                              <ListItemText primary={album}
+                                            secondary={albums[album] + " Songs"} />
                               <ListItemSecondaryAction>
                                 <IconButton onClick={() => {}}>
                                   <MoreVert />

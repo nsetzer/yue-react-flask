@@ -121,7 +121,8 @@ class DomainView extends React.Component<IDomainViewProps,IDomainViewState> {
                             <ListItem key={artist.name}
                                      button
                                      onClick={()=>{navigateTo("/main/library/"+artist.name)}}>
-                              <ListItemText primary={artist.name} />
+                              <ListItemText primary={artist.name}
+                                            secondary={Object.keys(artist.albums).length + " Albums. " + artist.count + " Songs"} />
                               <ListItemSecondaryAction>
                                 <IconButton onClick={() => {}}>
                                   <MoreVert />
