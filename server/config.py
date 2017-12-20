@@ -7,6 +7,42 @@ try:
 except ImportError:
     from yaml import Loader, Dumper
 
+import logging
+
+def _bytes(value):
+
+    m = 1
+    if isinstance(value, str):
+        value = value.lower()
+        if value.endswith("b"):
+            value = value[:-1]
+
+        if value.endswith("k"):
+            value = value[:-1]
+            m = 1024
+        elif value.endswith("m"):
+            value = value[:-1]
+            m = 1024 * 1024
+        elif value.endswith("g"):
+            value = value[:-1]
+            m = 1024 * 1024 * 1024
+    return int(value) * m
+
+def _level(value):
+    value = value.lower()
+    if value == "debug":
+        return logging.DEBUG
+    elif value == "warning":
+        return logging.WARNING
+    elif value == "info":
+        return logging.INFO
+    elif value == "critical":
+        return logging.CRITICAL
+    elif value == "trace":
+        return logging.DEBUG - 1
+    return logging.ERROR
+
+
 class Config(object):
     """base class for application configurations"""
 
@@ -22,13 +58,51 @@ class Config(object):
         with open(yaml_cfg, "r") as rf:
             data = yaml.load(rf, Loader=Loader)
 
-        print(data)
+        cfg = Config()
+
+        # TODO implement true sub classes
+        cfg.secret_key = data['server']['secret_key']
+        cfg.ssl = lambda: None
+        cfg.ssl.private_key = data['server']['ssl']['private_key']
+        cfg.ssl.certificate = data['server']['ssl']['certificate']
+
+        cfg.cors = lambda: None
+        cfg.cors.origins = data['server']['cors']['origins']
+
+        cfg.logging = lambda: None
+        cfg.logging.directory = data['server']['logging']['directory']
+        cfg.logging.filename = data['server']['logging']['filename']
+        cfg.logging.max_size = _bytes(data['server']['logging']['max_size'])
+        cfg.logging.num_backups = int(data['server']['logging']['num_backups'])
+        cfg.logging.level = _level(data['server']['logging']['level'])
+
+        cfg.database = lambda: None
+        cfg.database.kind = data['server']['database']['kind']
+        if cfg.database.kind == "sqlite":
+            path = data['server']['database']['path']
+            path = os.path.abspath(path)
+            cfg.database.url = "sqlite:///" + path
+        else:
+            raise Exception(cfg.database.kind + " unsupported")
+
+        # cfg.ENV = "production"
+        # cfg.DEBUG = False
+        cfg.SECRET_KEY = cfg.secret_key
+        cfg.setenv_default("DATABASE_URL",
+            "sqlite:///" + os.path.join(os.getcwd(), "app.db"))
+
+        Config._instance = cfg
+        return cfg
 
     @staticmethod
     def instance():
-        if Config._instance is None:
-            Config._instance = EnvironmentConfig()
         return Config._instance
+
+    def setenv_default(self, env, default):
+        if env in os.environ:
+            self.__dict__[env] = os.environ[env]
+        else:
+            self.__dict__[env] = default
 
 class EnvironmentConfig(Config):
     """
@@ -38,24 +112,20 @@ class EnvironmentConfig(Config):
     def __init__(self):
         super(EnvironmentConfig, self).__init__()
 
-        self.setenv_default("DEFAULT_ROLE", "user")
-        self.setenv_default("DEFAULT_DOMAIN", "test")
+        # self.setenv_default("DEFAULT_ROLE", "user")
+        # self.setenv_default("DEFAULT_DOMAIN", "test")
 
         self.setenv_default("ENV", "production")
-        self.setenv_default("DEBUG", "False")
-        self.DEBUG = (self.DEBUG.lower() == "true") or \
-            (self.ENV == "development")
+        # self.setenv_default("DEBUG", "False")
+        # self.DEBUG = (self.DEBUG.lower() == "true") or \
+        #    (self.ENV == "development")
 
         # self.setenv_default("PORT",4200)
         self.setenv_default("SECRET_KEY", "SECRET")
         self.setenv_default("DATABASE_URL",
             "sqlite:///" + os.path.join(os.getcwd(), "app.db"))
 
-    def setenv_default(self, env, default):
-        if env in os.environ:
-            self.__dict__[env] = os.environ[env]
-        else:
-            self.__dict__[env] = default
+
 
 
 

@@ -8,6 +8,7 @@ import argparse
 if (sys.version_info[0] == 2):
     raise RuntimeError("python2 not supported")
 
+from server.config import Config
 
 def configure_test_database(env_config):
     index = __import__("server.index").index
@@ -29,13 +30,18 @@ def main():
                         help='enable verbose logging')
     parser.add_argument('-p', '--pattern', dest='pattern', default="*",
                         help='filter for tests ot run')
+    parser.add_argument('--config', type=str,
+                    default="config/test/application.yml",
+                    help='application config path')
 
     args = parser.parse_args()
 
+    cfg = Config.init(args.config)
+
     path = os.path.join(os.getcwd(), "test.db")
-    os.environ["DATABASE_URL"] = "sqlite:///" + path
-    os.environ["ENV"] = "testing"
-    os.environ["DEBUG"] = "True" if args.verbose else "False"
+    #os.environ["DATABASE_URL"] = "sqlite:///" + path
+    #os.environ["ENV"] = "testing"
+    #os.environ["DEBUG"] = "True" if args.verbose else "False"
 
     configure_test_database("config/test/env.yml")
 

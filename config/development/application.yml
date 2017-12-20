@@ -1,0 +1,28 @@
+server:
+
+  env: production
+  secret_key: "secret"
+
+  cors:
+    origins: "*"
+
+  database:
+    kind: "sqlite"
+    path: "config/development/dev.db"
+
+  ssl:
+    #
+    # sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    # -keyout selfsigned.key -out selfsigned.crt
+    #
+    private_key: "config/development/selfsigned.key"
+    certificate: "config/development/selfsigned.crt"
+
+  logging:
+    directory: "./logs"
+    filename: "server.log"
+    max_size: 2MB
+    num_backups: 10
+    level: debug
+
+
