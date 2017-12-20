@@ -6,6 +6,9 @@ import {
     QUEUE_POPULATE,
     QUEUE_POPULATE_SUCCESS,
     QUEUE_POPULATE_FAILURE,
+    QUEUE_CREATE,
+    QUEUE_CREATE_SUCCESS,
+    QUEUE_CREATE_FAILURE,
     QUEUE_SET,
     QUEUE_SET_SUCCESS,
     QUEUE_SET_FAILURE,
@@ -24,9 +27,9 @@ import {
 import {
     user_queue_get,
     user_queue_populate,
-    user_queue_set
+    user_queue_set,
+    user_queue_create
 } from '../utils/http_queue';
-
 
 export function queueRequest(queueType) {
     return {type: queueType}
@@ -94,7 +97,7 @@ export function setQueue(song_ids : Array<string>) {
 export function populateQueue() {
     return function (dispatch) {
         dispatch(queueRequest(QUEUE_POPULATE));
-        var token = localStorage.getItem('token');
+        let token = localStorage.getItem('token');
         return user_queue_populate(token)
             .then(response => {
                 dispatch(queueSuccess(response.result,
@@ -103,6 +106,22 @@ export function populateQueue() {
             .catch(error => {
                 dispatch(queueError(error,
                                     QUEUE_POPULATE_FAILURE));
+            })
+    }
+}
+
+export function createQueue(searchTerm: string, mode: string) {
+    return function (dispatch) {
+        dispatch(queueRequest(QUEUE_CREATE));
+        let token = localStorage.getItem('token');
+        return user_queue_create(token, searchTerm, mode)
+            .then(response => {
+                dispatch(queueSuccess(response.result,
+                                      QUEUE_CREATE_SUCCESS));
+            })
+            .catch(error => {
+                dispatch(queueError(error,
+                                    QUEUE_CREATE_FAILURE));
             })
     }
 }

@@ -53,6 +53,7 @@ export interface IDomainAlbumViewProps {
   libraryGetAlbumSongs: (a,b) => any,
   search_results: Array<any>,
   insertNextInQueue: (s) => any
+  createQueue: (q,m) => any,
 };
 
 export interface IDomainAlbumViewState {
@@ -137,10 +138,12 @@ class DomainAlbumView extends React.Component<IDomainAlbumViewProps,IDomainAlbum
   }
 
   public render() {
-
+    let artist_name = this.props.match.params.artist
     let this_album = this.props.match.params.album;
-    if (this_album==="$all") {
-      this_album = "All Songs"
+    let default_query=`artist="${artist_name}" && album="${this_album}"`
+    if (this_album==='$all') {
+      this_album = 'All Songs'
+      default_query=`artist="${artist_name}"`
     }
 
     return (
@@ -163,6 +166,15 @@ class DomainAlbumView extends React.Component<IDomainAlbumViewProps,IDomainAlbum
               </IconButton>
             </Grid>
         </Grid>
+
+        <Button
+          raised
+          color="accent"
+          onClick={(e) => {
+            this.props.createQueue(default_query, 'random')}
+        }>
+          Random Play All
+        </Button>
 
         <List>
             {
