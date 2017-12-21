@@ -86,10 +86,31 @@ def search_library():
         "page_size": limit,
     })
 
+@app.route("/api/library", methods=["PUT"])
+@requires_auth
+def update_song():
+    """ update a song record, returns song_id on success
+
+    json body: an array of partial song objects. each object
+    should contain an id, and at least one other field to update
+
+    if filepath is given, it must exist or an error is thrown
+
+    """
+    return jsonify(result="ok")
+
 @app.route("/api/library", methods=["POST"])
 @requires_auth
-def create_song(song_id):
-    """ create/update a song record, returns song_id on success """
+def create_song():
+    """ create a song record, returns song_id on success
+
+    the json body must contain
+        - artist
+        - title
+        - album
+
+    if filepath is given, it must exist or an error is thrown
+    """
     return jsonify(result="ok")
 
 @app.route("/api/library/<song_id>", methods=["GET"])
@@ -126,7 +147,8 @@ def get_song_audio(song_id):
 @app.route("/api/library/<song_id>/audio", methods=["POST"])
 @requires_auth
 def set_song_audio(song_id):
-    """ upload audio for a song """
+    """ upload audio for a song, updates the path for the song given by id """
+    start = request.args.get('filepath', None)
     return jsonify(result="ok")
 
 @app.route("/api/library/<song_id>/art", methods=["GET"])
@@ -212,13 +234,6 @@ def post_history():
     AudioService.instance().insertPlayHistory(g.current_user, records)
 
     return jsonify(result="ok")
-
-
-
-
-
-
-
 
 
 
