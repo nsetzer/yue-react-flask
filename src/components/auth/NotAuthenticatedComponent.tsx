@@ -52,9 +52,9 @@ export function requireNoAuthentication(Component) {
         }
 
         checkAuth(props = this.props) {
+
             if (props.isAuthenticated) {
                 props.history.push('/main');
-
             } else {
                 const token = localStorage.getItem('token');
                 if (token) {
@@ -67,6 +67,10 @@ export function requireNoAuthentication(Component) {
                             } else {
                                 this.setState({loaded: true});
                             }
+                        })
+                        .catch((err) => {
+                            console.error("unable to verify token:" + token)
+                            this.setState({loaded: true});
                         });
                 } else {
                     this.setState({loaded: true});

@@ -1,6 +1,6 @@
 
 import os
-from flask import request, jsonify, g, send_file
+from flask import Response, request, jsonify, g, send_file
 
 from ..index import app
 from ..service.audio_service import AudioService
@@ -10,6 +10,47 @@ from .util import requires_auth, requires_no_auth, requires_auth_role, \
 from itsdangerous import SignatureExpired, BadSignature
 from ..dao.library import Song
 from ..dao.util import parse_iso_format
+
+from re import findall
+
+def send_file_v2(filepath):
+    """
+    this currently works only on firefox,
+
+    send a file and allow seeking when streaming
+    """
+
+    if not request.headers.has_key("Range"):
+        print("content length: " , os.stat(filepath).st_size)
+        return send_file(filepath)
+
+    ranges = findall(r"\d+", request.headers["Range"])
+    begin  = int( ranges[0] )
+
+    if len(ranges)>1:
+        end = int( ranges[1] )
+    else:
+        end = os.stat(filepath).st_size
+
+    with open(filepath,"rb") as rf:
+        rf.seek(begin)
+        data = rf.read(end-begin)
+
+    ext = os.path.splitext(filepath)[1]
+    mimetype = "audio/mpeg" if ext == ".mp3" else "application/octet-stream"
+    rv = Response(data, 206,
+        mimetype=mimetype, direct_passthrough=True)
+
+    range = 'bytes {0}-{1}/{2}'.format(begin, end, len(data))
+    rv.headers.add('Content-Range', range)
+    rv.headers.add('Accept-Ranges','bytes')
+    rv.headers.add('Content-Length',len(data))
+    rv.headers.add('Content-Disposition', 'attachment',
+        filename=os.path.split(filepath)[1])
+
+    print("%s %d" % (range, len(data)))
+
+    return rv
 
 QUERY_LIMIT_MAX = 500
 

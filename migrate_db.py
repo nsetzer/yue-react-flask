@@ -1,5 +1,5 @@
 
-import os, sys
+import os, sys, argparse
 
 if (sys.version_info[0] == 2):
     raise RuntimeError("python2 not supported")
@@ -7,6 +7,18 @@ if (sys.version_info[0] == 2):
 from yue.core.sqlstore import SQLStore
 from yue.core.library import Library as YueLibrary
 from yue.core.song import Song as YueSong, get_album_art, ArtNotFound
+
+from server.config import Config
+
+parser = argparse.ArgumentParser(description='yue server')
+parser.add_argument('--config', type=str,
+                    default="config/development/application.yml",
+                    help='application config path')
+parser.add_argument('mode', type=str,
+                    help='action to take')
+args = parser.parse_args()
+
+cfg = Config.init(args.config)
 
 from server.app import app, db, dbtables
 
@@ -122,7 +134,6 @@ def test():
     for song in songs:
         print(song['title'])
 
-
 def main():
 
     mode = sys.argv[1]
@@ -142,10 +153,10 @@ def main():
         sys.stderr.write("cannot find source db")
         sys.exit(1)
 
-    if mode == 'migrate':
+    if args.mode == 'migrate':
         migrate(username, dbpath)
 
-    elif mode == "create":
+    elif args.mode == "create":
 
         db_init(db, dbtables, "config/test/env.yml")
 
@@ -161,12 +172,12 @@ def main():
 
         migrate(username, domain_name, dbpath)
 
-    elif mode == "generate":
+    elif args.mode == "generate":
         """ create a database and populate it with dummy data"""
 
         db_init_generate(db, dbtables, "config/test/env.yml")
 
-    elif mode == "domain_info":
+    elif args.mode == "domain_info":
 
         domain = userDao.findDomainByName(domain_name)
         if domain is None:
@@ -181,7 +192,7 @@ def main():
         with open("library.JSON", "w") as wf:
             wf.write(json.dumps(data, sort_keys=True, indent=2))
 
-    elif mode == "test-2":
+    elif args.mode == "test-2":
         # test()
         #userDao = UserDao(db, dbtables)
         user = userDao.findUserByEmail("user000")

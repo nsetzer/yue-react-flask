@@ -163,6 +163,10 @@ class SongQueueDao(object):
         query = SongQueueTable.select() \
             .where(SongQueueTable.c.user_id == user_id)
         result = self.db.session.execute(query).fetchone()
+        # in the rare chance that a user does not have a queue
+        # typically happens when the user constructs their first playlist
+        if result is None:
+            return ""
         return result['query']
 
 

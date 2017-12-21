@@ -8,7 +8,7 @@ server:
 
   database:
     kind: "sqlite"
-    path: "config/test/test.db"
+    path: "database.test.sqlite"
 
   ssl:
     private_key: ""

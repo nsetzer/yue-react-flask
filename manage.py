@@ -1,11 +1,23 @@
 
-import os, sys
+import os, sys, argparse
 
 if (sys.version_info[0] == 2):
     raise RuntimeError("python2 not supported")
 
 from flask_script import Manager
 from flask_migrate import Migrate, MigrateCommand
+
+
+from server.config import Config
+
+parser = argparse.ArgumentParser(description='yue server')
+parser.add_argument('--config', type=str,
+                    default="config/development/application.yml",
+                    help='application config path')
+
+args = parser.parse_args()
+
+cfg = Config.init(args.config)
 
 from server.app import app, db, dbtables, list_routes
 from server.cli.config import db_init, db_drop_all

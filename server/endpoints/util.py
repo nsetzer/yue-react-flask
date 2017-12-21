@@ -86,7 +86,12 @@ def _handle_exceptions(f, args, kwargs):
         return httpError(e.status, str(e))
     except Exception as e:
         traceback.print_exc()
-        return httpError(400, "Unhandled Exception: " + str(e))
+
+        reason = "Unhandled Exception: "
+        if hasattr(g, 'current_user') and g.current_user is not None:
+            reason = "Unhandled Exception (current user: %s): " % g.current_user['email']
+
+        return httpError(500, reason + str(e))
 
 def _requires_token_auth_impl(f, args, kwargs, token):
     """
@@ -206,7 +211,7 @@ def requires_auth_query(f):
 
         token = request.args.get('token', None)
         if token is not None:
-            bytes_token = ("TOKEN " + token).encode("utf-8")
+            bytes_token = (token).encode("utf-8")
             return _requires_token_auth_impl(f, args, kwargs, bytes_token)
 
         token = request.args.get('apikey', None)

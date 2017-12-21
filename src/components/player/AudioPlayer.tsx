@@ -52,7 +52,9 @@ const ProgressOuterStyle = {
     //overflow: "hidden",
     cursor: "pointer",
     backgroundColor: "black",
+    border: "1px solid black",
     borderRadius: "5px",
+    zIndex:500,
 
 }
 
@@ -61,6 +63,7 @@ const ProgressInnerStyle = {
     width: "50%",
     backgroundColor: "red",
     borderRadius: "5px",
+    zIndex:501,
 
 }
 
@@ -252,9 +255,9 @@ class AudioPlayer extends React.Component<AudioPlayerProps,AudioPlayerState> {
           {this.props.artist}
           </Typography>
 
-          <Grid container spacing={24}>
+          <Grid container spacing={24} style={{marginBottom:0}}>
 
-            <Grid item xs={2}>
+            <Grid item xs={2} style={{paddingBottom:0}}>
                 <div style={TextContainer}>
                 <div style={TextBottomLeftStyle}>
                 <Typography type="caption">
@@ -264,7 +267,7 @@ class AudioPlayer extends React.Component<AudioPlayerProps,AudioPlayerState> {
                 </div>
             </Grid>
 
-            <Grid item xs={8}>
+            <Grid item xs={8} style={{paddingBottom:0}}>
                 <div style={TextContainer}>
                 <div style={TextVerticalCenterStyle}>
                     <IconButton onClick={(e) => this.onClickPrevious()}>
@@ -284,7 +287,7 @@ class AudioPlayer extends React.Component<AudioPlayerProps,AudioPlayerState> {
                 </div>
             </Grid>
 
-            <Grid item xs={2}>
+            <Grid item xs={2} style={{paddingBottom:0}}>
                <div style={TextContainer}>
                <div style={TextBottomRightStyle}>
                <Typography type="caption">
@@ -295,11 +298,11 @@ class AudioPlayer extends React.Component<AudioPlayerProps,AudioPlayerState> {
 
             </Grid>
 
-            </Grid>
+          </Grid>
 
-            <ProgressBar position={this.state.position}
-                         duration={this.state.duration}
-                         setPosition={this.onSetPosition}/>
+          <ProgressBar position={this.state.position}
+                       duration={this.state.duration}
+                       setPosition={this.onSetPosition}/>
 
             <Grid container spacing={8} style={{height:"40px"}}>
             <Grid item xs={3}>

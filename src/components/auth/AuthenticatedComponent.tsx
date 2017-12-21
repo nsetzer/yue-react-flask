@@ -10,6 +10,7 @@ export interface AuthenticatedComponentProps{
     history: any,
     isAuthenticated: boolean,
     loginUserSuccess: (any) => any,
+    logout: () => any
 }
 
 export interface AuthenticatedComponentState{
@@ -62,8 +63,13 @@ export function requireAuthentication(Component) {
                                 this.setState({loaded_if_needed: true});
 
                             } else {
+                                localStorage.removeItem('token');
                                 props.history.push('/login');
                             }
+                        })
+                        .catch(() => {
+                            localStorage.removeItem('token');
+                            props.history.push('/login');
                         });
 
                 }

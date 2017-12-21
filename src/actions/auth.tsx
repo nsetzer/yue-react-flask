@@ -15,7 +15,6 @@ import { get_token, create_user } from '../utils/http_functions';
 
 import History from '../history'
 
-
 export function loginUserSuccess(token) {
     localStorage.setItem('token', token);
     return {
@@ -82,6 +81,7 @@ export function loginUser(email, password, target) {
                 }
             })
             .catch(error => {
+                console.log(error)
                 dispatch(loginUserFailure({
                     response: {
                         status: 403,
