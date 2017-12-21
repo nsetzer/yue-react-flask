@@ -97,6 +97,18 @@ def update_song():
     if filepath is given, it must exist or an error is thrown
 
     """
+
+    songs = request.json
+
+    # first quickly verify the data is well formed
+    for song in songs:
+        # TODO: validate file path
+        if "id" not in song or len(song) < 2:
+            print(len(song), song)
+            return httpError(400, "invalid update request")
+
+    AudioService.instance().updateSongs(g.current_user, songs)
+
     return jsonify(result="ok")
 
 @app.route("/api/library", methods=["POST"])
@@ -111,7 +123,23 @@ def create_song():
 
     if filepath is given, it must exist or an error is thrown
     """
-    return jsonify(result="ok")
+
+    song = request.get_json(silent=True)
+
+    if song is None:
+        return httpError(400, "no content body")
+    print(song)
+
+    # first quickly verify the data is well formed
+    for field in ['artist', 'album', 'title']:
+        if field not in song:
+            return httpError(400, "`%s` missing from song meta data" % field)
+
+    # TODO: validate file path
+
+    song_id = AudioService.instance().createSong(g.current_user, song)
+
+    return jsonify(result=song_id)
 
 @app.route("/api/library/<song_id>", methods=["GET"])
 @requires_auth_role('fizzbuzz')

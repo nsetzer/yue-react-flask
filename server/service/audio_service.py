@@ -69,6 +69,28 @@ class AudioService(object):
             searchTerm, case_insensitive,
             orderby, limit, offset)
 
+    def updateSongs(self, user, songs):
+
+        # TODO: check user role features
+
+        for song in songs:
+            song_id = song['id']
+            del song['id']
+            uid = user['id']
+            did = user['domain_id']
+            self.libraryDao.update(uid, did, song_id, song, commit=False)
+        self.db.session.commit()
+
+    def createSong(self, user, song):
+
+        uid = user['id']
+        did = user['domain_id']
+
+        # TODO: check user role features
+        song_id = self.libraryDao.insert(uid, did, song)
+
+        return song_id
+
     def getDomainSongInfo(self, domain_id):
 
         return self.libraryDao.domainSongInfo(domain_id)

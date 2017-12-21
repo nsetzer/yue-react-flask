@@ -339,7 +339,7 @@ class LibraryDao(object):
             query = update(self.dbtables.SongDataTable) \
                 .values(song_data) \
                 .where(
-                    and_(self.dbtables.SongDataTable.c.song_id == song_id,
+                    and_(self.dbtables.SongDataTable.c.id == song_id,
                          self.dbtables.SongDataTable.c.domain_id == domain_id))
             self.db.session.execute(query)
 
@@ -355,7 +355,7 @@ class LibraryDao(object):
             query = update(self.dbtables.SongUserDataTable) \
                 .values(user_data) \
                 .where(
-                    and_(self.dbtables.SongDataTable.c.song_id == song_id,
+                    and_(self.dbtables.SongDataTable.c.id == song_id,
                          self.dbtables.SongDataTable.c.user_id == user_id))
             self.db.session.execute(query)
 
