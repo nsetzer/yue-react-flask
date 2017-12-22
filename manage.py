@@ -15,6 +15,9 @@ parser.add_argument('--config', type=str,
                     default="config/development/application.yml",
                     help='application config path')
 
+parser.add_argument('mode', type=str,
+                    help='action to take')
+
 args = parser.parse_args()
 
 cfg = Config.init(args.config)
@@ -36,7 +39,7 @@ def create():
 @manager.command
 def drop():
     """drop the db tables."""
-    db_drop__all(db, dbtables)
+    db_drop_all(db, dbtables)
 
 @manager.command
 def routes():
