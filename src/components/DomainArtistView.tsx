@@ -147,9 +147,9 @@ class DomainArtistView extends React.Component<DomainArtistViewProps,DomainArtis
                   return <Card style={{marginLeft:"8px",
                                        marginRight:"8px",
                                        marginTop:"5px",
-                                       marginBottom:"5px"}}>
-                            <ListItem key={album}
-                                     button
+                                       marginBottom:"5px"}}
+                                key={album}>
+                            <ListItem button
                                      onClick={()=>{navigateTo("/main/library/"+artist_name +"/" + album)}}>
                               <ListItemText primary={album}
                                             secondary={albums[album] + " Songs"} />

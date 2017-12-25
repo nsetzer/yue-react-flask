@@ -270,7 +270,7 @@ class MainView extends React.Component<IMainViewProps,IMainViewState> {
            style={{ position: 'fixed',
                     width: 'calc(100% - ' + _drawerWidth + 'px)',
                     marginLeft: _drawerWidth,
-                    background: theme.palette.primary.A200,
+                    background: theme.palette.primary['500'],
                     zIndex: 1000}} >
             <SoundView showMenuIcon={!this.state.pinNavBar}
                        openMenu={() => {this.openNavBar(true);}}

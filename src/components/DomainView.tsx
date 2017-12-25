@@ -117,9 +117,9 @@ class DomainView extends React.Component<IDomainViewProps,IDomainViewState> {
                   return <Card style={{marginLeft:"8px",
                                        marginRight:"8px",
                                        marginTop:"5px",
-                                       marginBottom:"5px"}}>
-                            <ListItem key={artist.name}
-                                     button
+                                       marginBottom:"5px"}}
+                                key={artist.name}>
+                            <ListItem button
                                      onClick={()=>{navigateTo("/main/library/"+artist.name)}}>
                               <ListItemText primary={artist.name}
                                             secondary={Object.keys(artist.albums).length + " Albums. " + artist.count + " Songs"} />

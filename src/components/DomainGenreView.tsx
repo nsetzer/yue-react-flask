@@ -87,9 +87,9 @@ class DomainGenreView extends React.Component<IDomainArtistViewProps,IDomainArti
                   return <Card style={{marginLeft:"8px",
                                        marginRight:"8px",
                                        marginTop:"5px",
-                                       marginBottom:"5px"}}>
-                            <ListItem key={genre.name}
-                                     button
+                                       marginBottom:"5px"}}
+                               key={genre.name}>
+                            <ListItem button
                                      onClick={()=>{navigateTo("/main/genres/view?genre="+genre.name)}}>
                               <ListItemText primary={genre.name}
                                             secondary={genre.artist_count + " Artists. " +genre.count + " Songs"} />

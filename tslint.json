@@ -62,7 +62,7 @@
             "check-else",
             "check-whitespace"
         ],
-        "quotemark": [true, "single", "avoid-escape", "jsx-double"],
+        "quotemark": [false, "single", "avoid-escape", "jsx-double"],
         "radix": true,
         "semicolon": false,
         "switch-default": true,

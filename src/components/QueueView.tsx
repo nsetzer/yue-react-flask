@@ -128,20 +128,21 @@ class QueueView extends React.Component<IQueueViewProps,IQueueViewState> {
                   return <Card style={{marginLeft:"8px",
                                        marginRight:"8px",
                                        marginTop:"5px",
-                                       marginBottom:"5px"}}>
-                           <ListItem key={song.id}>
-                           <ListItemText primary={song.title}
-                                         secondary={song.artist}/>
-                           <ListItemText style={listRightStyle}
-                                         primary={fmtDuration(song.length)}/>
-                           <ListItemSecondaryAction>
-                             <IconButton aria-label="Delete"
-                                         onClick={(e) => {this.onOpenMenu(e,index,song)}}>
-                              <MoreVert />
-                             </IconButton>
-                           </ListItemSecondaryAction>
-                           </ListItem>
-                          </Card>
+                                       marginBottom:"5px"}}
+                                key={song.id}>
+                          <ListItem>
+                             <ListItemText primary={song.title}
+                                           secondary={song.artist}/>
+                             <ListItemText style={listRightStyle}
+                                           primary={fmtDuration(song.length)}/>
+                             <ListItemSecondaryAction>
+                               <IconButton aria-label="Delete"
+                                           onClick={(e) => {this.onOpenMenu(e,index,song)}}>
+                                <MoreVert />
+                               </IconButton>
+                             </ListItemSecondaryAction>
+                          </ListItem>
+                         </Card>
                 }) : <div>No Songs To Display</div>
             }
         </List>

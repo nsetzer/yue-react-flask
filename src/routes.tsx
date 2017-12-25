@@ -12,35 +12,49 @@ import { requireAuthentication } from './components/auth/AuthenticatedComponent'
 import { requireNoAuthentication } from './components/auth/NotAuthenticatedComponent';
 import { DetermineAuth } from './components/auth/DetermineAuth';
 
-import MuiThemeProvider from 'material-ui/styles/MuiThemeProvider';
-import createMuiTheme from 'material-ui/styles/createMuiTheme'
-import createPalette, { Palette } from 'material-ui/styles/createPalette'
-import * as Color from 'material-ui/colors';
-import { fade } from 'material-ui/styles/colorManipulator'
-
 import History from './history'
 
+import { setBodyColor } from './utils/theme'
+
+import * as actionCreators from './actions/theme'
+import MuiThemeProvider from 'material-ui/styles/MuiThemeProvider';
+import { bindActionCreators } from 'redux';
+import { connect } from 'react-redux';
+/*makeColor("#d6780)")*/
+/*
 function getTheme() {
   let palette: Palette = createPalette({
-        'type': 'light',
-        'primary': Color.blue
-        /*'secondary': Colors.green800,*/
+        'type': 'dark',
+        'primary': makeColor("#ff6700", "dark"),
+        'secondary': Colors.amber
     });
   return createMuiTheme({
     'palette': palette
   });
 };
+*/
 
-const theme = getTheme();
-
-console.log(theme)
 // https://github.com/reactjs/react-router-tutorial/tree/master/lessons/06-params
 
-class AppRouter extends React.Component {
+export interface IAppRouterProps {
+  theme: any,
+  children?: any,
+  setTheme: (theme) => any,
+}
+
+export interface IAppRouterState {
+
+}
+
+class AppRouter extends React.Component<IAppRouterProps, IAppRouterState> {
 
   public render() {
+
+  let _theme = this.props.theme;
+  console.log(_theme)
+  setBodyColor(_theme.palette.background.default)
   return (
-    <MuiThemeProvider theme={theme}>
+    <MuiThemeProvider theme={_theme}>
       <Router history={History}>
         <Switch>
         <Route exact path="/" component={App} />
@@ -55,4 +69,17 @@ class AppRouter extends React.Component {
 
 }
 
-export default AppRouter;
+function mapStateToProps(state) {
+  return {
+    theme: state.theme.theme
+    };
+}
+
+function mapDispatchToProps(dispatch) {
+  return bindActionCreators(actionCreators, dispatch);
+}
+
+export default connect(
+  mapStateToProps,
+  mapDispatchToProps
+)(AppRouter);

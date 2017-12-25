@@ -183,8 +183,9 @@ class DomainAlbumView extends React.Component<IDomainAlbumViewProps,IDomainAlbum
                   return <Card style={{marginLeft:"8px",
                                        marginRight:"8px",
                                        marginTop:"5px",
-                                       marginBottom:"5px"}}>
-                           <ListItem key={song.id}>
+                                       marginBottom:"5px"}}
+                                key={song.id}>
+                           <ListItem>
                              <ListItemText primary={song.title}
                                            secondary={song.artist + " - " + song.album}/>
                              <ListItemText style={listRightStyle} primary={fmtDuration(song.length)}/>
