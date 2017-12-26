@@ -31,6 +31,7 @@ import DomainView from './DomainView';
 import DomainArtistView from './DomainArtistView';
 import DomainAlbumView from './DomainAlbumView';
 import DomainGenreView from './DomainGenreView';
+import SettingsView from './SettingsView';
 
 import Paper from 'material-ui/Paper';
 
@@ -289,6 +290,7 @@ class MainView extends React.Component<IMainViewProps,IMainViewState> {
           <Route exact path={`/main/genres/view`} component={DomainView}/>
           <Route exact path={`/main/library/:artist`} component={DomainArtistView}/>
           <Route exact path={`/main/library/:artist/:album`} component={DomainAlbumView}/>
+          <Route exact path={`/main/settings`} component={SettingsView}/>
           <Redirect from="/main" to="/main/queue" />
           {/*<Route path={'/main'} render={() => (
             <div>

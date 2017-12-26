@@ -40,6 +40,7 @@ export interface IAppRouterProps {
   theme: any,
   children?: any,
   setTheme: (theme) => any,
+  setPalette: (theme) => any,
 }
 
 export interface IAppRouterState {
