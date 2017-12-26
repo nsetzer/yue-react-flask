@@ -32,6 +32,7 @@ export function setBodyColor(color) {
 export function getDefaultTheme() {
   let palette: Palette = createPalette({
         'type': 'light',
+        'primary': makeColor("#ff6700", "light"),
     });
   return createMuiTheme({
     'palette': palette

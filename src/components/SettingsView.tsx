@@ -9,6 +9,7 @@ import * as _GridList from 'material-ui/GridList';
 let GridList = _GridList.default;
 console.log(_GridList)
 let GridListTile = _GridList.GridListTile;
+import Grid from 'material-ui/Grid';
 
 import * as UiList  from 'material-ui/List';
 const List = UiList.default
@@ -20,6 +21,7 @@ import IconButton from 'material-ui/IconButton';
 import Send from 'material-ui-icons/Send';
 import Delete from 'material-ui-icons/Delete';
 import MoreVert from 'material-ui-icons/MoreVert';
+import ColorLens from 'material-ui-icons/ColorLens';
 
 import * as themeActionCreators from '../actions/theme';
 let actionCreators = Object.assign({}, themeActionCreators);
@@ -94,7 +96,7 @@ class ColorDialog extends React.Component<IColorDialogProps,IColorDialogState> {
     constructor(props) {
         super(props);
         this.state = {
-            newColor: "#000"
+            newColor: props.color
         }
         this.onColorChanged = this.onColorChanged.bind(this);
     }
@@ -109,7 +111,7 @@ class ColorDialog extends React.Component<IColorDialogProps,IColorDialogState> {
                     open={this.props.open}
                 >
                 <DialogTitle>Select Color</DialogTitle>
-                <SketchPicker color={this.props.color}
+                <SketchPicker color={this.state.newColor}
                               onChangeComplete={this.onColorChanged} />
                 <Button onClick={() => {this.props.onCommit(this.state.newColor)}}>
                     commit changes
@@ -128,7 +130,8 @@ export interface ISettingsViewProps {
 
 export interface ISettingsViewState {
     palette: any,
-    colorPickerOpen: boolean
+    colorPickerOpen: boolean,
+    colorPickerTarget: string,
 }
 
 class SettingsView extends React.Component<ISettingsViewProps,ISettingsViewState> {
@@ -136,11 +139,15 @@ class SettingsView extends React.Component<ISettingsViewProps,ISettingsViewState
   constructor(props) {
     super(props);
 
+    let palette = {
+        type: props.theme.palette.type,
+        primary: props.theme.palette.primary,
+        secondary: props.theme.palette.secondary,
+    }
     this.state = {
-        palette: {
-            type:props.theme.palette.type
-        },
+        palette: palette,
         colorPickerOpen: false,
+        colorPickerTarget: "",
     }
     this.updateStyle = this.updateStyle.bind(this);
     this.onThemeTypeSwitch = this.onThemeTypeSwitch.bind(this);
@@ -150,6 +157,7 @@ class SettingsView extends React.Component<ISettingsViewProps,ISettingsViewState
   }
 
   public updateStyle(state) {
+    console.log(state)
     this.props.setPalette(state.palette);
   }
 
@@ -162,11 +170,25 @@ class SettingsView extends React.Component<ISettingsViewProps,ISettingsViewState
   }
 
   public showColorPicker(target) {
-    this.setState({colorPickerOpen: true});
+    this.setState({colorPickerOpen: true,
+                   colorPickerTarget: target});
   }
 
   public setNewColor(color) {
     this.setState({colorPickerOpen: false});
+    let palette = Object.assign({},this.state.palette);
+    if (this.state.colorPickerTarget === "primary") {
+        palette.primary = makeColor(color, this.state.palette.type)
+        this.updateStyle({
+            palette: palette,
+        });
+    } else if (this.state.colorPickerTarget === "secondary") {
+        palette.secondary = makeColor(color, this.state.palette.type)
+        this.updateStyle({
+            palette: palette,
+        });
+    }
+
   }
 
   public hideColorPicker() {
@@ -174,24 +196,58 @@ class SettingsView extends React.Component<ISettingsViewProps,ISettingsViewState
   }
 
   public render() {
-    let cc = makeColor("#123456", this.state.palette.theme);
 
     return (
     <div>
-    hello world
-
-    <Switch
-        checked={this.state.palette.type==="light"}
-        onChange={this.onThemeTypeSwitch}
-        aria-label="checkedA"
-        />
-    <ColorDisplay color={cc}/>
-    <Button onClick={this.showColorPicker}>Open simple dialog</Button>
     <ColorDialog onCommit={this.setNewColor}
                  onCancel={this.hideColorPicker}
                  open={this.state.colorPickerOpen}
-                 color="#FF0000"
-    />
+                 color="#FF0000" />
+
+    {this.state.palette.type}
+
+    <Switch
+        checked={this.state.palette.type==="light"}
+        onChange={this.onThemeTypeSwitch}>
+    </Switch>
+
+
+    <Grid container spacing={24}>
+        <Grid item  xs={1}>
+            <div style={{
+                width:"100%",
+                height:"100%",
+                textAlign:"center",
+                verticalAlign: "middle",
+                lineHeight: "80px"}}>
+                <IconButton onClick={(e) => this.showColorPicker("primary")}>
+                    <ColorLens />
+                </IconButton>
+            </div>
+        </Grid>
+        <Grid item  xs={11}>
+            <ColorDisplay color={this.state.palette.primary}/>
+        </Grid>
+    </Grid>
+
+    <Grid container spacing={24}>
+        <Grid item  xs={1}>
+            <div style={{
+                width:"100%",
+                height:"100%",
+                textAlign:"center",
+                verticalAlign: "middle",
+                lineHeight: "80px"}}>
+                <IconButton onClick={(e) => this.showColorPicker("secondary")}>
+                    <ColorLens />
+                </IconButton>
+            </div>
+        </Grid>
+        <Grid item  xs={11}>
+            <ColorDisplay color={this.state.palette.secondary}/>
+        </Grid>
+    </Grid>
+
 
     </div>
     )
