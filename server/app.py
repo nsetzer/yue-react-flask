@@ -33,7 +33,8 @@ def health():
 
 @app.route('/.well-known/<path:path>', methods=['GET'])
 def webroot(path):
-    return send_from_directory('.well-known', path)
+    base = os.path.join(os.getcwd(), ".well-known")
+    return send_from_directory(base, path)
 
 # serve the bundle when requesting the default path
 @app.route('/', defaults={'path': ''})
