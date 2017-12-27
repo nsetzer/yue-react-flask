@@ -1,6 +1,7 @@
 import os, sys
 
-from flask import Flask, request, render_template, jsonify, url_for
+from flask import Flask, request, send_from_directory, \
+                  render_template, jsonify, url_for
 
 from .index import db, dbtables, app, cors
 from .service.audio_service import AudioService
@@ -26,14 +27,18 @@ from .endpoints import user
 from .endpoints import library
 from .endpoints import queue
 
-# serve the bundle when requesting the default path
-@app.route('/', methods=['GET'])
-def index():
-    return render_template('index.html')
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify(result="OK")
 
-# serve the bundle when requesting the any path
-@app.route('/<path:path>', methods=['GET'])
-def index_any(path):
+@app.route('/.well-known/<path:path>', methods=['GET'])
+def webroot(path):
+    return send_from_directory('.well-known', path)
+
+# serve the bundle when requesting the default path
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def index(path):
     return render_template('index.html')
 
 def list_routes():
