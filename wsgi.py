@@ -8,6 +8,15 @@ from logging.handlers import RotatingFileHandler
 if (sys.version_info[0] == 2):
     raise RuntimeError("python2 not supported")
 
+# add the checkout directory to the path
+# TODO: setup.py install would avoid this,
+# the package 'server.*' would need a better name
+path=os.path.split(__file__)[0]
+sys.path.insert(0,path)
+os.chdir(path)
+sys.stderr.write("%s\n"%os.getcwd())
+
+
 from server.config import Config
 
 parser = argparse.ArgumentParser(description='yue server')
