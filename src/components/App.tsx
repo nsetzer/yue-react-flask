@@ -19,16 +19,13 @@ class App extends React.Component {
       <div className="App">
         <header className="App-header">
           <img src={logo} className="App-logo" alt="logo" />
-          <h1 className="App-title">Welcome to React</h1>
+          <h1 className="App-title">Welcome</h1>
         </header>
         <br/>
         <p>
         <Link to="/login">&nbsp;Login&nbsp;</Link>
-        <Link to="/register">&nbsp;Register&nbsp;</Link>
         </p>
         <p className="App-intro">
-          Your App is Now Running<br/>
-          To get started, edit <code>src/components/App.tsx</code> and save to reload.
         </p>
       </div>
     );

@@ -60,7 +60,6 @@ class AppRouter extends React.Component<IAppRouterProps, IAppRouterState> {
         <Switch>
         <Route exact path="/" component={App} />
         <Route exact path="/login" component={requireNoAuthentication(LoginView)} />
-        <Route exact path="/register" component={requireNoAuthentication(RegisterView)} />
         <Route path="/main" component={requireAuthentication(MainView)}/>
         <Route component={DetermineAuth(NotFoundView)} />
         </Switch>

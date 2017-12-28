@@ -24,6 +24,7 @@ def get_user():
     user['apikey'] = userDao.getUserApiKey(user['id'])
     return jsonify(result=user)
 
+"""
 @app.route("/api/user", methods=["POST"])
 def create_user():
     incoming = request.get_json()
@@ -45,6 +46,7 @@ def create_user():
         id=user_id,
         token=generate_token(new_user)
     )
+"""
 
 @app.route("/api/user/login", methods=["POST"])
 def get_token():

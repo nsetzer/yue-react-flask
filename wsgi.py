@@ -12,8 +12,9 @@ if (sys.version_info[0] == 2):
 # TODO: setup.py install would avoid this,
 # the package 'server.*' would need a better name
 path=os.path.split(__file__)[0]
-sys.path.insert(0,path)
-os.chdir(path)
+if path:
+    sys.path.insert(0,path)
+    os.chdir(path)
 sys.stderr.write("%s\n"%os.getcwd())
 
 
