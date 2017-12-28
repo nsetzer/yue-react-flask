@@ -80,7 +80,6 @@ class UserDaoTestCase(unittest.TestCase):
         domain_id = self.userDao.createDomain('domain3')
         role_id = self.userDao.createRole('role3')
         feat_id = self.userDao.createFeature('<create_user>')
-
         user_id = self.userDao.createUser("user234", "password", domain_id, role_id)
 
         self.userDao.addFeatureToRole(role_id, feat_id)
@@ -97,3 +96,14 @@ class UserDaoTestCase(unittest.TestCase):
         self.assertFalse(self.userDao.roleHasNamedFeature(role_id,
             '<create_user>'))
 
+
+    def test_list_user(self):
+
+        domain_id = self.userDao.createDomain('domain_list')
+        role_id = self.userDao.createRole('role_list')
+        user_id = self.userDao.createUser("user_list", "password", domain_id, role_id)
+
+
+        result = self.userDao.listUsers(domain_id)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['email'], "user_list")

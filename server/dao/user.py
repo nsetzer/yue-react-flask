@@ -19,6 +19,12 @@ class UserDao(object):
             self.db.session.commit()
         return result.inserted_primary_key[0]
 
+    def findDomainById(self, did):
+        query = self.dbtables.DomainTable.select() \
+            .where(self.dbtables.DomainTable.c.id == did)
+        result = self.db.session.execute(query)
+        return result.fetchone()
+
     def findDomainByName(self, name):
         query = self.dbtables.DomainTable.select() \
             .where(self.dbtables.DomainTable.c.name == name)
@@ -48,6 +54,12 @@ class UserDao(object):
         if commit:
             self.db.session.commit()
         return result.inserted_primary_key[0]
+
+    def findRoleById(self, rid):
+        query = self.dbtables.RoleTable.select() \
+            .where(self.dbtables.RoleTable.c.id == rid)
+        result = self.db.session.execute(query)
+        return result.fetchone()
 
     def findRoleByName(self, name):
         query = self.dbtables.RoleTable.select() \
@@ -127,6 +139,12 @@ class UserDao(object):
 
         return user_id
 
+    def findUserById(self, userId):
+        query = self.dbtables.UserTable.select() \
+            .where(self.dbtables.UserTable.c.id == userId)
+        result = self.db.session.execute(query)
+        return result.fetchone()
+
     def findUserByEmail(self, email):
         query = self.dbtables.UserTable.select() \
             .where(self.dbtables.UserTable.c.email == email)
@@ -151,6 +169,23 @@ class UserDao(object):
             .where(self.dbtables.UserTable.c.apikey == apikey)
         result = self.db.session.execute(query)
         return result.fetchone()
+
+    def listUsers(self, domain_id):
+
+        userTable = self.dbtables.UserTable
+        grantedDomainTable = self.dbtables.GrantedDomainTable
+        columns = [userTable.c.id, userTable.c.email,]
+
+        query = select(columns) \
+            .select_from(
+                userTable.join(
+                    grantedDomainTable,
+                    and_(grantedDomainTable.c.user_id == userTable.c.id),
+                    isouter=True)) \
+            .where(grantedDomainTable.c.domain_id == domain_id)
+        result = self.db.session.execute(query)
+
+        return [{'id':u['id'], 'email':u['email']} for u in result]
 
     def getUserApiKey(self, user_id):
         query = self.dbtables.UserTable.select() \

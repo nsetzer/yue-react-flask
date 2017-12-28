@@ -48,6 +48,67 @@ def create_user():
     )
 """
 
+@app.route("/api/user/create", methods=["POST"])
+@requires_auth
+def admin_create_user():
+    incoming = request.get_json()
+
+    try:
+        user_id = userDao.createUser(
+            incoming["email"],
+            incoming["domain"],
+            incoming["role"],
+            incoming["password"]
+        )
+
+    except:
+        return jsonify(message="User with that email already exists"), 409
+
+    new_user = userDao.findUserByEmail(incoming["email"])
+
+    return jsonify(
+        id=user_id,
+    )
+
+@app.route("/api/user/list/domain/<domain>", methods=["GET"])
+@requires_auth
+def admin_list_users(domain):
+
+    did = userDao.findDomainByName(domain).id
+
+    result = userDao.listUsers(did)
+
+    return jsonify(
+        result=result,
+    )
+
+@app.route("/api/user/list/user/<userId>", methods=["GET"])
+@requires_auth
+def admin_list_user(userId):
+    """
+    this is the same as get_user, but any admin can list any other user
+    """
+
+    user = userDao.findUserById(userId)
+    features = userDao.listFeaturesByName(user['role_id'])
+
+    return jsonify(result={
+        "email": user['email'],
+        "default_domain": user['domain_id'],
+        "default_role": user['role_id'],
+        "roles": [
+            {
+            "id": user['role_id'],
+            "features": features,
+            },
+        ],
+        "domains": [
+            {
+            "id": user['domain_id'],
+            }
+        ],
+    })
+
 @app.route("/api/user/login", methods=["POST"])
 def get_token():
     incoming = request.get_json()
