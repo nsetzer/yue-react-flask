@@ -25,4 +25,6 @@ server:
     num_backups: 10
     level: debug
 
+  filesystem:
+    media_root: "/mnt/data"
 

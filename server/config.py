@@ -85,6 +85,9 @@ class Config(object):
         else:
             raise Exception(cfg.database.kind + " unsupported")
 
+        cfg.filesystem = lambda: None
+        cfg.filesystem.media_root = data['server']['filesystem']['media_root']
+
         # cfg.ENV = "production"
         # cfg.DEBUG = False
         cfg.SECRET_KEY = cfg.secret_key

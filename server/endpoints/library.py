@@ -9,9 +9,11 @@ from .util import requires_auth, requires_no_auth, requires_auth_role, \
                   httpError, verify_token, compressed, requires_auth_query
 from itsdangerous import SignatureExpired, BadSignature
 from ..dao.library import Song
-from ..dao.util import parse_iso_format
+from ..dao.util import parse_iso_format, pathCorrectCase
 
 from re import findall
+
+from ..config import Config
 
 def send_file_v2(filepath):
     """
@@ -102,10 +104,31 @@ def update_song():
 
     # first quickly verify the data is well formed
     for song in songs:
-        # TODO: validate file path
-        if "id" not in song or len(song) < 2:
-            print(len(song), song)
+        # every record must have a song id (to update), and
+        # at least one other field (that will be modified)
+        if Song.id not in song or len(song) < 2:
             return httpError(400, "invalid update request")
+
+        # if a path is given, it must already exist
+        # see create_song and upload_song_audio for setting a path
+        # when the file does not yet exist.
+        if Song.path in song:
+            root = Config.instance().filesystem.media_root
+            path = song[Song.path]
+            if not os.path.isabs(path):
+                path = os.path.join(root, path)
+
+            # fix any windows / linux path inconsistencies
+            # this ensures the path exists on the local filesystem
+            try:
+                path = pathCorrectCase(path)
+            except Exception as e:
+                return httpError(400, str(e))
+
+            # enforce path to exist under media root
+            # in the future, I may allow more than one media root
+            if not path.startswith(root):
+                return httpError(400, "Invalid Path: `%s`" % path)
 
     AudioService.instance().updateSongs(g.current_user, songs)
 
@@ -174,7 +197,7 @@ def get_song_audio(song_id):
 
 @app.route("/api/library/<song_id>/audio", methods=["POST"])
 @requires_auth
-def set_song_audio(song_id):
+def upload_song_audio(song_id):
     """ upload audio for a song, updates the path for the song given by id """
     start = request.args.get('filepath', None)
     return jsonify(result="ok")

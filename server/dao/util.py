@@ -59,7 +59,6 @@ def format_delta(t):
         return "%d:%02d:%02d" % (h, m, s)
     return "%d:%02d" % (m, s)
 
-
 byte_labels = ['B', 'KB', 'MB', 'GB']
 def format_bytes(b):
     kb = 1024
@@ -111,3 +110,51 @@ def string_quote(string):
 def stripIllegalChars(x):
     return ''.join([c for c in x if c not in "<>:\"/\\|?*"])
 
+def pathCorrectCase(path):
+    """
+        return a normalized file path to the given path.
+        Fixes any potential case errors.
+    """
+
+    if os.path.exists(path):
+        return path
+
+    parts = path.split('/');
+
+    if parts[0] == '~':
+        newpath = os.path.expanduser('~')
+    elif parts[0] == ".":
+        newpath = os.getcwd()
+    else:
+        newpath = '/'+parts[0]
+
+    for i in range(1,len(parts)):
+
+        if parts[i] == ".":
+            # a dot is the same as the current directory
+            # newpath does not need to be changed
+            continue
+        elif parts[i] == "..":
+            # change to the parent directory
+            if newpath !="/":
+                newpath = os.path.split(newpath)[0]
+            continue
+
+        # test that the given part is a valid file or folder
+
+        testpath = os.path.join(newpath,parts[i])
+
+        if os.path.exists(testpath):
+            newpath = testpath;
+        else:
+            # scan the directory for files with the
+            # same name, ignoring case.
+            temp = parts[i].lower();
+            for item in os.listdir(newpath):
+                if item.lower() == temp:
+                    newpath = os.path.join(newpath,item)
+                    break;
+            else:
+                raise Exception('Path `%s/%s` not found'%(newpath,temp))
+
+    return newpath

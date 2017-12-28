@@ -355,8 +355,8 @@ class LibraryDao(object):
             query = update(self.dbtables.SongUserDataTable) \
                 .values(user_data) \
                 .where(
-                    and_(self.dbtables.SongDataTable.c.id == song_id,
-                         self.dbtables.SongDataTable.c.user_id == user_id))
+                    and_(self.dbtables.SongUserDataTable.c.song_id == song_id,
+                         self.dbtables.SongUserDataTable.c.user_id == user_id))
             self.db.session.execute(query)
 
             if commit:
