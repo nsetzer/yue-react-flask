@@ -132,9 +132,9 @@ def update_song():
                 return httpError(400, "Invalid Path: `%s`" % path)
 
             song[Song.path] = path
-        app.logger.error("upload (w/ path): %s", song)
-    else:
-        app.logger.error("upload (no path): %s", song)
+            app.logger.error("upload (w/ path): %s", song)
+        else:
+            app.logger.error("upload (no path): %s", song)
 
     AudioService.instance().updateSongs(g.current_user, songs)
 

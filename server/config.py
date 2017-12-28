@@ -88,6 +88,11 @@ class Config(object):
         cfg.filesystem = lambda: None
         cfg.filesystem.media_root = data['server']['filesystem']['media_root']
 
+        cfg.transcode = lambda: None
+        cfg.transcode.audio = lambda: None
+        cfg.transcode.audio.bin_path = data['server']['transcode']['audio']['bin_path']
+
+
         # cfg.ENV = "production"
         # cfg.DEBUG = False
         cfg.SECRET_KEY = cfg.secret_key

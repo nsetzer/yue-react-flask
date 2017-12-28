@@ -2,6 +2,7 @@
 import os, sys
 from ..dao.library import Song
 from .util import TranscodeServiceException, FFmpegEncoder
+from ..config import Config
 
 class TranscodeService(object):
     """docstring for UserService"""
@@ -13,7 +14,7 @@ class TranscodeService(object):
         self.db = db
         self.dbtables = dbtables
 
-        self.encoder = FFmpegEncoder("/usr/bin/ffmpeg")
+        self.encoder = FFmpegEncoder(Config.instance().transcode.audio.bin_path)
 
     @staticmethod
     def init(db, dbtables):

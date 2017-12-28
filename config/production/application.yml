@@ -28,3 +28,8 @@ server:
   filesystem:
     media_root: "/mnt/Data/Music"
 
+  transcode:
+    audio:
+      bin_path: /usr/local/bin/ffmpeg
+    image: {}
+
