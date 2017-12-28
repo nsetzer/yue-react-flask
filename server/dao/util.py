@@ -119,7 +119,7 @@ def pathCorrectCase(path):
     if os.path.exists(path):
         return path
 
-    parts = path.split('/');
+    parts = path.replace("\\", "/").split('/');
 
     if parts[0] == '~':
         newpath = os.path.expanduser('~')
@@ -130,7 +130,7 @@ def pathCorrectCase(path):
 
     for i in range(1,len(parts)):
 
-        if parts[i] == ".":
+        if parts[i] == "." or parts[i] == "":
             # a dot is the same as the current directory
             # newpath does not need to be changed
             continue

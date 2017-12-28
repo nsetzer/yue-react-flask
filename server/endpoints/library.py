@@ -104,6 +104,7 @@ def update_song():
 
     # first quickly verify the data is well formed
     for song in songs:
+        print(song)
         # every record must have a song id (to update), and
         # at least one other field (that will be modified)
         if Song.id not in song or len(song) < 2:
@@ -130,6 +131,11 @@ def update_song():
             if not path.startswith(root):
                 return httpError(400, "Invalid Path: `%s`" % path)
 
+            song[Song.path] = path
+        app.logger.error("upload (w/ path): %s", song)
+    else:
+        app.logger.error("upload (no path): %s", song)
+
     AudioService.instance().updateSongs(g.current_user, songs)
 
     return jsonify(result="ok")
@@ -151,14 +157,37 @@ def create_song():
 
     if song is None:
         return httpError(400, "no content body")
-    print(song)
+
+    if Song.path in song:
+        root = Config.instance().filesystem.media_root
+        path = song[Song.path]
+        if not os.path.isabs(path):
+            path = os.path.join(root, path)
+
+        # fix any windows / linux path inconsistencies
+        # this ensures the path exists on the local filesystem
+        try:
+            path = pathCorrectCase(path)
+        except Exception as e:
+            return httpError(400, str(e))
+
+        # enforce path to exist under media root
+        # in the future, I may allow more than one media root
+        if not path.startswith(root):
+            return httpError(400, "Invalid Path: `%s`" % path)
+
+        song[Song.path] = path
+        app.logger.error("create (w/ path): %s", song)
+
+    else:
+
+        app.logger.error("create (no path): %s", song)
+
 
     # first quickly verify the data is well formed
-    for field in ['artist', 'album', 'title']:
+    for field in [Song.artist, Song.album, Song.title]:
         if field not in song:
             return httpError(400, "`%s` missing from song meta data" % field)
-
-    # TODO: validate file path
 
     song_id = AudioService.instance().createSong(g.current_user, song)
 
@@ -184,7 +213,7 @@ def get_song_audio(song_id):
     song = AudioService.instance().findSongById(g.current_user, song_id)
 
     if not song or not song[Song.path]:
-        return httpError(404, "No Audio for %s" % song_id)
+        return httpError(404, "No Audio for %s `%s`" % (song_id, song[Song.path]))
 
     path = song[Song.path]
     if TranscodeService.instance().shouldTranscodeSong(song):
