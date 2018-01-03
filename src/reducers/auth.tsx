@@ -10,6 +10,9 @@ import {
     REGISTER_USER_FAILURE,
     REGISTER_USER_REQUEST,
     REGISTER_USER_SUCCESS,
+    CHANGE_PASSWORD_FAILURE,
+    CHANGE_PASSWORD_REQUEST,
+    CHANGE_PASSWORD_SUCCESS,
 } from '../constants/index';
 
 export const initialState = {
@@ -21,6 +24,7 @@ export const initialState = {
     isRegistering: false,
     isRegistered: false,
     registerStatusText: null,
+    changePasswordStatusText: null,
 };
 
 export default createReducer(initialState, {
@@ -73,5 +77,17 @@ export default createReducer(initialState, {
             token: null,
             userName: null,
             registerStatusText: `Register Error: ${payload.status} ${payload.statusText}`,
+        }),
+    [CHANGE_PASSWORD_SUCCESS]: (state, payload) =>
+        Object.assign({}, state, {
+            changePasswordStatusText: 'Password Successfully changed.',
+        }),
+    [CHANGE_PASSWORD_REQUEST]: (state) =>
+        Object.assign({}, state, {
+            changePasswordStatusText: ""
+        }),
+    [CHANGE_PASSWORD_FAILURE]: (state, payload) =>
+        Object.assign({}, state, {
+            changePasswordStatusText: `Change Password Error: ${payload.status} ${payload.statusText}`,
         }),
 });

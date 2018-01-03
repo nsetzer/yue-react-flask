@@ -16,6 +16,15 @@ from .util import requires_auth, requires_no_auth, verify_token, generate_token
 
 userDao = UserDao(db, dbtables)
 
+"""
+curl -v \
+    -u admin:admin \
+    -H 'Content-Type: application/json' \
+    -d '{"password": "newpassword"}' \
+    -X PUT  http://localhost:4200/api/user/password
+
+"""
+
 @app.route("/api/user", methods=["GET"])
 @requires_auth
 def get_user():
@@ -69,6 +78,15 @@ def admin_create_user():
     return jsonify(
         id=user_id,
     )
+
+
+@app.route("/api/user/password", methods=["PUT"])
+@requires_auth
+def change_user_password():
+    incoming = request.get_json()
+    user = g.current_user
+    userDao.changeUserPassword(user['id'], incoming["password"])
+    return jsonify(result="OK")
 
 @app.route("/api/user/list/domain/<domain>", methods=["GET"])
 @requires_auth

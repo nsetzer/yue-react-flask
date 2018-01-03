@@ -158,7 +158,7 @@ class UserDao(object):
 
         if user:
             crypt = user[self.dbtables.UserTable.c.password]
-
+            print(email, password, user)
             if bcrypt.checkpw(password.encode("utf-8"), crypt):
                 return user
 
@@ -169,6 +169,21 @@ class UserDao(object):
             .where(self.dbtables.UserTable.c.apikey == apikey)
         result = self.db.session.execute(query)
         return result.fetchone()
+
+    def changeUserPassword(self, user_id, password, commit=True):
+
+        print("USER:",self.findUserById(user_id))
+        salt = bcrypt.gensalt(12)
+        crypt = bcrypt.hashpw(password.encode("utf-8"), salt)
+        data = {"password": crypt}
+        query = update(self.dbtables.UserTable) \
+            .values(data) \
+            .where(self.dbtables.UserTable.c.id == user_id)
+        self.db.session.execute(query)
+
+        if commit:
+            self.db.session.commit()
+        print("USER:",self.findUserById(user_id))
 
     def listUsers(self, domain_id):
 

@@ -8,10 +8,17 @@ import {
     REGISTER_USER_FAILURE,
     REGISTER_USER_REQUEST,
     REGISTER_USER_SUCCESS,
+    CHANGE_PASSWORD_FAILURE,
+    CHANGE_PASSWORD_REQUEST,
+    CHANGE_PASSWORD_SUCCESS,
 } from '../constants/index';
 
 import { parseJSON } from '../utils/misc';
-import { get_token, create_user } from '../utils/http_functions';
+import {
+    get_token,
+    create_user,
+    change_user_password
+} from '../utils/http_functions';
 
 import History from '../history'
 
@@ -142,6 +149,63 @@ export function registerUser(email, password, target) {
                     response: {
                         status: 403,
                         statusText: 'User with that email already exists',
+                    },
+                }
+                ));
+            });
+    };
+}
+
+export function changePasswordRequest() {
+    return {
+        type: CHANGE_PASSWORD_REQUEST,
+    };
+}
+
+export function changePasswordSuccess() {
+    return {
+        type: CHANGE_PASSWORD_SUCCESS,
+        payload: {},
+    };
+}
+
+export function changePasswordFailure(error) {
+    localStorage.removeItem('token');
+    return {
+        type: CHANGE_PASSWORD_FAILURE,
+        payload: {
+            status: error.response.status,
+            statusText: error.response.statusText,
+        },
+    };
+}
+
+export function changePassword(password, target) {
+    return function (dispatch) {
+        dispatch(changePasswordRequest());
+        let token = localStorage.getItem('token');
+        return change_user_password(token, password)
+            .then(parseJSON)
+            .then(response => {
+                try {
+                    dispatch(changePasswordSuccess());
+                    History.push(target);
+                } catch (e) {
+                    console.error(e)
+                    dispatch(changePasswordFailure({
+                        response: {
+                            status: 403,
+                            statusText: 'Invalid token',
+                        },
+                    }));
+                }
+            })
+            .catch(error => {
+                console.error(error)
+                dispatch(changePasswordFailure({
+                    response: {
+                        status: 403,
+                        statusText: 'User does not exist', // what?
                     },
                 }
                 ));

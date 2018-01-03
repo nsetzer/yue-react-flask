@@ -154,6 +154,7 @@ class SettingsView extends React.Component<ISettingsViewProps,ISettingsViewState
     this.showColorPicker = this.showColorPicker.bind(this);
     this.hideColorPicker = this.hideColorPicker.bind(this);
     this.setNewColor = this.setNewColor.bind(this);
+    this.openPage = this.openPage.bind(this);
   }
 
   public updateStyle(state) {
@@ -195,10 +196,19 @@ class SettingsView extends React.Component<ISettingsViewProps,ISettingsViewState
     this.setState({colorPickerOpen: false});
   }
 
+  public openPage(url) {
+    History.push(url);
+    window.scrollTo(0, 0)
+  }
+
   public render() {
 
     return (
     <div>
+
+    <Button onClick={()=>{this.openPage("/main/settings/password")}}>Change Password</Button>
+    <br/>
+
     <ColorDialog onCommit={this.setNewColor}
                  onCancel={this.hideColorPicker}
                  open={this.state.colorPickerOpen}

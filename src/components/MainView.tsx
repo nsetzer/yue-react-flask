@@ -32,6 +32,7 @@ import DomainArtistView from './DomainArtistView';
 import DomainAlbumView from './DomainAlbumView';
 import DomainGenreView from './DomainGenreView';
 import SettingsView from './SettingsView';
+import ChangePassword from './ChangePassword';
 
 import Paper from 'material-ui/Paper';
 
@@ -227,7 +228,6 @@ class MainView extends React.Component<IMainViewProps,IMainViewState> {
 
     // const height = document.getElementById('AppHeader').clientHeight;
     const height = this.divElement.clientHeight;
-    console.log(height)
     // this.setState({headerHeight:height});
   }
 
@@ -291,6 +291,7 @@ class MainView extends React.Component<IMainViewProps,IMainViewState> {
           <Route exact path={`/main/library/:artist`} component={DomainArtistView}/>
           <Route exact path={`/main/library/:artist/:album`} component={DomainAlbumView}/>
           <Route exact path={`/main/settings`} component={SettingsView}/>
+          <Route exact path={`/main/settings/password`} component={ChangePassword}/>
           <Redirect from="/main" to="/main/queue" />
           {/*<Route path={'/main'} render={() => (
             <div>

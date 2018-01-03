@@ -1,7 +1,7 @@
 /* eslint camelcase: 0 */
 
 import axios from 'axios';
-var request = require('request-promise');
+const request = require('request-promise');
 
 import env from '../env'
 
@@ -14,11 +14,10 @@ const tokenConfig = (token) => ({
     },
 });
 
-
 export function validate_token(token) {
-    var url = env.baseUrl + '/api/user/token'
-    var body = { token, }
-    var config = { withCredentials: true }
+    let url = env.baseUrl + '/api/user/token'
+    let body = { token, }
+    let config = { withCredentials: true }
     return axios.post(url, body, config );
 }
 
@@ -27,6 +26,22 @@ export function create_user(email, password) {
         email,
         password,
     });
+}
+
+export  function change_user_password(token: string, password) {
+    let url: string = env.baseUrl + '/api/user/password'
+
+    let options = {
+        method: 'PUT',
+        uri: url,
+        body: {password: password},
+        headers: {
+            'Authorization': token,
+        },
+        json: true,
+    };
+
+    return request(options);
 }
 
 export function get_token(email, password) {
