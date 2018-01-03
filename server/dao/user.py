@@ -189,7 +189,10 @@ class UserDao(object):
 
         userTable = self.dbtables.UserTable
         grantedDomainTable = self.dbtables.GrantedDomainTable
-        columns = [userTable.c.id, userTable.c.email,]
+        columns = [userTable.c.id,
+                   userTable.c.email,
+                   userTable.c.domain_id,
+                   userTable.c.role_id]
 
         query = select(columns) \
             .select_from(
@@ -200,7 +203,12 @@ class UserDao(object):
             .where(grantedDomainTable.c.domain_id == domain_id)
         result = self.db.session.execute(query)
 
-        return [{'id':u['id'], 'email':u['email']} for u in result]
+        return [{
+            'id':u['id'],
+            'email':u['email'],
+            'default_domain':u['domain_id'],
+            'default_role':u['role_id'],
+        } for u in result]
 
     def getUserApiKey(self, user_id):
         query = self.dbtables.UserTable.select() \

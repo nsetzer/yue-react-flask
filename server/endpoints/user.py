@@ -23,6 +23,11 @@ curl -v \
     -d '{"password": "newpassword"}' \
     -X PUT  http://localhost:4200/api/user/password
 
+
+curl -v -u admin:admin "http://localhost:4200/api/user/list/domain/production"
+curl -v -u admin:admin "http://localhost:4200/api/user/list/user/1"
+
+
 """
 
 @app.route("/api/user", methods=["GET"])
@@ -94,10 +99,16 @@ def admin_list_users(domain):
 
     did = userDao.findDomainByName(domain).id
 
-    result = userDao.listUsers(did)
+    domains = { d['id']: d['name'] for d in userDao.listDomains() }
+    roles = { r['id']: r['name'] for r in userDao.listRoles() }
+    users = userDao.listUsers(did)
 
     return jsonify(
-        result=result,
+        result={
+            "domains": domains,
+            "roles": roles,
+            "users": users,
+        }
     )
 
 @app.route("/api/user/list/user/<userId>", methods=["GET"])

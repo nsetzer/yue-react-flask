@@ -20,6 +20,9 @@ sys.stderr.write("%s\n"%os.getcwd())
 
 from server.config import Config
 
+# TODO: add support for a YUE_ACTIVE_PROFILE environment variable
+# default to production and use to change what the default config is
+# fail if the config does not exist
 parser = argparse.ArgumentParser(description='yue server')
 parser.add_argument('--config', type=str,
                     default="config/production/application.yml",
