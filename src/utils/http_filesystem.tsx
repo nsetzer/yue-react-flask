@@ -7,7 +7,8 @@ import env from '../env'
 list a directory or download a file
 */
 export function filesystem_get_path(token: string, root: string, path: string) {
-    let url: string = env.baseUrl + '/api/fs/${root}/path/${path}'
+    let url: string = env.baseUrl + `/api/fs/${root}/path/${path}`
+    console.log(url)
 
     let options = {
         method: 'GET',

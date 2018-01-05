@@ -88,7 +88,6 @@ def list_directory(fs_name, root, path):
             p = p[1:]
         return p
 
-    print(parent, path, trim_path(path))
     result = {
         "name": fs_name,
         "path": trim_path(path),

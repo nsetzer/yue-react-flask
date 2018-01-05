@@ -31,7 +31,13 @@ import History from '../history'
 import Typography from 'material-ui/Typography';
 
 export interface IFileSystemViewProps {
-
+    statusText: any,
+    directories: any,
+    files: any,
+    name: string,
+    parent_directory: string,
+    current_directory: string,
+    filesystemGetPath: (root,path) => any,
 }
 
 export interface IFileSystemViewState {
@@ -42,32 +48,124 @@ class FileSystemView extends React.Component<IFileSystemViewProps, IFileSystemVi
 
     constructor(props) {
         super(props);
+        // TODO: get current path from the route
         this.componentDidMount = this.componentDidMount.bind(this)
+        this.openParentDirectory = this.openParentDirectory.bind(this)
+        this.openDirectory = this.openDirectory.bind(this)
     }
 
     public componentDidMount() {
+
+        this.props.filesystemGetPath("default", "");
+        console.log("get file system root")
         return;
+
+    }
+
+    public openParentDirectory() {
+        let path = this.props.parent_directory;
+        console.log(path)
+        this.props.filesystemGetPath("default", path);
+    }
+
+    public openDirectory(name) {
+        let path = this.props.current_directory
+        if (path) {
+            path = path + "/" + name
+        } else {
+            path = name
+        }
+        console.log(path)
+        this.props.filesystemGetPath("default", path);
     }
 
     public render() {
         return (
             <div>
-            Hello World
+
+            <h3>{this.props.name}:{this.props.current_directory}</h3>
+
+            <List>
+
+            <Card style={{marginLeft:"8px",
+                                       marginRight:"8px",
+                                       marginTop:"5px",
+                                       marginBottom:"5px"}}
+                                key={name}>
+                <ListItem>
+                    <ListItemText primary={".."}/>
+                    <ListItemSecondaryAction>
+                        <IconButton onClick={(e) => {this.openParentDirectory()}}>
+                            <MoreVert />
+                        </IconButton>
+                    </ListItemSecondaryAction>
+                </ListItem>
+            </Card>
+
+            {
+              (this.props.directories && this.props.directories.length>0) ?
+                this.props.directories.map( (name, index) => {
+                  return <Card style={{marginLeft:"8px",
+                                       marginRight:"8px",
+                                       marginTop:"5px",
+                                       marginBottom:"5px"}}
+                                key={name}>
+                           <ListItem>
+                             <ListItemText primary={name}/>
+                             <ListItemSecondaryAction>
+                               <IconButton onClick={(e) => {this.openDirectory(name)}}>
+                                <MoreVert />
+                               </IconButton>
+                             </ListItemSecondaryAction>
+                           </ListItem>
+                         </Card>
+                }) : null
+            }
+
+            {
+              (this.props.files && this.props.files.length>0) ?
+                this.props.files.map( (file, index) => {
+                  return <Card style={{marginLeft:"8px",
+                                       marginRight:"8px",
+                                       marginTop:"5px",
+                                       marginBottom:"5px"}}
+                                key={file.name}>
+                           <ListItem>
+                             <ListItemText primary={file.name}
+                                           secondary={file.size + " bytes"}/>
+                             <ListItemSecondaryAction>
+                               <IconButton onClick={(e) => {}}>
+                                <MoreVert />
+                               </IconButton>
+                             </ListItemSecondaryAction>
+                           </ListItem>
+                         </Card>
+                }) : null
+            }
+
+            </List>
+
             </div>
         )
     }
 }
 
 function mapStateToProps(state) {
-  return {
+    return {
+        statusText: state.filesystem.statusText,
+        directories: state.filesystem.directories,
+        files: state.filesystem.files,
+        name: state.filesystem.name,
+        parent_directory: state.filesystem.parent_directory,
+        current_directory: state.filesystem.current_directory,
     };
 }
 
 function mapDispatchToProps(dispatch) {
-  return bindActionCreators(actionCreators, dispatch);
+    return bindActionCreators(actionCreators, dispatch);
 }
 
 export default connect(
-  mapStateToProps,
-  mapDispatchToProps
+    mapStateToProps,
+    mapDispatchToProps
 )(FileSystemView);
