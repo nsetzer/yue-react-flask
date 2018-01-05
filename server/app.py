@@ -26,6 +26,7 @@ def csrf_protect():
 from .endpoints import user
 from .endpoints import library
 from .endpoints import queue
+from .endpoints import filesystem
 
 @app.route('/health', methods=['GET'])
 def health():
