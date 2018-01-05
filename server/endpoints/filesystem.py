@@ -4,6 +4,8 @@ from flask import request, jsonify, g, send_file
 from ..index import app, db, dbtables
 from .util import requires_auth, httpError
 from stat import S_ISDIR, S_ISREG, S_IRGRP
+
+from ..config import Config
 """
 curl -v -u admin:admin "http://localhost:4200/api/fs/default"
 curl -v -u admin:admin "http://localhost:4200/api/fs/default"
@@ -34,22 +36,8 @@ def fs_get_path(root, path):
 
     # application config should define a number of valid roots
     # that can be listed.
-    os_root = "/"
+    os_root = Config.instance().filesystem.media_root
     path = os.path.join(os_root, path)
-
-    return list_directory(os_root, path)
-
-@app.route('/api/fs/roots')
-@requires_auth
-def fs_get_routes():
-    # todo this should be a list of names
-    return jsonify(result=["default", ])
-
-def list_directory(root, path):
-    """
-    check for .yueignore in the root, or in the given path
-    use to load filters to remove elements from the response
-    """
 
     if not os.path.exists(path):
         return httpError(404, "path does not exist")
@@ -57,7 +45,19 @@ def list_directory(root, path):
     if os.path.isfile(path):
         return send_file(path)
 
-    # list the directory
+    return list_directory(root, os_root, path)
+
+@app.route('/api/fs/roots')
+@requires_auth
+def fs_get_routes():
+    # todo this should be a list of names
+    return jsonify(result=["default", ])
+
+def list_directory(fs_name, root, path):
+    """
+    check for .yueignore in the root, or in the given path
+    use to load filters to remove elements from the response
+    """
 
     parent, _ = os.path.split(path)
     if not parent.startswith(root):
@@ -78,6 +78,9 @@ def list_directory(root, path):
         elif S_ISREG(mode):
             files.append({"name": name, "size": st.st_size})
 
+    files.sort(key=lambda f: f['name'])
+    dirs.sort()
+
     def trim_path(p):
         if p.startswith(root):
             p = p[len(root):]
@@ -87,6 +90,7 @@ def list_directory(root, path):
 
     print(parent, path, trim_path(path))
     result = {
+        "name": fs_name,
         "path": trim_path(path),
         "parent": trim_path(parent),
         "files": files,
