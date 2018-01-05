@@ -5,6 +5,7 @@ import message from './message';
 import queue from './queue';
 import library from './library';
 import theme from './theme';
+import filesystem from './filesystem';
 
 const rootReducer = combineReducers({
     routing: routerReducer,
@@ -14,6 +15,7 @@ const rootReducer = combineReducers({
     queue,
     library,
     theme,
+    filesystem,
 });
 
 export default rootReducer;

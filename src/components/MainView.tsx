@@ -32,6 +32,7 @@ import DomainArtistView from './DomainArtistView';
 import DomainAlbumView from './DomainAlbumView';
 import DomainGenreView from './DomainGenreView';
 import SettingsView from './SettingsView';
+import FileSystemView from './FileSystemView';
 import ChangePassword from './ChangePassword';
 
 import Paper from 'material-ui/Paper';
@@ -121,6 +122,13 @@ class AppSideNav extends React.Component<IAppSideNavProps,IAppSideNavState> {
             <Settings />
           </ListItemIcon>
           <ListItemText primary="Settings" />
+        </ListItem>
+        <ListItem button
+                  onClick={() => {this.openPage('/main/filesystem');}}>
+          <ListItemIcon>
+            <Settings />
+          </ListItemIcon>
+          <ListItemText primary="FileSystem" />
         </ListItem>
       <Divider />
         <ListItem button
@@ -292,6 +300,7 @@ class MainView extends React.Component<IMainViewProps,IMainViewState> {
           <Route exact path={`/main/library/:artist/:album`} component={DomainAlbumView}/>
           <Route exact path={`/main/settings`} component={SettingsView}/>
           <Route exact path={`/main/settings/password`} component={ChangePassword}/>
+          <Route exact path={`/main/filesystem`} component={FileSystemView}/>
           <Redirect from="/main" to="/main/queue" />
           {/*<Route path={'/main'} render={() => (
             <div>
