@@ -144,6 +144,8 @@ class AudioService(object):
         a user to double push without creating duplicates
 
         records: a list of objects containing a `song_id`, and `timestamp`.
+
+        returns the number of records successfully imported.
         """
 
         # get a set of existing records for the same time span
@@ -154,13 +156,17 @@ class AudioService(object):
         record_set = set((r['timestamp'] for r in db_records))
 
         # only insert records if they are unique
+        count = 0
         for record in records:
             if record['timestamp'] not in record_set:
                 self.historyDao.insert(user['id'],
                                        record['song_id'],
                                        record['timestamp'],
                                        commit=False)
+                count += 1
         self.db.session.commit()
+
+        return count
 
     def getPlayHistory(self, user, start, end=None, offset=None, limit=None):
         """

@@ -11,21 +11,6 @@ curl -v -u admin:admin "http://localhost:4200/api/fs/default"
 curl -v -u admin:admin "http://localhost:4200/api/fs/default"
 """
 
-"""
-
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
-<html>
-<head><title>Index of libs-release-local/com/cogito/compute-library</title>
-</head>
-<body>
-<h1>Index of libs-release-local/com/cogito/compute-library</h1>
-<pre>Name                     Last modified      Size</pre><hr/>
-<pre>
-<a href="../">../</a>
-<a href="3.10.0/">3.10.0/</a>                   23-May-2016 15:41    -
-</pre>
-"""
-
 @app.route('/api/fs/<root>/path/', defaults={'path': ''})
 @app.route('/api/fs/<root>/path/<path:path>')
 @requires_auth
