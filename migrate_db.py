@@ -79,22 +79,13 @@ all_fields.update(number_fields)
 all_fields.update(date_fields)
 all_fields.update(user_fields)
 
-def migrate(username, domain_name, dbpath):
-
-    domain = userDao.findDomainByName(domain_name)
-    if domain is None:
-        sys.stdout.write("Domain with name `%s` not found" % domain_name)
-        sys.exit(1)
-
+def _yue_reader(dbpath):
     sqlstore = SQLStore(dbpath)
     yueLib = YueLibrary(sqlstore)
 
-    user = userDao.findUserByEmail(username)
-
-    print("Migrating Database:")
-    start = time.time()
-    for song in yueLib.search(None):
+    for song in yueLib.search("ban=0"):
         new_song = {v: song[k] for k, v in all_fields.items()}
+
         new_song[Song.ref_id] = song[YueSong.uid]
 
         try:
@@ -103,15 +94,49 @@ def migrate(username, domain_name, dbpath):
             new_song[Song.art_path] = art_path
         except ArtNotFound as e:
             pass
+        except Exception as e:
+            pass
 
-        song_id = libraryDao.insertOrUpdateByReferenceId(
-            user.id, domain.id, song[YueSong.uid], new_song, commit=False)
-    db.session.commit()
+        yield new_song
+
+def migrate(username, domain_name, json_objects):
+    """
+    username: username to associate with the new songs
+    domain_name: name of the domain for songs to be available in
+    json_objects: an iterable of json objects reprenting songs
+
+    each song record requires an Artist, Album Title,
+    and a reference id "ref_id". the ref_id is used to associate the
+    old style database format with the database used by the web app.
+    """
+
+    domain = userDao.findDomainByName(domain_name)
+    if domain is None:
+        sys.stdout.write("Domain with name `%s` not found" % domain_name)
+        sys.exit(1)
+
+    user = userDao.findUserByEmail(username)
+
+    print("Migrating Database:")
+    start = time.time()
+    count = 0
+    try:
+        for new_song in json_objects:
+            print(new_song[Song.ref_id])
+            song_id = libraryDao.insertOrUpdateByReferenceId(
+                user.id, domain.id,
+                new_song[Song.ref_id], new_song,
+                commit=False)
+            count += 1
+    except KeyboardInterrupt:
+        pass
+    finally:
+        db.session.commit()
 
     end = time.time()
 
     t = end - start
-    print("migrated %d songs in %.3f seconds" % (len(yueLib), t))
+    print("migrated %d songs in %.3f seconds" % (count, t))
 
 def test():
 
@@ -154,7 +179,7 @@ def main():
         sys.exit(1)
 
     if args.mode == 'migrate':
-        migrate(username, dbpath)
+        migrate(username, domain_name, _yue_reader(dbpath))
 
     elif args.mode == "create":
 
@@ -170,7 +195,7 @@ def main():
             sys.stdout.write("Role with name `%s` not found" % role_name)
             sys.exit(1)
 
-        migrate(username, domain_name, dbpath)
+        migrate(username, domain_name, _yue_reader(dbpath))
 
     elif args.mode == "generate":
         """ create a database and populate it with dummy data"""

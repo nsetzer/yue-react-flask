@@ -91,6 +91,7 @@ class Config(object):
         cfg.transcode = lambda: None
         cfg.transcode.audio = lambda: None
         cfg.transcode.audio.bin_path = data['server']['transcode']['audio']['bin_path']
+        cfg.transcode.audio.tmp_path = data['server']['transcode']['audio']['tmp_path']
 
 
         # cfg.ENV = "production"

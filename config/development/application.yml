@@ -29,4 +29,5 @@ server:
   transcode:
     audio:
       bin_path: /usr/bin/ffmpeg
+      tmp_path: "/tmp/yue-audio"
     image: {}

@@ -22,7 +22,7 @@ cfg = Config.init(args.config)
 # configure ssl
 context = None
 if os.path.exists(cfg.ssl.private_key) and os.path.exists(cfg.ssl.certificate):
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
     context.load_cert_chain(cfg.ssl.certificate, cfg.ssl.private_key)
 
 # configure logging

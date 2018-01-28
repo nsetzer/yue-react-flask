@@ -33,7 +33,7 @@ class TranscodeService(object):
 
     def transcodeSong(self, song):
         srcpath = song[Song.path]
-        tgtpath = "/tmp/yue-audio"
+        tgtpath = Config.instance().transcode.audio.tmp_path
 
         if not os.path.exists(tgtpath):
             os.makedirs(tgtpath)
