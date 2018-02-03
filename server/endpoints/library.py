@@ -5,7 +5,7 @@ from flask import Response, request, jsonify, g, send_file
 from ..index import app
 from ..service.audio_service import AudioService
 from ..service.transcode_service import TranscodeService
-from .util import requires_auth, requires_no_auth, requires_auth_role, \
+from .util import requires_auth, requires_no_auth, requires_auth_feature, \
                   httpError, verify_token, compressed, requires_auth_query
 from itsdangerous import SignatureExpired, BadSignature
 from ..dao.library import Song
@@ -194,7 +194,7 @@ def create_song():
     return jsonify(result=song_id)
 
 @app.route("/api/library/<song_id>", methods=["GET"])
-@requires_auth_role('fizzbuzz')
+@requires_auth
 def get_song(song_id):
     """ return information about a specific song """
     song = AudioService.instance().findSongById(g.current_user, song_id)
@@ -212,15 +212,23 @@ def get_song_audio(song_id):
 
     song = AudioService.instance().findSongById(g.current_user, song_id)
 
-    if not song or not song[Song.path]:
-        return httpError(404, "No Audio for %s `%s`" % (song_id, song[Song.path]))
+    if not song:
+        logger.error(path)
+        return httpError(404, "No Song for id %s" % (song_id))
 
     path = song[Song.path]
+
+    if not path:
+        return httpError(404, "No Audio File registered for %s" % (song_id))
+
+    if not os.path.exists(path):
+        return httpError(404, "Audio File not found for %s `%s`" % (song_id, path))
+
     if TranscodeService.instance().shouldTranscodeSong(song):
         path = TranscodeService.instance().transcodeSong(song)
 
     if not os.path.exists(path):
-        return httpError(404, "No Audio for %s" % song_id)
+        return httpError(404, "Audio File not found for %s `%s`" % (song_id, path))
 
     return send_file(path)
 

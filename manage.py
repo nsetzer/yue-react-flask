@@ -23,7 +23,7 @@ args = parser.parse_args()
 cfg = Config.init(args.config)
 
 from server.app import app, db, dbtables, list_routes
-from server.cli.config import db_init, db_drop_all
+from server.cli.config import db_init, db_update, db_drop_all
 from server.dao.util import hash_password
 
 #migrate = Migrate(app, db)
@@ -34,7 +34,11 @@ from server.dao.util import hash_password
 
 def create():
     """Creates the db tables."""
-    db_init(db, dbtables, "config/production/env.yml")
+    db_init(db, dbtables, "config/development/env.yml")
+
+def update():
+    """Creates the db tables."""
+    db_update(db, dbtables, "config/development/env.yml")
 
 def drop():
     """drop the db tables."""
@@ -53,6 +57,8 @@ if __name__ == '__main__':
 
     if args.mode == "create":
         create()
+    elif args.mode == "update":
+        update()
     elif args.mode == "drop":
         drop()
     elif args.mode == "routes":

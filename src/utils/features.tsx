@@ -1,12 +1,20 @@
 
 import store from '../store/configureStore';
 
+export function getTheme() {
+    let state = store.getState() as {theme:any};
+
+    if (!('theme' in state) || !state.theme) {
+        return false;
+    }
+
+    return state.theme
+}
 
 function userHasFeature(feat : string): boolean {
 
     let state = store.getState() as {auth:any};
 
-    console.log(state)
     if (!('auth' in state) || !state.auth) {
         return false;
     }

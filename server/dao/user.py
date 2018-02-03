@@ -80,7 +80,6 @@ class UserDao(object):
 
         query = delete(self.dbtables.RoleTable) \
             .where(self.dbtables.RoleTable.c.id == role_id)
-
         self.db.session.execute(query)
 
         if commit:
@@ -93,6 +92,22 @@ class UserDao(object):
         if commit:
             self.db.session.commit()
         return result.inserted_primary_key[0]
+
+    def dropFeature(self, feature_id, commit=True):
+        """
+        remove a feature from the database
+        revoke the feature from any roles it has been granted to.
+        """
+        query = delete(self.dbtables.RoleFeatureTable) \
+            .where(self.dbtables.RoleFeatureTable.c.feature_id == feature_id)
+        self.db.session.execute(query)
+
+        query = delete(self.dbtables.FeatureTable) \
+            .where(self.dbtables.FeatureTable.c.id == feature_id)
+        self.db.session.execute(query)
+
+        if commit:
+            self.db.session.commit()
 
     def findFeatureByName(self, name):
         query = self.dbtables.FeatureTable.select() \
@@ -315,6 +330,15 @@ class UserDao(object):
 
         if commit:
             self.db.session.commit()
+
+    def userHasRole(self, user_id, role_id):
+        query = self.dbtables.GrantedRoleTable.select() \
+            .where(
+                and_(self.dbtables.GrantedRoleTable.c.user_id == user_id,
+                     self.dbtables.GrantedRoleTable.c.role_id == role_id,
+                    ))
+        result = self.db.session.execute(query)
+        return len(result.fetchall()) != 0
 
     def roleHasFeature(self, role_id, feature_id):
         query = self.dbtables.RoleFeatureTable.select() \

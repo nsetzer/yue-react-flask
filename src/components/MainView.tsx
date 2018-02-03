@@ -16,8 +16,6 @@ import LibraryMusic from 'material-ui-icons/LibraryMusic';
 import * as ListIcons from 'material-ui-icons/List';
 const ListIcon = ListIcons.default;
 
-import { withTheme } from 'material-ui/styles';
-
 import Divider from 'material-ui/Divider';
 import * as UiList  from 'material-ui/List';
 const List = UiList.default;
@@ -43,7 +41,7 @@ import { Route, Redirect, Switch } from 'react-router-dom';
 
 import History from '../history';
 
-import { readFilesystem } from '../utils/features'
+import { getTheme, readFilesystem } from '../utils/features'
 
 interface IDictionary<T> {
     [Key: string]: T;
@@ -71,6 +69,7 @@ export interface IAppSideNavProps {
 
 export interface IAppSideNavState {
 }
+
 class AppSideNav extends React.Component<IAppSideNavProps,IAppSideNavState> {
   constructor(props) {
     super(props);
@@ -172,8 +171,10 @@ class AppSideNav extends React.Component<IAppSideNavProps,IAppSideNavState> {
 }
 
 export interface IMainViewProps {
+  dispatch: (action: any) => void;
   logoutAndRedirect: PropTypes.func;
   theme: any;
+  currentUser: any;
 }
 
 export interface IMainViewState {
@@ -272,7 +273,7 @@ class MainView extends React.Component<IMainViewProps,IMainViewState> {
                   onLogout={(e) => {this.logout(e);}}
                   />;
 
-    const { theme } = this.props;
+    const theme = getTheme().theme;
 
     return (
       <div>
@@ -323,6 +324,7 @@ class MainView extends React.Component<IMainViewProps,IMainViewState> {
 
 function mapStateToProps(state) {
   return {
+    currentUser : state.auth.currentUser
   };
 }
 
@@ -333,4 +335,4 @@ function mapDispatchToProps(dispatch) {
 export default connect(
   mapStateToProps,
   mapDispatchToProps
-)(withTheme()(MainView));
+)(MainView);

@@ -93,7 +93,18 @@ def _handle_exceptions(f, args, kwargs):
 
         return httpError(500, reason + str(e))
 
-def _requires_token_auth_impl(f, args, kwargs, token):
+def _validate_user_feature(user_data, feature_name):
+    """
+    validate that a role has a specific feature
+    assume that the user has been granted the specified role
+    """
+    user_id = user_data['id']
+    role_id = user_data['role_id']
+    # has_role = _userDao.userHasRole(user_id, role_id)
+    has_feat = _userDao.roleHasNamedFeature(role_id, feature_name)
+    return has_feat;
+
+def _requires_token_auth_impl(f, args, kwargs, feature, token):
     """
     token based authentication for client side state management
 
@@ -103,8 +114,13 @@ def _requires_token_auth_impl(f, args, kwargs, token):
     """
 
     try:
-        print(token)
         user_data = verify_token(token)
+
+        if feature is not None:
+            if not _validate_user_feature(user_data, feature):
+                return httpError(401,
+                    "failed to authenticate user %s with feature %s" % (
+                        email, feature))
 
         g.current_user = user_data
 
@@ -120,7 +136,7 @@ def _requires_token_auth_impl(f, args, kwargs, token):
         return httpError(401,
             "Authentication is required to access this resource")
 
-def _requires_basic_auth_impl(f, args, kwargs, token):
+def _requires_basic_auth_impl(f, args, kwargs, feature, token):
     """
     basic auth enables easy testing
 
@@ -138,17 +154,25 @@ def _requires_basic_auth_impl(f, args, kwargs, token):
     if user:
         # basic auth requires a db lookup to validate the user
         # store the user information in the same way as the token auth
-        g.current_user = {
+        user_data = {
             "id": user.id,
             "email": user.email,
             "domain_id": user.domain_id,
             "role_id": user.role_id
         }
+
+        if feature is not None:
+            if not _validate_user_feature(user_data, feature):
+                return httpError(401,
+                    "failed to authenticate user %s with feature %s" % (
+                        email, feature))
+
+        g.current_user = user_data
         return _handle_exceptions(f, args, kwargs)
 
     return httpError(401, "failed to authenticate user %s" % email)
 
-def _requires_apikey_auth_impl(f, args, kwargs, token):
+def _requires_apikey_auth_impl(f, args, kwargs, feature, token):
     """
     basic auth enables easy testing
 
@@ -164,12 +188,21 @@ def _requires_apikey_auth_impl(f, args, kwargs, token):
     if user:
         # basic auth requires a db lookup to validate the user
         # store the user information in the same way as the token auth
-        g.current_user = {
+        user_data = {
             "id": user.id,
             "email": user.email,
             "domain_id": user.domain_id,
             "role_id": user.role_id
         }
+
+        if feature is not None:
+            if not _validate_user_feature(user_data, feature):
+                return httpError(401,
+                    "failed to authenticate user %s with feature %s" % (
+                        email, feature))
+
+        g.current_user = user_data
+
         return _handle_exceptions(f, args, kwargs)
 
     return httpError(401, "failed to authenticate user by apikey")
@@ -189,10 +222,10 @@ def requires_auth(f):
 
         bytes_token = token.encode('utf-8', 'ignore')
         if token.startswith("Basic "):
-            return _requires_basic_auth_impl(f, args, kwargs, bytes_token)
+            return _requires_basic_auth_impl(f, args, kwargs, None, bytes_token)
         elif token.startswith("APIKEY "):
-                return _requires_apikey_auth_impl(f, args, kwargs, bytes_token)
-        return _requires_token_auth_impl(f, args, kwargs, bytes_token)
+                return _requires_apikey_auth_impl(f, args, kwargs, None, bytes_token)
+        return _requires_token_auth_impl(f, args, kwargs, None, bytes_token)
 
     return decorated
 
@@ -213,18 +246,18 @@ def requires_auth_query(f):
         token = request.args.get('token', None)
         if token is not None:
             bytes_token = (token).encode("utf-8")
-            return _requires_token_auth_impl(f, args, kwargs, bytes_token)
+            return _requires_token_auth_impl(f, args, kwargs, None, bytes_token)
 
         token = request.args.get('apikey', None)
         if token is not None:
             bytes_token = ("APIKEY " + token).encode("utf-8")
-            return _requires_apikey_auth_impl(f, args, kwargs, bytes_token)
+            return _requires_apikey_auth_impl(f, args, kwargs, None, bytes_token)
 
         return httpError(401, "no token or apikey provided to authenticate")
 
     return decorated
 
-def requires_auth_role(role=None):
+def requires_auth_feature(feature=None):
 
     def impl(f):
 
@@ -237,14 +270,12 @@ def requires_auth_role(role=None):
                 return httpError(401, str(e))
 
             token = request.headers['Authorization']
-            # TODO: check role for current user
-
             bytes_token = token.encode('utf-8', 'ignore')
             if token.startswith("Basic "):
-                return _requires_basic_auth_impl(f, args, kwargs, bytes_token)
+                return _requires_basic_auth_impl(f, args, kwargs, feature, bytes_token)
             elif token.startswith("APIKEY "):
-                return _requires_apikey_auth_impl(f, args, kwargs, bytes_token)
-            return _requires_token_auth_impl(f, args, kwargs, bytes_token)
+                return _requires_apikey_auth_impl(f, args, kwargs, feature, bytes_token)
+            return _requires_token_auth_impl(f, args, kwargs, feature, bytes_token)
         return decorated
     return impl
 
