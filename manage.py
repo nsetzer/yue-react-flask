@@ -18,13 +18,13 @@ parser.add_argument('--config', type=str,
 parser.add_argument('mode', type=str,
                     help='action to take')
 
-print(sys.argv)
 args = parser.parse_args()
 
 cfg = Config.init(args.config)
 
 from server.app import app, db, dbtables, list_routes
 from server.cli.config import db_init, db_drop_all
+from server.dao.util import hash_password
 
 #migrate = Migrate(app, db)
 #manager = Manager(app)
@@ -44,6 +44,10 @@ def routes():
     """List application endpoints"""
     list_routes()
 
+def hash():
+    if len(sys.argv)!=2:
+        sys.stdout.write("usage: %s password" % sys.argv[0])
+    print(hash_password(sys.argv[1]).decode("utf-8"))
 
 if __name__ == '__main__':
 
@@ -53,3 +57,5 @@ if __name__ == '__main__':
         drop()
     elif args.mode == "routes":
         routes()
+    elif args.mode == "hash_password":
+        hash()

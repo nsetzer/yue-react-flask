@@ -11,16 +11,27 @@ import {
     CHANGE_PASSWORD_FAILURE,
     CHANGE_PASSWORD_REQUEST,
     CHANGE_PASSWORD_SUCCESS,
+    SET_USER_INFORMATION,
 } from '../constants/index';
 
 import { parseJSON } from '../utils/misc';
 import {
     get_token,
     create_user,
-    change_user_password
+    change_user_password,
+    data_about_user
 } from '../utils/http_functions';
 
 import History from '../history'
+
+export function setUserInformation( info ) {
+    return {
+        type: SET_USER_INFORMATION,
+        payload: {
+            info,
+        },
+    };
+}
 
 export function loginUserSuccess(token) {
     localStorage.setItem('token', token);
@@ -95,6 +106,26 @@ export function loginUser(email, password, target) {
                         statusText: 'Invalid username or password',
                     },
                 }));
+            });
+    };
+}
+
+export function getUserInformation(token) {
+
+    console.log("getUserInformation")
+    return function (dispatch) {
+        //let token = localStorage.getItem('token');
+        console.log("getUserInformation: " + token)
+        return data_about_user(token)
+            .then(res => {
+                console.log("got here")
+                console.log(res)
+                return dispatch(setUserInformation(res.result));
+            })
+            .catch(error => {
+                console.log("got error")
+                console.log(error.message)
+                return dispatch(setUserInformation(null));
             });
     };
 }

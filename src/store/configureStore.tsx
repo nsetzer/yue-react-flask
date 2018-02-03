@@ -13,7 +13,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 */
-export default function configureStore() {
+function configureStore() {
     const store = createStore(
         rootReducer,
         applyMiddleware(thunkMiddleware)
@@ -30,3 +30,5 @@ export default function configureStore() {
 
     return store;
 }
+
+export default configureStore()

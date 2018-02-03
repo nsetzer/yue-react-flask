@@ -10,6 +10,7 @@ export interface NotAuthenticatedComponentProps{
     history: any,
     isAuthenticated: boolean,
     loginUserSuccess: (any) => any,
+    getUserInformation: (any) => any,
 }
 
 export interface NotAuthenticatedComponentState{
@@ -62,6 +63,7 @@ export function requireNoAuthentication(Component) {
                         .then(res => {
                             if (res.status === 200) {
                                 this.props.loginUserSuccess(token);
+                                this.props.getUserInformation(token);
                                 props.history.push('/main');
 
                             } else {

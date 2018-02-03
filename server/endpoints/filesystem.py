@@ -2,7 +2,7 @@
 import os, sys
 from flask import request, jsonify, g, send_file
 from ..index import app, db, dbtables
-from .util import requires_auth, httpError
+from .util import requires_auth, requires_auth_role, httpError
 from stat import S_ISDIR, S_ISREG, S_IRGRP
 
 from ..config import Config
@@ -13,7 +13,7 @@ curl -v -u admin:admin "http://localhost:4200/api/fs/default"
 
 @app.route('/api/fs/<root>/path/', defaults={'path': ''})
 @app.route('/api/fs/<root>/path/<path:path>')
-@requires_auth
+@requires_auth_role("read_filesystem")
 def fs_get_path(root, path):
 
     if root != "default":
@@ -33,7 +33,7 @@ def fs_get_path(root, path):
     return list_directory(root, os_root, path)
 
 @app.route('/api/fs/roots')
-@requires_auth
+@requires_auth_role("read_filesystem")
 def fs_get_routes():
     # todo this should be a list of names
     return jsonify(result=["default", ])

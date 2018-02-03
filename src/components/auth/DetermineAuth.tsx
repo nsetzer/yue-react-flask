@@ -11,6 +11,7 @@ export interface DetermineAuthenticatedComponentProps{
     userName: string,
     token: string,
     loginUserSuccess: (any) => any,
+    getUserInformation: (any) => any,
 }
 
 export interface DetermineAuthenticatedComponentState{
@@ -61,6 +62,7 @@ export function DetermineAuth(Component) {
                         .then(res => {
                             if (res.status === 200) {
                                 this.props.loginUserSuccess(token);
+                                this.props.getUserInformation(token);
                                 this.setState({
                                     loaded_if_needed: true,
                                 });

@@ -52,24 +52,20 @@ export function get_token(email, password) {
 }
 
 export function data_about_user(token) {
-    return axios.get(env.baseUrl + '/api/user', tokenConfig(token));
-}
+    //return axios.get(env.baseUrl + '/api/user', tokenConfig(token));
+    let url: string = env.baseUrl + '/api/user'
 
-export function get_random_int() {
-    return axios.get(env.baseUrl + '/api/random')
-}
+    let options = {
+        method: 'GET',
+        uri: url,
+        headers: {
+            'Authorization': token,
+        },
+        json: true,
+    };
 
-export function create_message(text) {
-    return axios.post(env.baseUrl + '/api/message',
-                      {message:text});
-}
+    return request(options);
 
-export function get_all_messages() {
-    return axios.get(env.baseUrl + '/api/message')
-}
-
-export function delete_message(id) {
-    return axios.delete(env.baseUrl + `/api/message/${id}`)
 }
 
 

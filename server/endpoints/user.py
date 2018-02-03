@@ -30,13 +30,16 @@ curl -v -u admin:admin "http://localhost:4200/api/user/list/user/1"
 
 """
 
+def get_user_info(user):
+    user = user.copy()
+    user['features'] = userDao.listFeaturesByName(user['role_id'])
+    user['apikey'] = userDao.getUserApiKey(user['id'])
+    return user
+
 @app.route("/api/user", methods=["GET"])
 @requires_auth
 def get_user():
-    user = g.current_user
-    user['features'] = userDao.listFeaturesByName(user['role_id'])
-    user['apikey'] = userDao.getUserApiKey(user['id'])
-    return jsonify(result=user)
+    return jsonify(result=get_user_info(g.current_user))
 
 """
 @app.route("/api/user", methods=["POST"])

@@ -13,11 +13,13 @@ import {
     CHANGE_PASSWORD_FAILURE,
     CHANGE_PASSWORD_REQUEST,
     CHANGE_PASSWORD_SUCCESS,
+    SET_USER_INFORMATION,
 } from '../constants/index';
 
 export const initialState = {
     token: null,
     userName: null,
+    currentUser: null,
     isAuthenticated: false,
     isAuthenticating: false,
     statusText: null,
@@ -28,6 +30,10 @@ export const initialState = {
 };
 
 export default createReducer(initialState, {
+    [SET_USER_INFORMATION]: (state, payload) =>
+        Object.assign({}, state, {
+            currentUser: payload.info,
+        }),
     [LOGIN_USER_REQUEST]: (state) =>
         Object.assign({}, state, {
             isAuthenticating: true,

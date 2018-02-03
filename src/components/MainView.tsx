@@ -43,6 +43,8 @@ import { Route, Redirect, Switch } from 'react-router-dom';
 
 import History from '../history';
 
+import { readFilesystem } from '../utils/features'
+
 interface IDictionary<T> {
     [Key: string]: T;
 }
@@ -123,13 +125,15 @@ class AppSideNav extends React.Component<IAppSideNavProps,IAppSideNavState> {
           </ListItemIcon>
           <ListItemText primary="Settings" />
         </ListItem>
-        <ListItem button
-                  onClick={() => {this.openPage('/main/filesystem');}}>
-          <ListItemIcon>
-            <Settings />
-          </ListItemIcon>
-          <ListItemText primary="FileSystem" />
-        </ListItem>
+        { readFilesystem()?
+          <ListItem button
+                    onClick={() => {this.openPage('/main/filesystem');}}>
+            <ListItemIcon>
+              <Settings />
+            </ListItemIcon>
+            <ListItemText primary="FileSystem" />
+          </ListItem> : null
+        }
       <Divider />
         <ListItem button
                   onClick={this.props.onLogout}>
@@ -169,7 +173,6 @@ class AppSideNav extends React.Component<IAppSideNavProps,IAppSideNavState> {
 
 export interface IMainViewProps {
   logoutAndRedirect: PropTypes.func;
-  userName: PropTypes.string;
   theme: any;
 }
 
@@ -320,7 +323,7 @@ class MainView extends React.Component<IMainViewProps,IMainViewState> {
 
 function mapStateToProps(state) {
   return {
-    };
+  };
 }
 
 function mapDispatchToProps(dispatch) {

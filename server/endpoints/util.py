@@ -103,6 +103,7 @@ def _requires_token_auth_impl(f, args, kwargs, token):
     """
 
     try:
+        print(token)
         user_data = verify_token(token)
 
         g.current_user = user_data

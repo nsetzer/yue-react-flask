@@ -10,6 +10,7 @@ export interface AuthenticatedComponentProps{
     history: any,
     isAuthenticated: boolean,
     loginUserSuccess: (any) => any,
+    getUserInformation: (any) => any,
     logout: () => any
 }
 
@@ -60,6 +61,7 @@ export function requireAuthentication(Component) {
 
                             if (res.status === 200) {
                                 this.props.loginUserSuccess(token);
+                                this.props.getUserInformation(token);
                                 this.setState({loaded_if_needed: true});
 
                             } else {

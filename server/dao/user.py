@@ -1,7 +1,8 @@
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import and_, or_, not_, select, column, update, insert, delete
 
-import bcrypt
+
+from .util import hash_password, check_password_hash
 
 class UserDao(object):
     """docstring for UserDao"""
@@ -10,6 +11,8 @@ class UserDao(object):
         super(UserDao, self).__init__()
         self.db = db
         self.dbtables = dbtables
+
+        self.workfactor = 12
 
     def createDomain(self, domainName, commit=True):
         query = insert(self.dbtables.DomainTable) \
@@ -115,12 +118,11 @@ class UserDao(object):
 
     def createUser(self, email, password, domain_id, role_id, commit=True):
 
-        salt = bcrypt.gensalt(12)
-        crypt = bcrypt.hashpw(password.encode("utf-8"), salt)
+        hashed = hash_password(password, self.workfactor)
 
         user_ = {
             "email": email,
-            "password": crypt,
+            "password": hashed,
             "domain_id": domain_id,
             "role_id": role_id,
         }
@@ -157,9 +159,9 @@ class UserDao(object):
         user = self.db.session.execute(query).fetchone()
 
         if user:
-            crypt = user[self.dbtables.UserTable.c.password]
+            hash = user[self.dbtables.UserTable.c.password]
             print(email, password, user)
-            if bcrypt.checkpw(password.encode("utf-8"), crypt):
+            if check_password_hash(hash, password):
                 return user
 
         return None
@@ -172,10 +174,8 @@ class UserDao(object):
 
     def changeUserPassword(self, user_id, password, commit=True):
 
-        print("USER:",self.findUserById(user_id))
-        salt = bcrypt.gensalt(12)
-        crypt = bcrypt.hashpw(password.encode("utf-8"), salt)
-        data = {"password": crypt}
+        hash = hash_password(password, self.workfactor)
+        data = {"password": hash}
         query = update(self.dbtables.UserTable) \
             .values(data) \
             .where(self.dbtables.UserTable.c.id == user_id)
@@ -183,7 +183,6 @@ class UserDao(object):
 
         if commit:
             self.db.session.commit()
-        print("USER:",self.findUserById(user_id))
 
     def listUsers(self, domain_id):
 
@@ -219,9 +218,8 @@ class UserDao(object):
     def updateUser(self, user, commit=True):
 
         if 'password' in user:
-            salt = bcrypt.gensalt(12)
-            crypt = bcrypt.hashpw(user['password'].encode("utf-8"), salt)
-            user['password'] = crypt
+            hash = hash_password(password, self.workfactor)
+            user['password'] = hash
 
         query = update(self.dbtables.UserTable) \
             .values(user) \
