@@ -4,6 +4,7 @@ from ..dao.user import UserDao
 from ..dao.library import LibraryDao, Song
 from ..dao.queue import SongQueueDao
 from ..dao.history import HistoryDao
+from ..dao.shuffle import binshuffle
 
 from .util import AudioServiceException
 class AudioService(object):
@@ -64,10 +65,23 @@ class AudioService(object):
         limit=None,
         offset=None):
 
-        return self.libraryDao.search(
+        shuffle = False
+        limit_save = limit
+        if orderby == "random":
+            orderby = None
+            shuffle = True
+            limit = None
+
+        result = self.libraryDao.search(
             user['id'], user['domain_id'],
             searchTerm, case_insensitive,
             orderby, limit, offset)
+
+        if shuffle:
+            result = binshuffle(result, lambda s : s['artist'])[:limit_save]
+        print(searchTerm, len(result))
+
+        return result;
 
     def updateSongs(self, user, songs):
 
@@ -92,8 +106,10 @@ class AudioService(object):
         return song_id
 
     def getDomainSongInfo(self, domain_id):
-
         return self.libraryDao.domainSongInfo(domain_id)
+
+    def getDomainSongUserInfo(self, user):
+        return self.libraryDao.domainSongUserInfo(user['id'], user['domain_id'])
 
     def getQueue(self, user):
         return self.queueDao.get(user['id'], user['domain_id'])
@@ -109,6 +125,9 @@ class AudioService(object):
 
     def defaultQuery(self, user):
         return self.queueDao.getDefaultQuery(user['id'])
+
+    def setDefaultQuery(self, user, query_str):
+        return self.queueDao.setDefaultQuery(user['id'], query_str)
 
     def populateQueue(self, user):
         songs = self.queueDao.get(user['id'], user['domain_id'])

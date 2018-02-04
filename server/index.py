@@ -31,6 +31,10 @@ cors = CORS(app, resources={r"/api/*": {"origins": cfg.cors.origins}})
 
 dbtables = DatabaseTables(db.metadata)
 
+if cfg.database.kind == "sqlite":
+    db.session.execute("PRAGMA journal_mode = WAL");
+    db.session.execute("PRAGMA synchronous = NORMAL");
+
 if not os.path.exists(cfg.build_dir):
     # only an error in production environments
     app.logger.warn("build directory not found\n")

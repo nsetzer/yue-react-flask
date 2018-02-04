@@ -27,6 +27,8 @@ def SongDataTable(metadata):
     length: length of the song in seconds
     equalizer: measure of volume of the song
     year: year the track was released
+    banished: song should not appear in queries for any user
+    date_added: date song was added to the database
     """
     return Table('song_data', metadata,
         Column('id', String, primary_key=True, default=generate_uuid),
@@ -48,6 +50,7 @@ def SongDataTable(metadata):
         Column('length', Integer, default=0),
         Column('equalizer', Integer, default=0),
         Column('year', Integer, default=0),
+        Column('banished', Integer, default=0),
         # date
         Column('date_added', Integer, default=lambda: int(time.time()))
     )

@@ -75,6 +75,7 @@ def create_queue_from_query():
     query = request.args.get('query', def_query)
     limit = max(1, min(QUERY_LIMIT_MAX, int(request.args.get('limit', 50))))
     page = max(0, int(request.args.get('page', 0)))
+
     orderby = request.args.get('orderby', 'artist')
     offset = limit * page
 
@@ -84,16 +85,25 @@ def create_queue_from_query():
     song_ids = [song['id'] for song in songs]
     AudioService.instance().setQueue(g.current_user, song_ids)
 
+    # set the default query to the last query used by the user
+    # if the query used to create the playlist did not produce
+    # more results than the limit, default to an empty query.
+    if len(songs) < limit:
+        query = ""
+    AudioService.instance().setDefaultQuery(g.current_user, query)
+
+    qstr = AudioService.instance().defaultQuery(g.current_user)
     return jsonify(result=songs)
 
 @app.route("/api/queue/query", methods=["GET"])
 @cross_origin(supports_credentials=True)
 @requires_auth
 def get_queue_query():
-    """ return the defualt query for the user """
-    # service = AudioService.instance()
-    # songs = service.getQueue(g.current_user)
-    return jsonify(result="")
+    """ return the default query for the user """
+
+    qstr = AudioService.instance().defaultQuery(g.current_user)
+
+    return jsonify(result=qstr)
 
 @app.route("/api/queue/query", methods=["POST"])
 @cross_origin(supports_credentials=True)
@@ -107,12 +117,10 @@ def set_queue_query():
 
     req = request.get_json()
 
-    if 'text' not in req:
+    if 'query' not in req:
         return httpError(400, "invalid request: missing `text`")
 
-    text = req['text']
-
-    # TODO: set default query to text
+    AudioService.instance().setDefaultQuery(g.current_user, req['query'])
 
     return jsonify(result="OK")
 

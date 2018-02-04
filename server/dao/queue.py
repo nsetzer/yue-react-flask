@@ -24,7 +24,7 @@ class SongQueueDao(object):
 
         if not lst:
             query = insert(SongQueueTable) \
-                .values({"user_id": user_id, "songs": song_ids, })
+                .values({"user_id": user_id, "songs": song_ids, "query": ""})
         else:
             query = update(SongQueueTable) \
                 .values({"songs": song_ids, }) \
@@ -169,6 +169,25 @@ class SongQueueDao(object):
             return ""
         return result['query']
 
+    def setDefaultQuery(self, user_id, query_str):
+
+        SongQueueTable = self.dbtables.SongQueueTable
+
+        # create the queue if it does not exist
+        query = SongQueueTable.select() \
+            .where(SongQueueTable.c.user_id == user_id)
+        lst = self.db.session.execute(query).fetchall()
+
+        if not lst:
+            query = insert(SongQueueTable) \
+                .values({"user_id": user_id, "songs": [], "query": query_str})
+        else:
+            query = update(SongQueueTable) \
+                .values({"query": query_str, }) \
+                .where(SongQueueTable.c.user_id == user_id)
+
+        self.db.session.execute(query)
+        self.db.session.commit()
 
 
 

@@ -83,10 +83,20 @@ def _yue_reader(dbpath):
     sqlstore = SQLStore(dbpath)
     yueLib = YueLibrary(sqlstore)
 
-    for song in yueLib.search("ban=0"):
+    for song in yueLib.search(""):
         new_song = {v: song[k] for k, v in all_fields.items()}
 
         new_song[Song.ref_id] = song[YueSong.uid]
+        new_song[Song.banished] = song[YueSong.blocked]
+
+        # experimental hack to allow searching by genre
+        # all genrs are now formated as: 'foo;'
+        gen = new_song[YueSong.genre].replace(",", ";").strip()
+        if not gen:
+            gen  = [ ]
+        else:
+            gen = [g.strip().title() for g in gen.split(";")]
+        new_song[YueSong.genre] = ";" + ";".join([ g for g in gen if g]) + ";"
 
         try:
             temp_path = os.path.splitext(song[YueSong.path])[0] + ".jpg"
@@ -122,7 +132,8 @@ def migrate(username, domain_name, json_objects):
     count = 0
     try:
         for new_song in json_objects:
-            print(new_song[Song.ref_id])
+            if count % 100 == 0 and count > 1:
+                print(count)
             song_id = libraryDao.insertOrUpdateByReferenceId(
                 user.id, domain.id,
                 new_song[Song.ref_id], new_song,

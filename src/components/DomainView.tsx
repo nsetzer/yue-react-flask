@@ -5,6 +5,8 @@ import { Link } from 'react-router-dom'
 import { bindActionCreators } from 'redux';
 import { connect } from 'react-redux';
 
+import Button from 'material-ui/Button';
+
 import * as UiList  from 'material-ui/List';
 const List = UiList.default
 const ListItem = UiList.ListItem
@@ -16,7 +18,11 @@ import Send from 'material-ui-icons/Send';
 import Delete from 'material-ui-icons/Delete';
 import MoreVert from 'material-ui-icons/MoreVert';
 
-import * as actionCreators from '../actions/library';
+import * as libraryActionCreators from '../actions/library';
+import * as queueActionCreators from '../actions/queue';
+const actionCreators = Object.assign({},
+                                     libraryActionCreators,
+                                     queueActionCreators);
 
 import Typography from 'material-ui/Typography';
 
@@ -30,6 +36,7 @@ export interface IDomainViewProps {
   location: any
   libraryStatus: string,
   libraryGetDomainInfo: () => any,
+  createQueue: (q,m) => any,
   domain_artists: Array<any>,
   domain_genres: Array<any>,
   domain_song_count: number
@@ -59,6 +66,21 @@ function navigateBack() {
   window.scrollTo(0,0)
 }
 
+function str_array_eq(ar1, ar2) {
+  // first check that the arrays are of equal length
+  if (ar1.length != ar2.length) {
+    return false;
+  }
+  // check that the contents are the same
+  for (let i=0; i < ar1.length; i++) {
+    if (ar1[i] != ar2[i]) {
+      return false
+    }
+  }
+
+  return true;
+}
+
 class DomainView extends React.Component<IDomainViewProps,IDomainViewState> {
 
   constructor(props) {
@@ -69,10 +91,30 @@ class DomainView extends React.Component<IDomainViewProps,IDomainViewState> {
 
   public componentWillMount() {
     let query_params: {genre:string} = parseQuery(this.props.location.search);
-    console.log(query_params);
+
+    let genres = []
     if (query_params.genre !== null) {
-      this.setState({filter_genres: [query_params.genre, ]})
+      genres = [query_params.genre, ]
     }
+
+    if (!str_array_eq(genres, this.state.filter_genres)) {
+      this.setState({filter_genres: genres})
+    }
+
+  }
+
+  public componentWillReceiveProps(newProps) {
+    let query_params: {genre:string} = parseQuery(newProps.location.search);
+
+    let genres = []
+    if (query_params.genre !== null) {
+      genres = [query_params.genre, ]
+    }
+
+    if (!str_array_eq(genres, this.state.filter_genres)) {
+      this.setState({filter_genres: genres})
+    }
+
   }
 
   public componentDidMount() {
@@ -92,7 +134,6 @@ class DomainView extends React.Component<IDomainViewProps,IDomainViewState> {
 
     let artists = (this.props.domain_artists.length>0)?
                   this.props.domain_artists:[]
-    console.log(artists.length)
 
     let genres = this.state.filter_genres;
     if (genres && genres.length > 0) {
@@ -101,14 +142,29 @@ class DomainView extends React.Component<IDomainViewProps,IDomainViewState> {
       });
     }
 
-    console.log(artists.length)
-    console.log(genres)
+    // note: this is a hack to enable search by genre
+    // assumption is that genre is unstructured data
+    // however, we are now forcing it to be a semicolon separated list
+    // that is terminated by a semicolon. therefore if i do a wild card
+    // search in the database (e.g. "*;foo;*" ) I should find exactly
+    // that genre
+    const queryString = genres.map( x => `genre=\";${x};\"`).join(" ");
+
 
     return (
         <div>
         <Typography type="title" align="center" gutterBottom>
           Artists
         </Typography>
+
+        <Button
+          raised
+          color="accent"
+          onClick={(e) => {
+            this.props.createQueue(queryString, 'random')}
+        }>
+          Random Play All
+        </Button>
 
         <List>
             {

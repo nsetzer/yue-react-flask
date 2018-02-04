@@ -35,7 +35,8 @@ class Song(object):
     play_count  = 'play_count'  # number of times song has been played
     skip_count  = 'skip_count'  # number of times song was skipped
     rating      = 'rating'      # from 0 - 10
-    blocked     = 'blocked'     # was 'banished', type boolean
+    banished    = 'banished'     # was 'banished' by domain, type boolean
+    blocked     = 'blocked'     # was 'banished' by user, type boolean
     equalizer   = 'equalizer'   # used in automatic volume leveling
     date_added  = 'date_added'  # as unix time stamp
     frequency   = 'frequency'   # how often the song is played (days)
@@ -386,6 +387,35 @@ class LibraryDao(object):
 
         return song_id
 
+    def domainSongUserInfo(self, user_id, domain_id):
+        """
+        generate a document describing artists, albums, and genres in the
+        database for a given domain.
+
+        Remove songs blocked by a user
+
+        """
+        columns = [column(Song.artist),
+                   column(Song.artist_key),
+                   column(Song.album),
+                   column(Song.genre),
+                   column(Song.blocked),
+                   column(Song.banished)]
+
+        SongData = self.dbtables.SongDataTable
+        SongUserData = self.dbtables.SongUserDataTable
+
+        query = select(columns) \
+            .select_from(
+                    SongData.join(
+                        SongUserData,
+                        and_(SongData.c.id == SongUserData.c.song_id,
+                             SongUserData.c.user_id == user_id),
+                        isouter=True)) \
+            .where(self.dbtables.SongDataTable.c.domain_id == domain_id)
+
+        return self._getDomainSongInfo(query)
+
     def domainSongInfo(self, domain_id):
         """
         generate a document describing artists, albums, and genres in the
@@ -396,15 +426,21 @@ class LibraryDao(object):
         columns = [column(Song.artist),
                    column(Song.artist_key),
                    column(Song.album),
-                   column(Song.genre)]
+                   column(Song.genre),
+                   column(Song.banished)]
 
         query = select(columns) \
             .select_from(self.dbtables.SongDataTable) \
             .where(self.dbtables.SongDataTable.c.domain_id == domain_id)
 
+        return self._getDomainSongInfo(query)
+
+    def _getDomainSongInfo(self, query):
+
         keys = {}
         artists = {}
         genres = {}
+        n_records1 = 0
         total = 0
 
         genre_artists = {}
@@ -413,6 +449,14 @@ class LibraryDao(object):
             key = record[Song.artist_key]
             art = record[Song.artist]
             alb = record[Song.album]
+
+            n_records1 += 1
+            if record[Song.banished]:
+                continue
+
+            if Song.blocked in record and record[Song.blocked]:
+                continue
+
             # genres are comma or colon deliminated
             gen = record[Song.genre].replace(",", ";").strip()
             if not gen:
@@ -420,6 +464,7 @@ class LibraryDao(object):
             else:
                 # attempt to de-duplicate genre names
                 gen = [g.strip().title() for g in gen.split(";")]
+                gen = [g for g in gen if g]
 
             # count artist and album
             if art not in artists:
@@ -434,7 +479,7 @@ class LibraryDao(object):
 
             # count genres for the record
             for g in gen:
-                if g not in genres:
+                if g and g not in genres:
                     genres[g] = {"name": g, "count": 0, "artist_count": 0}
                 genres[g]['count'] += 1
                 if g not in artists[art]['genres']:
@@ -460,6 +505,7 @@ class LibraryDao(object):
             "genres": genres,
             "num_songs": total
         }
+        print("domain: %d/%d" % (total, n_records1))
 
         return data
 
@@ -470,11 +516,19 @@ class LibraryDao(object):
         case_insensitive=True,
         orderby=None,
         limit=None,
-        offset=None):
+        offset=None,
+        showBanished=False):
 
         rule = self.grammar.ruleFromString(searchTerm)
 
         sql_rule = rule.sql()
+
+        if not showBanished:
+            if sql_rule is None:
+                sql_rule = self.dbtables.SongDataTable.c.banished == 0
+            else:
+                sql_rule = and_(self.dbtables.SongDataTable.c.banished == 0, sql_rule)
+            sql_rule = and_(self.dbtables.SongUserDataTable.c.blocked == 0, sql_rule)
 
         if orderby is not None:
             orderby = self._getSearchOrder(case_insensitive, orderby)

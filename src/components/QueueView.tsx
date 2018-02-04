@@ -116,10 +116,15 @@ class QueueView extends React.Component<IQueueViewProps,IQueueViewState> {
   public render() {
     return (
         <div>
-        <IconButton aria-label="Populate"
+
+        {/*<IconButton aria-label="Populate"
              onClick={() => {this.props.populateQueue()}}>
               <Send />
-        </IconButton>
+        </IconButton>*/}
+        <Typography type="title" align="center" gutterBottom>
+          Now Playing
+        </Typography>
+
         <Typography noWrap>
         <List>
             {
@@ -131,16 +136,16 @@ class QueueView extends React.Component<IQueueViewProps,IQueueViewState> {
                                        marginBottom:"5px"}}
                                 key={song.id}>
                           <ListItem>
-                             <ListItemText primary={song.title}
+                             <ListItemText primary={(index+1) + ". " + song.title}
                                            secondary={song.artist}/>
                              <ListItemText style={listRightStyle}
                                            primary={fmtDuration(song.length)}/>
-                             <ListItemSecondaryAction>
-                               <IconButton aria-label="Delete"
+                             {index>=1?(<ListItemSecondaryAction>
+                               <IconButton aria-label="More"
                                            onClick={(e) => {this.onOpenMenu(e,index,song)}}>
                                 <MoreVert />
                                </IconButton>
-                             </ListItemSecondaryAction>
+                             </ListItemSecondaryAction>):null}
                           </ListItem>
                          </Card>
                 }) : <div>No Songs To Display</div>

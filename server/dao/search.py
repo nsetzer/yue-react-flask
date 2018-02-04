@@ -101,6 +101,9 @@ class BlankSearchRule(SearchRule):
     def __repr__(self):
         return "<all>"
 
+    def sqlstr(self):
+        return ""
+
 class ColumnSearchRule(SearchRule):
     """Base class for applying a rule to a column in a table"""
 

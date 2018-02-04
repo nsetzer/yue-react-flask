@@ -37,7 +37,7 @@ export function user_queue_populate(token: string) {
  * TODO: mode can either be "random" or "index"
  * and corresponds to the shuffle mode (ordered by album, index; or randomized)
  */
-export function user_queue_create(token: string, searchTerm: string, mode: string) {
+export function user_queue_create(token: string, searchTerm: string, orderby: string) {
 
     let url: string = env.baseUrl + '/api/queue/create'
 
@@ -46,6 +46,7 @@ export function user_queue_create(token: string, searchTerm: string, mode: strin
         uri: url,
         qs: {
             query: searchTerm,
+            orderby: orderby,
         },
         headers: {
             'Authorization': token,

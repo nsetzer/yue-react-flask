@@ -61,8 +61,10 @@ QUERY_LIMIT_MAX = 500
 @compressed
 def get_domain_info():
 
-    domain_id = g.current_user['domain_id']
-    data = AudioService.instance().getDomainSongInfo(domain_id)
+    #domain_id = g.current_user['domain_id']
+    #data = AudioService.instance().getDomainSongInfo(domain_id)
+
+    data = AudioService.instance().getDomainSongUserInfo(g.current_user)
     return jsonify(result=data)
 
 @app.route("/api/library", methods=["GET"])
