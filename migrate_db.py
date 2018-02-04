@@ -11,14 +11,14 @@ from yue.core.song import Song as YueSong, get_album_art, ArtNotFound
 from server.config import Config
 
 parser = argparse.ArgumentParser(description='yue server')
-parser.add_argument('--config', type=str,
-                    default="config/development/application.yml",
+parser.add_argument('--config-dir', type=str,
+                    default="config/development",
                     help='application config path')
 parser.add_argument('mode', type=str,
                     help='action to take')
 args = parser.parse_args()
 
-cfg = Config.init(args.config)
+cfg = Config.init(os.path.join(args.config_dir,"application.yml"))
 
 from server.app import app, db, dbtables
 
@@ -98,14 +98,15 @@ def _yue_reader(dbpath):
             gen = [g.strip().title() for g in gen.split(";")]
         new_song[YueSong.genre] = ";" + ";".join([ g for g in gen if g]) + ";"
 
-        try:
-            temp_path = os.path.splitext(song[YueSong.path])[0] + ".jpg"
-            art_path = get_album_art(song[YueSong.path], temp_path)
-            new_song[Song.art_path] = art_path
-        except ArtNotFound as e:
-            pass
-        except Exception as e:
-            pass
+        new_song[Song.art_path] = ""
+        #try:
+        #    temp_path = os.path.splitext(song[YueSong.path])[0] + ".jpg"
+        #    art_path = get_album_art(song[YueSong.path], temp_path)
+        #    new_song[Song.art_path] = art_path
+        #except ArtNotFound as e:
+        #    pass
+        #except Exception as e:
+        #    pass
 
         yield new_song
 
@@ -131,14 +132,43 @@ def migrate(username, domain_name, json_objects):
     start = time.time()
     count = 0
     try:
+        db.session.execute("PRAGMA JOURNAL_MODE = MEMORY");
+        db.session.execute("PRAGMA synchronous = OFF");
+        db.session.execute("PRAGMA TEMP_STORE = MEMORY");
+        db.session.execute("PRAGMA LOCKING_MODE = EXCLUSIVE");
+
+        bulk_songs = []
+        bulk_users = []
         for new_song in json_objects:
             if count % 100 == 0 and count > 1:
-                print(count)
-            song_id = libraryDao.insertOrUpdateByReferenceId(
-                user.id, domain.id,
-                new_song[Song.ref_id], new_song,
-                commit=False)
+                end = time.time()
+                t = (end-start)
+                print("%d %.2f %.2f" % (count, count / t, t))
+
+            song_data = libraryDao.prepareSongDataInsert(domain.id, new_song)
+            bulk_songs.append(song_data)
+
+            user_data = libraryDao.prepareUserDataInsert(user.id, domain.id, new_song)
+            if user_data:
+                bulk_users.append(user_data)
+
+            #song_id = libraryDao.insert(
+            #    user.id, domain.id,
+            #    new_song,
+            #    commit=False)
+
+            #song_id = libraryDao.insertOrUpdateByReferenceId(
+            #    user.id, domain.id,
+            #    new_song[Song.ref_id], new_song,
+            #    commit=False)
             count += 1
+
+        print("prepared %d songs in %.3f seconds, performing bulk insert" % (count, t))
+
+        libraryDao.bulkInsertSongData(bulk_songs, False)
+        if bulk_users:
+            libraryDao.bulkInsertUserData(bulk_users, False)
+
     except KeyboardInterrupt:
         pass
     finally:
@@ -189,12 +219,14 @@ def main():
         sys.stderr.write("cannot find source db")
         sys.exit(1)
 
+    env_config = os.path.join(args.config_dir,"env.yml")
+
     if args.mode == 'migrate':
-        migrate(username, domain_name, _yue_reader(dbpath))
+        migrate(username, domain_name, list(_yue_reader(dbpath)))
 
     elif args.mode == "create":
 
-        db_init(db, dbtables, "config/test/env.yml")
+        db_init(db, dbtables, env_config)
 
         domain = userDao.findDomainByName(domain_name)
         if domain is None:
@@ -211,7 +243,7 @@ def main():
     elif args.mode == "generate":
         """ create a database and populate it with dummy data"""
 
-        db_init_generate(db, dbtables, "config/test/env.yml")
+        db_init_generate(db, dbtables, env_config)
 
     elif args.mode == "domain_info":
 

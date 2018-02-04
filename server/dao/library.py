@@ -261,6 +261,9 @@ class LibraryDao(object):
         self.grammar = SongSearchGrammar(
             dbtables, self.formatter.cols_song, self.formatter.cols_user)
 
+        self.song_keys = set(self.formatter.cols_song)
+        self.user_keys = set(self.formatter.cols_user)
+
     def insert(self, user_id, domain_id, song, commit=True):
 
         song_id = self.insertSongData(domain_id, song, False)
@@ -272,7 +275,14 @@ class LibraryDao(object):
 
         return song_id
 
-    def insertSongData(self, domain_id, song, commit=True):
+    def prepareSongDataInsert(self, domain_id, song):
+        """
+        returns a dictionary that is ready to be inserted into the database
+
+        this is intended to be combined with a single call to
+        bulkInsertSongData. Multiple songs can be prepared ahead of time
+        allowing for an efficient insert.
+        """
 
         if Song.artist not in song:
             raise LibraryException("artist key missing from song")
@@ -286,9 +296,14 @@ class LibraryDao(object):
         if Song.artist_key not in song:
             song[Song.artist_key] = Song.getArtistKey(song[Song.artist])
 
-        song_keys = set(self.formatter.cols_song)
-        song_data = {k: song[k] for k in song.keys() if k in song_keys}
+        song_data = {k: song[k] for k in song.keys() if k in self.song_keys}
         song_data['domain_id'] = domain_id
+
+        return song_data
+
+    def insertSongData(self, domain_id, song, commit=True):
+
+        song_data = self.prepareSongDataInsert(domain_id, song)
 
         query = self.dbtables.SongDataTable.insert() \
             .values(song_data)
@@ -302,15 +317,59 @@ class LibraryDao(object):
 
         return song_id
 
-    def insertUserData(self, user_id, song_id, song, commit=True):
+    def bulkInsertSongData(self, songs, commit=True):
+        """
+        Insert multiple songs at once.
 
-        user_keys = set(self.formatter.cols_user)
-        user_data = {k: song[k] for k in song.keys() if k in user_keys}
+        each song in the given list is assumed to be the output
+        from prepareSongDataInsert.
+
+        Note: every song in the list should have the same set of keys
+        otherwise an insertion error will occur, even for columns which
+        have a default value
+        """
+
+        self.db.session.execute(self.dbtables.SongDataTable.insert(), songs)
+
+        if commit:
+            self.db.session.commit()
+
+    def prepareUserDataInsert(self, user_id, song_id, song):
+        """
+        returns a dictionary that is ready to be inserted into the database
+
+        Note: the dictionary may be empty indicating no record
+        needs to be inserted for the song. This will happen when the
+        song contains user information
+
+        this is intended to be combined with a single call to
+        bulkInsertUserData. Multiple songs can be prepared ahead of time
+        allowing for an efficient insert.
+        """
+
+        user_data = {k: song[k] for k in song.keys() if k in self.user_keys}
 
         if user_data:
-
             user_data["user_id"] = user_id
             user_data["song_id"] = song_id
+
+        return user_data
+
+    def insertUserData(self, user_id, song_id, song, commit=True):
+        """
+        Insert multiple songs at once.
+
+        each song in the given list is assumed to be the output
+        from prepareSongDataInsert.
+
+        Note: every song in the list should have the same set of keys
+        otherwise an insertion error will occur, even for columns which
+        have a default value
+        """
+
+        user_data = prepareUserDataInsert(user_id, song_id, song)
+
+        if user_data:
 
             query = self.dbtables.SongUserDataTable.insert() \
                 .values(user_data)
@@ -319,6 +378,13 @@ class LibraryDao(object):
 
             if commit:
                 self.db.session.commit()
+
+    def bulkInsertUserData(self, songs, commit=True):
+
+        self.db.session.execute(self.dbtables.SongUserDataTable.insert(), songs)
+
+        if commit:
+            self.db.session.commit()
 
     def update(self, user_id, domain_id, song_id, song, commit=True):
 
