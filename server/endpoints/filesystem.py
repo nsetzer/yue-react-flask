@@ -24,6 +24,7 @@ def fs_get_path(root, path):
     os_root = Config.instance().filesystem.media_root
     path = os.path.join(os_root, path)
 
+
     if not os.path.exists(path):
         return httpError(404, "path does not exist")
 
@@ -67,6 +68,7 @@ def list_directory(fs_name, root, path):
     dirs.sort()
 
     def trim_path(p):
+        p = p.replace("\\","/")
         if p.startswith(root):
             p = p[len(root):]
         while p.startswith("/"):

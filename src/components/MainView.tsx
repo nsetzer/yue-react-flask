@@ -130,7 +130,7 @@ class AppSideNav extends React.Component<IAppSideNavProps,IAppSideNavState> {
             <ListItemIcon>
               <Settings />
             </ListItemIcon>
-            <ListItemText primary="FileSystem" />
+            <ListItemText primary="File System" />
           </ListItem> : null
         }
       <Divider />
