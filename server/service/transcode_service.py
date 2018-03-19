@@ -26,14 +26,20 @@ class TranscodeService(object):
     def instance():
         return TranscodeService._instance
 
-    def shouldTranscodeSong(self, song):
+    def shouldTranscodeSong(self, song, mode):
+
+        if mode == "raw":
+            return False;
         srcpath = song[Song.path]
-        print(srcpath)
         return not srcpath.lower().endswith('mp3')
 
-    def transcodeSong(self, song):
+    def transcodeSong(self, song, mode):
+
         srcpath = song[Song.path]
         tgtpath = Config.instance().transcode.audio.tmp_path
+
+        if mode == "raw":
+            return srcpath;
 
         if not os.path.exists(tgtpath):
             os.makedirs(tgtpath)

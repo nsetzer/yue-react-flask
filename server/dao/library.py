@@ -589,12 +589,15 @@ class LibraryDao(object):
 
         sql_rule = rule.sql()
 
-        if not showBanished:
-            if sql_rule is None:
-                sql_rule = self.dbtables.SongDataTable.c.banished == 0
-            else:
-                sql_rule = and_(self.dbtables.SongDataTable.c.banished == 0, sql_rule)
-            sql_rule = and_(self.dbtables.SongUserDataTable.c.blocked == 0, sql_rule)
+        # TODO: this code does not work, write a unit test!
+        #if not showBanished:
+        #    if sql_rule is None:
+        #        sql_rule = self.dbtables.SongDataTable.c.banished != 1
+        #    else:
+        #        sql_rule = and_(self.dbtables.SongDataTable.c.banished != 1,
+        #                        sql_rule)
+        #    sql_rule = and_(self.dbtables.SongUserDataTable.c.blocked != 1,
+        #                    sql_rule)
 
         if orderby is not None:
             orderby = self._getSearchOrder(case_insensitive, orderby)

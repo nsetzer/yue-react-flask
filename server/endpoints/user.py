@@ -12,7 +12,8 @@ from ..index import app, db, dbtables
 
 from ..dao.user import UserDao
 
-from .util import requires_auth, requires_no_auth, verify_token, generate_token
+from .util import requires_auth, requires_no_auth, verify_token, \
+    generate_token, requires_auth_query, requires_auth_feature
 
 userDao = UserDao(db, dbtables)
 
@@ -37,7 +38,7 @@ def get_user_info(user):
     return user
 
 @app.route("/api/user", methods=["GET"])
-@requires_auth
+@requires_auth_feature("read_user")
 def get_user():
     return jsonify(result=get_user_info(g.current_user))
 
@@ -66,7 +67,7 @@ def create_user():
 """
 
 @app.route("/api/user/create", methods=["POST"])
-@requires_auth
+@requires_auth_feature("create_user")
 def admin_create_user():
     incoming = request.get_json()
 
@@ -89,7 +90,7 @@ def admin_create_user():
 
 
 @app.route("/api/user/password", methods=["PUT"])
-@requires_auth
+@requires_auth_feature("write_user")
 def change_user_password():
     incoming = request.get_json()
     user = g.current_user
@@ -97,7 +98,7 @@ def change_user_password():
     return jsonify(result="OK")
 
 @app.route("/api/user/list/domain/<domain>", methods=["GET"])
-@requires_auth
+@requires_auth_feature("create_user")
 def admin_list_users(domain):
 
     did = userDao.findDomainByName(domain).id
@@ -115,7 +116,7 @@ def admin_list_users(domain):
     )
 
 @app.route("/api/user/list/user/<userId>", methods=["GET"])
-@requires_auth
+@requires_auth_feature("create_user")
 def admin_list_user(userId):
     """
     this is the same as get_user, but any admin can list any other user

@@ -1,4 +1,4 @@
-
+#! C:\\Python35\\python.exe $this --config-dir config/production create
 import os, sys, argparse
 
 if (sys.version_info[0] == 2):

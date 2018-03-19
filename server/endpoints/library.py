@@ -57,7 +57,7 @@ def send_file_v2(filepath):
 QUERY_LIMIT_MAX = 500
 
 @app.route("/api/library/info", methods=["GET"])
-@requires_auth
+@requires_auth_feature("read_song_record")
 @compressed
 def get_domain_info():
 
@@ -68,7 +68,7 @@ def get_domain_info():
     return jsonify(result=data)
 
 @app.route("/api/library", methods=["GET"])
-@requires_auth
+@requires_auth_feature("read_song_record")
 @compressed
 def search_library():
     """ return song information from the library """
@@ -91,7 +91,7 @@ def search_library():
     })
 
 @app.route("/api/library", methods=["PUT"])
-@requires_auth
+@requires_auth_feature("write_song_record")
 def update_song():
     """ update a song record, returns song_id on success
 
@@ -143,7 +143,7 @@ def update_song():
     return jsonify(result="ok")
 
 @app.route("/api/library", methods=["POST"])
-@requires_auth
+@requires_auth_feature("write_song_record")
 def create_song():
     """ create a song record, returns song_id on success
 
@@ -196,14 +196,14 @@ def create_song():
     return jsonify(result=song_id)
 
 @app.route("/api/library/<song_id>", methods=["GET"])
-@requires_auth
+@requires_auth_feature("read_song_record")
 def get_song(song_id):
     """ return information about a specific song """
     song = AudioService.instance().findSongById(g.current_user, song_id)
     return jsonify(result=song)
 
 @app.route("/api/library/<song_id>/audio", methods=["GET"])
-@requires_auth_query
+@requires_auth_query("read_song")
 def get_song_audio(song_id):
     """ stream audio for a specific song
     TODO: a user API token should be sent using a query parameter
@@ -211,6 +211,8 @@ def get_song_audio(song_id):
     this needs to accessable with a simple GET request, any auth parameters
     must be passed as query parameters, not headers
     """
+
+    mode = request.args.get('mode', "default")
 
     song = AudioService.instance().findSongById(g.current_user, song_id)
 
@@ -226,8 +228,8 @@ def get_song_audio(song_id):
     if not os.path.exists(path):
         return httpError(404, "Audio File not found for %s `%s`" % (song_id, path))
 
-    if TranscodeService.instance().shouldTranscodeSong(song):
-        path = TranscodeService.instance().transcodeSong(song)
+    if TranscodeService.instance().shouldTranscodeSong(song, mode):
+        path = TranscodeService.instance().transcodeSong(song, mode)
 
     if not os.path.exists(path):
         return httpError(404, "Audio File not found for %s `%s`" % (song_id, path))
@@ -235,14 +237,14 @@ def get_song_audio(song_id):
     return send_file(path)
 
 @app.route("/api/library/<song_id>/audio", methods=["POST"])
-@requires_auth
+@requires_auth_feature("write_song")
 def upload_song_audio(song_id):
     """ upload audio for a song, updates the path for the song given by id """
     start = request.args.get('filepath', None)
     return jsonify(result="ok")
 
 @app.route("/api/library/<song_id>/art", methods=["GET"])
-@requires_auth_query
+@requires_auth_query("read_song")
 def get_song_art(song_id):
     """ get album art for a specific song
 
@@ -264,13 +266,13 @@ def get_song_art(song_id):
     return send_file(path)
 
 @app.route("/api/library/<song_id>/art", methods=["POST"])
-@requires_auth
+@requires_auth_feature("write_song")
 def set_song_art(song_id):
     """ upload album art for a specific song """
     return jsonify(result="ok")
 
 @app.route("/api/library/history", methods=["GET"])
-@requires_auth
+@requires_auth_feature("read_user")
 def get_history():
     """
     returns playback records for the logged in user
@@ -315,7 +317,7 @@ def get_history():
     })
 
 @app.route("/api/library/history", methods=["POST"])
-@requires_auth
+@requires_auth_feature("write_user")
 def post_history():
 
     records = request.json

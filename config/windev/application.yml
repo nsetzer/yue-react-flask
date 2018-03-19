@@ -11,6 +11,10 @@ server:
     path: "database.sqlite"
 
   ssl:
+    #
+    # sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    # -keyout selfsigned.key -out selfsigned.crt
+    #
     private_key: "config/production/selfsigned.key"
     certificate: "config/production/selfsigned.crt"
 

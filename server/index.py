@@ -1,7 +1,7 @@
 import os, sys
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
-from flask_bcrypt import Bcrypt
+#from flask_bcrypt import Bcrypt
 from flask_cors import CORS
 
 import logging
@@ -10,6 +10,9 @@ from logging.handlers import RotatingFileHandler
 from .dao.tables.tables import DatabaseTables
 
 from .config import Config
+
+from .logger import Logger
+Logger.register()
 
 cfg = Config.instance()
 
@@ -26,14 +29,15 @@ app.config['DEFAULT_ROLE'] = "user"
 app.config['DEFAULT_DOMAIN'] = "production"
 
 db     = SQLAlchemy(app)
-bcrypt = Bcrypt(app)
+#bcrypt = Bcrypt(app)
 cors = CORS(app, resources={r"/api/*": {"origins": cfg.cors.origins}})
 
 dbtables = DatabaseTables(db.metadata)
 
-if cfg.database.kind == "sqlite":
-    db.session.execute("PRAGMA journal_mode = WAL");
-    db.session.execute("PRAGMA synchronous = NORMAL");
+#if cfg.database.kind == "sqlite":
+#    db.session.execute("PRAGMA JOURNAL_MODE = WAL");
+#    db.session.execute("PRAGMA synchronous = NORMAL");
+#    db.session.execute("PRAGMA TEMP_STORE = MEMORY");
 
 if not os.path.exists(cfg.build_dir):
     # only an error in production environments

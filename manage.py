@@ -1,3 +1,4 @@
+#! python $this feat
 
 import os, sys, argparse
 
@@ -25,6 +26,7 @@ cfg = Config.init(args.config)
 from server.app import app, db, dbtables, list_routes
 from server.cli.config import db_init, db_update, db_drop_all
 from server.dao.util import hash_password
+from server.endpoints.util import get_features
 
 #migrate = Migrate(app, db)
 #manager = Manager(app)
@@ -48,6 +50,10 @@ def routes():
     """List application endpoints"""
     list_routes()
 
+def features():
+    for feat in sorted(get_features()):
+        print(feat)
+
 def hash():
     if len(sys.argv)!=2:
         sys.stdout.write("usage: %s password" % sys.argv[0])
@@ -65,3 +71,5 @@ if __name__ == '__main__':
         routes()
     elif args.mode == "hash_password":
         hash()
+    elif "features".startswith(args.mode):
+        features()

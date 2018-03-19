@@ -212,6 +212,9 @@ def requires_auth(f):
     endpoint decorator requiring authorization,
     and handles unhandled exceptions
     """
+
+    sys.stderr.write("%s does not have a feature\n" % f.__name__)
+
     @wraps(f)
     def decorated(*args, **kwargs):
 
@@ -229,7 +232,21 @@ def requires_auth(f):
 
     return decorated
 
-def requires_auth_query(f):
+__g_features = set()
+def __add_feature(feature):
+    """record features used by this application
+
+    Every decorator adds the feature used to this set.
+    this allows listing of all features used by the application
+    """
+    global __g_features
+    if isinstance(feature,str):
+        __g_features.add(feature)
+
+def get_features():
+    return frozenset(__g_features)
+
+def requires_auth_query(feature=None):
     """
     endpoint decorator requiring authorization,
 
@@ -240,24 +257,30 @@ def requires_auth_query(f):
     in plain text as a query string, which may be saved to logs.
     the token or apikey can be easily invalidated if compromised.
     """
-    @wraps(f)
-    def decorated(*args, **kwargs):
 
-        token = request.args.get('token', None)
-        if token is not None:
-            bytes_token = (token).encode("utf-8")
-            return _requires_token_auth_impl(f, args, kwargs, None, bytes_token)
+    __add_feature(feature)
 
-        token = request.args.get('apikey', None)
-        if token is not None:
-            bytes_token = ("APIKEY " + token).encode("utf-8")
-            return _requires_apikey_auth_impl(f, args, kwargs, None, bytes_token)
+    def impl(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
 
-        return httpError(401, "no token or apikey provided to authenticate")
+            token = request.args.get('token', None)
+            if token is not None:
+                bytes_token = (token).encode("utf-8")
+                return _requires_token_auth_impl(f, args, kwargs, feature, bytes_token)
 
-    return decorated
+            token = request.args.get('apikey', None)
+            if token is not None:
+                bytes_token = ("APIKEY " + token).encode("utf-8")
+                return _requires_apikey_auth_impl(f, args, kwargs, feature, bytes_token)
+
+            return httpError(401, "no token or apikey provided to authenticate")
+        return decorated
+    return impl
 
 def requires_auth_feature(feature=None):
+
+    __add_feature(feature)
 
     def impl(f):
 

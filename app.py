@@ -1,9 +1,23 @@
+#! C:\\Python35\\python.exe $this --config config/windev/application.yml
 
 import os, sys
 import argparse
 import ssl
 import logging
 from logging.handlers import RotatingFileHandler
+
+import codecs
+
+# note: logging errors due to encoding may be an http/https mismatch
+# check that the correct configuration is used
+encoding = "cp850"
+if sys.stdout.encoding != encoding:
+  sys.stdout = codecs.getwriter(encoding)(sys.stdout.buffer, 'strict')
+if sys.stderr.encoding != encoding:
+  sys.stderr = codecs.getwriter(encoding)(sys.stderr.buffer, 'strict')
+
+#from server.logger import Logger
+#Logger().register()
 
 if (sys.version_info[0] == 2):
     raise RuntimeError("python2 not supported")

@@ -6,7 +6,8 @@ from .util import requires_auth
 from ..dao.library import Song
 from ..service.audio_service import AudioService
 
-from .util import httpError, get_request_header, compressed
+from .util import httpError, get_request_header, compressed, \
+    requires_auth_query, requires_auth_feature
 
 QUERY_LIMIT_MAX = 200
 
@@ -29,7 +30,7 @@ curl -v \
 
 @app.route("/api/queue", methods=["GET"])
 @cross_origin(supports_credentials=True)
-@requires_auth
+@requires_auth_feature("read_user")
 @compressed
 def get_queue():
     """ return current song """
@@ -39,7 +40,7 @@ def get_queue():
 
 @app.route("/api/queue", methods=["POST"])
 @cross_origin(supports_credentials=True)
-@requires_auth
+@requires_auth_feature("write_user")
 def set_queue():
     """ set the songs in the queue """
     content_type = get_request_header(request, "Content-Type")
@@ -56,7 +57,7 @@ def set_queue():
 
 @app.route("/api/queue/populate", methods=["GET"])
 @cross_origin(supports_credentials=True)
-@requires_auth
+@requires_auth_feature("write_user")
 def populate_queue():
     """ add songs to the queue using the default query """
 
@@ -67,7 +68,7 @@ def populate_queue():
 
 @app.route("/api/queue/create", methods=["GET"])
 @cross_origin(supports_credentials=True)
-@requires_auth
+@requires_auth_feature("write_user")
 def create_queue_from_query():
     """ create a new queue using a query, return the new song list """
 
@@ -97,7 +98,7 @@ def create_queue_from_query():
 
 @app.route("/api/queue/query", methods=["GET"])
 @cross_origin(supports_credentials=True)
-@requires_auth
+@requires_auth_feature("read_user")
 def get_queue_query():
     """ return the default query for the user """
 
@@ -107,7 +108,7 @@ def get_queue_query():
 
 @app.route("/api/queue/query", methods=["POST"])
 @cross_origin(supports_credentials=True)
-@requires_auth
+@requires_auth_feature("write_user")
 def set_queue_query():
     """ set the defualt query for the user """
 
