@@ -19,7 +19,7 @@ class LibraryEndpointTestCase(TestCase):
     def tearDown(self):
         pass
 
-    def test_queue(self):
+    def test_list_domain(self):
 
         app = self.login(self.USERNAME, self.PASSWORD)
 

@@ -1,10 +1,9 @@
 
 
-from ..index import db
 from sqlalchemy.orm import relationship
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import and_, or_, not_, select, update, column, func, asc, desc
-
+from sqlalchemy.sql.expression import bindparam
 from .search import SearchGrammar, ParseError
 
 import datetime, time
@@ -278,10 +277,6 @@ class LibraryDao(object):
     def prepareSongDataInsert(self, domain_id, song):
         """
         returns a dictionary that is ready to be inserted into the database
-
-        this is intended to be combined with a single call to
-        bulkInsertSongData. Multiple songs can be prepared ahead of time
-        allowing for an efficient insert.
         """
 
         if Song.artist not in song:
@@ -317,23 +312,6 @@ class LibraryDao(object):
 
         return song_id
 
-    def bulkInsertSongData(self, songs, commit=True):
-        """
-        Insert multiple songs at once.
-
-        each song in the given list is assumed to be the output
-        from prepareSongDataInsert.
-
-        Note: every song in the list should have the same set of keys
-        otherwise an insertion error will occur, even for columns which
-        have a default value
-        """
-
-        self.db.session.execute(self.dbtables.SongDataTable.insert(), songs)
-
-        if commit:
-            self.db.session.commit()
-
     def prepareUserDataInsert(self, user_id, song_id, song):
         """
         returns a dictionary that is ready to be inserted into the database
@@ -341,10 +319,6 @@ class LibraryDao(object):
         Note: the dictionary may be empty indicating no record
         needs to be inserted for the song. This will happen when the
         song contains user information
-
-        this is intended to be combined with a single call to
-        bulkInsertUserData. Multiple songs can be prepared ahead of time
-        allowing for an efficient insert.
         """
 
         user_data = {k: song[k] for k in song.keys() if k in self.user_keys}
@@ -367,7 +341,7 @@ class LibraryDao(object):
         have a default value
         """
 
-        user_data = prepareUserDataInsert(user_id, song_id, song)
+        user_data = self.prepareUserDataInsert(user_id, song_id, song)
 
         if user_data:
 
@@ -378,13 +352,6 @@ class LibraryDao(object):
 
             if commit:
                 self.db.session.commit()
-
-    def bulkInsertUserData(self, songs, commit=True):
-
-        self.db.session.execute(self.dbtables.SongUserDataTable.insert(), songs)
-
-        if commit:
-            self.db.session.commit()
 
     def update(self, user_id, domain_id, song_id, song, commit=True):
 
@@ -637,7 +604,7 @@ class LibraryDao(object):
         if offset is not None:
             query = query.offset(offset)
 
-        results = db.session.execute(query).fetchall()
+        results = self.db.session.execute(query).fetchall()
 
         return self.formatter.format(user_id, results)
 

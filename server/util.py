@@ -6,7 +6,7 @@ import json
 from .app import app, db, dbtables
 from .dao.user import UserDao
 from .dao.library import Song, LibraryDao
-from .endpoints.util import generate_basic_token, generate_apikey_token
+from .endpoints.util import generate_basic_token, generate_apikey_token, get_features
 import traceback
 
 import json
@@ -67,6 +67,11 @@ class TestCase(unittest.TestCase):
             cls.USERNAME = "user000"
             cls.PASSWORD = "user000"
             cls.USER = cls.userDao.findUserByEmail(cls.USERNAME)
+
+            # give the default test user all features used by the environment
+            for feat_name in get_features():
+                feat = cls.userDao.findFeatureByName(feat_name)
+                cls.userDao.addFeatureToRole(cls.USER['role_id'], feat.id)
 
             cls.LIBRARY = LibraryDao(db, dbtables)
 

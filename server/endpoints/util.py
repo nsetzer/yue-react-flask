@@ -120,7 +120,7 @@ def _requires_token_auth_impl(f, args, kwargs, feature, token):
             if not _validate_user_feature(user_data, feature):
                 return httpError(401,
                     "failed to authenticate user %s with feature %s" % (
-                        email, feature))
+                        user_data['email'], feature))
 
         g.current_user = user_data
 
@@ -133,6 +133,7 @@ def _requires_token_auth_impl(f, args, kwargs, feature, token):
         return httpError(401,
             "Token has expired")
     except Exception as e:
+        sys.stderr.write("%s" % e)
         return httpError(401,
             "Authentication is required to access this resource")
 

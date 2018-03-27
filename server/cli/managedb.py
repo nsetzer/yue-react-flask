@@ -1,10 +1,33 @@
 
 from ..dao.user import UserDao
-from ..dao.library import LibraryDao
+from ..dao.library import Song, LibraryDao
+from ..dao.tables.tables import DatabaseTables
 
+import logging
 import time
 
-def db_populate(db, dbtables, username, domain_name, json_objects):
+from sqlalchemy import create_engine, MetaData
+from sqlalchemy.orm.session import sessionmaker
+
+def db_connect(connection_string):
+    """
+    a reimplementation of the Flask-SqlAlchemy integration
+    """
+    Session = sessionmaker()
+
+    engine = create_engine(connection_string)
+    Session.configure(bind=engine)
+
+    db = lambda : None
+    db.metadata = MetaData()
+    db.session = Session()
+    db.tables = DatabaseTables(db.metadata)
+    db.create_all = lambda: db.metadata.create_all(engine)
+    db.connection_string = connection_string
+
+    return db
+
+def db_populate(db, dbtables, user_name, domain_name, json_objects):
     """
     username: username to associate with the new songs
     domain_name: name of the domain for songs to be available in
@@ -21,11 +44,13 @@ def db_populate(db, dbtables, username, domain_name, json_objects):
     domain = userDao.findDomainByName(domain_name)
     if domain is None:
         sys.stdout.write("Domain with name `%s` not found" % domain_name)
-        sys.exit(1)
+        return
 
-    user = userDao.findUserByEmail(username)
+    user = userDao.findUserByEmail(user_name)
+    if user is None:
+        sys.stdout.write("User with name `%s` not found" % user_name)
+        return
 
-    print("Migrating Database:")
     start = time.time()
     count = 0
     try:
@@ -34,37 +59,9 @@ def db_populate(db, dbtables, username, domain_name, json_objects):
         db.session.execute("PRAGMA TEMP_STORE = MEMORY");
         db.session.execute("PRAGMA LOCKING_MODE = EXCLUSIVE");
 
-        bulk_songs = []
-        bulk_users = []
-        for new_song in json_objects:
-            if count % 100 == 0 and count > 1:
-                end = time.time()
-                t = (end-start)
-                print("%d %.2f %.2f" % (count, count / t, t))
-
-            song_data = libraryDao.prepareSongDataInsert(domain.id, new_song)
-            bulk_songs.append(song_data)
-
-            user_data = libraryDao.prepareUserDataInsert(user.id, domain.id, new_song)
-            if user_data:
-                bulk_users.append(user_data)
-
-            #song_id = libraryDao.insert(
-            #    user.id, domain.id,
-            #    new_song,
-            #    commit=False)
-
-            #song_id = libraryDao.insertOrUpdateByReferenceId(
-            #    user.id, domain.id,
-            #    new_song[Song.ref_id], new_song,
-            #    commit=False)
-            count += 1
-
-        print("prepared %d songs in %.3f seconds, performing bulk insert" % (count, t))
-
-        libraryDao.bulkInsertSongData(bulk_songs, False)
-        if bulk_users:
-            libraryDao.bulkInsertUserData(bulk_users, False)
+        for song in json_objects:
+            song_id = libraryDao.insert(
+                user.id, domain.id, song, commit=False)
 
     except KeyboardInterrupt:
         pass
@@ -74,8 +71,40 @@ def db_populate(db, dbtables, username, domain_name, json_objects):
     end = time.time()
 
     t = end - start
-    print("migrated %d songs in %.3f seconds" % (count, t))
+    logging.info("imported %d songs in %.3f seconds" % (count, t))
 
+def db_repopulate(db, dbtables, user_name, domain_name, json_objects):
 
-def db_repopulate(db, dbtables, username, domain_name, json_objects):
-     print(len(list(json_objects)))
+    userDao = UserDao(db, dbtables)
+    libraryDao = LibraryDao(db, dbtables)
+
+    domain = userDao.findDomainByName(domain_name)
+    if domain is None:
+        sys.stdout.write("Domain with name `%s` not found" % domain_name)
+        return
+
+    user = userDao.findUserByEmail(user_name)
+    if user is None:
+        sys.stdout.write("User with name `%s` not found" % user_name)
+        return
+
+    try:
+
+        db.session.execute("PRAGMA JOURNAL_MODE = MEMORY");
+        db.session.execute("PRAGMA synchronous = OFF");
+        db.session.execute("PRAGMA TEMP_STORE = MEMORY");
+        db.session.execute("PRAGMA LOCKING_MODE = EXCLUSIVE");
+
+        for song in json_objects:
+            song_id = libraryDao.insertOrUpdateByReferenceId(
+                user.id, domain.id, song[Song.ref_id], song, commit=False)
+
+    except KeyboardInterrupt:
+        pass
+    finally:
+        db.session.commit()
+
+        end = time.time()
+
+    t = end - start
+    logging.info("updated %d songs in %.3f seconds" % (count, t))
