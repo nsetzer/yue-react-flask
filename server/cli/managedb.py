@@ -62,6 +62,7 @@ def db_populate(db, dbtables, user_name, domain_name, json_objects):
         for song in json_objects:
             song_id = libraryDao.insert(
                 user.id, domain.id, song, commit=False)
+            count += 1
 
     except KeyboardInterrupt:
         pass
@@ -88,6 +89,8 @@ def db_repopulate(db, dbtables, user_name, domain_name, json_objects):
         sys.stdout.write("User with name `%s` not found" % user_name)
         return
 
+    start = time.time()
+    count = 0
     try:
 
         db.session.execute("PRAGMA JOURNAL_MODE = MEMORY");
@@ -98,7 +101,7 @@ def db_repopulate(db, dbtables, user_name, domain_name, json_objects):
         for song in json_objects:
             song_id = libraryDao.insertOrUpdateByReferenceId(
                 user.id, domain.id, song[Song.ref_id], song, commit=False)
-
+            count += 1
     except KeyboardInterrupt:
         pass
     finally:

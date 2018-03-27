@@ -63,41 +63,44 @@ def db_drop_all(db, dbtables):
     db.session.commit()
 
 def _db_create_role(userDao, role_name, child):
-    log = lambda m: sys.stdout.write(m+"\n");
-
-
+    n_changes = 0
     role_id = userDao.createRole(role_name, commit=False)
     for feat_name in child['features']:
         if feat_name == "all":
             for feat in userDao.listAllFeatures():
-                log("adding feature %s to role %s" % (feat['feature'], role_name))
+                logging.info("adding feature %s to role %s" % (feat['feature'], role_name))
                 feat_id = feat['id']
                 userDao.addFeatureToRole(
                     role_id, feat_id, commit=False)
+                n_changes += 1
         else:
-            log("adding feature %s to role %s" % (feat_name, role_name))
+            logging.info("adding feature %s to role %s" % (feat_name, role_name))
             feat = userDao.findFeatureByName(feat_name)
             feat_id = feat['id']
             userDao.addFeatureToRole(
                 role_id, feat_id,commit=False)
+            n_changes += 1
+    return n_changes
 
 def _db_update_role(userDao, role_name, child):
-    log = lambda m: sys.stdout.write(m+"\n");
-
+    n_changes = 0
     role = userDao.findRoleByName(role_name)
     for feat_name in child['features']:
         if feat_name == "all":
             for feat in userDao.listAllFeatures():
-                log("adding feature %s to role %s" % (feat['feature'], role_name))
+                logging.info("adding feature %s to role %s" % (feat['feature'], role_name))
                 if not userDao.roleHasFeature(role.id, feat['id']):
                     userDao.addFeatureToRole(
                         role.id, feat['id'], commit=False)
+                    n_changes += 1
         else:
-            log("adding feature %s to role %s" % (feat_name, role_name))
+            logging.info("adding feature %s to role %s" % (feat_name, role_name))
             feat = userDao.findFeatureByName(feat_name)
             if not userDao.roleHasFeature(role.id, feat['id']):
                 userDao.addFeatureToRole(
                     role.id, feat['id'], commit=False)
+                n_changes += 1
+    return n_changes
 
 def db_init(db, dbtables, config_path):
 
@@ -106,6 +109,10 @@ def db_init(db, dbtables, config_path):
         data = yaml.load(rf, Loader=Loader)
 
     yaml_assert(data)
+
+    return db_init_main(db, dbtables, data)
+
+def db_init_main(db, dbtables, data):
 
     db.create_all()
 
@@ -238,6 +245,12 @@ def db_update(db, dbtables, config_path):
 
     yaml_assert(data)
 
+    return db_update_main(db, dbtables, data)
+
+def db_update_main(db, dbtables, data):
+
+    n_changes = 0
+
     db.create_all()
 
     userDao = UserDao(db, dbtables)
@@ -253,10 +266,12 @@ def db_update(db, dbtables, config_path):
         logging.info("removing feature: %s" % feat_name)
         feat = userDao.findFeatureByName(feat_name)
         userDao.dropFeature(feat['id'], commit=False)
+        n_changes += 1
 
     for feat_name in new_features:
         logging.info("creating feature: %s" % feat_name)
         userDao.createFeature(feat_name, commit=False)
+        n_changes += 1
 
     cfg_domains = set(data['domains'])
     all_domains = set(d['name'] for d in userDao.listDomains())
@@ -266,6 +281,7 @@ def db_update(db, dbtables, config_path):
     for domain_name in new_domains:
         logging.info("creating domain: %s" % domain_name)
         userDao.createDomain(domain_name, commit=False)
+        n_changes += 1
 
     cfg_roles = set()
     for item in data['roles']:
@@ -284,15 +300,16 @@ def db_update(db, dbtables, config_path):
             if role_name in item:
                 logging.info("creating role: %s" % role_name)
                 child = item[role_name]
-                _db_create_role(userDao, role_name, child)
+                n_changes += _db_create_role(userDao, role_name, child)
 
     for role_name in update_roles:
         for item in data['roles']:
             if role_name in item:
-                logging.info("updating role: %s" % role_name)
                 child = item[role_name]
-                _db_update_role(userDao, role_name, child)
+                n_changes += _db_update_role(userDao, role_name, child)
 
     db.session.commit()
+
+    return n_changes;
 
 
