@@ -90,24 +90,11 @@ def db_repopulate(db, dbtables, user_name, domain_name, json_objects):
         return
 
     start = time.time()
-    count = 0
-    try:
 
-        db.session.execute("PRAGMA JOURNAL_MODE = MEMORY");
-        db.session.execute("PRAGMA synchronous = OFF");
-        db.session.execute("PRAGMA TEMP_STORE = MEMORY");
-        db.session.execute("PRAGMA LOCKING_MODE = EXCLUSIVE");
+    count = libraryDao.bulkUpsertByRefId(
+            user.id, domain.id, json_objects, commit=False)
 
-        for song in json_objects:
-            song_id = libraryDao.insertOrUpdateByReferenceId(
-                user.id, domain.id, song[Song.ref_id], song, commit=False)
-            count += 1
-    except KeyboardInterrupt:
-        pass
-    finally:
-        db.session.commit()
-
-        end = time.time()
+    end = time.time()
 
     t = end - start
     logging.info("updated %d songs in %.3f seconds" % (count, t))

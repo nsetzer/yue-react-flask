@@ -405,7 +405,12 @@ class LibraryDao(object):
         return None
 
     def insertOrUpdateByReferenceId(self, user_id, domain_id, ref_id, song, commit=True):
+        """
+        insert or update a single song record
 
+        this operation is very slow. consuder using bulkUpsertByRefId if more
+        than 1 song needs to be updated in this way.
+        """
         results = self._query(user_id, domain_id,
                              self.dbtables.SongDataTable.c.ref_id == ref_id)
 
@@ -419,6 +424,38 @@ class LibraryDao(object):
             self.db.session.commit()
 
         return song_id
+
+    def bulkUpsertByRefId(self, user_id, domain_id, songs, commit = True):
+        """
+        insert or update multiple song records in a single operation
+        """
+        SongData = self.dbtables.SongDataTable
+        SongUserData = self.dbtables.SongUserDataTable
+
+        query = select([SongData.c.id, SongData.c.ref_id]) \
+            .select_from(SongData) \
+            .where(SongData.c.domain_id == domain_id)
+
+        # fetch results and map ref_id to id
+        results = self.db.session.execute(query).fetchall()
+        idmap = {v:k for k,v in results}
+
+        count = 0
+        for song in songs:
+            ref_id = song.get(Song.ref_id, None)
+            song_id = idmap.get(ref_id, None)
+            if song_id is None:
+                song_id = self.insertSongData(domain_id, song, commit = False)
+                self.insertUserData(user_id, song_id, song, commit = False)
+            else:
+                self.updateSongData(domain_id, song_id, song, commit = False)
+                self.updateUserData(user_id, song_id, song, commit = False)
+            count += 1
+
+        if commit:
+            self.db.session.commit()
+
+        return count
 
     def domainSongUserInfo(self, user_id, domain_id):
         """
