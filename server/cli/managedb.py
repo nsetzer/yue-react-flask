@@ -3,11 +3,23 @@ from ..dao.user import UserDao
 from ..dao.library import Song, LibraryDao
 from ..dao.tables.tables import DatabaseTables
 
+import os
+import sys
 import logging
 import time
 
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm.session import sessionmaker
+
+
+def db_remove(db_path):
+    if os.path.exists(db_path):
+        try:
+            os.remove(db_path)
+        except PermissionError:
+            sys.stderr.write("\nUnable to remove database: %s\n" % db_path)
+            return False
+    return True
 
 def db_connect(connection_string):
     """
@@ -23,6 +35,7 @@ def db_connect(connection_string):
     db.session = Session()
     db.tables = DatabaseTables(db.metadata)
     db.create_all = lambda: db.metadata.create_all(engine)
+    db.disconnect = lambda: engine.dispose()
     db.connection_string = connection_string
 
     return db

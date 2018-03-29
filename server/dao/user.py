@@ -174,7 +174,6 @@ class UserDao(object):
 
         if user:
             hash = user[self.dbtables.UserTable.c.password]
-            print(email, password, user)
             if check_password_hash(hash, password):
                 return user
 

@@ -1,20 +1,40 @@
 import os
 import unittest
 
-from ..util import TestCase
-
 from .user import UserDao
 
-from ..app import app, db, dbtables
+
+from ..cli.managedb import db_connect
 
 from sqlalchemy.exc import IntegrityError
 
 class UserDaoTestCase(unittest.TestCase):
 
-    def setUp(self):
-        super().setUp()
+    db_name = "UserDaoTestCase"
 
-        self.userDao = UserDao(db, dbtables)
+    @classmethod
+    def setUpClass(cls):
+        # build a test database, with a minimal configuration
+        cls.db_path = "database.test.%s.sqlite" % cls.db_name
+
+        if os.path.exists(cls.db_path):
+            os.remove(cls.db_path)
+
+        db = db_connect("sqlite:///" + cls.db_path)
+
+        db.create_all()
+
+        cls.db = db
+
+        cls.userDao = UserDao(db, db.tables)
+
+    @classmethod
+    def tearDownClass(cls):
+        if os.path.exists(cls.db_path):
+            os.remove(cls.db_path)
+
+    def setUp(self):
+        pass
 
     def tearDown(self):
         pass
@@ -107,3 +127,8 @@ class UserDaoTestCase(unittest.TestCase):
         result = self.userDao.listUsers(domain_id)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]['email'], "user_list")
+
+def main():
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(UserDaoTestCase)
+    unittest.TextTestRunner().run(suite)
+
