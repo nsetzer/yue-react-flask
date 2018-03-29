@@ -1,7 +1,6 @@
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import and_, or_, not_, select, column, update, insert, delete
 
-
 from .util import hash_password, check_password_hash
 
 class UserDao(object):

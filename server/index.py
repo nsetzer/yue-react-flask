@@ -11,8 +11,8 @@ from .dao.tables.tables import DatabaseTables
 
 from .config import Config
 
-from .logger import Logger
-Logger.register()
+#from .logger import Logger
+#Logger.register()
 
 cfg = Config.instance()
 

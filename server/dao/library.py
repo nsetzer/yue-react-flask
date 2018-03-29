@@ -1,10 +1,9 @@
 
 
-from ..index import db
 from sqlalchemy.orm import relationship
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import and_, or_, not_, select, update, column, func, asc, desc
-
+from sqlalchemy.sql.expression import bindparam
 from .search import SearchGrammar, ParseError
 
 import datetime, time
@@ -278,10 +277,6 @@ class LibraryDao(object):
     def prepareSongDataInsert(self, domain_id, song):
         """
         returns a dictionary that is ready to be inserted into the database
-
-        this is intended to be combined with a single call to
-        bulkInsertSongData. Multiple songs can be prepared ahead of time
-        allowing for an efficient insert.
         """
 
         if Song.artist not in song:
@@ -317,23 +312,6 @@ class LibraryDao(object):
 
         return song_id
 
-    def bulkInsertSongData(self, songs, commit=True):
-        """
-        Insert multiple songs at once.
-
-        each song in the given list is assumed to be the output
-        from prepareSongDataInsert.
-
-        Note: every song in the list should have the same set of keys
-        otherwise an insertion error will occur, even for columns which
-        have a default value
-        """
-
-        self.db.session.execute(self.dbtables.SongDataTable.insert(), songs)
-
-        if commit:
-            self.db.session.commit()
-
     def prepareUserDataInsert(self, user_id, song_id, song):
         """
         returns a dictionary that is ready to be inserted into the database
@@ -341,10 +319,6 @@ class LibraryDao(object):
         Note: the dictionary may be empty indicating no record
         needs to be inserted for the song. This will happen when the
         song contains user information
-
-        this is intended to be combined with a single call to
-        bulkInsertUserData. Multiple songs can be prepared ahead of time
-        allowing for an efficient insert.
         """
 
         user_data = {k: song[k] for k in song.keys() if k in self.user_keys}
@@ -367,7 +341,7 @@ class LibraryDao(object):
         have a default value
         """
 
-        user_data = prepareUserDataInsert(user_id, song_id, song)
+        user_data = self.prepareUserDataInsert(user_id, song_id, song)
 
         if user_data:
 
@@ -378,13 +352,6 @@ class LibraryDao(object):
 
             if commit:
                 self.db.session.commit()
-
-    def bulkInsertUserData(self, songs, commit=True):
-
-        self.db.session.execute(self.dbtables.SongUserDataTable.insert(), songs)
-
-        if commit:
-            self.db.session.commit()
 
     def update(self, user_id, domain_id, song_id, song, commit=True):
 
@@ -438,7 +405,12 @@ class LibraryDao(object):
         return None
 
     def insertOrUpdateByReferenceId(self, user_id, domain_id, ref_id, song, commit=True):
+        """
+        insert or update a single song record
 
+        this operation is very slow. consuder using bulkUpsertByRefId if more
+        than 1 song needs to be updated in this way.
+        """
         results = self._query(user_id, domain_id,
                              self.dbtables.SongDataTable.c.ref_id == ref_id)
 
@@ -452,6 +424,38 @@ class LibraryDao(object):
             self.db.session.commit()
 
         return song_id
+
+    def bulkUpsertByRefId(self, user_id, domain_id, songs, commit = True):
+        """
+        insert or update multiple song records in a single operation
+        """
+        SongData = self.dbtables.SongDataTable
+        SongUserData = self.dbtables.SongUserDataTable
+
+        query = select([SongData.c.id, SongData.c.ref_id]) \
+            .select_from(SongData) \
+            .where(SongData.c.domain_id == domain_id)
+
+        # fetch results and map ref_id to id
+        results = self.db.session.execute(query).fetchall()
+        idmap = {v:k for k,v in results}
+
+        count = 0
+        for song in songs:
+            ref_id = song.get(Song.ref_id, None)
+            song_id = idmap.get(ref_id, None)
+            if song_id is None:
+                song_id = self.insertSongData(domain_id, song, commit = False)
+                self.insertUserData(user_id, song_id, song, commit = False)
+            else:
+                self.updateSongData(domain_id, song_id, song, commit = False)
+                self.updateUserData(user_id, song_id, song, commit = False)
+            count += 1
+
+        if commit:
+            self.db.session.commit()
+
+        return count
 
     def domainSongUserInfo(self, user_id, domain_id):
         """
@@ -637,7 +641,7 @@ class LibraryDao(object):
         if offset is not None:
             query = query.offset(offset)
 
-        results = db.session.execute(query).fetchall()
+        results = self.db.session.execute(query).fetchall()
 
         return self.formatter.format(user_id, results)
 
