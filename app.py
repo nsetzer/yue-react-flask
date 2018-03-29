@@ -58,9 +58,9 @@ app.logger.setLevel(cfg.logging.level)
 app.logger.info("config: %s", args.config)
 app.logger.info("database: %s", cfg.database.url)
 
-port = 4200
-if "PORT" in os.environ:
-    port = int(os.environ["PORT"])
+#port = 4200
+#if "PORT" in os.environ:
+#    port = int(os.environ["PORT"])
 
-app.run(host='0.0.0.0', port=port, ssl_context=context)
+app.run(host=cfg.host, port=cfg.port, ssl_context=context)
 

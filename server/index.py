@@ -28,6 +28,8 @@ app.config['SECRET_KEY'] = cfg.secret_key
 app.config['DEFAULT_ROLE'] = "user"
 app.config['DEFAULT_DOMAIN'] = "production"
 
+#app.config['SERVER_NAME'] = "%s:%s" % (cfg.host, cfg.port)
+
 db     = SQLAlchemy(app)
 #bcrypt = Bcrypt(app)
 cors = CORS(app, resources={r"/api/*": {"origins": cfg.cors.origins}})

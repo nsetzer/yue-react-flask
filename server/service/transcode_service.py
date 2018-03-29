@@ -14,7 +14,12 @@ class TranscodeService(object):
         self.db = db
         self.dbtables = dbtables
 
-        self.encoder = FFmpegEncoder(Config.instance().transcode.audio.bin_path)
+        enc_path = Config.instance().transcode.audio.bin_path
+
+        if not os.path.exists(enc_path):
+            raise FileNotFoundError(enc_path)
+
+        self.encoder = FFmpegEncoder(enc_path)
 
     @staticmethod
     def init(db, dbtables):
@@ -27,9 +32,20 @@ class TranscodeService(object):
         return TranscodeService._instance
 
     def shouldTranscodeSong(self, song, mode):
+        """
+        mode:
+            default: transcode to mp3_320_2ch
+            original: do not transcode
 
-        if mode == "raw":
+        todo: the env/app config should support specifing modes
+            allow for: mono, stereo; 320, 256, 128; mp3, flac, etc;
+
+        limit the available modes to a predefined list
+        """
+
+        if mode == "original":
             return False;
+
         srcpath = song[Song.path]
         return not srcpath.lower().endswith('mp3')
 
@@ -38,7 +54,7 @@ class TranscodeService(object):
         srcpath = song[Song.path]
         tgtpath = Config.instance().transcode.audio.tmp_path
 
-        if mode == "raw":
+        if mode == "original":
             return srcpath;
 
         if not os.path.exists(tgtpath):

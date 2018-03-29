@@ -1,4 +1,4 @@
-#! python $this feat
+#! python $this --config config/windev/application.yml routes
 
 import os, sys, argparse
 

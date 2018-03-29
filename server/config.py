@@ -61,7 +61,11 @@ class Config(object):
         cfg = Config()
 
         # TODO implement true sub classes
+        cfg.host = data['server']['host']
+        cfg.port = data['server']['port']
+        cfg.domain = data['server']['env']
         cfg.secret_key = data['server']['secret_key']
+
         cfg.ssl = lambda: None
         cfg.ssl.private_key = data['server']['ssl']['private_key']
         cfg.ssl.certificate = data['server']['ssl']['certificate']

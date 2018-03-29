@@ -47,16 +47,19 @@ def list_routes():
     """List application endpoints"""
 
     output = []
-    for rule in app.url_map.iter_rules():
 
-        options = {}
-        for arg in rule.arguments:
-            options[arg] = "[{0}]".format(arg)
+    with app.test_request_context():
 
-        methods = ','.join(rule.methods)
-        url = url_for(rule.endpoint, **options)
-        url = url.replace("%5B", ":").replace("%5D", "")
-        output.append([rule.endpoint, methods, url])
+        for rule in app.url_map.iter_rules():
+
+            options = {}
+            for arg in rule.arguments:
+                options[arg] = "[{0}]".format(arg)
+
+            methods = ','.join(rule.methods)
+            url = url_for(rule.endpoint, **options)
+            url = url.replace("%5B", ":").replace("%5D", "")
+            output.append([rule.endpoint, methods, url])
 
     for endpoint, methods, url in sorted(output, key=lambda x: x[2]):
         line = "{:30s} {:20s} {}".format(endpoint, methods, url)

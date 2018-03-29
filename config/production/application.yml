@@ -1,5 +1,8 @@
 server:
 
+  host: localhost
+  port: 4200
+
   env: production
   secret_key: "secret"
 

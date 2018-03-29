@@ -38,6 +38,7 @@ userDao = UserDao(db, dbtables)
 libraryDao = LibraryDao(db, dbtables)
 
 from server.cli.config import db_init, db_init_generate
+from server.dao.util import pathCorrectCase
 
 text_fields = {
     YueSong.path: Song.path,
@@ -79,7 +80,7 @@ all_fields.update(number_fields)
 all_fields.update(date_fields)
 all_fields.update(user_fields)
 
-def _yue_reader(dbpath):
+def _yue_reader(dbpath, chroot = None):
     sqlstore = SQLStore(dbpath)
     yueLib = YueLibrary(sqlstore)
 
@@ -89,14 +90,22 @@ def _yue_reader(dbpath):
         new_song[Song.ref_id] = song[YueSong.uid]
         new_song[Song.banished] = song[YueSong.blocked]
 
+        if chroot is not None:
+            src, dst = chroot
+            path = new_song[Song.path].replace("\\", "/")
+            if path.lower.startswith(src):
+                path = os.path.join(dst,path[len(src):])
+                path = pathCorrectCase(path)
+                new_song[Song.path] = path
+
         # experimental hack to allow searching by genre
         # all genrs are now formated as: 'foo;'
-        gen = new_song[YueSong.genre].replace(",", ";").strip()
+        gen = new_song[Song.genre].replace(",", ";").strip()
         if not gen:
             gen  = [ ]
         else:
             gen = [g.strip().title() for g in gen.split(";")]
-        new_song[YueSong.genre] = ";" + ";".join([ g for g in gen if g]) + ";"
+        new_song[Song.genre] = ";" + ";".join([ g for g in gen if g]) + ";"
 
         new_song[Song.art_path] = ""
         #try:
