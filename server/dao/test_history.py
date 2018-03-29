@@ -64,11 +64,9 @@ class SongHistoryTestCase(unittest.TestCase):
                     }
                     cls.SONGS.append(song)
 
-
     @classmethod
     def tearDownClass(cls):
         db_remove(cls.db_path)
-
 
     def setUp(self):
         pass
@@ -76,11 +74,8 @@ class SongHistoryTestCase(unittest.TestCase):
     def tearDown(self):
         pass
 
-
     def setUp(self):
         super().setUp()
-
-
 
     def tearDown(self):
         pass

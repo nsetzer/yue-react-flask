@@ -7,12 +7,8 @@ import time
 from ..cli.managedb import db_connect
 from ..cli.config import db_init_main
 
-# from ..util import TestCase
-
 from .user import UserDao
 from .library import Song, LibraryDao
-
-# from ..app import app, db, dbtables
 
 class LibraryTestCase(unittest.TestCase):
 

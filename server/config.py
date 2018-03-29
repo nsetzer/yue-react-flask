@@ -10,10 +10,16 @@ except ImportError:
 import logging
 
 def _bytes(value):
-
+    """
+    convert a string or integer into a number of bytes
+        int(4096) -> 4096
+        "4096"    -> 4096
+        "4k"      -> 4096
+    """
     m = 1
     if isinstance(value, str):
         value = value.lower()
+        # value could end with 'B', 'K', 'KB', etc
         if value.endswith("b"):
             value = value[:-1]
 

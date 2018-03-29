@@ -280,13 +280,19 @@ class LibraryDao(object):
         """
 
         if Song.artist not in song:
-            raise LibraryException("artist key missing from song")
+            msg = "artist key missing from song"
+            msg += "or invalid type(%s)" % (type(song))
+            raise LibraryException(msg)
 
         if Song.album not in song:
-            raise LibraryException("album key missing from song")
+            msg = "album key missing from song"
+            msg += "or invalid type(%s)" % (type(song))
+            raise LibraryException(msg)
 
         if Song.title not in song:
-            raise LibraryException("title key missing from song")
+            msg = "title key missing from song"
+            msg += "or invalid type(%s)" % (type(song))
+            raise LibraryException(msg)
 
         if Song.artist_key not in song:
             song[Song.artist_key] = Song.getArtistKey(song[Song.artist])
