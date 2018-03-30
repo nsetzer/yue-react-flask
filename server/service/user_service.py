@@ -27,3 +27,7 @@ class UserService(object):
     @staticmethod
     def instance():
         return UserService._instance
+
+    def getUserByPassword(self, email, password):
+        return self.userDao.findUserByEmailAndPassword(email, password)
+
