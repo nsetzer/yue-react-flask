@@ -12,8 +12,9 @@ class AudioService(object):
 
     _instance = None
 
-    def __init__(self, db, dbtables):
+    def __init__(self, config, db, dbtables):
         super(AudioService, self).__init__()
+        self.config = config
         self.db = db
         self.dbtables = dbtables
 
@@ -23,9 +24,9 @@ class AudioService(object):
         self.historyDao = HistoryDao(db, dbtables)
 
     @staticmethod
-    def init(db, dbtables):
+    def init(config, db, dbtables):
         if not AudioService._instance:
-            AudioService._instance = AudioService(db, dbtables)
+            AudioService._instance = AudioService(config, db, dbtables)
         return AudioService._instance
 
     @staticmethod

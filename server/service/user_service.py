@@ -51,23 +51,24 @@ class UserService(object):
 
     _instance = None
 
-    def __init__(self, db, dbtables):
+    def __init__(self, config, db, dbtables):
         super(UserService, self).__init__()
+        self.config = config
         self.db = db
         self.dbtables = dbtables
 
         self.userDao = UserDao(db, dbtables)
 
         # TODO: this needs to be populated by the application config
-        self.secret = "SECRET"
+        self.secret = config.secret_key
         # allow specifying 14d for 14 days, 2w for 2 weeks, 1m for 1 month, etc
         TWO_WEEKS = 1209600
         self.expiration = TWO_WEEKS
 
     @staticmethod
-    def init(db, dbtables):
+    def init(config, db, dbtables):
         if not UserService._instance:
-            UserService._instance = UserService(db, dbtables)
+            UserService._instance = UserService(config, db, dbtables)
         return UserService._instance
 
     @staticmethod
@@ -76,11 +77,14 @@ class UserService(object):
 
 
     def createUser(self, email, domain, role, password):
+
+        domain = self.userDao.findDomainByName(domain)
+        role = self.userDao.findRoleByName(role)
         user_id = self.userDao.createUser(
                 email,
-                domain,
-                role,
-                password
+                password,
+                domain['id'],
+                role['id']
             )
         return user_id
 

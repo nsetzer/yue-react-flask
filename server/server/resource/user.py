@@ -1,4 +1,6 @@
 
+import logging
+
 from flask import jsonify, render_template, g, request
 
 from server.framework.web_resource import WebResource
@@ -12,7 +14,6 @@ class UserResource(WebResource):
 
         self.user_service = user_service
 
-
         self.register("/api/user", self.get_user, ['GET'])
         self.register("/api/user/login", self.get_token, ['POST'])
         self.register("/api/user/token", self.is_token_valid, ['POST'])
@@ -23,7 +24,6 @@ class UserResource(WebResource):
 
     @requires_auth()
     def get_user(self, app):
-
         info=self.user_service.listUser(g.current_user['id'])
         return jsonify(result=info)
 
@@ -57,7 +57,7 @@ class UserResource(WebResource):
                    reason=reason)
 
     @requires_auth()
-    def create_user(app):
+    def create_user(self, app):
         incoming = request.get_json()
 
         try:
@@ -68,7 +68,8 @@ class UserResource(WebResource):
                 incoming["password"]
             )
 
-        except:
+        except Exception as e:
+            logging.error("%s" % e)
             return jsonify(message="Unable to create user"), 409
 
         return jsonify(
@@ -76,7 +77,7 @@ class UserResource(WebResource):
         )
 
     @requires_auth()
-    def change_user_password(app):
+    def change_user_password(self, app):
         incoming = request.get_json()
 
         if not incoming:
@@ -91,14 +92,14 @@ class UserResource(WebResource):
         return jsonify(result="OK")
 
     @requires_auth()
-    def list_users(app, domainName):
+    def list_users(self, app, domainName):
 
         user_info = self.user_service.listDomainUsers(domainName)
 
         return jsonify(result=user_info)
 
     @requires_auth()
-    def list_user(app, userId):
+    def list_user(self, app, userId):
 
         user_info = self.user_service.listUser(userId)
 

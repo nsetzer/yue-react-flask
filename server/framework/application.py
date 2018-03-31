@@ -91,8 +91,8 @@ class FlaskApp(object):
 
         return output
 
-    def test_client(self):
-        return self.app.test_client()
+    def test_client(self, token = None, password = None):
+        return AppTestClientWrapper(self.app.test_client(), token)
 
     def run(self, ssl_context=None):
 
@@ -105,4 +105,57 @@ class FlaskApp(object):
                      ssl_context=ssl_context);
 
 
+class AppTestClientWrapper(object):
+    """
+    A Test client wrapper for a flask application
 
+    perform common http requests with authentication
+    """
+
+    def __init__(self, app, token=None):
+        super(AppTestClientWrapper, self).__init__()
+        self.app = app
+
+        if token:
+            self.headers = {"Authorization": token}
+        else:
+            self.headers = {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        pass
+
+    def get(self, *args, **kwargs):
+        return self._wrapper(self.app.get, args, kwargs)
+
+    def post(self, *args, **kwargs):
+        return self._wrapper(self.app.post, args, kwargs)
+
+    def put(self, *args, **kwargs):
+        return self._wrapper(self.app.put, args, kwargs)
+
+    def delete(self, *args, **kwargs):
+        return self._wrapper(self.app.delete, args, kwargs)
+
+    def get_json(self, *args, **kwargs):
+        res = self._wrapper(self.app.get, args, kwargs)
+        if res.status_code < 200 or res.status_code >= 300:
+            raise Exception(res.data)
+        body = json.loads(res.data.decode("utf-8"))
+        return body['result']
+
+    def post_json(self, url, data, *args, **kwargs):
+        args = list(args)
+        args.insert(0, url)
+        kwargs['data'] = json.dumps(data)
+        kwargs['content_type'] = 'application/json'
+        return self._wrapper(self.app.post, args, kwargs)
+
+    def _wrapper(self, method, args, kwargs):
+        if "headers" not in kwargs:
+            kwargs['headers'] = self.headers
+        else:
+            kwargs['headers'].update(self.headers)
+        return method(*args, **kwargs)

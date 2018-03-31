@@ -33,7 +33,7 @@ def _handle_exceptions(f, args, kwargs):
 def get_request_header(req, header):
     if header in request.headers:
         return request.headers[header]
-    elif header.lower() not in request.headers:
+    elif header.lower() in request.headers:
         return request.headers[header.lower()]
     else:
         raise HttpException("%s header not provided" % header, 401)

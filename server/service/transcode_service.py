@@ -9,8 +9,9 @@ class TranscodeService(object):
 
     _instance = None
 
-    def __init__(self, db, dbtables):
+    def __init__(self, config, db, dbtables):
         super(TranscodeService, self).__init__()
+        self.config = config
         self.db = db
         self.dbtables = dbtables
 
@@ -22,9 +23,9 @@ class TranscodeService(object):
         self.encoder = FFmpegEncoder(enc_path)
 
     @staticmethod
-    def init(db, dbtables):
+    def init(config, db, dbtables):
         if not TranscodeService._instance:
-            TranscodeService._instance = TranscodeService(db, dbtables)
+            TranscodeService._instance = TranscodeService(config, db, dbtables)
         return TranscodeService._instance
 
     @staticmethod
