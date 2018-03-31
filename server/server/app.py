@@ -1,7 +1,7 @@
 
 
 from ..framework.application import FlaskApp
-from ..framework.web_resource import WebResource, get
+from ..framework.web_resource import WebResource
 
 from ..config import Config
 
@@ -51,13 +51,9 @@ class YueApp(FlaskApp):
 
 def main():
 
-    cfg = Config.init("config/development/application.yml")
+    cfg = Config.init("config/windev/application.yml")
 
     app = YueApp(cfg)
-
-    routes = app.list_routes()
-    for endpoint, methods, url in routes:
-        print("{:30s} {:20s} {}".format(endpoint, methods, url))
 
     app.run()
 

@@ -63,6 +63,10 @@ class Config(object):
     def init(yaml_cfg):
         with open(yaml_cfg, "r") as rf:
             data = yaml.load(rf, Loader=Loader)
+            return Config.init_config(data)
+
+    @staticmethod
+    def init_config(data):
 
         cfg = Config()
 

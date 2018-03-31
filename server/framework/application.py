@@ -54,7 +54,7 @@ class FlaskApp(object):
         #    self.app.add_url_rule(path, name, f, methods=methods)
 
     def register(self, path, name, callback, **options):
-        f=lambda *x,**y : callback(*x, **y)
+        f=lambda *x,**y : callback(self, *x, **y)
         self.app.add_url_rule(path, name, f, **options)
 
     def list_routes(self):
@@ -84,6 +84,10 @@ class FlaskApp(object):
         return self.app.test_client()
 
     def run(self, ssl_context=None):
+
+        routes = self.list_routes()
+        for endpoint, methods, url in routes:
+            print("{:30s} {:20s} {}".format(endpoint, methods, url))
 
         self.app.run(host=self.config.host,
                      port=self.config.port,
