@@ -1,5 +1,5 @@
 
-from flask import jsonify, render_template, g
+from flask import jsonify, render_template, g, request
 
 from server.framework.web_resource import WebResource
 
@@ -21,8 +21,11 @@ class UserResource(WebResource):
         self.register("/api/user/list/domain/<domain>", self.list_users, ['GET'])
         self.register("/api/user/list/user/<userId>", self.list_user, ['GET'])
 
+    @requires_auth()
     def get_user(self, app):
-        return jsonify(result=get_user_info(g.current_user))
+
+        info=self.user_service.listUser(g.current_user['id'])
+        return jsonify(result=info)
 
     def get_token(self, app):
         incoming = request.get_json()
@@ -53,6 +56,7 @@ class UserResource(WebResource):
         return jsonify(token_is_valid=is_valid,
                    reason=reason)
 
+    @requires_auth()
     def create_user(app):
         incoming = request.get_json()
 
@@ -71,6 +75,7 @@ class UserResource(WebResource):
             id=user_id,
         )
 
+    @requires_auth()
     def change_user_password(app):
         incoming = request.get_json()
 
@@ -85,12 +90,14 @@ class UserResource(WebResource):
 
         return jsonify(result="OK")
 
+    @requires_auth()
     def list_users(app, domainName):
 
         user_info = self.user_service.listDomainUsers(domainName)
 
         return jsonify(result=user_info)
 
+    @requires_auth()
     def list_user(app, userId):
 
         user_info = self.user_service.listUser(userId)

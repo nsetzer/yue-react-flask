@@ -1,7 +1,8 @@
 
 import logging
-
+from functools import wraps
 from flask import after_this_request, request, jsonify, g
+import traceback
 
 class HttpException(Exception):
     """docstring for HttpException"""
@@ -11,7 +12,7 @@ class HttpException(Exception):
 
 def httpError(code, message):
     # TODO: this should be at loglevel debug
-    sys.stderr.write("[%3d] %s\n" % (code, message))
+    logging.error("[%3d] %s" % (code, message))
     return jsonify(error=message), code
 
 def _handle_exceptions(f, args, kwargs):
@@ -124,6 +125,7 @@ def requires_auth(features=None):
         features = [features,]
 
     def impl(f):
+        @wraps(f)
         def wrapper(resource, *args, **kwargs):
 
             args = list(args)

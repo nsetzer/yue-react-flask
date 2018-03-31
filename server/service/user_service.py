@@ -12,8 +12,6 @@ from itsdangerous import SignatureExpired, BadSignature
 import base64
 from bcrypt import gensalt
 
-TWO_WEEKS = 1209600
-
 def generate_basic_token(username, password):
     """convert a username and possword into a basic token"""
     enc = (username + ":" + password).encode("utf-8", "ignore")
@@ -31,8 +29,8 @@ def parse_apikey_token(token):
         raise Exception("Invalid ApiKey Token")
     return token[7:].decode("utf-8")
 
-def generate_token(user, expiration=TWO_WEEKS):
-    s = Serializer(app.config['SECRET_KEY'], expires_in=expiration)
+def generate_token(secret, user, expiration):
+    s = Serializer(secret, expires_in=expiration)
     token = s.dumps({
         'id': user['id'],
         'email': user['email'],
@@ -41,8 +39,8 @@ def generate_token(user, expiration=TWO_WEEKS):
     }).decode('utf-8')
     return token
 
-def verify_token(token):
-    s = Serializer(app.config['SECRET_KEY'])
+def verify_token(secret, token):
+    s = Serializer(secret)
     return s.loads(token)
 
 class UserException(Exception):
@@ -60,6 +58,12 @@ class UserService(object):
 
         self.userDao = UserDao(db, dbtables)
 
+        # TODO: this needs to be populated by the application config
+        self.secret = "SECRET"
+        # allow specifying 14d for 14 days, 2w for 2 weeks, 1m for 1 month, etc
+        TWO_WEEKS = 1209600
+        self.expiration = TWO_WEEKS
+
     @staticmethod
     def init(db, dbtables):
         if not UserService._instance:
@@ -72,7 +76,7 @@ class UserService(object):
 
 
     def createUser(self, email, domain, role, password):
-        user_id = userDao.createUser(
+        user_id = self.userDao.createUser(
                 email,
                 domain,
                 role,
@@ -134,7 +138,7 @@ class UserService(object):
     def getUserFromToken(self, token, features = None):
 
         try:
-            user_data = verify_token(token)
+            user_data = verify_token(self.secret, token)
 
             if features is not None:
                 if not self._validate_user_feature(user_data, features[0]):
@@ -157,14 +161,14 @@ class UserService(object):
         if not user:
             raise UserException("Unable to login user")
 
-        return generate_token(user)
+        return generate_token(self.secret, user, self.expiration)
 
     def verifyToken(self, token):
 
         is_valid = False
         reason = ""
         try:
-            if verify_token(token):
+            if verify_token(self.secret, token):
                 is_valid = True
                 reason = "OK"
         except BadSignature:
@@ -176,15 +180,13 @@ class UserService(object):
 
         return is_valid, reason
 
-
-
     def changeUserPassword(self, user, new_password):
 
-        userDao.changeUserPassword(user['id'], new_password)
+        self.userDao.changeUserPassword(user['id'], new_password)
 
     def listUser(self, userId):
 
-        user = userDao.findUserById(userId)
+        user = self.userDao.findUserById(userId)
 
         if not user:
             raise UserException("Unable to login user")

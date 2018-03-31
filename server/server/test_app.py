@@ -8,6 +8,8 @@ from .app import AppResource, YueApp
 from ..framework.application import FlaskApp
 from ..framework.web_resource import WebResource
 
+from .resource.user import UserResource
+
 from ..service.audio_service import AudioService
 from ..service.transcode_service import TranscodeService
 from ..service.user_service import UserService
@@ -19,7 +21,7 @@ from ..cli.managedb import db_connect, db_remove
 
 class TestApp(FlaskApp):
     """docstring for TestApp"""
-    def __init__(self):
+    def __init__(self, test_name=""):
 
         ffmpeg_paths = [
             '/bin/ffmpeg',
@@ -46,7 +48,7 @@ class TestApp(FlaskApp):
                 'cors': {'origins': '*'},
                 'database': {
                     'kind': 'sqlite',
-                    'path': 'database.test.sqlite'
+                    'path': 'database.test.%s.sqlite' % test_name
                 },
                 'ssl': {'private_key': '', 'certificate': ''},
                 'logging': {
@@ -99,11 +101,10 @@ class TestApp(FlaskApp):
 
 
         self.resource_app = AppResource()
+        self.resource_user = UserResource(self.user_service)
 
     def tearDown(self):
-        if os.path.exists(self.db_path):
-            os.remove(self.db_path)
-
+        db_remove(self.db_path)
 
 class AppTestCase(unittest.TestCase):
 
@@ -128,9 +129,10 @@ class AppTestCase(unittest.TestCase):
         #            }
         #            cls.songs.append(song)
 
-        cls.app = TestApp();
+        cls.app = TestApp(cls.__name__);
 
         cls.app.add_resource(cls.app.resource_app)
+        cls.app.add_resource(cls.app.resource_user)
 
     @classmethod
     def tearDownClass(cls):
@@ -146,6 +148,49 @@ class AppTestCase(unittest.TestCase):
         with self.app.test_client() as app:
             result = app.get("/health")
             self.assertEqual(result.status_code, 200)
+
+    def test_login(self):
+
+        body = {
+            "email": "user000",
+            "password": "user000",
+        }
+
+        with self.app.test_client() as app:
+            result = app.post('/api/user/login',
+                             data=json.dumps(body),
+                             content_type='application/json')
+            self.assertEqual(result.status_code, 200)
+            data = json.loads(result.data.decode("utf-8"))
+            self.assertTrue("token" in data)
+
+            token = data['token']
+
+            isok, _ = self.app.user_service.verifyToken(token)
+
+            self.assertTrue(isok)
+
+
+    def test_get_user_by_token(self):
+
+        user_name = "user000"
+        token = self.app.user_service.loginUser(user_name, user_name)
+        headers = {"Authorization": token}
+
+        with self.app.test_client() as app:
+            result = app.get('/api/user',
+                             headers=headers)
+            self.assertEqual(result.status_code, 200)
+            data = json.loads(result.data.decode("utf-8"))
+
+            self.assertTrue("result" in data)
+
+            user_info = data['result']
+
+            self.assertTrue('email' in user_info)
+            self.assertEqual(user_info['email'], user_name)
+
+
 
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(AppTestCase)

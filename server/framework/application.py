@@ -54,8 +54,19 @@ class FlaskApp(object):
         #    self.app.add_url_rule(path, name, f, methods=methods)
 
     def register(self, path, name, callback, **options):
-        f=lambda *x,**y : callback(self, *x, **y)
-        self.app.add_url_rule(path, name, f, **options)
+        msg = ""
+        try:
+            f=lambda *x,**y : callback(self, *x, **y)
+            self.app.add_url_rule(path, name, f, **options)
+            return
+        except AssertionError as e:
+            msg = "%s" % e
+
+        # likely case is double registering a resource,
+        msg = "Error registering %s: %s"  % (name, msg)
+        msg += " or endpoint already mapped"
+        raise Exception(msg)
+
 
     def list_routes(self):
         """return a list of (endpoint, method, url)
