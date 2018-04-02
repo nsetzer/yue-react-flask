@@ -3,7 +3,7 @@ import logging
 
 from flask import jsonify, render_template, g, request
 
-from server.framework.web_resource import WebResource, get, post, put, delete
+from ..framework.web_resource import WebResource, get, post, put, delete
 
 from .util import requires_auth
 
@@ -14,20 +14,12 @@ class UserResource(WebResource):
         user_read   - user can read data
         user_write  - user can update their data
         user_create - user can create new users
-        power_user  - user can retrieve information on other users
+        user_power  - user can retrieve information on other users
     """
     def __init__(self, user_service):
         super(UserResource, self).__init__("/api/user")
 
         self.user_service = user_service
-
-        #self.register("/api/user", self.get_user, ['GET'])
-        #self.register("/api/user/login", self.login_user, ['POST'])
-        #self.register("/api/user/token", self.is_token_valid, ['POST'])
-        #self.register("/api/user/create", self.create_user, ['POST'])
-        #self.register("/api/user/password", self.change_password, ['PUT'])
-        #self.register("/api/user/list/domain/<domain>", self.list_users, ['GET'])
-        #self.register("/api/user/list/user/<userId>", self.list_user, ['GET'])
 
     @get("")
     @requires_auth("user_read")

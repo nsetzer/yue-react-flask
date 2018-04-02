@@ -14,7 +14,7 @@ from ..service.transcode_service import TranscodeService
 from ..service.user_service import UserService
 from ..dao.library import Song
 
-from .resource.user import UserResource
+from .user_resource import UserResource
 
 from ..config import Config
 
