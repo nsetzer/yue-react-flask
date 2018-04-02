@@ -31,8 +31,8 @@ class QueueResourceTestCase(unittest.TestCase):
         username = "user000"
         with self.app.login(username, username) as app:
             data = app.get_json('/api/queue/populate')
-            print(data)
 
+            # TODO: something...
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(QueueResourceTestCase)
     unittest.TextTestRunner().run(suite)
