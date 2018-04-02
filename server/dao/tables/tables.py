@@ -1,5 +1,4 @@
 
-from .message import MessageTable
 from .user import DomainTable, RoleTable, UserTable, \
                   GrantedDomainTable, GrantedRoleTable, \
                   FeatureTable, RoleFeatureTable
@@ -11,8 +10,6 @@ class DatabaseTables(object):
     """docstring for AppTables"""
     def __init__(self, metadata):
         super(DatabaseTables, self).__init__()
-
-        self.MessageTable = MessageTable(metadata)
 
         self.DomainTable = DomainTable(metadata)
         self.RoleTable = RoleTable(metadata)
