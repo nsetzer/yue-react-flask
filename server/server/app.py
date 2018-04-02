@@ -15,6 +15,9 @@ from ..service.user_service import UserService
 from ..dao.library import Song
 
 from .user_resource import UserResource
+from .library_resource import LibraryResource
+from .queue_resource import QueueResource
+from .files_resource import FilesResource
 
 from ..config import Config
 
@@ -55,12 +58,18 @@ class YueApp(FlaskApp):
     def __init__(self, config):
         super(YueApp, self).__init__(config)
 
+        self.user_service = UserService(config, self.db, self.db.tables)
         self.audio_service = AudioService(config, self.db, self.db.tables)
         self.transcode_service = TranscodeService(config, self.db, self.db.tables)
-        self.user_service = UserService(config, self.db, self.db.tables)
 
         self.add_resource(AppResource())
         self.add_resource(UserResource(self.user_service))
+        self.add_resource(LibraryResource(self.user_service,
+                                          self.audio_service,
+                                          self.transcode_service))
+        self.add_resource(QueueResource(self.user_service,
+                                        self.audio_service))
+        self.add_resource(FilesResource())
 
 
 
@@ -80,7 +89,12 @@ class TestApp(FlaskApp):
         # resources will be registed.
         self.resource_app = AppResource()
         self.resource_user = UserResource(self.user_service)
-
+        self.resource_library = LibraryResource(self.user_service,
+                                                self.audio_service,
+                                                self.transcode_service)
+        self.resource_queue = QueueResource(self.user_service,
+                                              self.audio_service)
+        self.resource_files = FilesResource(self.user_service)
 
         self.TEST_DOMAIN = "test"
         self.TEST_ROLE = "test"
@@ -138,11 +152,13 @@ class TestApp(FlaskApp):
 
         self.env_cfg = {
             'features': ["user_read", "user_write",
-                         "user_create", "user_power"],
+                         "user_create", "user_power",
+                         "library_read", "library_write",
+                         "filesystem_read","filesystem_write"],
             'domains': ['test'],
             'roles': [
                 {'null': { 'features': []}},
-                {'test': { 'features': ["user_read", "user_write",]}},
+                {'test': { 'features': ["user_read", "user_write","library_read"]}},
                 {'admin': { 'features': ['all',]}},
             ],
             'users': [

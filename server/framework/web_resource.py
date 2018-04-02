@@ -1,7 +1,11 @@
 
 from functools import wraps
-from flask import after_this_request
+from flask import after_this_request, request
 from collections import namedtuple
+
+from io import BytesIO
+import gzip
+import datetime
 
 WebEndpoint = namedtuple('WebEndpoint', ['path', 'methods', 'name', 'method'])
 
@@ -39,7 +43,11 @@ def delete(path):
 
 def compressed(f):
     """
-    compress the output using gzip if the client supports it.
+    decorator that compresses the output using gzip if the client supports it.
+
+    If the client request indicates that it accepts gzip compression,
+    then compress the return payload.
+
     """
     @wraps(f)
     def wrapper(*args, **kwargs):

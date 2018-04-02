@@ -31,6 +31,7 @@ def _handle_exceptions(f, args, kwargs):
         return httpError(500, reason + str(e))
 
 def get_request_header(req, header):
+    # TODO: can this method be deprecated?
     if header in request.headers:
         return request.headers[header]
     elif header.lower() in request.headers:

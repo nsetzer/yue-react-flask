@@ -5,6 +5,7 @@ import flask
 from flask import url_for, request, g, jsonify
 from ..cli.managedb import db_connect
 import json
+import gzip
 
 """
     Application Stack:
@@ -95,7 +96,7 @@ class FlaskApp(object):
 
         return output
 
-    def test_client(self, token = None, password = None):
+    def test_client(self, token = None):
         return AppTestClientWrapper(self.app.test_client(), token)
 
     def run(self, ssl_context=None):
@@ -103,7 +104,7 @@ class FlaskApp(object):
 
         routes = self.list_routes()
         for endpoint, methods, url in routes:
-            print("{:30s} {:20s} {}".format(endpoint, methods, url))
+            print("{:40s} {:20s} {}".format(endpoint, methods, url))
         sys.stdout.flush()
 
         self.app.run(host=self.config.host,
@@ -145,11 +146,18 @@ class AppTestClientWrapper(object):
     def delete(self, *args, **kwargs):
         return self._wrapper(self.app.delete, args, kwargs)
 
-    def get_json(self, *args, **kwargs):
+    def get_json(self, *args, compressed=False, **kwargs):
+        if compressed:
+            if "headers" not in kwargs:
+                kwargs['headers'] = {}
+            kwargs['headers']["Accept-Encoding"] = "gzip"
         res = self._wrapper(self.app.get, args, kwargs)
         if res.status_code < 200 or res.status_code >= 300:
             raise Exception(res.data)
-        body = json.loads(res.data.decode("utf-8"))
+        data = res.data
+        if compressed:
+            data = gzip.decompress(data)
+        body = json.loads(data.decode("utf-8"))
         return body['result']
 
     def post_json(self, url, data, *args, **kwargs):

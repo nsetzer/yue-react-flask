@@ -5,8 +5,6 @@ import time
 
 from .app import TestApp
 
-from .util import get_features
-
 class UserResourceTestCase(unittest.TestCase):
 
     @classmethod
@@ -26,9 +24,6 @@ class UserResourceTestCase(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
 
-    def test_features(self):
-
-        print(get_features())
     def test_login(self):
 
         body = {

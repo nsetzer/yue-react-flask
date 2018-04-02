@@ -80,7 +80,6 @@ class AudioService(object):
 
         if shuffle:
             result = binshuffle(result, lambda s : s['artist'])[:limit_save]
-        print(searchTerm, len(result))
 
         return result;
 

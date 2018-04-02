@@ -19,6 +19,7 @@ from ..config import Config
 from ..cli.config import db_init_main
 from ..cli.managedb import db_connect, db_remove
 
+from .util import get_features
 
 class AppTestCase(unittest.TestCase):
 
@@ -40,6 +41,11 @@ class AppTestCase(unittest.TestCase):
 
     def tearDown(self):
         super().tearDown()
+
+    def test_features(self):
+        # todo: a test which counts registered features, looking for changes
+
+        print(get_features())
 
     def test_health(self):
         with self.app.test_client() as app:

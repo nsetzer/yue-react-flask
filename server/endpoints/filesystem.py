@@ -24,7 +24,6 @@ def fs_get_path(root, path):
     os_root = Config.instance().filesystem.media_root
     path = os.path.join(os_root, path)
 
-
     if not os.path.exists(path):
         return httpError(404, "path does not exist")
 
