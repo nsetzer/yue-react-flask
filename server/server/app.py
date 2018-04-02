@@ -79,7 +79,8 @@ class TestApp(FlaskApp):
         config = self._init_config(test_name)
         super(TestApp, self).__init__(config)
 
-        self.db = db_connect(self.config.database.url)
+        # self.db = db_connect(self.config.database.url)
+        self.db = db_connect(None)
 
         db_init_main(self.db, self.db.tables, self.env_cfg)
 
@@ -193,6 +194,16 @@ class TestApp(FlaskApp):
         config = Config.init_config(self.app_cfg)
 
         return config
+
+    def add_all_resources(self):
+        self.add_resource(AppResource())
+        self.add_resource(UserResource(self.user_service))
+        self.add_resource(LibraryResource(self.user_service,
+                                          self.audio_service,
+                                          self.transcode_service))
+        self.add_resource(QueueResource(self.user_service,
+                                        self.audio_service))
+        self.add_resource(FilesResource(self.user_service))
 
     def login(self, username, password):
         token = self.user_service.loginUser(username, password)

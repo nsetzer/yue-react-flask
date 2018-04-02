@@ -20,7 +20,7 @@ class UserDaoTestCase(unittest.TestCase):
         if os.path.exists(cls.db_path):
             os.remove(cls.db_path)
 
-        db = db_connect("sqlite:///" + cls.db_path)
+        db = db_connect(None)
 
         db.create_all()
 

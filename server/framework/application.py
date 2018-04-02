@@ -31,7 +31,7 @@ class FlaskApp(object):
             static_folder=self.config.static_dir,
             template_folder=self.config.build_dir)
 
-        self.app.config['SECRET_KEY'] = self.config.secret_key
+        # self.app.config['SECRET_KEY'] = self.config.secret_key
 
         self.log = self.app.logger
 
@@ -45,15 +45,6 @@ class FlaskApp(object):
 
         for path, methods, name, func in res.endpoints():
             self.register(path, name, func, methods=methods)
-
-        #for path, methods, name, func in res._class_endpoints:
-        #    # get the bound instance of the method,
-        #    # workaround for some strange behavior
-        #    bound_func = getattr(res, func.__name__)
-        #    self.register(path, name, bound_func, methods=methods)
-        #    print(name, path, func.__name__)
-        #    f=lambda *x,**y : func(* ([res, self,] + list(x)), **y)
-        #    self.app.add_url_rule(path, name, f, methods=methods)
 
     def register(self, path, name, callback, **options):
         msg = ""

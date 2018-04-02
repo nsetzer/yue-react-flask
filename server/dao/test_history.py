@@ -22,7 +22,7 @@ class SongHistoryTestCase(unittest.TestCase):
         if not db_remove(cls.db_path):
             raise RuntimeError("Unable to remove database: %s" % csl.db_path)
 
-        db = db_connect("sqlite:///" + cls.db_path)
+        db = db_connect(None)
 
         env_cfg = {
             'features': ['test', ],

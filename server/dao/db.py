@@ -27,11 +27,15 @@ def db_remove(db_path):
             return False
     return True
 
-def db_connect(connection_string):
+def db_connect(connection_string=None):
     """
     a reimplementation of the Flask-SqlAlchemy integration
     """
     Session = sessionmaker()
+
+    # connect to a SQLite :memory: database
+    if connection_string is None:
+        connection_string = 'sqlite://'
 
     engine = create_engine(connection_string)
     Session.configure(bind=engine)

@@ -16,7 +16,7 @@ class TranscodeService(object):
 
         enc_path = config.transcode.audio.bin_path
 
-        if not os.path.exists(enc_path):
+        if enc_path and not os.path.exists(enc_path):
             raise FileNotFoundError(enc_path)
 
         self.encoder = FFmpegEncoder(enc_path)
