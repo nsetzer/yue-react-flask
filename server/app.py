@@ -3,15 +3,15 @@ import os, sys
 from flask import Flask, request, send_from_directory, \
                   render_template, jsonify, url_for
 
-from .index import db, dbtables, app, cors
+from .index import cfg, db, dbtables, app, cors
 from .service.audio_service import AudioService
 from .service.user_service import UserService
 from .service.transcode_service import TranscodeService
 
 # init services before endpoints
-AudioService.init(db, dbtables)
-UserService.init(db, dbtables)
-TranscodeService.init(db, dbtables)
+AudioService.init(cfg, db, dbtables)
+UserService.init(cfg, db, dbtables)
+TranscodeService.init(cfg, db, dbtables)
 
 """
 @app.before_request

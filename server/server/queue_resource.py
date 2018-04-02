@@ -1,5 +1,6 @@
 
-
+import os
+import sys
 import logging
 
 from flask import jsonify, render_template, g, request, send_file
@@ -62,6 +63,9 @@ class QueueResource(WebResource):
     def create_queue(self, app):
         """ create a new queue using a query, return the new song list """
 
+        sys.stderr.write("GOT HERE")
+        app.log.info("create new queue %s" % g.current_user)
+
         def_query = self.audio_service.defaultQuery(g.current_user)
         query = request.args.get('query', def_query)
         limit = int(request.args.get('limit', 50))
@@ -75,6 +79,7 @@ class QueueResource(WebResource):
             query, limit=limit, orderby=orderby, offset=offset)
 
         song_ids = [song['id'] for song in songs]
+        app.log.info("create new queue %s" % songs)
         self.audio_service.setQueue(g.current_user, song_ids)
 
         # set the default query to the last query used by the user
@@ -89,13 +94,13 @@ class QueueResource(WebResource):
 
     @get("query")
     @requires_auth("user_read")
-    def create_queue(self, app):
+    def get_default_queue(self, app):
         qstr = self.audio_service.defaultQuery(g.current_user)
         return jsonify(result=qstr)
 
     @post("query")
     @requires_auth("user_write")
-    def create_queue(self, app):
+    def set_default_queue(self, app):
 
         req = request.get_json()
 

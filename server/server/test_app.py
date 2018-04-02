@@ -8,8 +8,6 @@ from .app import AppResource, YueApp, TestApp
 from ..framework.application import FlaskApp
 from ..framework.web_resource import WebResource
 
-from .resource.user import UserResource
-
 from ..service.audio_service import AudioService
 from ..service.transcode_service import TranscodeService
 from ..service.user_service import UserService
@@ -45,7 +43,17 @@ class AppTestCase(unittest.TestCase):
     def test_features(self):
         # todo: a test which counts registered features, looking for changes
 
-        print(get_features())
+        cfg_features = self.app.env_cfg['features']
+        all_features = get_features()
+        for feat in all_features:
+            if feat not in cfg_features:
+                self.app.log.error("missing: %s" % feat)
+
+        for feat in cfg_features:
+            if feat not in all_features:
+                self.app.log.error("unused: %s" % feat)
+
+        self.assertEqual(len(cfg_features), len(all_features))
 
     def test_health(self):
         with self.app.test_client() as app:

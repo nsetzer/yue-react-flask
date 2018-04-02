@@ -202,6 +202,11 @@ class UserService(object):
                 "id": user['domain_id'],
                 }
             ],
+            # todo: features here should be the list of features for the
+            # default role. I may want to remove this in the future
+            # and upadte the frontend to correctly process this structure
+            # added for compatability with the old framework
+            "features": features
         }
 
         return user_info

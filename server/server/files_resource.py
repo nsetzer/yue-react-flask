@@ -34,6 +34,11 @@ class FilesResource(WebResource):
     def get_path2(self, app, root, path):
         return self._list_path(root, path)
 
+    @post("<root>/path/<path:path>")
+    @requires_auth("filesystem_write")
+    def upload(self, app, root, path):
+        return jsonify(result="NOT OK"), 501
+
     @get("roots")
     @requires_auth("filesystem_read")
     def get_roots(self, app):
@@ -59,5 +64,7 @@ class FilesResource(WebResource):
             return send_file(path)
 
         return list_directory(root, os_root, path)
+
+
 
 

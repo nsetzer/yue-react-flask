@@ -1,4 +1,4 @@
-#! C:\\Python35\\python.exe $this --config-dir config/production create
+#! C:\\Python35\\python.exe $this --config-dir config/windev create
 import os, sys, argparse
 
 if (sys.version_info[0] == 2):
@@ -38,6 +38,7 @@ userDao = UserDao(db, dbtables)
 libraryDao = LibraryDao(db, dbtables)
 
 from server.cli.config import db_init, db_init_generate
+from server.cli.managedb import db_populate
 from server.dao.util import pathCorrectCase
 
 text_fields = {
@@ -247,7 +248,8 @@ def main():
             sys.stdout.write("Role with name `%s` not found" % role_name)
             sys.exit(1)
 
-        migrate(username, domain_name, _yue_reader(dbpath))
+        #migrate(username, domain_name, _yue_reader(dbpath))
+        db_populate(db, dbtables, username, domain_name, _yue_reader(dbpath))
 
     elif args.mode == "generate":
         """ create a database and populate it with dummy data"""

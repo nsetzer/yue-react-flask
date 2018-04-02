@@ -521,7 +521,7 @@ class LibraryDao(object):
 
         genre_artists = {}
 
-        for record in db.session.execute(query).fetchall():
+        for record in self.db.session.execute(query).fetchall():
             key = record[Song.artist_key]
             art = record[Song.artist]
             alb = record[Song.album]

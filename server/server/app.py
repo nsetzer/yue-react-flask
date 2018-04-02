@@ -69,9 +69,7 @@ class YueApp(FlaskApp):
                                           self.transcode_service))
         self.add_resource(QueueResource(self.user_service,
                                         self.audio_service))
-        self.add_resource(FilesResource())
-
-
+        self.add_resource(FilesResource(self.user_service))
 
 class TestApp(FlaskApp):
     """docstring for TestApp"""
@@ -154,11 +152,18 @@ class TestApp(FlaskApp):
             'features': ["user_read", "user_write",
                          "user_create", "user_power",
                          "library_read", "library_write",
+                         "library_read_song", "library_write_song",
                          "filesystem_read","filesystem_write"],
             'domains': ['test'],
             'roles': [
                 {'null': { 'features': []}},
-                {'test': { 'features': ["user_read", "user_write","library_read"]}},
+                {'test': { 'features': [
+                            "user_read",
+                            "user_write",
+                            "library_read",
+                            "library_read_song"]
+                         }
+                },
                 {'admin': { 'features': ['all',]}},
             ],
             'users': [

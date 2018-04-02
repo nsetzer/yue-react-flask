@@ -44,7 +44,7 @@ class UserResource(WebResource):
         return jsonify(token=token)
 
     @post("token")
-    def is_token_valid(app):
+    def is_token_valid(self, app):
         # TODO: is this endpoint still requiered?
 
         incoming = request.get_json()
