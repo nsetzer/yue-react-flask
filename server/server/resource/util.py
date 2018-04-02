@@ -39,15 +39,16 @@ def get_request_header(req, header):
         raise HttpException("%s header not provided" % header, 401)
 
 __g_features = set()
-def __add_feature(feature):
+def __add_feature(features):
     """record features used by this application
 
     Every decorator adds the feature used to this set.
     this allows listing of all features used by the application
     """
     global __g_features
-    if isinstance(feature,str):
-        __g_features.add(feature)
+    if features is not None:
+        for f in features:
+            __g_features.add(f)
 
 def get_features():
     return frozenset(__g_features)
@@ -123,6 +124,7 @@ def requires_auth(features=None):
 
     if isinstance(features, str):
         features = [features,]
+    __add_feature(features)
 
     def impl(f):
         @wraps(f)

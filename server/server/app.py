@@ -3,7 +3,7 @@ import os
 import sys
 
 from ..framework.application import FlaskApp
-from ..framework.web_resource import WebResource
+from ..framework.web_resource import WebResource, get
 
 from ..config import Config
 
@@ -28,20 +28,24 @@ class AppResource(WebResource):
 
     def __init__(self):
         super(AppResource, self).__init__()
-        self.register('/', self.index1, ['GET'])
-        self.register('/<path:path>', self.index2, ['GET'])
-        self.register('/health', self.health, ['GET'])
-        self.register('/.well-known/<path:path>', self.webroot, ['GET'])
+        #self.register('/', self.index1, ['GET'])
+        #self.register('/<path:path>', self.index2, ['GET'])
+        #self.register('/health', self.health, ['GET'])
+        #self.register('/.well-known/<path:path>', self.webroot, ['GET'])
 
+    @get("/")
     def index1(self, app):
         return render_template('index.html')
 
+    @get("/<path:path>")
     def index2(self, app, path):
         return render_template('index.html')
 
+    @get("/health")
     def health(self, app):
         return jsonify(result="OK")
 
+    @get("/.well-known/<path:path>")
     def webroot(self, app, path):
         base = os.path.join(os.getcwd(), ".well-known")
         return send_from_directory(base, path)
@@ -133,13 +137,19 @@ class TestApp(FlaskApp):
         }
 
         self.env_cfg = {
-            'features': ['test', ],
+            'features': ["user_read", "user_write",
+                         "user_create", "user_power"],
             'domains': ['test'],
             'roles': [
-                {'test': { 'features': ['all',]}},
+                {'null': { 'features': []}},
+                {'test': { 'features': ["user_read", "user_write",]}},
                 {'admin': { 'features': ['all',]}},
             ],
             'users': [
+                {'email': 'null',
+                 'password': 'null',
+                 'domains': ['test'],
+                 'roles': ['null']},
                 {'email': 'user000',
                  'password': 'user000',
                  'domains': ['test'],

@@ -4,6 +4,7 @@ import sys
 import flask
 from flask import url_for, request, g, jsonify
 from ..cli.managedb import db_connect
+import json
 
 """
     Application Stack:
@@ -47,8 +48,11 @@ class FlaskApp(object):
         for path, methods, name, func in res.endpoints():
             self.register(path, name, func, methods=methods)
 
-        # this does not work at all
         #for path, methods, name, func in res._class_endpoints:
+        #    # get the bound instance of the method,
+        #    # workaround for some strange behavior
+        #    bound_func = getattr(res, func.__name__)
+        #    self.register(path, name, bound_func, methods=methods)
         #    print(name, path, func.__name__)
         #    f=lambda *x,**y : func(* ([res, self,] + list(x)), **y)
         #    self.app.add_url_rule(path, name, f, methods=methods)
@@ -96,9 +100,11 @@ class FlaskApp(object):
 
     def run(self, ssl_context=None):
 
+
         routes = self.list_routes()
         for endpoint, methods, url in routes:
             print("{:30s} {:20s} {}".format(endpoint, methods, url))
+        sys.stdout.flush()
 
         self.app.run(host=self.config.host,
                      port=self.config.port,
@@ -152,6 +158,13 @@ class AppTestClientWrapper(object):
         kwargs['data'] = json.dumps(data)
         kwargs['content_type'] = 'application/json'
         return self._wrapper(self.app.post, args, kwargs)
+
+    def put_json(self, url, data, *args, **kwargs):
+        args = list(args)
+        args.insert(0, url)
+        kwargs['data'] = json.dumps(data)
+        kwargs['content_type'] = 'application/json'
+        return self._wrapper(self.app.put, args, kwargs)
 
     def _wrapper(self, method, args, kwargs):
         if "headers" not in kwargs:

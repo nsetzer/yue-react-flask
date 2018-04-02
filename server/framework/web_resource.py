@@ -1,6 +1,9 @@
 
 from functools import wraps
 from flask import after_this_request
+from collections import namedtuple
+
+WebEndpoint = namedtuple('WebEndpoint', ['path', 'methods', 'name', 'method'])
 
 def get(path):
     """decorator which registers a class method as a GET handler"""
@@ -79,17 +82,17 @@ class MetaWebResource(type):
         cls._class_endpoints = []
         for key, value in namespace.items():
             if hasattr(value,"_endpoint"):
-                fname = name + "." + value.__name__
-                path = value._endpoint
-                methods = value._methods
-                print("meta", fname, path)
-                cls._class_endpoints.append( (path, methods, fname, value) )
+                func = value
+                fname = name + "." + func.__name__
+                path = func._endpoint
+                methods = func._methods
+                endpoint = WebEndpoint(path, methods, fname, func)
+                cls._class_endpoints.append( endpoint )
 
-# , metaclass = MetaWebResource
-class WebResource(object):
+class WebResource(object, metaclass = MetaWebResource):
     """base class for a WebResource
 
-    A WebResource wraps a service with a number of REST endpoints
+    A WebResource wraps a service with an http interface
 
     """
 
@@ -100,9 +103,28 @@ class WebResource(object):
         self.__endpoints = []
 
     def endpoints(self):
-        return self.__endpoints
+        """
+        Returns a list of endpoints that have been registered to this resource
+
+        This includes any endpoint registered using the register() function
+        or with the get, put, post, delete decorators
+        """
+
+        endpoints = self.__endpoints[:]
+
+        for path, methods, name, func in self._class_endpoints:
+            # get the instance of the method which is bound to self
+            bound_func = getattr(self, func.__name__)
+            if path == "":
+                path = self.root
+            elif not path.startswith("/"):
+                path = (self.root + '/' + path).replace("//","/")
+            endpoints.append( WebEndpoint(path, methods, name, bound_func) )
+
+        return endpoints
 
     def register(self, path, func, methods):
         name = self.__class__.__name__ + "." + func.__name__
-        path = (self.root + path).replace("//","/")
-        self.__endpoints.append( (path, methods, name, func) )
+        if not path.startswith("/"):
+            path = (self.root + '/' + path).replace("//","/")
+        self.__endpoints.append( WebEndpoint(path, methods, name, func) )

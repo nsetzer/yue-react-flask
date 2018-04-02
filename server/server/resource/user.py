@@ -3,31 +3,40 @@ import logging
 
 from flask import jsonify, render_template, g, request
 
-from server.framework.web_resource import WebResource
+from server.framework.web_resource import WebResource, get, post, put, delete
 
 from .util import requires_auth
 
 class UserResource(WebResource):
-    """docstring for UserResource"""
+    """UserResource
+
+    features:
+        user_read   - user can read data
+        user_write  - user can update their data
+        user_create - user can create new users
+        power_user  - user can retrieve information on other users
+    """
     def __init__(self, user_service):
-        super(UserResource, self).__init__()
+        super(UserResource, self).__init__("/api/user")
 
         self.user_service = user_service
 
-        self.register("/api/user", self.get_user, ['GET'])
-        self.register("/api/user/login", self.get_token, ['POST'])
-        self.register("/api/user/token", self.is_token_valid, ['POST'])
-        self.register("/api/user/create", self.create_user, ['POST'])
-        self.register("/api/user/password", self.change_user_password, ['PUT'])
-        self.register("/api/user/list/domain/<domain>", self.list_users, ['GET'])
-        self.register("/api/user/list/user/<userId>", self.list_user, ['GET'])
+        #self.register("/api/user", self.get_user, ['GET'])
+        #self.register("/api/user/login", self.login_user, ['POST'])
+        #self.register("/api/user/token", self.is_token_valid, ['POST'])
+        #self.register("/api/user/create", self.create_user, ['POST'])
+        #self.register("/api/user/password", self.change_password, ['PUT'])
+        #self.register("/api/user/list/domain/<domain>", self.list_users, ['GET'])
+        #self.register("/api/user/list/user/<userId>", self.list_user, ['GET'])
 
-    @requires_auth()
+    @get("")
+    @requires_auth("user_read")
     def get_user(self, app):
         info=self.user_service.listUser(g.current_user['id'])
         return jsonify(result=info)
 
-    def get_token(self, app):
+    @post("login")
+    def login_user(self, app):
         incoming = request.get_json()
 
         if not incoming:
@@ -42,7 +51,9 @@ class UserResource(WebResource):
 
         return jsonify(token=token)
 
+    @post("token")
     def is_token_valid(app):
+        # TODO: is this endpoint still requiered?
 
         incoming = request.get_json()
 
@@ -56,7 +67,8 @@ class UserResource(WebResource):
         return jsonify(token_is_valid=is_valid,
                    reason=reason)
 
-    @requires_auth()
+    @post("create")
+    @requires_auth("user_create")
     def create_user(self, app):
         incoming = request.get_json()
 
@@ -76,8 +88,9 @@ class UserResource(WebResource):
             id=user_id,
         )
 
-    @requires_auth()
-    def change_user_password(self, app):
+    @put("password")
+    @requires_auth("user_write")
+    def change_password(self, app):
         incoming = request.get_json()
 
         if not incoming:
@@ -91,14 +104,16 @@ class UserResource(WebResource):
 
         return jsonify(result="OK")
 
-    @requires_auth()
-    def list_users(self, app, domainName):
+    @get("list/domain/<domain>")
+    @requires_auth("user_power")
+    def list_users(self, app, domain):
 
-        user_info = self.user_service.listDomainUsers(domainName)
+        user_info = self.user_service.listDomainUsers(domain)
 
         return jsonify(result=user_info)
 
-    @requires_auth()
+    @get("list/user/<userId>")
+    @requires_auth("user_power")
     def list_user(self, app, userId):
 
         user_info = self.user_service.listUser(userId)

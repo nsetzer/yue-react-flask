@@ -110,11 +110,7 @@ class UserService(object):
             "role_id": user.role_id
         }
 
-        if features is not None:
-            if not self._validate_user_feature(user_data, features[0]):
-                raise UserException(
-                    "failed to authenticate user %s with feature %s" % (
-                        user_data['email'], features[0]))
+        self._validate_features(user_data, features)
 
         return user_data
 
@@ -131,11 +127,7 @@ class UserService(object):
             "role_id": user.role_id
         }
 
-        if features is not None:
-            if not self._validate_user_feature(user_data, features[0]):
-                raise UserException(
-                    "failed to authenticate user %s with feature %s" % (
-                        user_data['email'], features[0]))
+        self._validate_features(user_data, features)
 
         return user_data
 
@@ -144,11 +136,7 @@ class UserService(object):
         try:
             user_data = verify_token(self.secret, token)
 
-            if features is not None:
-                if not self._validate_user_feature(user_data, features[0]):
-                    raise UserException(
-                        "failed to authenticate user %s with feature %s" % (
-                            user_data['email'], features[0]))
+            self._validate_features(user_data, features)
 
             return user_data
         except BadSignature:
@@ -220,11 +208,11 @@ class UserService(object):
 
     def listDomainUsers(self, domainName):
 
-        did = self.userDao.findDomainByName(domain).id
+        did = self.userDao.findDomainByName(domainName).id
 
         domains = { d['id']: d['name'] for d in self.userDao.listDomains() }
         roles = { r['id']: r['name'] for r in self.userDao.listRoles() }
-        users = userDao.listUsers(did)
+        users = self.userDao.listUsers(did)
 
         info = {
             "domains": domains,
@@ -233,8 +221,6 @@ class UserService(object):
         }
 
         return info
-
-
 
     def _validate_user_feature(self, user_data, feature_name):
         """
@@ -246,3 +232,11 @@ class UserService(object):
         # has_role = _userDao.userHasRole(user_id, role_id)
         has_feat = self.userDao.roleHasNamedFeature(role_id, feature_name)
         return has_feat;
+
+    def _validate_features(self, user_data, features = None):
+
+        if features is not None:
+            if not self._validate_user_feature(user_data, features[0]):
+                raise UserException(
+                    "failed to authenticate user %s with feature %s" % (
+                        user_data['email'], features[0]))
