@@ -3,7 +3,6 @@ import os
 import sys
 import flask
 from flask import url_for, request, g, jsonify
-from ..cli.managedb import db_connect
 import json
 import gzip
 
@@ -33,8 +32,6 @@ class FlaskApp(object):
             template_folder=self.config.build_dir)
 
         self.app.config['SECRET_KEY'] = self.config.secret_key
-
-        self.db = db_connect(self.config.database.url)
 
         self.log = self.app.logger
 

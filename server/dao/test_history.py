@@ -7,9 +7,8 @@ import datetime
 from .user import UserDao
 from .library import Song, LibraryDao
 from .history import HistoryDao
-from ..cli.config import db_init_main
 
-from ..cli.managedb import db_connect, db_remove
+from .db import db_connect, db_remove, db_init_main
 
 class SongHistoryTestCase(unittest.TestCase):
 
@@ -104,3 +103,5 @@ def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(SongHistoryTestCase)
     unittest.TextTestRunner().run(suite)
 
+if __name__ == '__main__':
+    main()

@@ -2,7 +2,6 @@
 import os, sys
 from ..dao.library import Song
 from .util import TranscodeServiceException, FFmpegEncoder
-from ..config import Config
 
 class TranscodeService(object):
     """docstring for UserService"""
@@ -15,7 +14,7 @@ class TranscodeService(object):
         self.db = db
         self.dbtables = dbtables
 
-        enc_path = Config.instance().transcode.audio.bin_path
+        enc_path = config.transcode.audio.bin_path
 
         if not os.path.exists(enc_path):
             raise FileNotFoundError(enc_path)
@@ -53,7 +52,7 @@ class TranscodeService(object):
     def transcodeSong(self, song, mode):
 
         srcpath = song[Song.path]
-        tgtpath = Config.instance().transcode.audio.tmp_path
+        tgtpath = self.config.transcode.audio.tmp_path
 
         if mode == "original":
             return srcpath;

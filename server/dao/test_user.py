@@ -4,7 +4,7 @@ import unittest
 from .user import UserDao
 
 
-from ..cli.managedb import db_connect
+from .db import db_connect
 
 from sqlalchemy.exc import IntegrityError
 
@@ -132,3 +132,5 @@ def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(UserDaoTestCase)
     unittest.TextTestRunner().run(suite)
 
+if __name__ == '__main__':
+    main()

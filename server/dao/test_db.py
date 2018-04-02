@@ -3,10 +3,10 @@ import unittest
 import tempfile
 import json
 
-from .config import db_init_main, db_update_main
-from .managedb import db_connect, db_populate, db_repopulate
-from ..dao.user import UserDao
-from ..dao.library import Song, LibraryDao
+from .db import db_connect, db_populate, db_repopulate, \
+    db_init_main, db_update_main
+from .user import UserDao
+from .library import Song, LibraryDao
 
 class ManageDBTestCase(unittest.TestCase):
 
@@ -162,3 +162,6 @@ class ManageDBTestCase(unittest.TestCase):
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ManageDBTestCase)
     unittest.TextTestRunner().run(suite)
+
+if __name__ == '__main__':
+    main()

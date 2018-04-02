@@ -1,9 +1,16 @@
-#! cd ../.. && python migrate_db.py test
 
+from ..dao.user import UserDao
+from ..dao.library import Song, LibraryDao
+from ..dao.tables.tables import DatabaseTables
+
+import os
 import sys
-import random
-import time
 import logging
+import time
+import random
+
+from sqlalchemy import create_engine, MetaData
+from sqlalchemy.orm.session import sessionmaker
 
 import yaml
 try:
@@ -11,8 +18,105 @@ try:
 except ImportError:
     from yaml import Loader, Dumper
 
-from ..dao.user import UserDao
-from ..dao.library import LibraryDao
+def db_remove(db_path):
+    if os.path.exists(db_path):
+        try:
+            os.remove(db_path)
+        except PermissionError:
+            sys.stderr.write("\nUnable to remove database: %s\n" % db_path)
+            return False
+    return True
+
+def db_connect(connection_string):
+    """
+    a reimplementation of the Flask-SqlAlchemy integration
+    """
+    Session = sessionmaker()
+
+    engine = create_engine(connection_string)
+    Session.configure(bind=engine)
+
+    db = lambda : None
+    db.metadata = MetaData()
+    db.session = Session()
+    db.tables = DatabaseTables(db.metadata)
+    db.create_all = lambda: db.metadata.create_all(engine)
+    db.disconnect = lambda: engine.dispose()
+    db.connection_string = connection_string
+
+    return db
+
+def db_populate(db, dbtables, user_name, domain_name, json_objects):
+    """
+    username: username to associate with the new songs
+    domain_name: name of the domain for songs to be available in
+    json_objects: an iterable of json objects reprenting songs
+
+    each song record requires an Artist, Album Title,
+    and a reference id "ref_id". the ref_id is used to associate the
+    old style database format with the database used by the web app.
+    """
+
+    userDao = UserDao(db, dbtables)
+    libraryDao = LibraryDao(db, dbtables)
+
+    domain = userDao.findDomainByName(domain_name)
+    if domain is None:
+        sys.stdout.write("Domain with name `%s` not found" % domain_name)
+        return
+
+    user = userDao.findUserByEmail(user_name)
+    if user is None:
+        sys.stdout.write("User with name `%s` not found" % user_name)
+        return
+
+    start = time.time()
+    count = 0
+    try:
+        db.session.execute("PRAGMA JOURNAL_MODE = MEMORY");
+        db.session.execute("PRAGMA synchronous = OFF");
+        db.session.execute("PRAGMA TEMP_STORE = MEMORY");
+        db.session.execute("PRAGMA LOCKING_MODE = EXCLUSIVE");
+
+        for song in json_objects:
+            song_id = libraryDao.insert(
+                user.id, domain.id, song, commit=False)
+            count += 1
+
+    except KeyboardInterrupt:
+        pass
+    finally:
+        db.session.commit()
+
+    end = time.time()
+
+    t = end - start
+    logging.info("imported %d songs in %.3f seconds" % (count, t))
+
+def db_repopulate(db, dbtables, user_name, domain_name, json_objects):
+
+    userDao = UserDao(db, dbtables)
+    libraryDao = LibraryDao(db, dbtables)
+
+    domain = userDao.findDomainByName(domain_name)
+    if domain is None:
+        sys.stdout.write("Domain with name `%s` not found" % domain_name)
+        return
+
+    user = userDao.findUserByEmail(user_name)
+    if user is None:
+        sys.stdout.write("User with name `%s` not found" % user_name)
+        return
+
+    start = time.time()
+
+    count = libraryDao.bulkUpsertByRefId(
+            user.id, domain.id, json_objects, commit=False)
+
+    end = time.time()
+
+    t = end - start
+    logging.info("updated %d songs in %.3f seconds" % (count, t))
 
 class ConfigException(Exception):
     """docstring for ConfigException"""
@@ -108,11 +212,11 @@ def db_init(db, dbtables, config_path):
     with open(config_path, "r") as rf:
         data = yaml.load(rf, Loader=Loader)
 
-    yaml_assert(data)
-
     return db_init_main(db, dbtables, data)
 
 def db_init_main(db, dbtables, data):
+
+    yaml_assert(data)
 
     db.create_all()
 
@@ -156,84 +260,6 @@ def db_init_main(db, dbtables, data):
 
     db.session.commit()
 
-def db_init_test(db, dbtables, config_path):
-
-    # create initial environment
-    db_init(db, dbtables, config_path)
-
-    userDao = UserDao(db, dbtables)
-    libDao = LibraryDao(db, dbtables)
-
-    user = userDao.findUserByEmail("user000")
-
-    # create additional resources for testing
-    for a in range(3):
-        for b in range(3):
-            for t in range(3):
-                song = {
-                    "artist": "Artist%03d" % a,
-                    "album": "Album%03d" % b,
-                    "title": "Title%03d" % t,
-                    "rating": int(10 * (a * b * t) / 27)
-                }
-                print("---+")
-                libDao.insert(user['id'], user['domain_id'],
-                    song, commit=False)
-    db.session.commit()
-
-def db_init_generate(db, dbtables, config_path):
-
-    # create initial environment
-    db_init(db, dbtables, config_path)
-
-    # generate 500 artists with an average of 4 albums and 6 songs per album
-    # generate ~10,000 songs to simulate a "large" database
-
-    n_artists = 500
-    n_mean_albums = 4
-    n_mean_songs = 6
-    n_genres = 16
-    n_max_genres_per_song = 3
-
-    # ----------------
-    userDao = UserDao(db, dbtables)
-    libraryDao = LibraryDao(db, dbtables)
-
-    user = userDao.findUserByEmail("user000")
-
-    genres = ["Genre%03d" % i for i in range(n_genres)]
-
-    na = n_mean_albums * 2
-    ns = n_mean_songs * 2
-
-    count = 0
-    s = time.time()
-    for a in range(500):
-        for b in range(int(random.triangular(1, na))):
-
-            k = random.randint(1, n_max_genres_per_song + 1)
-            g = ', '.join(random.sample(genres, k))
-
-            for t in range(int(random.triangular(1, ns))):
-
-                song = {
-                    "artist": "Artist%03d" % a,
-                    "album": "Album%03d" % b,
-                    "title": "Title%03d" % count,
-                    "length": random.randint(30, 360),
-                    "genre": g,
-                }
-                libraryDao.insertSongData(user.domain_id, song)
-
-                # 25% chance of rating 0-10
-                # r = 0 if random.random() < .25 else random.randint(0, 11)
-
-                count += 1
-    e = time.time()
-
-    db.session.commit()
-    print("count: %d created in %s" % (count, e - s))
-
 def db_update(db, dbtables, config_path):
 
     # removing roles or domains and modifing users is
@@ -243,11 +269,12 @@ def db_update(db, dbtables, config_path):
     with open(config_path, "r") as rf:
         data = yaml.load(rf, Loader=Loader)
 
-    yaml_assert(data)
 
     return db_update_main(db, dbtables, data)
 
 def db_update_main(db, dbtables, data):
+
+    yaml_assert(data)
 
     n_changes = 0
 

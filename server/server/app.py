@@ -1,11 +1,13 @@
 
 import os
 import sys
+import logging
+from logging.handlers import RotatingFileHandler
 
 from ..framework.application import FlaskApp
 from ..framework.web_resource import WebResource, get
 
-from ..config import Config
+from .config import Config
 
 from flask import jsonify, render_template
 
@@ -19,11 +21,9 @@ from .library_resource import LibraryResource
 from .queue_resource import QueueResource
 from .files_resource import FilesResource
 
-from ..config import Config
+from ..dao.db import db_connect, db_remove, db_init_main
 
-from ..cli.config import db_init_main
-from ..cli.managedb import db_connect, db_remove
-
+import ssl
 
 class AppResource(WebResource):
     """docstring for AppResource
@@ -58,6 +58,8 @@ class YueApp(FlaskApp):
     def __init__(self, config):
         super(YueApp, self).__init__(config)
 
+        self.db = db_connect(self.config.database.url)
+
         self.user_service = UserService(config, self.db, self.db.tables)
         self.audio_service = AudioService(config, self.db, self.db.tables)
         self.transcode_service = TranscodeService(config, self.db, self.db.tables)
@@ -76,6 +78,8 @@ class TestApp(FlaskApp):
     def __init__(self, test_name=""):
         config = self._init_config(test_name)
         super(TestApp, self).__init__(config)
+
+        self.db = db_connect(self.config.database.url)
 
         db_init_main(self.db, self.db.tables, self.env_cfg)
 
@@ -214,11 +218,54 @@ class TestApp(FlaskApp):
 
 def main():
 
+    import argparse
+    import codecs
+
+    encoding = "cp850"
+    if sys.stdout.encoding != encoding:
+      sys.stdout = codecs.getwriter(encoding)(sys.stdout.buffer, 'strict')
+    if sys.stderr.encoding != encoding:
+      sys.stderr = codecs.getwriter(encoding)(sys.stderr.buffer, 'strict')
+
+
+    default_profile = "windev" if sys.platform == "win32" else "development"
+    parser = argparse.ArgumentParser(description='')
+    parser.add_argument('--config_dir', dest='config', default="./config",
+                        help='enable verbose logging')
+    parser.add_argument('-p', '--profile', dest='profile',
+                        default=default_profile,
+                        help='default profile to use')
+
+    args = parser.parse_args()
+
+
+    app_cfg_path = os.path.join(args.config, args.profile, "application.yml")
     cfg = Config.init("config/windev/application.yml")
+
+    if not os.path.exists(cfg.logging.directory):
+        os.makedirs(cfg.logging.directory)
+
+    FORMAT = '%(asctime)-15s %(message)s'
+    logging.basicConfig(format=FORMAT, level=cfg.logging.level)
+    log_path = os.path.join(cfg.logging.directory, cfg.logging.filename)
+    handler = RotatingFileHandler(log_path,
+        maxBytes=cfg.logging.max_size,
+        backupCount=cfg.logging.num_backups)
+    handler.setLevel(cfg.logging.level)
+    logging.getLogger().addHandler(handler)
+
+    logging.info("using config: %s" % app_cfg_path)
+
+    context = None
+    if os.path.exists(cfg.ssl.private_key) and os.path.exists(cfg.ssl.certificate):
+        context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+        context.load_cert_chain(cfg.ssl.certificate, cfg.ssl.private_key)
+
+    # configure logging
 
     app = YueApp(cfg)
 
-    app.run()
+    app.run(context)
 
 if __name__ == '__main__':
     main()

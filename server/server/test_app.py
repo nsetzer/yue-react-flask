@@ -12,10 +12,9 @@ from ..service.audio_service import AudioService
 from ..service.transcode_service import TranscodeService
 from ..service.user_service import UserService
 
-from ..config import Config
+from .config import Config
 
-from ..cli.config import db_init_main
-from ..cli.managedb import db_connect, db_remove
+from ..dao.db import db_connect, db_remove, db_init_main
 
 from .util import get_features
 

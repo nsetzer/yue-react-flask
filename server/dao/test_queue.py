@@ -6,8 +6,7 @@ import json
 from .user import UserDao
 from .library import Song, LibraryDao
 from .queue import SongQueueDao
-from ..cli.config import db_init_main
-from ..cli.managedb import db_connect, db_remove
+from .db import db_connect, db_remove, db_init_main
 
 class SongQueueTestCase(unittest.TestCase):
 
@@ -122,5 +121,6 @@ def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(SongQueueTestCase)
     unittest.TextTestRunner().run(suite)
 
-
+if __name__ == '__main__':
+    main()
 

@@ -4,8 +4,7 @@ import tempfile
 import json
 import time
 
-from ..cli.managedb import db_connect
-from ..cli.config import db_init_main
+from .db import db_init_main, db_connect
 
 from .user import UserDao
 from .library import Song, LibraryDao
@@ -220,3 +219,5 @@ def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(LibraryTestCase)
     unittest.TextTestRunner().run(suite)
 
+if __name__ == '__main__':
+    main()
