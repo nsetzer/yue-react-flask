@@ -19,9 +19,6 @@ class SongHistoryTestCase(unittest.TestCase):
         # build a test database, with a minimal configuration
         cls.db_path = "database.test.%s.sqlite" % cls.db_name
 
-        if not db_remove(cls.db_path):
-            raise RuntimeError("Unable to remove database: %s" % csl.db_path)
-
         db = db_connect(None)
 
         env_cfg = {
@@ -65,7 +62,7 @@ class SongHistoryTestCase(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        db_remove(cls.db_path)
+        pass
 
     def setUp(self):
         pass
@@ -79,7 +76,7 @@ class SongHistoryTestCase(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def test_queue_head(self):
+    def test_history(self):
 
         user_id = self.USER['id']
         domain_id = self.USER['domain_id']

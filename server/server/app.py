@@ -16,42 +16,15 @@ from ..service.transcode_service import TranscodeService
 from ..service.user_service import UserService
 from ..dao.library import Song
 
+from .app_resource import AppResource
 from .user_resource import UserResource
 from .library_resource import LibraryResource
 from .queue_resource import QueueResource
 from .files_resource import FilesResource
 
-from ..dao.db import db_connect, db_remove, db_init_main
+from ..dao.db import db_connect, db_init_main
 
 import ssl
-
-class AppResource(WebResource):
-    """docstring for AppResource
-    """
-
-    def __init__(self):
-        super(AppResource, self).__init__()
-        #self.register('/', self.index1, ['GET'])
-        #self.register('/<path:path>', self.index2, ['GET'])
-        #self.register('/health', self.health, ['GET'])
-        #self.register('/.well-known/<path:path>', self.webroot, ['GET'])
-
-    @get("/")
-    def index1(self, app):
-        return render_template('index.html')
-
-    @get("/<path:path>")
-    def index2(self, app, path):
-        return render_template('index.html')
-
-    @get("/health")
-    def health(self, app):
-        return jsonify(result="OK")
-
-    @get("/.well-known/<path:path>")
-    def webroot(self, app, path):
-        base = os.path.join(os.getcwd(), ".well-known")
-        return send_from_directory(base, path)
 
 class YueApp(FlaskApp):
     """docstring for YueApp"""
@@ -73,31 +46,13 @@ class YueApp(FlaskApp):
                                         self.audio_service))
         self.add_resource(FilesResource(self.user_service))
 
-class TestApp(FlaskApp):
+class TestApp(YueApp):
     """docstring for TestApp"""
     def __init__(self, test_name=""):
         config = self._init_config(test_name)
         super(TestApp, self).__init__(config)
 
-        # self.db = db_connect(self.config.database.url)
-        self.db = db_connect(None)
-
         db_init_main(self.db, self.db.tables, self.env_cfg)
-
-        self.audio_service = AudioService(config, self.db, self.db.tables)
-        self.transcode_service = TranscodeService(config, self.db, self.db.tables)
-        self.user_service = UserService(config, self.db, self.db.tables)
-
-        # create the resources, but let the individual tests decide which
-        # resources will be registed.
-        self.resource_app = AppResource()
-        self.resource_user = UserResource(self.user_service)
-        self.resource_library = LibraryResource(self.user_service,
-                                                self.audio_service,
-                                                self.transcode_service)
-        self.resource_queue = QueueResource(self.user_service,
-                                              self.audio_service)
-        self.resource_files = FilesResource(self.user_service)
 
         self.TEST_DOMAIN = "test"
         self.TEST_ROLE = "test"
@@ -162,6 +117,8 @@ class TestApp(FlaskApp):
             'domains': ['test'],
             'roles': [
                 {'null': { 'features': []}},
+                # the test user has the minimum set of features to
+                # be able to listen to music and manage their profile
                 {'test': { 'features': [
                             "user_read",
                             "user_write",
@@ -187,11 +144,8 @@ class TestApp(FlaskApp):
             ]
         }
 
-        self.db_path = self.app_cfg['server']['database']['path']
-
-        db_remove(self.db_path)
-
         config = Config.init_config(self.app_cfg)
+        config.database.url = None
 
         return config
 
@@ -225,7 +179,8 @@ class TestApp(FlaskApp):
                     self.SONGS.append(song)
 
     def tearDown(self):
-        db_remove(self.db_path)
+        # nothing to do
+        pass
 
 def main():
 
@@ -249,9 +204,8 @@ def main():
 
     args = parser.parse_args()
 
-
     app_cfg_path = os.path.join(args.config, args.profile, "application.yml")
-    cfg = Config.init("config/windev/application.yml")
+    cfg = Config.init(app_cfg_path)
 
     if not os.path.exists(cfg.logging.directory):
         os.makedirs(cfg.logging.directory)

@@ -1,4 +1,3 @@
-#! python $this routes
 
 import os, sys, argparse
 

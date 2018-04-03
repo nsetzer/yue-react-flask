@@ -4,7 +4,7 @@ import tempfile
 import json
 import time
 
-from .app import AppResource, YueApp, TestApp
+from .app import TestApp
 from ..framework.application import FlaskApp
 from ..framework.web_resource import WebResource
 
@@ -18,7 +18,7 @@ from ..dao.db import db_connect, db_remove, db_init_main
 
 from .util import get_features
 
-class AppTestCase(unittest.TestCase):
+class AppResourceTestCase(unittest.TestCase):
 
     db_name = "AppTestCase"
 
@@ -26,8 +26,6 @@ class AppTestCase(unittest.TestCase):
     def setUpClass(cls):
 
         cls.app = TestApp(cls.__name__);
-
-        cls.app.add_resource(cls.app.resource_app)
 
     @classmethod
     def tearDownClass(cls):
@@ -76,7 +74,7 @@ class AppTestCase(unittest.TestCase):
             self.assertTrue(doc.startswith("<!DOCTYPE html>"))
 
 def main():
-    suite = unittest.defaultTestLoader.loadTestsFromTestCase(AppTestCase)
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(AppResourceTestCase)
     unittest.TextTestRunner().run(suite)
 
 if __name__ == '__main__':

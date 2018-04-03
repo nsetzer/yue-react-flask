@@ -12,8 +12,6 @@ class QueueResourceTestCase(unittest.TestCase):
 
         cls.app = TestApp(cls.__name__);
 
-        cls.app.add_resource(cls.app.resource_queue)
-
         cls.app.create_test_songs()
 
     @classmethod

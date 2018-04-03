@@ -111,45 +111,6 @@ class Config(object):
         return cfg
 
     @staticmethod
-    def default():
-
-        cfg = Config()
-
-        # TODO implement true sub classes
-        cfg.host = "localhost"
-        cfg.port = 4200
-        cfg.domain = "test"
-        cfg.secret_key = "secret"
-
-        cfg.ssl = lambda: None
-        cfg.ssl.private_key = None
-        cfg.ssl.certificate = None
-
-        cfg.cors = lambda: None
-        cfg.cors.origins = ""
-
-        cfg.logging = lambda: None
-        cfg.logging.directory = "./log"
-        cfg.logging.filename = "server.log"
-        cfg.logging.max_size = 2*1024*1024
-        cfg.logging.num_backups = 1
-        cfg.logging.level = logging.ERROR
-
-        cfg.database = lambda: None
-        cfg.database.kind = "sqlite"
-        cfg.database.url = None
-
-        cfg.filesystem = lambda: None
-        cfg.filesystem.media_root = "./tmp"
-
-        cfg.transcode = lambda: None
-        cfg.transcode.audio = lambda: None
-        cfg.transcode.audio.bin_path = ""
-        cfg.transcode.audio.tmp_path = "./tmp"
-
-        return cfg
-
-    @staticmethod
     def instance():
         return Config._instance
 

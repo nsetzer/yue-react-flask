@@ -16,8 +16,6 @@ class LibraryResourceTestCase(unittest.TestCase):
 
         cls.app = TestApp(cls.__name__);
 
-        cls.app.add_resource(cls.app.resource_library)
-
         cls.app.create_test_songs()
 
     @classmethod

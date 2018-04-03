@@ -17,10 +17,7 @@ class ManageDBTestCase(unittest.TestCase):
 
         cls.db_path = "database.test.%s.sqlite" % cls.db_name
 
-        if os.path.exists(cls.db_path):
-            os.remove(cls.db_path)
-
-        db = db_connect("sqlite:///" + cls.db_path)
+        db = db_connect(None)
 
         cls.userDao = UserDao(db, db.tables)
         cls.libraryDao = LibraryDao(db, db.tables)
@@ -87,8 +84,7 @@ class ManageDBTestCase(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        if os.path.exists(cls.db_path):
-            os.remove(cls.db_path)
+        pass
 
     def setUp(self):
         pass

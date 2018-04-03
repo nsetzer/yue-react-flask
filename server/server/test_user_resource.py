@@ -12,8 +12,6 @@ class UserResourceTestCase(unittest.TestCase):
 
         cls.app = TestApp(cls.__name__);
 
-        cls.app.add_resource(cls.app.resource_user)
-
     @classmethod
     def tearDownClass(cls):
         cls.app.tearDown()
