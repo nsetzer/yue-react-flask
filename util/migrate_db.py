@@ -43,9 +43,6 @@ def main():
         if os.path.exists(path):
             dbpath = path
             break
-    else:
-        sys.stderr.write("cannot find source db")
-        sys.exit(1)
 
     default_profile = "windev" if sys.platform == "win32" else "development"
     parser = argparse.ArgumentParser(description='')
@@ -67,15 +64,18 @@ def main():
                         default="sqlite:///database.sqlite",
                         help='the database connection string')
 
+    parser.add_argument('--yuedb', dest='yue_db_path',
+                        default=dbpath,
+                        help='the database connection string')
+
     parser.add_argument('mode', type=str,
                         help='action to take')
 
-    parser.add_argument('extra', type=str, nargs="*",
-                        help='extra positional parameters')
-
     args = parser.parse_args()
 
-    args.yue_db_path = dbpath
+    if args.yue_db_path is None or not os.path.exists(args.yue_db_path):
+        sys.stderr.write("cannot find database: %s" % args.yue_db_path)
+        sys.exit(1)
     args.env_cfg_path = os.path.join(args.config, args.profile, "env.yml")
     args.app_cfg_path = os.path.join(args.config, args.profile, "application.yml")
 
@@ -87,6 +87,8 @@ def main():
         create(args)
     elif args.mode == "update":
         update(args)
+    else:
+        sys.stderr.write("unknown mode: %s" % args.mode)
 
 if __name__ == '__main__':
     main()
