@@ -35,6 +35,9 @@ def _bytes(value):
     return int(value) * m
 
 def _level(value):
+    """
+    convert a string logging level into a logging enum
+    """
     value = value.lower()
     if value == "debug":
         return logging.DEBUG
@@ -48,6 +51,61 @@ def _level(value):
         return logging.DEBUG - 1
     return logging.ERROR
 
+def _get_key(d, *keys, default=None, required=False):
+
+    try:
+        p = d
+        for k in keys:
+            p = p[k]
+        return p
+    except:
+        if not required:
+            return default
+
+    raise KeyError(",".join(keys))
+
+class SSLConfig(object):
+    def __init__(self, base):
+        self.private_key = _get_key(base, 'ssl', 'private_key', default="")
+        self.certificate = _get_key(base, 'ssl', 'certificate', default="")
+
+class CORSConfig(object):
+    def __init__(self, base):
+        self.origins = _get_key(base, 'cors', 'origins', default="")
+
+class LoggingConfig(object):
+    def __init__(self, base):
+        self.directory =  _get_key(base, 'logging', 'directory', default="./log")
+        self.filename =  _get_key(base, 'logging', 'filename', default="server.log")
+        self.max_size = _bytes(_get_key(base, 'logging', 'max_size', default="2048k"))
+        self.num_backups = int(_get_key(base, 'logging', 'num_backups', default=10))
+        self.level = _level(_get_key(base, 'logging', 'level', default="error"))
+
+class DatabaseConfig(object):
+    def __init__(self, base):
+
+        self.kind = _get_key(base, 'database', 'kind', default="sqlite")
+        if self.kind == "sqlite":
+            path = _get_key(base, 'database', 'path', default=":memory:")
+            if path == ":memory:":
+                self.url = "sqlite://"
+            else:
+                path = os.path.abspath(path)
+                self.url = "sqlite:///" + path
+        else:
+            raise Exception(self.kind + " unsupported database type")
+
+class FilesystemConfig(object):
+    def __init__(self, base):
+
+        self.media_root = _get_key(base, 'filesystem', 'media_root', default=os.getcwd())
+
+class TranscodeConfig(object):
+    def __init__(self, base):
+        self.audio = lambda: None
+        self.audio.bin_path = _get_key(base, 'transcode', 'audio', 'bin_path', default="")
+        self.audio.tmp_path = _get_key(base, 'transcode', 'audio', 'tmp_path', default="./tmp")
+        self.image = lambda: None
 
 class Config(object):
     """base class for application configurations"""
@@ -68,82 +126,30 @@ class Config(object):
     @staticmethod
     def init_config(data):
 
+        base = data['server']
+
         cfg = Config()
 
         # TODO implement true sub classes
-        cfg.host = data['server']['host']
-        cfg.port = data['server']['port']
-        cfg.domain = data['server']['env']
-        cfg.secret_key = data['server']['secret_key']
+        cfg.host = _get_key(base, 'host', default="localhost")
+        cfg.port = _get_key(base, 'port', default=4200)
+        cfg.domain = _get_key(base, 'env', default="production")
+        cfg.secret_key = _get_key(base, 'secret_key', required=True)
 
-        cfg.ssl = lambda: None
-        cfg.ssl.private_key = data['server']['ssl']['private_key']
-        cfg.ssl.certificate = data['server']['ssl']['certificate']
-
-        cfg.cors = lambda: None
-        cfg.cors.origins = data['server']['cors']['origins']
-
-        cfg.logging = lambda: None
-        cfg.logging.directory = data['server']['logging']['directory']
-        cfg.logging.filename = data['server']['logging']['filename']
-        cfg.logging.max_size = _bytes(data['server']['logging']['max_size'])
-        cfg.logging.num_backups = int(data['server']['logging']['num_backups'])
-        cfg.logging.level = _level(data['server']['logging']['level'])
-
-        cfg.database = lambda: None
-        cfg.database.kind = data['server']['database']['kind']
-        if cfg.database.kind == "sqlite":
-            path = data['server']['database']['path']
-            path = os.path.abspath(path)
-            cfg.database.url = "sqlite:///" + path
-        else:
-            raise Exception(cfg.database.kind + " unsupported")
-
-        cfg.filesystem = lambda: None
-        cfg.filesystem.media_root = data['server']['filesystem']['media_root']
-
-        cfg.transcode = lambda: None
-        cfg.transcode.audio = lambda: None
-        cfg.transcode.audio.bin_path = data['server']['transcode']['audio']['bin_path']
-        cfg.transcode.audio.tmp_path = data['server']['transcode']['audio']['tmp_path']
+        cfg.ssl = SSLConfig(base)
+        cfg.cors = CORSConfig(base)
+        cfg.logging = LoggingConfig(base)
+        cfg.database = DatabaseConfig(base)
+        cfg.filesystem = FilesystemConfig(base)
+        cfg.transcode = TranscodeConfig(base)
 
         Config._instance = cfg
         return cfg
 
     @staticmethod
+    def null():
+        return Config.init_config({'server':{'secret_key':""}})
+
+    @staticmethod
     def instance():
         return Config._instance
-
-    def setenv_default(self, env, default):
-        if env in os.environ:
-            self.__dict__[env] = os.environ[env]
-        else:
-            self.__dict__[env] = default
-
-class EnvironmentConfig(Config):
-    """
-    A configuration option which takes values from the current environment
-    """
-
-    def __init__(self):
-        super(EnvironmentConfig, self).__init__()
-
-        # self.setenv_default("DEFAULT_ROLE", "user")
-        # self.setenv_default("DEFAULT_DOMAIN", "test")
-
-        self.setenv_default("ENV", "production")
-        # self.setenv_default("DEBUG", "False")
-        # self.DEBUG = (self.DEBUG.lower() == "true") or \
-        #    (self.ENV == "development")
-
-        # self.setenv_default("PORT",4200)
-        self.setenv_default("SECRET_KEY", "SECRET")
-        self.setenv_default("DATABASE_URL",
-            "sqlite:///" + os.path.join(os.getcwd(), "app.db"))
-
-
-
-
-
-
-

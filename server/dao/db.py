@@ -115,7 +115,7 @@ def db_repopulate(db, dbtables, user_name, domain_name, json_objects):
     start = time.time()
 
     count = libraryDao.bulkUpsertByRefId(
-            user.id, domain.id, json_objects, commit=False)
+            user.id, domain.id, json_objects)
 
     end = time.time()
 

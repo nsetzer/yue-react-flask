@@ -7,7 +7,7 @@ from collections import OrderedDict
 import bcrypt
 
 def hash_password(password, workfactor=12):
-    salt = bcrypt.gensalt(12)
+    salt = bcrypt.gensalt(workfactor)
     hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
     return hashed
 
