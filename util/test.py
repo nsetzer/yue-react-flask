@@ -8,6 +8,30 @@ import argparse
 if (sys.version_info[0] == 2):
     raise RuntimeError("python2 not supported")
 
+class Tests(object):
+
+    def run(self, verbose):
+        test_loader = unittest.defaultTestLoader
+        test_runner = unittest.TextTestRunner(verbosity=verbose)
+        # test_suite = collect_test_suite(package,args.pattern);
+        test_suite = test_loader.discover(".", pattern="test_*.py")
+        return test_runner.run(test_suite)
+
+class Coverage(object):
+    """
+
+    INSTALL:
+      pip install coverage
+    """
+
+    def run(self):
+      self._exec("coverage run " + __file__)
+      self._exec("coverage html  --omit='/usr/*,*test_*.py'")
+
+    def _exec(self,*args):
+      cmd=' '.join(args)
+      print(cmd)
+      os.system(cmd)
 
 def main():
     """run server tests"""
@@ -20,13 +44,17 @@ def main():
     parser.add_argument('-p', '--pattern', dest='pattern', default="*",
                         help='filter for tests ot run')
 
-    args = parser.parse_args()
-    test_loader = unittest.defaultTestLoader
-    test_runner = unittest.TextTestRunner(verbosity=2 if args.verbose else 1)
-    # test_suite = collect_test_suite(package,args.pattern);
-    test_suite = test_loader.discover(".", pattern="test_*.py")
+    parser.add_argument('--mode', dest='mode', default="test",
+                        help='test or coverage')
 
-    return test_runner.run(test_suite)
+    args = parser.parse_args()
+
+    print(args.mode)
+    if "coverage".startswith(args.mode):
+        Coverage().run()
+    else:
+        Tests().run(2 if args.verbose else 1)
+
 
 
 if __name__ == '__main__':
