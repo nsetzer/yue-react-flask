@@ -2,7 +2,7 @@
 
 from sqlalchemy.orm import relationship
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import and_, or_, not_, select, update, column, func, asc, desc
+from sqlalchemy import and_, or_, not_, case, select, update, column, func, asc, desc
 from sqlalchemy.sql.expression import bindparam
 from .search import SearchGrammar, ParseError
 
@@ -102,10 +102,6 @@ class Song(object):
         "freq": frequency,
         "frequency": frequency,
     }
-
-    def __init__(self, arg):
-        super(Song, self).__init__()
-        self.arg = arg
 
     @staticmethod
     def column(abrv):
@@ -354,7 +350,10 @@ class LibraryDao(object):
             query = self.dbtables.SongUserDataTable.insert() \
                 .values(user_data)
 
-            self.db.session.execute(query)
+            result = self.db.session.execute(query)
+
+            if result.rowcount != 1:
+                raise LibraryException("User Data insert failed for %s" % song_id)
 
             if commit:
                 self.db.session.commit()
@@ -381,7 +380,11 @@ class LibraryDao(object):
                 .where(
                     and_(self.dbtables.SongDataTable.c.id == song_id,
                          self.dbtables.SongDataTable.c.domain_id == domain_id))
-            self.db.session.execute(query)
+
+            result = self.db.session.execute(query)
+
+            if result.rowcount != 1:
+                raise LibraryException("Song Data update failed for %s" % song_id)
 
             if commit:
                 self.db.session.commit()
@@ -397,7 +400,12 @@ class LibraryDao(object):
                 .where(
                     and_(self.dbtables.SongUserDataTable.c.song_id == song_id,
                          self.dbtables.SongUserDataTable.c.user_id == user_id))
-            self.db.session.execute(query)
+
+            result = self.db.session.execute(query)
+
+            # if the update fails, insert the row instead
+            if result.rowcount == 0:
+                self.insertUserData(user_id, song_id, song, commit=False)
 
             if commit:
                 self.db.session.commit()
@@ -421,10 +429,11 @@ class LibraryDao(object):
                              self.dbtables.SongDataTable.c.ref_id == ref_id)
 
         if results:
-            self.update(user_id, domain_id, results[0]['id'], song)
-            return results[0]['id']
+            song_id = results[0]['id']
+            self.update(user_id, domain_id, song_id, song, commit=False)
+            return song_id
 
-        song_id = self.insert(user_id, domain_id, song)
+        song_id = self.insert(user_id, domain_id, song, commit=False)
 
         if commit:
             self.db.session.commit()
@@ -451,11 +460,11 @@ class LibraryDao(object):
             ref_id = song.get(Song.ref_id, None)
             song_id = idmap.get(ref_id, None)
             if song_id is None:
-                song_id = self.insertSongData(domain_id, song, commit = False)
-                self.insertUserData(user_id, song_id, song, commit = False)
+                song_id = self.insertSongData(domain_id, song, commit=False)
+                self.insertUserData(user_id, song_id, song, commit=False)
             else:
-                self.updateSongData(domain_id, song_id, song, commit = False)
-                self.updateUserData(user_id, song_id, song, commit = False)
+                self.updateSongData(domain_id, song_id, song, commit=False)
+                self.updateUserData(user_id, song_id, song, commit=False)
             count += 1
 
         if commit:
@@ -527,9 +536,11 @@ class LibraryDao(object):
             alb = record[Song.album]
 
             n_records1 += 1
+            # ignored songs banished by the domain
             if record[Song.banished]:
                 continue
 
+            # ignored songs blocked by the user (for domainSongUserInfo)
             if Song.blocked in record and record[Song.blocked]:
                 continue
 
@@ -565,8 +576,11 @@ class LibraryDao(object):
                     genre_artists[g] = set()
                 genre_artists[g].add(art)
 
+            # count the number of artists in each genre
             for g, items in genre_artists.items():
                 genres[g]['artist_count'] = len(items)
+
+            # count the number of songs for this album
             if alb not in albums:
                 albums[alb] = 0
             albums[alb] += 1
@@ -593,24 +607,30 @@ class LibraryDao(object):
         orderby=None,
         limit=None,
         offset=None,
-        showBanished=False):
+        showBanished=False,
+        debug=False):
 
         rule = self.grammar.ruleFromString(searchTerm)
 
+        SongTable = self.dbtables.SongDataTable.c
+        UserTable = self.dbtables.SongUserDataTable.c
+
         sql_rule = rule.sql()
 
-        # TODO: this code does not work, write a unit test!
-        #if not showBanished:
-        #    if sql_rule is None:
-        #        sql_rule = self.dbtables.SongDataTable.c.banished != 1
-        #    else:
-        #        sql_rule = and_(self.dbtables.SongDataTable.c.banished != 1,
-        #                        sql_rule)
-        #    sql_rule = and_(self.dbtables.SongUserDataTable.c.blocked != 1,
-        #                    sql_rule)
+        if not showBanished:
+            # remove entries that have either the blocked or banished bit set
+            stmt1 = SongTable.banished == 0
+            # if the left outer join produces a null, default to 0 and compare.
+            stmt2 = case([(UserTable.blocked == None, 0),],
+                         else_=UserTable.blocked) == 0
+            stmt3 = and_(stmt1, stmt2)
+            sql_rule = stmt3 if sql_rule is None else and_(sql_rule, stmt3)
 
         if orderby is not None:
             orderby = self._getSearchOrder(case_insensitive, orderby)
+
+        if debug:
+            print(sql_rule)
 
         return self._query(user_id, domain_id, sql_rule, orderby, limit, offset)
 

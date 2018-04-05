@@ -7,7 +7,7 @@ import time
 from .db import db_init_main, db_connect
 
 from .user import UserDao
-from .library import Song, LibraryDao
+from .library import Song, LibraryDao, LibraryException
 
 class LibraryTestCase(unittest.TestCase):
 
@@ -31,6 +31,14 @@ class LibraryTestCase(unittest.TestCase):
                  'password': 'user000',
                  'domains': ['test'],
                  'roles': ['test']},
+                {'email': 'user001',
+                 'password': 'user001',
+                 'domains': ['test'],
+                 'roles': ['test']},
+                {'email': 'user002',
+                 'password': 'user002',
+                 'domains': ['test'],
+                 'roles': ['test']},
             ]
         }
 
@@ -51,12 +59,11 @@ class LibraryTestCase(unittest.TestCase):
                         Song.artist: "Artist%03d" % a,
                         Song.album: "Album%03d" % b,
                         Song.title: "Title%03d" % t,
-                        Song.ref_id: "id%06d" % ((a+1)*100 + (b+1)*10 + (t+1)),
+                        Song.ref_id: "id%06d" % len(cls.songs),
                     }
                     cls.songs.append(song)
 
         cls.db = db
-
 
     @classmethod
     def tearDownClass(cls):
@@ -91,18 +98,55 @@ class LibraryTestCase(unittest.TestCase):
         song3 = self.libraryDao.findSongById(user_id, -1, uid)
         self.assertIsNone(song3)
 
-    def test_002_insert_songs(self):
+    def test_002a_insert_no_artist(self):
+
         user_id = self.USER['id']
         domain_id = self.USER['domain_id']
 
+        song = {
+            Song.album: "test",
+            Song.title: "test",
+        }
+
+        with self.assertRaises(LibraryException):
+            self.libraryDao.insert(user_id, domain_id, song)
+
+    def test_002b_insert_no_albumt(self):
+
+        user_id = self.USER['id']
+        domain_id = self.USER['domain_id']
+
+        song = {
+            Song.artist: "test",
+            Song.title: "test",
+        }
+
+        with self.assertRaises(LibraryException):
+            self.libraryDao.insert(user_id, domain_id, song)
+
+    def test_002c_insert_no_title(self):
+
+        user_id = self.USER['id']
+        domain_id = self.USER['domain_id']
+
+        song = {
+            Song.artist: "test",
+            Song.album: "test",
+        }
+
+        with self.assertRaises(LibraryException):
+            self.libraryDao.insert(user_id, domain_id, song)
+
+    def test_003_insert_songs(self):
+        user_id = self.USER['id']
+        domain_id = self.USER['domain_id']
 
         for song in self.songs:
             self.libraryDao.insert(user_id, domain_id, song)
 
-    def test_002a_all_text_search(self):
+    def test_003a_all_text_search(self):
         user_id = self.USER['id']
         domain_id = self.USER['domain_id']
-
 
         songs = self.libraryDao.search(user_id, domain_id, "Artist000")
 
@@ -111,7 +155,7 @@ class LibraryTestCase(unittest.TestCase):
         for song in songs:
             self.assertEqual(song[Song.artist], "Artist000")
 
-    def test_002b_simple_search(self):
+    def test_003b_simple_search(self):
         user_id = self.USER['id']
         domain_id = self.USER['domain_id']
 
@@ -122,7 +166,7 @@ class LibraryTestCase(unittest.TestCase):
         for song in songs:
             self.assertEqual(song[Song.artist], "Artist000")
 
-    def test_002c_search_limit(self):
+    def test_003c_search_limit(self):
         user_id = self.USER['id']
         domain_id = self.USER['domain_id']
         limit = 4
@@ -135,7 +179,7 @@ class LibraryTestCase(unittest.TestCase):
         for song in songs:
             self.assertEqual(song[Song.artist], "Artist000")
 
-    def test_002d_search_order_string(self):
+    def test_003d_search_order_string(self):
 
         user_id = self.USER['id']
         domain_id = self.USER['domain_id']
@@ -149,7 +193,7 @@ class LibraryTestCase(unittest.TestCase):
         for s1, s2 in zip(songs, songs2):
             self.assertEqual(s1['artist'], s2)
 
-    def test_002e_search_order_forward(self):
+    def test_003e_search_order_forward(self):
 
         user_id = self.USER['id']
         domain_id = self.USER['domain_id']
@@ -163,7 +207,7 @@ class LibraryTestCase(unittest.TestCase):
         for s1, s2 in zip(songs, songs2):
             self.assertEqual(s1['artist'], s2)
 
-    def test_002f_search_order_reverse(self):
+    def test_003f_search_order_reverse(self):
 
         user_id = self.USER['id']
         domain_id = self.USER['domain_id']
@@ -177,7 +221,37 @@ class LibraryTestCase(unittest.TestCase):
         for s1, s2 in zip(songs, songs2):
             self.assertEqual(s1['artist'], s2)
 
-    def test_003_bulk_upsert(self):
+    def test_003_insert_update_by_refid(self):
+
+        user_id = self.USER['id']
+        domain_id = self.USER['domain_id']
+
+        song = {
+            Song.artist: "test",
+            Song.album: "test",
+            Song.title: "test",
+            Song.ref_id: 1474,
+        }
+
+        song_id = self.libraryDao.insertOrUpdateByReferenceId(
+            user_id, domain_id, song[Song.ref_id], song)
+
+        song2 = self.libraryDao.findSongById(user_id, domain_id, song_id)
+        self.assertEqual(song2[Song.artist], song[Song.artist])
+
+        song[Song.artist] = "test2"
+
+        song_id2 = self.libraryDao.insertOrUpdateByReferenceId(
+            user_id, domain_id, song[Song.ref_id], song)
+
+        # a new song record should not be created
+        self.assertEqual(song_id, song_id2)
+
+        song3 = self.libraryDao.findSongById(user_id, domain_id, song_id)
+        s= "%s=%s" % (song3[Song.artist], song[Song.artist])
+        self.assertEqual(song3[Song.artist], song[Song.artist], s)
+
+    def test_003a_bulk_upsert(self):
 
         # generate 1000 songs to insert
         songs = []
@@ -210,6 +284,103 @@ class LibraryTestCase(unittest.TestCase):
         # this test should write to stderr if the performance
         # changes between runs. cache results to the local file system
         return
+
+    def test_003b_insert_and_update(self):
+        # insert a song with user data for user000
+        # update the song with user data for user001
+        # verify that the user000 data is unchanged
+        # verify that the user001 data is inserted correctly
+        # the first insert should create two rows
+        # the next update should update one row (song data)
+        #    and insert one row (user data)
+        # verify that the update falls back to an insert when the user data
+        # row does not exist
+
+        user000 = self.userDao.findUserByEmail("user000")
+        user001 = self.userDao.findUserByEmail("user001")
+
+        user_id = self.USER['id']
+        domain_id = self.USER['domain_id']
+
+        song = {
+            "artist": "test",
+            "title": "test",
+            "album": "test",
+            "rating": 5
+        }
+
+        song_id = self.libraryDao.insert(
+            user000['id'], user000['domain_id'], song)
+
+        song["rating"] = 3
+        song["artist"] = "test2"
+        self.libraryDao.update(
+            user001['id'], user001['domain_id'], song_id, song)
+
+        song000 = self.libraryDao.search(
+            user000['id'], user000['domain_id'], "id=%s" % song_id)[0]
+
+        song001 = self.libraryDao.search(
+            user001['id'], user001['domain_id'], "id=%s" % song_id)[0]
+
+        self.assertEqual(song000["artist"], "test2")
+        self.assertEqual(song001["artist"], "test2")
+
+        self.assertEqual(song000["rating"], 5)
+        self.assertEqual(song001["rating"], 3)
+
+    def test_004a_search_blocked(self):
+
+        user000 = self.userDao.findUserByEmail("user000")
+
+        song = {
+            Song.artist: "test",
+            Song.album: "test",
+            Song.title: "test",
+            Song.blocked: 1,
+        }
+
+        song_id = self.libraryDao.insert(
+            user000['id'], user000['domain_id'], song)
+
+        songs = self.libraryDao.search(
+            user000['id'], user000['domain_id'], "id=%s" % song_id,
+            showBanished=True, debug=False)
+
+        self.assertEqual(len(songs), 1)
+
+        songs = self.libraryDao.search(
+            user000['id'], user000['domain_id'], "id=%s" % song_id,
+            showBanished=False, debug=False)
+
+        self.assertEqual(len(songs), 0)
+
+    def test_004b_search_banished(self):
+
+        user000 = self.userDao.findUserByEmail("user000")
+
+        song = {
+            Song.artist: "test",
+            Song.album: "test",
+            Song.title: "test",
+            Song.banished: 1,
+        }
+
+        song_id = self.libraryDao.insert(
+            user000['id'], user000['domain_id'], song)
+
+        songs = self.libraryDao.search(
+            user000['id'], user000['domain_id'], "id=%s" % song_id,
+            showBanished=True, debug=False)
+
+        self.assertEqual(len(songs), 1)
+
+        songs = self.libraryDao.search(
+            user000['id'], user000['domain_id'], "id=%s" % song_id,
+            showBanished=False, debug=False)
+
+        self.assertEqual(len(songs), 0)
+
 
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(LibraryTestCase)

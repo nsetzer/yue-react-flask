@@ -174,7 +174,7 @@ class AudioService(object):
         db_records = self.historyDao.retrieve(user['id'], start, end)
         record_set = set((r['timestamp'] for r in db_records))
 
-        # only insert records if they are unique
+        # only insert records if they are unique (by time)
         count = 0
         for record in records:
             if record['timestamp'] not in record_set:

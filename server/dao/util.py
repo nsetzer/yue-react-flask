@@ -1,7 +1,7 @@
 import time
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import OrderedDict
 
 import bcrypt
@@ -34,6 +34,7 @@ except:
 
 def parse_iso_format(dt_str):
     """
+    parse a datestring into a datetime object
     as returned from datetime.datetime.now().isoformat()
     or in javascript: new Date().toISOString();
     """
@@ -42,7 +43,7 @@ def parse_iso_format(dt_str):
     us = us.rstrip("Z")
     if us:
         us = int(us.rstrip("Z"), 10)
-        dt += datetime.timedelta(microseconds=us)
+        dt += timedelta(microseconds=us)
     return dt
 
 def format_date(unixTime):

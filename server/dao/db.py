@@ -27,7 +27,12 @@ def db_remove(db_path):
             return False
     return True
 
-def db_connect(connection_string=None):
+def _abort_flush(*args, **kwargs):
+    """monkey patch db.session.flush to prevent writing to the database"""
+    sys.stderr.write("ERROR: flush. Database open in readonly mode\n")
+    return
+
+def db_connect(connection_string=None, readonly=False):
     """
     a reimplementation of the Flask-SqlAlchemy integration
     """
@@ -43,6 +48,8 @@ def db_connect(connection_string=None):
     db = lambda : None
     db.metadata = MetaData()
     db.session = Session()
+    if readonly:
+        db.session.flush = _abort_flush
     db.tables = DatabaseTables(db.metadata)
     db.create_all = lambda: db.metadata.create_all(engine)
     db.disconnect = lambda: engine.dispose()

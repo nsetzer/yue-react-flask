@@ -167,7 +167,7 @@ class LibraryResource(WebResource):
 
         end = self._get_datetime(app, "end")
         if end is None:
-            return httpError(400, "start time must be provided")
+            return httpError(400, "end time must be provided")
 
         page = int(request.args.get('page', "0"))
         page_size = int(request.args.get('page_size', "500"))
@@ -185,6 +185,13 @@ class LibraryResource(WebResource):
     @post("history")
     @requires_auth("user_write")
     def update_history(self, app):
+        """
+
+        the json payload is a list of history records.
+            {"timestamp": <epoch_time>, "song_id": <song_id>}
+
+        epoch_time is the number of seconds since the UNIX epoch as an integer
+        """
 
         records = request.json
         if records is None or len(records) == 0:
@@ -196,7 +203,7 @@ class LibraryResource(WebResource):
 
     def _get_datetime(self, app, field):
         st = request.args.get(field, None)
-        t=0
+        t = 0
         if st is not None:
             try:
                 try:
@@ -205,7 +212,7 @@ class LibraryResource(WebResource):
                     t = int(parse_iso_format(st).timestamp())
                 return t
             except Exception as e:
-                app.log.error("unable to parse %s(%s) : %s" % (field,st,e))
+                app.log.exception("unable to parse %s(%s) : %s" % (field, st, e))
         return None
 
     def _validate_song_list(self, app, songs):

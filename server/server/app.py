@@ -165,6 +165,7 @@ class TestApp(YueApp):
 
     def create_test_songs(self):
         self.SONGS = []
+        self.SONGIDS = []
         for a in range(3):
             for b in range(3):
                 for t in range(3):
@@ -177,6 +178,7 @@ class TestApp(YueApp):
                     song_id = self.audio_service.createSong(self.USER, song)
                     song[Song.id] = song_id
                     self.SONGS.append(song)
+                    self.SONGIDS.append(song_id)
 
     def tearDown(self):
         # nothing to do
