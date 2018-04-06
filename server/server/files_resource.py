@@ -8,9 +8,9 @@ from ..dao.library import Song
 from ..dao.util import parse_iso_format, pathCorrectCase
 
 from ..framework.web_resource import WebResource, \
-    get, post, put, delete, compressed
+    get, post, put, delete, compressed, httpError
 
-from .util import httpError, requires_auth
+from .util import requires_auth
 
 class FilesResource(WebResource):
     """QueueResource

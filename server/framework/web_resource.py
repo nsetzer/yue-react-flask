@@ -1,20 +1,52 @@
 
 from functools import wraps
-from flask import after_this_request, request
+from flask import after_this_request, request, g, jsonify
 from collections import namedtuple
 
 from io import BytesIO
 import gzip
 import datetime
+import logging
 
 WebEndpoint = namedtuple('WebEndpoint', ['path', 'methods', 'name', 'method'])
+
+def httpError(code, message):
+    # TODO: this should be at loglevel debug
+    logging.error("[%3d] %s" % (code, message))
+    return jsonify(error=message), code
+
+def _endpoint_mapper(f):
+
+    if not hasattr(f, "_params"):
+        return f
+
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        g.args = lambda: None
+        for name, type_, default, required in f._params:
+            if required and name not in request.args:
+                return httpError(400,
+                    "required query parameter `%s` not found" % name)
+
+            # validate the query parameter and add it to the request args
+            try:
+                if name in request.args:
+                    value = type_(request.args[name])
+                else:
+                    value = default
+            except Exception as e:
+                return httpError(400,
+                    "unable to validate query parameter: %s=%s" % (name, request.args[name]))
+            setattr(g.args, name, value)
+        return f(*args, **kwargs)
+    return wrapper
 
 def get(path):
     """decorator which registers a class method as a GET handler"""
     def decorator(f):
         f._endpoint = path
         f._methods = ['GET',]
-        return f
+        return _endpoint_mapper(f)
     return decorator
 
 def put(path):
@@ -22,7 +54,7 @@ def put(path):
     def decorator(f):
         f._endpoint = path
         f._methods = ['PUT',]
-        return f
+        return _endpoint_mapper(f)
     return decorator
 
 def post(path):
@@ -30,7 +62,7 @@ def post(path):
     def decorator(f):
         f._endpoint = path
         f._methods = ['POST',]
-        return f
+        return _endpoint_mapper(f)
     return decorator
 
 def delete(path):
@@ -38,6 +70,16 @@ def delete(path):
     def decorator(f):
         f._endpoint = path
         f._methods = ['DELET',]
+        return _endpoint_mapper(f)
+    return decorator
+
+def param(name, type_=str, default=None, required=False):
+    """decorator which validates query parameters"""
+
+    def decorator(f):
+        if not hasattr(f, "_params"):
+            f._params = []
+        f._params.append((name, type_, default, required))
         return f
     return decorator
 

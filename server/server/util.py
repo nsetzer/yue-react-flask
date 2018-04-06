@@ -4,16 +4,15 @@ from functools import wraps
 from flask import after_this_request, request, jsonify, g
 import traceback
 
+from ..dao.util import parse_iso_format
+
+from ..framework.web_resource import httpError
+
 class HttpException(Exception):
     """docstring for HttpException"""
     def __init__(self, message, code=400):
         super(HttpException, self).__init__(message)
         self.status = code
-
-def httpError(code, message):
-    # TODO: this should be at loglevel debug
-    logging.error("[%3d] %s" % (code, message))
-    return jsonify(error=message), code
 
 def _handle_exceptions(f, args, kwargs):
     try:
@@ -170,6 +169,17 @@ def requires_auth(features=None):
         return wrapper
     return impl
 
-
+def datetime_validator(st):
+        t = 0
+        if st is not None:
+            try:
+                try:
+                    t = int(st)
+                except ValueError:
+                    t = int(parse_iso_format(st).timestamp())
+                return t
+            except Exception as e:
+                logging.exception("unable to parse %s(%s) : %s" % (field, st, e))
+        return None
 
 

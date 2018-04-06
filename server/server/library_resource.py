@@ -6,12 +6,12 @@ import logging
 from flask import jsonify, render_template, g, request, send_file
 
 from ..dao.library import Song
-from ..dao.util import parse_iso_format, pathCorrectCase
+from ..dao.util import pathCorrectCase
 
 from ..framework.web_resource import WebResource, \
-    get, post, put, delete, compressed
+    get, post, put, delete, param, compressed, httpError
 
-from .util import httpError, requires_auth
+from .util import requires_auth, datetime_validator
 
 class LibraryResource(WebResource):
     """LibraryResource
@@ -158,28 +158,28 @@ class LibraryResource(WebResource):
         return jsonify(result="NOT OK"), 501
 
     @get("history")
+    @param("start", type_=datetime_validator, required=True)
+    @param("end", type_=datetime_validator, required=True)
+    @param("page", type_=int, default=0)
+    @param("page_size", type_=int, default=500)
     @requires_auth("user_read")
     def get_history(self, app):
+        """
+        get song history between a date range
 
-        start = self._get_datetime(app, "start")
-        if start is None:
-            return httpError(400, "start time must be provided")
+        the start and end time can be an integer or ISO string.
+        """
 
-        end = self._get_datetime(app, "end")
-        if end is None:
-            return httpError(400, "end time must be provided")
-
-        page = int(request.args.get('page', "0"))
-        page_size = int(request.args.get('page_size', "500"))
-        offset = page * page_size
+        offset = g.args.page * g.args.page_size
 
         records = self.audio_service.getPlayHistory(
-            g.current_user, start, end, offset=offset, limit=page_size)
+            g.current_user, g.args.start, g.args.end,
+            offset=offset, limit=g.args.page_size)
 
         return jsonify({
             "result": records,
-            "page": page,
-            "page_size": page_size
+            "page": g.args.page,
+            "page_size": g.args.page_size
         })
 
     @post("history")

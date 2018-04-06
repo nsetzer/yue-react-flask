@@ -4,6 +4,7 @@ import unittest
 import shutil
 import fnmatch
 import argparse
+import logging
 
 if (sys.version_info[0] == 2):
     raise RuntimeError("python2 not supported")
@@ -49,7 +50,9 @@ def main():
 
     args = parser.parse_args()
 
-    print(args.mode)
+    logger = logging.getLogger()
+    logger.disabled = True
+
     if "coverage".startswith(args.mode):
         Coverage().run()
     else:
