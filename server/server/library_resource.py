@@ -9,9 +9,20 @@ from ..dao.library import Song
 from ..dao.util import pathCorrectCase
 
 from ..framework.web_resource import WebResource, \
-    get, post, put, delete, param, compressed, httpError
+    get, post, put, delete, param, compressed, httpError, int_range, int_min
 
 from .util import requires_auth, datetime_validator
+
+def validate(expr, value):
+    if not expr:
+        raise Exception("invalid input")
+    return value
+def vmin(target,value):
+    return validate(target <= value, value)
+def vmax(target, value):
+    return validate(target >= value, value)
+
+
 
 class LibraryResource(WebResource):
     """LibraryResource
@@ -32,25 +43,25 @@ class LibraryResource(WebResource):
         self.QUERY_LIMIT_MAX = 500
 
     @get("")
+    @param("query", default=None)
+    @param("limit", type_=int_range(0, 500), default=50)
+    @param("page", type_=int_min(0), default=0)
+    @param("orderby", default="artist")
     @requires_auth("library_read")
     @compressed
     def search_library(self, app):
         """ return song information from the library """
 
-        query = request.args.get('query', None)
-        limit = int(request.args.get('limit', 50))
-        limit = max(1, min(self.QUERY_LIMIT_MAX, limit))
-        page = max(0, int(request.args.get('page', 0)))
-        orderby = request.args.get('orderby', 'artist')
-        offset = limit * page
+        offset = g.args.limit * g.args.page
 
         songs = self.audio_service.search(g.current_user,
-            query, limit=limit, orderby=orderby, offset=offset)
+            g.args.query, limit=g.args.limit,
+            orderby=g.args.orderby, offset=offset)
 
         return jsonify({
             "result": songs,
-            "page": page,
-            "page_size": limit,
+            "page": g.args.page,
+            "page_size": g.args.limit,
         })
 
     @put("")
@@ -97,9 +108,9 @@ class LibraryResource(WebResource):
         return jsonify(result=song)
 
     @get("<song_id>/audio")
+    @param("mode", default="default")
     @requires_auth("library_read_song")
     def get_song_audio(self, app, song_id):
-        mode = request.args.get('mode', "default")
 
         song = self.audio_service.findSongById(g.current_user, song_id)
 
@@ -115,8 +126,8 @@ class LibraryResource(WebResource):
             app.log.error("Audio for %s not found at: `%s`" % (song_id, path))
             return httpError(404, "Audio File not found")
 
-        if self.transcode_service.shouldTranscodeSong(song, mode):
-            path = self.transcode_service.transcodeSong(song, mode)
+        if self.transcode_service.shouldTranscodeSong(song, g.args.mode):
+            path = self.transcode_service.transcodeSong(song, g.args.mode)
 
         if not os.path.exists(path):
             app.log.error("Audio for %s not found at: `%s`" % (song_id, path))
@@ -200,20 +211,6 @@ class LibraryResource(WebResource):
         count = self.audio_service.insertPlayHistory(g.current_user, records)
 
         return jsonify({"result": count, "records": len(records)})
-
-    def _get_datetime(self, app, field):
-        st = request.args.get(field, None)
-        t = 0
-        if st is not None:
-            try:
-                try:
-                    t = int(st)
-                except ValueError:
-                    t = int(parse_iso_format(st).timestamp())
-                return t
-            except Exception as e:
-                app.log.exception("unable to parse %s(%s) : %s" % (field, st, e))
-        return None
 
     def _validate_song_list(self, app, songs):
 

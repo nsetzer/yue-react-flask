@@ -54,6 +54,16 @@ class LibraryResourceTestCase(unittest.TestCase):
             data = app.get_json('/api/library', compressed=True)
             self.assertEqual(len(self.app.SONGS), len(data))
 
+    def test_search_invalid_page(self):
+        # show that the validators work as intended.
+        # the minimum page value is 0, any integer lower than that
+        # should return an error, instead of defaulting to 0
+        username = "user000"
+        with self.app.login(username, username) as app:
+            qs = {"page": -1, }
+            result = app.get("/api/library", query_string=qs)
+            self.assertEqual(result.status_code, 400, result)
+
     def test_001_history(self):
         """ show that history records can be imported for a song.
         """

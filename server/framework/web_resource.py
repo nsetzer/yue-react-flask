@@ -10,6 +10,13 @@ import logging
 
 WebEndpoint = namedtuple('WebEndpoint', ['path', 'methods', 'name', 'method'])
 
+# validate that an integer is between two numbers
+int_range = lambda min_, max_: lambda v: vmin(max_,vmax(min_, int(v)))
+# validate that an integer is larger than some number
+int_min = lambda min_: lambda v: vmax(min_, int(v))
+# validate that an integer is smaller than some number
+int_max = lambda max_: lambda v: vmin(max_, int(v))
+
 def httpError(code, message):
     # TODO: this should be at loglevel debug
     logging.error("[%3d] %s" % (code, message))
