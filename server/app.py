@@ -85,7 +85,7 @@ class TestApp(YueApp):
                 'port': 4200,
                 'env': 'production',
                 'secret_key': 'secret',
-                'cors': {'origins': '*'},
+                'cors': {'origin': '*'},
                 'database': {
                     'kind': 'sqlite',
                     'path': 'database.test.%s.sqlite' % test_name
@@ -144,7 +144,7 @@ class TestApp(YueApp):
             ]
         }
 
-        config = Config.init_config(self.app_cfg)
+        config = Config(self.app_cfg)
         config.database.url = None
 
         return config
@@ -197,7 +197,7 @@ def main():
     args = parser.parse_args()
 
     app_cfg_path = os.path.join(args.config, args.profile, "application.yml")
-    cfg = Config.init(app_cfg_path)
+    cfg = Config(app_cfg_path)
 
     if not os.path.exists(cfg.logging.directory):
         os.makedirs(cfg.logging.directory)
