@@ -146,7 +146,7 @@ class RegExpSearchRule(ColumnSearchRule):
 
     def check(self, elem, ignoreCase=True):
         # TODO: use ignoreCase...
-        return regexp(self.value, elem[self.column])
+        return regexp(self.value, elem[self.column.name])
 
     def __repr__(self):
         return "<%s =~ \"%s\"" % (self.column, self.fmtval(self.value))
@@ -161,7 +161,7 @@ class PartialStringSearchRule(ColumnSearchRule):
 
     def check(self, elem, ignoreCase=True):
         v1 = self.type_(case_(self.value, ignoreCase))
-        v2 = self.type_(case_(elem[self.column], ignoreCase))
+        v2 = self.type_(case_(elem[self.column.name], ignoreCase))
         return v1 in v2
 
     def __repr__(self):
@@ -175,7 +175,7 @@ class InvertedPartialStringSearchRule(ColumnSearchRule):
 
     def check(self, elem, ignoreCase=True):
         v1 = self.type_(case_(self.value, ignoreCase))
-        v2 = self.type_(case_(elem[self.column], ignoreCase))
+        v2 = self.type_(case_(elem[self.column.name], ignoreCase))
         return v1 not in v2
 
     def __repr__(self):
@@ -192,7 +192,7 @@ class ExactSearchRule(ColumnSearchRule):
 
     def check(self, elem, ignoreCase=True):
         v1 = self.type_(case_(self.value, ignoreCase))
-        v2 = self.type_(case_(elem[self.column], ignoreCase))
+        v2 = self.type_(case_(elem[self.column.name], ignoreCase))
         return v1 == v2
 
     def __repr__(self):
@@ -206,7 +206,7 @@ class InvertedExactSearchRule(ColumnSearchRule):
 
     def check(self, elem, ignoreCase=True):
         v1 = self.type_(case_(self.value, ignoreCase))
-        v2 = self.type_(case_(elem[self.column], ignoreCase))
+        v2 = self.type_(case_(elem[self.column.name], ignoreCase))
         return v1 != v2
 
     def __repr__(self):
@@ -220,7 +220,7 @@ class LessThanSearchRule(ColumnSearchRule):
 
     def check(self, elem, ignoreCase=True):
         v1 = self.type_(case_(self.value, ignoreCase))
-        v2 = self.type_(case_(elem[self.column], ignoreCase))
+        v2 = self.type_(case_(elem[self.column.name], ignoreCase))
         return v2 < v1
 
     def __repr__(self):
@@ -234,7 +234,7 @@ class LessThanEqualSearchRule(ColumnSearchRule):
 
     def check(self, elem, ignoreCase=True):
         v1 = self.type_(case_(self.value, ignoreCase))
-        v2 = self.type_(case_(elem[self.column], ignoreCase))
+        v2 = self.type_(case_(elem[self.column.name], ignoreCase))
         return v2 <= v1
 
     def __repr__(self):
@@ -248,7 +248,7 @@ class GreaterThanSearchRule(ColumnSearchRule):
 
     def check(self, elem, ignoreCase=True):
         v1 = self.type_(case_(self.value, ignoreCase))
-        v2 = self.type_(case_(elem[self.column], ignoreCase))
+        v2 = self.type_(case_(elem[self.column.name], ignoreCase))
         return v2 > v1
 
     def __repr__(self):
@@ -262,7 +262,7 @@ class GreaterThanEqualSearchRule(ColumnSearchRule):
 
     def check(self, elem, ignoreCase=True):
         v1 = self.type_(case_(self.value, ignoreCase))
-        v2 = self.type_(case_(elem[self.column], ignoreCase))
+        v2 = self.type_(case_(elem[self.column.name], ignoreCase))
         return v2 >= v1
 
     def __repr__(self):
@@ -286,7 +286,7 @@ class RangeSearchRule(SearchRule):
     def check(self, elem, ignoreCase=True):
         a = self.type_(case_(self.value_low, ignoreCase))
         b = self.type_(case_(self.value_high, ignoreCase))
-        c = case_(elem[self.column], ignoreCase)
+        c = case_(elem[self.column.name], ignoreCase)
         return a <= c <= b
 
     def __repr__(self):
@@ -303,7 +303,7 @@ class NotRangeSearchRule(RangeSearchRule):
     def check(self, elem, ignoreCase=True):
         a = self.type_(case_(self.value_low, ignoreCase))
         b = self.type_(case_(self.value_high, ignoreCase))
-        c = case_(elem[self.column], ignoreCase)
+        c = case_(elem[self.column.name], ignoreCase)
         return c < a or c > b
 
     def __repr__(self):
@@ -556,13 +556,13 @@ class FormatConversion(object):
         # modulo fix the day by rolling up, feb 29 to march 1
         # or july 32 to aug 1st, if needed
         days = calendar.monthrange(y, m)[1]
-        if d > days:
+        while d > days:
             d -= days
             m += 1
-        # fix the year by rounding months that are out of bounds
-        if m > 12:
-            m -= 12
-            y += 1
+            if (m > 12):
+                m -= 12
+                y += 1
+            days = calendar.monthrange(y, m)[1]
 
         new_date = datetime(y, m, d)
         if dd != 0:
@@ -588,7 +588,7 @@ class FormatConversion(object):
             [YY]YY/MM/
             [YY]YY/MM/DD
         a slash is used to differentiate from a bare integer, which
-        is parsed elsware as a day-delta
+        is parsed elseware as a day-delta
         """
         x = sValue.split('/')
         x = [y for y in x if y]  # remove empty sections
@@ -753,7 +753,7 @@ class Grammar(object):
             if self.quoted:
                 raise TokenizeError("Unterminated Double Quote")
 
-    def __init__(self):
+    def __init__(self, dtn=None):
         super(Grammar, self).__init__()
 
         # set these to names of columns of specific data types
@@ -770,7 +770,7 @@ class Grammar(object):
         self.compile_operators()
 
         self.autoset_datetime = True
-        self.fc = FormatConversion()
+        self.fc = FormatConversion(dtn)
 
     # public
 
@@ -1077,8 +1077,8 @@ class Grammar(object):
 
 class SearchGrammar(Grammar):
 
-    def __init__(self):
-        super(SearchGrammar, self).__init__()
+    def __init__(self, dtn=None):
+        super(SearchGrammar, self).__init__(dtn)
 
     def compile_operators(self):
 

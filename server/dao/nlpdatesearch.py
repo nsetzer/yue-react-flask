@@ -127,7 +127,7 @@ class NLPDateRange(object):
         self.match_words = re.compile(rex_format)
 
         if dtn is None:
-            self.dtn = datetime.now()
+            self.dtn = datetime.datetime.now()
         else:
             self.dtn = dtn
 
@@ -210,7 +210,9 @@ def main():
         result = nlp.parse(text)
         if result:
             ds,de = result
-            print(ds,de)
+            t1 = timegm(ds.utctimetuple())
+            t2 = timegm(de.utctimetuple())
+            print(ds, de, t1, t2, text)
             #print ppdt(ds),'-->',ppdt(de)
             #print timegm(de.utctimetuple()), (de-ds).total_seconds()
         else:

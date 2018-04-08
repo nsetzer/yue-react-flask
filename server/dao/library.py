@@ -4,7 +4,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import and_, or_, not_, case, select, update, column, func, asc, desc
 from sqlalchemy.sql.expression import bindparam
-from .search import SearchGrammar, ParseError
+from .search import SearchGrammar, ParseError, Rule
 
 import datetime, time
 import uuid
@@ -602,7 +602,7 @@ class LibraryDao(object):
     def search(self,
         user_id,
         domain_id,
-        searchTerm,
+        rule,
         case_insensitive=True,
         orderby=None,
         limit=None,
@@ -610,7 +610,8 @@ class LibraryDao(object):
         showBanished=False,
         debug=False):
 
-        rule = self.grammar.ruleFromString(searchTerm)
+        if not isinstance(rule, Rule):
+            rule = self.grammar.ruleFromString(rule)
 
         SongTable = self.dbtables.SongDataTable.c
         UserTable = self.dbtables.SongUserDataTable.c
