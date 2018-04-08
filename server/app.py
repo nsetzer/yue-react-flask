@@ -4,25 +4,25 @@ import sys
 import logging
 from logging.handlers import RotatingFileHandler
 
-from ..framework.application import FlaskApp
-from ..framework.web_resource import WebResource, get
+from .framework.application import FlaskApp
+from .framework.web_resource import WebResource, get
 
 from .config import Config
 
 from flask import jsonify, render_template
 
-from ..service.audio_service import AudioService
-from ..service.transcode_service import TranscodeService
-from ..service.user_service import UserService
-from ..dao.library import Song
+from .service.audio_service import AudioService
+from .service.transcode_service import TranscodeService
+from .service.user_service import UserService
+from .dao.library import Song
 
-from .app_resource import AppResource
-from .user_resource import UserResource
-from .library_resource import LibraryResource
-from .queue_resource import QueueResource
-from .files_resource import FilesResource
+from .resource.app_resource import AppResource
+from .resource.user_resource import UserResource
+from .resource.library_resource import LibraryResource
+from .resource.queue_resource import QueueResource
+from .resource.files_resource import FilesResource
 
-from ..dao.db import db_connect, db_init_main
+from .dao.db import db_connect, db_init_main
 
 import ssl
 

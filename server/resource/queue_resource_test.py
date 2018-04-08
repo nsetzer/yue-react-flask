@@ -3,8 +3,8 @@ import unittest
 import json
 import time
 
+from ..app import TestApp
 from ..dao.library import Song
-from .app import TestApp
 
 class QueueResourceTestCase(unittest.TestCase):
 

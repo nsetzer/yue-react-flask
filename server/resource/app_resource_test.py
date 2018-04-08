@@ -4,15 +4,13 @@ import tempfile
 import json
 import time
 
-from .app import TestApp
+from ..app import TestApp
 from ..framework.application import FlaskApp
 from ..framework.web_resource import WebResource
 
 from ..service.audio_service import AudioService
 from ..service.transcode_service import TranscodeService
 from ..service.user_service import UserService
-
-from .config import Config
 
 from ..dao.db import db_connect, db_remove, db_init_main
 

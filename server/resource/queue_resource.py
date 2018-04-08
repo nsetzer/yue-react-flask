@@ -18,11 +18,6 @@ from .util import requires_auth, search_order_validator, \
 class QueueResource(WebResource):
     """QueueResource
 
-    features:
-        library_read   - can view information about the domain library
-        library_write  - can update information in this domain library
-        library_read_song  - can stream music
-        library_write_song  - can upload music
     """
     def __init__(self, user_service, audio_service):
         super(QueueResource, self).__init__("/api/queue")

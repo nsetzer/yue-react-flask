@@ -3,7 +3,7 @@ import unittest
 import json
 import time
 
-from .app import TestApp
+from ..app import TestApp
 
 from io import BytesIO
 import gzip

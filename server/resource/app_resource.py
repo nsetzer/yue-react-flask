@@ -18,10 +18,6 @@ class AppResource(WebResource):
 
     def __init__(self):
         super(AppResource, self).__init__()
-        #self.register('/', self.index1, ['GET'])
-        #self.register('/<path:path>', self.index2, ['GET'])
-        #self.register('/health', self.health, ['GET'])
-        #self.register('/.well-known/<path:path>', self.webroot, ['GET'])
 
     @get("/")
     def index1(self):
