@@ -1,8 +1,8 @@
 
-
+import os
 import logging
 
-from flask import jsonify, render_template, g, request, send_file
+from flask import jsonify, render_template, g, request, send_file, send_from_directory
 
 from ..dao.library import Song
 from ..dao.util import parse_iso_format, pathCorrectCase
@@ -16,16 +16,23 @@ class AppResource(WebResource):
     """docstring for AppResource
     """
 
-    def __init__(self):
+    def __init__(self, config):
         super(AppResource, self).__init__()
+        self.config = config
 
     @get("/")
     def index1(self):
-        return render_template('index.html')
+        path = os.path.join(self.config.build_dir, 'index.html')
+        return open(path).read()
 
     @get("/<path:path>")
     def index2(self, path):
-        return render_template('index.html')
+        path = os.path.join(self.config.build_dir, 'index.html')
+        return open(path).read()
+
+    @get("/static/<path:path>")
+    def static(self, path):
+        return send_from_directory(self.config.static_dir, path)
 
     @get("/health")
     def health(self):

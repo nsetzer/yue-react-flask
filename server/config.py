@@ -71,7 +71,13 @@ class SSLConfig(object):
 
 class CORSConfig(object):
     def __init__(self, base):
-        self.origins = _get_key(base, 'cors', 'origins', default="")
+        # TODO: revist default values
+        self.origin = _get_key(base, 'cors', 'origin',
+            default="*")
+        self.headers = _get_key(base, 'cors', 'headers',
+            default="Origin, X-Requested-With, Content-Type, Accept")
+        self.methods = _get_key(base, 'cors', 'methods',
+            default="GET, POST, PUT, DELETE, OPTIONS")
 
 class LoggingConfig(object):
     def __init__(self, base):
@@ -106,6 +112,9 @@ class TranscodeConfig(object):
         self.audio.bin_path = _get_key(base, 'transcode', 'audio', 'bin_path', default="")
         self.audio.tmp_path = _get_key(base, 'transcode', 'audio', 'tmp_path', default="./tmp")
         self.image = lambda: None
+
+# todo, break this into an AppConfig and BaseAppConfig
+# stash the BaseAppConfig in the framework
 
 class Config(object):
     """base class for application configurations"""

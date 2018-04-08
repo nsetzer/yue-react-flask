@@ -28,10 +28,9 @@ class FlaskApp(object):
         self.config = config
 
         self.app = flask.Flask(self.__class__.__name__,
-            static_folder=self.config.static_dir,
-            template_folder=self.config.build_dir)
-
-        # self.app.config['SECRET_KEY'] = self.config.secret_key
+            static_folder=None)
+            #static_folder=self.config.static_dir,
+            #template_folder=self.config.build_dir)
 
         self.log = self.app.logger
 
@@ -40,6 +39,8 @@ class FlaskApp(object):
 
         if not os.path.exists(self.config.static_dir):
             self.log.warn("not found: %s\n" % cfg.static_dir)
+
+        self.app.after_request(self._add_cors_headers)
 
     def add_resource(self, res):
 
@@ -58,7 +59,6 @@ class FlaskApp(object):
         msg = "Error registering %s: %s"  % (name, msg)
         msg += " or endpoint already mapped"
         raise Exception(msg)
-
 
     def list_routes(self):
         """return a list of (endpoint, method, url)
@@ -88,7 +88,6 @@ class FlaskApp(object):
 
     def run(self, ssl_context=None):
 
-
         routes = self.list_routes()
         for endpoint, methods, url in routes:
             print("{:40s} {:20s} {}".format(endpoint, methods, url))
@@ -97,6 +96,14 @@ class FlaskApp(object):
         self.app.run(host=self.config.host,
                      port=self.config.port,
                      ssl_context=ssl_context);
+
+    def _add_cors_headers(self, response):
+
+        response.headers["Access-Control-Allow-Origin"] = self.config.cors.origin
+        response.headers["Access-Control-Allow-Headers"] = self.config.cors.headers
+        response.headers["Access-Control-Allow-Methods"] = self.config.cors.methods
+
+        return response
 
 
 class AppTestClientWrapper(object):

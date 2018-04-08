@@ -37,7 +37,7 @@ class YueApp(FlaskApp):
         self.audio_service = AudioService(config, self.db, self.db.tables)
         self.transcode_service = TranscodeService(config, self.db, self.db.tables)
 
-        self.add_resource(AppResource())
+        self.add_resource(AppResource(self.config))
         self.add_resource(UserResource(self.user_service))
         self.add_resource(LibraryResource(self.user_service,
                                           self.audio_service,
@@ -148,16 +148,6 @@ class TestApp(YueApp):
         config.database.url = None
 
         return config
-
-    def add_all_resources(self):
-        self.add_resource(AppResource())
-        self.add_resource(UserResource(self.user_service))
-        self.add_resource(LibraryResource(self.user_service,
-                                          self.audio_service,
-                                          self.transcode_service))
-        self.add_resource(QueueResource(self.user_service,
-                                        self.audio_service))
-        self.add_resource(FilesResource(self.user_service))
 
     def login(self, username, password):
         token = self.user_service.loginUser(username, password)
