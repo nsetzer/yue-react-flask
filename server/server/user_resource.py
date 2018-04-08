@@ -24,12 +24,12 @@ class UserResource(WebResource):
 
     @get("")
     @requires_auth("user_read")
-    def get_user(self, app):
+    def get_user(self):
         info=self.user_service.listUser(g.current_user['id'])
         return jsonify(result=info)
 
     @post("login")
-    def login_user(self, app):
+    def login_user(self):
         incoming = request.get_json()
 
         if not incoming:
@@ -45,7 +45,7 @@ class UserResource(WebResource):
         return jsonify(token=token)
 
     @post("token")
-    def is_token_valid(self, app):
+    def is_token_valid(self):
         # TODO: is this endpoint still requiered?
 
         incoming = request.get_json()
@@ -62,7 +62,7 @@ class UserResource(WebResource):
 
     @post("create")
     @requires_auth("user_create")
-    def create_user(self, app):
+    def create_user(self):
         incoming = request.get_json()
 
         try:
@@ -83,7 +83,7 @@ class UserResource(WebResource):
 
     @put("password")
     @requires_auth("user_write")
-    def change_password(self, app):
+    def change_password(self):
         incoming = request.get_json()
 
         if not incoming:
@@ -99,7 +99,7 @@ class UserResource(WebResource):
 
     @get("list/domain/<domain>")
     @requires_auth("user_power")
-    def list_users(self, app, domain):
+    def list_users(self, domain):
 
         user_info = self.user_service.listDomainUsers(domain)
 
@@ -107,7 +107,7 @@ class UserResource(WebResource):
 
     @get("list/user/<userId>")
     @requires_auth("user_power")
-    def list_user(self, app, userId):
+    def list_user(self, userId):
 
         user_info = self.user_service.listUser(userId)
 

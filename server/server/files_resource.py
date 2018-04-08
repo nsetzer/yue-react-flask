@@ -26,22 +26,22 @@ class FilesResource(WebResource):
 
     @get("<root>/path/")
     @requires_auth("filesystem_read")
-    def get_path1(self, app, root):
+    def get_path1(self, root):
         return self._list_path(root, "")
 
     @get("<root>/path/<path:path>")
     @requires_auth("filesystem_read")
-    def get_path2(self, app, root, path):
+    def get_path2(self, root, path):
         return self._list_path(root, path)
 
     @post("<root>/path/<path:path>")
     @requires_auth("filesystem_write")
-    def upload(self, app, root, path):
+    def upload(self, root, path):
         return jsonify(result="NOT OK"), 501
 
     @get("roots")
     @requires_auth("filesystem_read")
-    def get_roots(self, app):
+    def get_roots(self):
         # todo this should be a list of names
         return jsonify(result=["default", ])
 

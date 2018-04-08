@@ -36,7 +36,7 @@ class LibraryResource(WebResource):
     @param("orderby", type_=search_order_validator, default=Song.artist)
     @requires_auth("library_read")
     @compressed
-    def search_library(self, app):
+    def search_library(self):
         """ return song information from the library """
 
         offset = g.args.limit * g.args.page
@@ -53,7 +53,7 @@ class LibraryResource(WebResource):
 
     @put("")
     @requires_auth("library_write")
-    def update_song(self, app):
+    def update_song(self):
 
         songs = request.json
 
@@ -65,7 +65,7 @@ class LibraryResource(WebResource):
 
     @post("")
     @requires_auth("library_write")
-    def create_song(self, app):
+    def create_song(self):
         song = request.json
 
         response = self._validate_song_list(app, [song,])
@@ -84,20 +84,20 @@ class LibraryResource(WebResource):
     @get("info")
     @requires_auth("library_read")
     @compressed
-    def get_domain_info(self, app):
+    def get_domain_info(self):
         data = self.audio_service.getDomainSongUserInfo(g.current_user)
         return jsonify(result=data)
 
     @get("<song_id>")
     @requires_auth("library_read")
-    def get_song(self, app, song_id):
+    def get_song(self, song_id):
         song = self.audio_service.findSongById(g.current_user, song_id)
         return jsonify(result=song)
 
     @get("<song_id>/audio")
     @param("mode", default="default")
     @requires_auth("library_read_song")
-    def get_song_audio(self, app, song_id):
+    def get_song_audio(self, song_id):
 
         song = self.audio_service.findSongById(g.current_user, song_id)
 
@@ -110,26 +110,26 @@ class LibraryResource(WebResource):
             return httpError(404, "No audio for %s" % (song_id))
 
         if not os.path.exists(path):
-            app.log.error("Audio for %s not found at: `%s`" % (song_id, path))
+            logging.error("Audio for %s not found at: `%s`" % (song_id, path))
             return httpError(404, "Audio File not found")
 
         if self.transcode_service.shouldTranscodeSong(song, g.args.mode):
             path = self.transcode_service.transcodeSong(song, g.args.mode)
 
         if not os.path.exists(path):
-            app.log.error("Audio for %s not found at: `%s`" % (song_id, path))
+            logging.error("Audio for %s not found at: `%s`" % (song_id, path))
             return httpError(404, "Audio File not found")
 
         return send_file(path)
 
     @post("<song_id>/audio")
     @requires_auth("library_write_song")
-    def set_song_audio(self, app, song_id):
+    def set_song_audio(self, song_id):
         return jsonify(result="NOT OK"), 501
 
     @get("<song_id>/art")
     @requires_auth("library_read_song")
-    def get_song_art(self, app, song_id):
+    def get_song_art(self, song_id):
         """ get album art for a specific song
 
         TODO: query options should be used to specify
@@ -145,14 +145,14 @@ class LibraryResource(WebResource):
         path = self.audio_service.getSongArtPath(g.current_user, song_id)
 
         if not os.path.exists(path):
-            app.log.error("Art for %s not found at: `%s`" % (song_id, path))
+            logging.error("Art for %s not found at: `%s`" % (song_id, path))
             return httpError(404, "Album art not found")
 
         return send_file(path)
 
     @post("<song_id>/art")
     @requires_auth("library_write_song")
-    def set_song_art(self, app, song_id):
+    def set_song_art(self, song_id):
         return jsonify(result="NOT OK"), 501
 
     @get("history")
@@ -161,7 +161,7 @@ class LibraryResource(WebResource):
     @param("page", type_=int, default=0)
     @param("page_size", type_=int, default=500)
     @requires_auth("user_read")
-    def get_history(self, app):
+    def get_history(self):
         """
         get song history between a date range
 
@@ -182,7 +182,7 @@ class LibraryResource(WebResource):
 
     @post("history")
     @requires_auth("user_write")
-    def update_history(self, app):
+    def update_history(self):
         """
 
         the json payload is a list of history records.
@@ -199,7 +199,7 @@ class LibraryResource(WebResource):
 
         return jsonify({"result": count, "records": len(records)})
 
-    def _validate_song_list(self, app, songs):
+    def _validate_song_list(self, songs):
 
         for song in songs:
             # every record must have a song id (to update), and
@@ -229,8 +229,8 @@ class LibraryResource(WebResource):
                     return httpError(400, "Invalid Path: `%s`" % path)
 
                 song[Song.path] = path
-                app.log.error("upload (w/ path): %s", song)
+                logging.error("upload (w/ path): %s", song)
             else:
-                app.log.error("upload (no path): %s", song)
+                logging.error("upload (no path): %s", song)
 
         return None

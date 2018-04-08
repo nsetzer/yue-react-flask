@@ -33,14 +33,14 @@ class QueueResource(WebResource):
     @get("")
     @requires_auth("user_read")
     @compressed
-    def get_queue(self, app):
+    def get_queue(self):
         songs = self.audio_service.getQueue(g.current_user)
         return jsonify(result=songs)
 
     @post("")
     @body(uuid_list_validator)
     @requires_auth("user_write")
-    def set_queue(self, app):
+    def set_queue(self):
         """ set the songs in the queue """
 
         self.audio_service.setQueue(g.current_user, g.body)
@@ -49,7 +49,7 @@ class QueueResource(WebResource):
 
     @get("populate")
     @requires_auth("user_write")
-    def populate_queue(self, app):
+    def populate_queue(self):
         songs = self.audio_service.populateQueue(g.current_user)
         return jsonify(result=songs)
 
@@ -59,7 +59,7 @@ class QueueResource(WebResource):
     @param("page", type_=int_min(0), default=0)
     @param("orderby", type_=search_order_validator, default=Song.artist)
     @requires_auth("user_write")
-    def create_queue(self, app):
+    def create_queue(self):
         """ create a new queue using a query, return the new song list """
 
         if g.args.query is None:
@@ -78,13 +78,13 @@ class QueueResource(WebResource):
 
     @get("query")
     @requires_auth("user_read")
-    def get_default_queue(self, app):
+    def get_default_queue(self):
         qstr = self.audio_service.defaultQuery(g.current_user)
         return jsonify(result=qstr)
 
     @post("query")
     @requires_auth("user_write")
-    def set_default_queue(self, app):
+    def set_default_queue(self):
 
         req = request.get_json()
 

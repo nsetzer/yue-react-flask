@@ -49,8 +49,7 @@ class FlaskApp(object):
     def register(self, path, name, callback, **options):
         msg = ""
         try:
-            f=lambda *x,**y : callback(self, *x, **y)
-            self.app.add_url_rule(path, name, f, **options)
+            self.app.add_url_rule(path, name, callback, **options)
             return
         except AssertionError as e:
             msg = "%s" % e

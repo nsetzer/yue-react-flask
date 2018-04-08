@@ -24,18 +24,18 @@ class AppResource(WebResource):
         #self.register('/.well-known/<path:path>', self.webroot, ['GET'])
 
     @get("/")
-    def index1(self, app):
+    def index1(self):
         return render_template('index.html')
 
     @get("/<path:path>")
-    def index2(self, app, path):
+    def index2(self, path):
         return render_template('index.html')
 
     @get("/health")
-    def health(self, app):
+    def health(self):
         return jsonify(result="OK")
 
     @get("/.well-known/<path:path>")
-    def webroot(self, app, path):
+    def webroot(self, path):
         base = os.path.join(os.getcwd(), ".well-known")
         return send_from_directory(base, path)
