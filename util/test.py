@@ -15,7 +15,7 @@ class Tests(object):
         test_loader = unittest.defaultTestLoader
         test_runner = unittest.TextTestRunner(verbosity=verbose)
         # test_suite = collect_test_suite(package,args.pattern);
-        test_suite = test_loader.discover(".", pattern="test_*.py")
+        test_suite = test_loader.discover(".", pattern="*_test.py")
         return test_runner.run(test_suite)
 
 class Coverage(object):
@@ -27,7 +27,7 @@ class Coverage(object):
 
     def run(self):
       self._exec("coverage run " + __file__)
-      self._exec("coverage html  --omit='/usr/*,*test_*.py'")
+      self._exec("coverage html  --omit='/usr/*,*_test*.py'")
 
     def _exec(self,*args):
       cmd=' '.join(args)
