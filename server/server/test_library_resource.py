@@ -60,6 +60,10 @@ class LibraryResourceTestCase(unittest.TestCase):
         # should return an error, instead of defaulting to 0
         username = "user000"
         with self.app.login(username, username) as app:
+            qs = {"page": 0, }
+            result = app.get("/api/library", query_string=qs)
+            self.assertEqual(result.status_code, 200, result)
+
             qs = {"page": -1, }
             result = app.get("/api/library", query_string=qs)
             self.assertEqual(result.status_code, 400, result)

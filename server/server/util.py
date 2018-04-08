@@ -3,8 +3,10 @@ import logging
 from functools import wraps
 from flask import after_this_request, request, jsonify, g
 import traceback
+from uuid import UUID
 
 from ..dao.util import parse_iso_format
+from ..dao.library import Song
 
 from ..framework.web_resource import httpError
 
@@ -170,16 +172,34 @@ def requires_auth(features=None):
     return impl
 
 def datetime_validator(st):
-        t = 0
-        if st is not None:
+    t = 0
+    if st is not None:
+        try:
             try:
-                try:
-                    t = int(st)
-                except ValueError:
-                    t = int(parse_iso_format(st).timestamp())
-                return t
-            except Exception as e:
-                logging.exception("unable to parse %s(%s) : %s" % (field, st, e))
-        return None
+                t = int(st)
+            except ValueError:
+                t = int(parse_iso_format(st).timestamp())
+            return t
+        except Exception as e:
+            logging.exception("unable to parse %s(%s) : %s" % (field, st, e))
+    raise Exception("Invalid datetime")
+
+def search_order_validator(s):
+    if s not in Song.fields():
+        raise Exception("Invalid column name")
+    return s;
 
 
+def uuid_validator(uuid_string):
+    try:
+        val = UUID(uuid_string, version=4)
+    except ValueError:
+        return False
+
+    if str(val) != uuid_string:
+        raise Exception("Invalid uuid")
+
+    return uuid_string
+
+def uuid_list_validator(lst):
+    return [uuid_validator(s) for s in lst]

@@ -3,7 +3,8 @@ import logging
 
 from flask import jsonify, render_template, g, request
 
-from ..framework.web_resource import WebResource, get, post, put, delete
+from ..framework.web_resource import WebResource, \
+    get, post, put, delete, httpError
 
 from .util import requires_auth
 
@@ -32,11 +33,11 @@ class UserResource(WebResource):
         incoming = request.get_json()
 
         if not incoming:
-            return jsonify(error="invalid request body"), 400
+            return httpError(400, "invalid request body")
         if 'email' not in incoming:
-            return jsonify(error="email not specified"), 400
+            return httpError(400, "email not specified")
         if 'password' not in incoming:
-            return jsonify(error="password not specified"), 400
+            return httpError(400, "password not specified")
 
         token = self.user_service.loginUser(
             incoming["email"], incoming["password"])
@@ -50,9 +51,9 @@ class UserResource(WebResource):
         incoming = request.get_json()
 
         if not incoming:
-            return jsonify(error="invalid request body"), 400
+            return httpError(400, "invalid request body")
         if 'token' not in incoming:
-            return jsonify(error="token not specified"), 400
+            return httpError(400, "token not specified")
 
         is_valid, reason = self.user_service.verifyToken(incoming["token"])
 
@@ -74,7 +75,7 @@ class UserResource(WebResource):
 
         except Exception as e:
             logging.error("%s" % e)
-            return jsonify(message="Unable to create user"), 409
+            return httpError(400, "Unable to create user")
 
         return jsonify(
             id=user_id,
@@ -86,9 +87,9 @@ class UserResource(WebResource):
         incoming = request.get_json()
 
         if not incoming:
-            return jsonify(error="invalid request body"), 400
+            return httpError(400, "invalid request body")
         if 'password' not in incoming:
-            return jsonify(error="password not specified"), 400
+            return httpError(400, "password not specified")
 
         user = g.current_user
 

@@ -11,18 +11,7 @@ from ..dao.util import pathCorrectCase
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, param, compressed, httpError, int_range, int_min
 
-from .util import requires_auth, datetime_validator
-
-def validate(expr, value):
-    if not expr:
-        raise Exception("invalid input")
-    return value
-def vmin(target,value):
-    return validate(target <= value, value)
-def vmax(target, value):
-    return validate(target >= value, value)
-
-
+from .util import requires_auth, datetime_validator, search_order_validator
 
 class LibraryResource(WebResource):
     """LibraryResource
@@ -40,13 +29,11 @@ class LibraryResource(WebResource):
         self.audio_service = audio_service
         self.transcode_service = transcode_service
 
-        self.QUERY_LIMIT_MAX = 500
-
     @get("")
     @param("query", default=None)
     @param("limit", type_=int_range(0, 500), default=50)
     @param("page", type_=int_min(0), default=0)
-    @param("orderby", default="artist")
+    @param("orderby", type_=search_order_validator, default=Song.artist)
     @requires_auth("library_read")
     @compressed
     def search_library(self, app):

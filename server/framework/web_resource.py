@@ -10,12 +10,23 @@ import logging
 
 WebEndpoint = namedtuple('WebEndpoint', ['path', 'methods', 'name', 'method'])
 
+def validate(expr, value):
+    if not expr:
+        raise Exception("invalid input")
+    return value
+
+def vmin(target,value):
+    return validate(target <= value, value)
+
+def vmax(target, value):
+    return validate(target >= value, value)
+
 # validate that an integer is between two numbers
-int_range = lambda min_, max_: lambda v: vmin(max_,vmax(min_, int(v)))
+int_range = lambda min_, max_: lambda v: vmax(max_,vmin(min_, int(v)))
 # validate that an integer is larger than some number
-int_min = lambda min_: lambda v: vmax(min_, int(v))
+int_min = lambda min_: lambda v: vmin(min_, int(v))
 # validate that an integer is smaller than some number
-int_max = lambda max_: lambda v: vmin(max_, int(v))
+int_max = lambda max_: lambda v: vmax(max_, int(v))
 
 def httpError(code, message):
     # TODO: this should be at loglevel debug
@@ -24,28 +35,31 @@ def httpError(code, message):
 
 def _endpoint_mapper(f):
 
-    if not hasattr(f, "_params"):
-        return f
 
     @wraps(f)
     def wrapper(*args, **kwargs):
         g.args = lambda: None
-        for name, type_, default, required in f._params:
-            if required and name not in request.args:
-                return httpError(400,
-                    "required query parameter `%s` not found" % name)
+        if hasattr(f, "_params"):
+            for name, type_, default, required in f._params:
+                if required and name not in request.args:
+                    return httpError(400,
+                        "required query parameter `%s` not found" % name)
 
-            # validate the query parameter and add it to the request args
-            try:
-                if name in request.args:
-                    value = type_(request.args[name])
-                else:
-                    value = default
-            except Exception as e:
-                return httpError(400,
-                    "unable to validate query parameter: %s=%s" % (name, request.args[name]))
-            setattr(g.args, name, value)
+                # validate the query parameter and add it to the request args
+                try:
+                    if name in request.args:
+                        value = type_(request.args[name])
+                    else:
+                        value = default
+                except Exception as e:
+                    return httpError(400,
+                        "unable to validate query parameter: %s=%s" % (name, request.args[name]))
+                setattr(g.args, name, value)
+        if hasattr(f, "_body"):
+            type_, json = f._body
+            g.body = type_(request.get_json())
         return f(*args, **kwargs)
+
     return wrapper
 
 def get(path):
@@ -87,6 +101,12 @@ def param(name, type_=str, default=None, required=False):
         if not hasattr(f, "_params"):
             f._params = []
         f._params.append((name, type_, default, required))
+        return f
+    return decorator
+
+def body(type_, json=True):
+    def decorator(f):
+        f._body = (type_, json)
         return f
     return decorator
 

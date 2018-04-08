@@ -9,9 +9,11 @@ from ..dao.library import Song
 from ..dao.util import parse_iso_format, pathCorrectCase
 
 from ..framework.web_resource import WebResource, \
-    get, post, put, delete, compressed, httpError
+    get, post, put, delete, compressed, httpError, param, body, \
+    int_range, int_min
 
-from .util import requires_auth
+from .util import requires_auth, search_order_validator, \
+    uuid_validator, uuid_list_validator
 
 class QueueResource(WebResource):
     """QueueResource
@@ -28,9 +30,6 @@ class QueueResource(WebResource):
         self.user_service = user_service
         self.audio_service = audio_service
 
-
-        self.QUERY_LIMIT_MAX = 200
-
     @get("")
     @requires_auth("user_read")
     @compressed
@@ -39,15 +38,12 @@ class QueueResource(WebResource):
         return jsonify(result=songs)
 
     @post("")
+    @body(uuid_list_validator)
     @requires_auth("user_write")
     def set_queue(self, app):
         """ set the songs in the queue """
 
-        records = request.get_json()
-        if records is None or len(records) == 0:
-            return httpError(400, "no data sent")
-
-        self.audio_service.setQueue(g.current_user, song_ids)
+        self.audio_service.setQueue(g.current_user, g.body)
 
         return jsonify(result="OK")
 
@@ -57,39 +53,27 @@ class QueueResource(WebResource):
         songs = self.audio_service.populateQueue(g.current_user)
         return jsonify(result=songs)
 
-
     @get("create")
+    @param("query", default=None)
+    @param("limit", type_=int_range(0, 500), default=50)
+    @param("page", type_=int_min(0), default=0)
+    @param("orderby", type_=search_order_validator, default=Song.artist)
     @requires_auth("user_write")
     def create_queue(self, app):
         """ create a new queue using a query, return the new song list """
 
-        sys.stderr.write("GOT HERE")
-        app.log.info("create new queue %s" % g.current_user)
+        if g.args.query is None:
+            g.args.query = self.audio_service.defaultQuery(g.current_user)
 
-        def_query = self.audio_service.defaultQuery(g.current_user)
-        query = request.args.get('query', def_query)
-        limit = int(request.args.get('limit', 50))
-        limit = max(1, min(self.QUERY_LIMIT_MAX, limit))
-        page = max(0, int(request.args.get('page', 0)))
-
-        orderby = request.args.get('orderby', 'artist')
-        offset = limit * page
+        offset = g.args.limit * g.args.page
 
         songs = self.audio_service.search(g.current_user,
-            query, limit=limit, orderby=orderby, offset=offset)
+            g.args.query, limit=g.args.limit, orderby=g.args.orderby,
+            offset=offset)
 
         song_ids = [song['id'] for song in songs]
-        app.log.info("create new queue %s" % songs)
         self.audio_service.setQueue(g.current_user, song_ids)
 
-        # set the default query to the last query used by the user
-        # if the query used to create the playlist did not produce
-        # more results than the limit, default to an empty query.
-        if len(songs) < limit:
-            query = ""
-        self.audio_service.setDefaultQuery(g.current_user, query)
-
-        qstr = self.audio_service.defaultQuery(g.current_user)
         return jsonify(result=songs)
 
     @get("query")
