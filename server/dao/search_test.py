@@ -27,6 +27,7 @@ from .search import SearchGrammar, \
         LessThanEqualSearchRule, \
         GreaterThanSearchRule, \
         GreaterThanEqualSearchRule, \
+        RegExpSearchRule, \
         RangeSearchRule, \
         NotRangeSearchRule, \
         NotSearchRule, \
@@ -131,11 +132,15 @@ class TestSearchMeta(type):
         def gen_compare_rule_test(rule1,rule2):
             """ check that two different rules return the same results """
             def test(self):
-                s1 = extract( Song.id, self.libraryDao.search(
-                    self.USER["id"], self.USER["domain_id"], rule1) )
-                s2 = extract( Song.id, self.libraryDao.search(
-                    self.USER["id"], self.USER["domain_id"], rule2) )
-                self.assertEqual(s1, s2)
+                r1 = self.libraryDao.search(
+                    self.USER["id"], self.USER["domain_id"], rule1)
+                r2 = self.libraryDao.search(
+                    self.USER["id"], self.USER["domain_id"], rule2)
+                s1 = extract(Song.id, r1)
+                s2 = extract(Song.id, r2)
+                a1 = ", ".join(sorted(extract(Song.artist, r1)))
+                a2 = ", ".join(sorted(extract(Song.artist, r2)))
+                self.assertEqual(s1, s2, "\n%s\n%s" % (a1, a2))
             return test
 
         c = lambda col:cls.libraryDao.grammar.getColumnType(col)
@@ -154,6 +159,9 @@ class TestSearchMeta(type):
         pl1 = PartialStringSearchRule(c('artist'),'art1')
         pl2 = InvertedPartialStringSearchRule(c('artist'),'art1')
 
+        rex1 = RegExpSearchRule(c('artist'), "^art1.*$")
+        rex_cmp = PartialStringSearchRule(c('artist'), "art1")
+
         and1 = AndSearchRule([gt1,lt1])
         or1 = OrSearchRule([lt2,gt2])
 
@@ -164,7 +172,7 @@ class TestSearchMeta(type):
                   ExactSearchRule(c('play_count'),2000,type_=int),
                   InvertedExactSearchRule(c('artist'),'art1'),
                   InvertedExactSearchRule(c('play_count'),2000,type_=int),
-                  rng1, rng2, gt1, gt2, lt1, lt2, and1, or1, not1
+                  rng1, rng2, gt1, gt2, lt1, lt2, and1, or1, not1, rex1
                   ]
 
         for i, rule in enumerate(rules):
@@ -173,7 +181,8 @@ class TestSearchMeta(type):
 
         attr["test_and"] = gen_compare_rule_test(and1, rng1)
         attr["test_or"] = gen_compare_rule_test(or1, rng2)
-        attr["test_or"] = gen_compare_rule_test(rng2, not1)
+        attr["test_rng"] = gen_compare_rule_test(rng2, not1)
+        attr["test_rex1"] = gen_compare_rule_test(rex1, rex_cmp)
 
         attr["test_pl1"] = gen_compare_count_test(pl1,11)
         attr["test_pl2"] = gen_compare_count_test(pl2, 9)
