@@ -32,6 +32,10 @@ def _abort_flush(*args, **kwargs):
     sys.stderr.write("ERROR: flush. Database open in readonly mode\n")
     return
 
+def _sqlite3_regex(expr, item):
+    reg = re.compile(expr, re.I)
+    return reg.search(item) is not None
+
 def db_connect(connection_string=None, readonly=False):
     """
     a reimplementation of the Flask-SqlAlchemy integration
@@ -46,6 +50,9 @@ def db_connect(connection_string=None, readonly=False):
     Session.configure(bind=engine)
 
     db = lambda : None
+    db.conn = engine.connect()
+    if connection_string.startswith("sqlite:"):
+        db.conn.connection.create_function('regexp', 2, _sqlite3_regex)
     db.metadata = MetaData()
     db.session = Session()
     if readonly:
