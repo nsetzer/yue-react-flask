@@ -1,7 +1,7 @@
 
 from .nlpdatesearch import NLPDateRange
 
-from .util import lru_cache, format_delta, format_date, string_quote
+from .util import format_delta, format_date, string_quote
 import re
 import calendar
 from datetime import datetime, timedelta
@@ -10,9 +10,6 @@ import time
 from sqlalchemy import and_, or_, not_, select, between
 
 import sys
-isPython3 = sys.version_info[0] == 3
-if isPython3:
-    unicode = str
 
 class IntDate(int):
     """ integer tagged as an epoch-time, see SearchRule.fmtval()"""
@@ -113,7 +110,6 @@ class ColumnSearchRule(SearchRule):
         self.value = value
         self.type_ = type_
 
-@lru_cache(maxsize=128)
 def rexcmp(expr):
     return re.compile(expr, re.IGNORECASE)
 
@@ -910,13 +906,13 @@ class Grammar(object):
                 if not hasr:
                     raise RHSError(tok, "expected value [V01]")
                 r = tokens.pop(i + 1)
-                if not isinstance(r, (str, unicode)):
+                if not isinstance(r, str):
                     raise RHSError(tok, "expected string [S01]")
                 if r.kind == "special":
                     raise RHSError(tok, "unexpected operator `%s` [U01]" % r)
                 # left side is optional, defaults to all text
                 if not hasl or \
-                        (not isinstance(tokens[i - 1], (str, unicode)) or tokens[i - 1] in self.operators_flow):
+                        (not isinstance(tokens[i - 1], str) or tokens[i - 1] in self.operators_flow):
                     # no left side, or left side has been processed and is not a column label
                     tokens[i] = self.buildRule(self.all_text, self.operators[tok], r)
                 else:
@@ -937,13 +933,13 @@ class Grammar(object):
                 if not hasl:
                     raise LHSError(tok, "expected value [V03]")
                 r = tokens.pop(i + 1)
-                if not isinstance(r, (str, unicode)):
+                if not isinstance(r, str):
                     raise RHSError(tok, "expected string [S02]")
                 if r.kind == "special":
                     raise RHSError(tok, "unexpected operator `%s` [U02]" % r)
                 i -= 1
                 l = tokens.pop(i)
-                if not isinstance(l, (str, unicode)):
+                if not isinstance(l, str):
                     raise LHSError(tok, "expected string [S03]")
                 if l in self.meta_columns:
                     # and remove the column name
@@ -977,7 +973,7 @@ class Grammar(object):
             return BlankSearchRule()
 
         elif len(tokens) == 1:
-            if isinstance(tokens[0], (str, unicode)):
+            if isinstance(tokens[0], str):
                 # there should be no strings at this point
                 raise ParseError("unexpected error")
             return tokens[0]
@@ -1009,13 +1005,13 @@ class Grammar(object):
         i = len(tokens) - 1
         while i >= 0:
             tok = tokens[i]
-            if isinstance(tok, (str, unicode)) and tok == operator:
+            if isinstance(tok, str) and tok == operator:
                 hasl = i > 0
                 hasr = i < len(tokens) - 1
                 if not hasr:
                     raise RHSError(tok, "expected value [V04]")
                 r = tokens.pop(i + 1)
-                if isinstance(r, (str, unicode)) and r in self.operators_flow:
+                if isinstance(r, str) and r in self.operators_flow:
                     raise RHSError(tok, "unexpected operator `%s` [U03]" % r)
                 tokens[i] = NotSearchRule([r, ])
             i -= 1
@@ -1029,7 +1025,7 @@ class Grammar(object):
         while i < len(tokens):
             tok = tokens[i]
 
-            if isinstance(tokens[i], (str, unicode)):
+            if isinstance(tokens[i], str):
                 if tok.startswith(self.sigil):
                     current_col = StrPos(tok[1:], tok.pos + 1, tok.end, tok.kind)
                     tokens.pop(i)

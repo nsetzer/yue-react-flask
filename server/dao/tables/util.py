@@ -12,9 +12,6 @@ import datetime, time
 def generate_uuid():
     return str(uuid.uuid4())
 
-def generate_null_timestamp():
-    return datetime.datetime.utcfromtimestamp(0)
-
 class StringArrayType(TypeDecorator):
     """
     String Array for SQite and PostreSQL

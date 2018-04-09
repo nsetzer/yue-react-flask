@@ -13,6 +13,8 @@ class UserDao(object):
 
         self.workfactor = 12
 
+    # domain
+
     def createDomain(self, domainName, commit=True):
         query = insert(self.dbtables.DomainTable) \
             .values({'name': domainName})
@@ -49,6 +51,8 @@ class UserDao(object):
         if commit:
             self.db.session.commit()
 
+    # role
+
     def createRole(self, roleName, commit=True):
         query = insert(self.dbtables.RoleTable) \
             .values({'name': roleName})
@@ -83,6 +87,8 @@ class UserDao(object):
 
         if commit:
             self.db.session.commit()
+
+    # features
 
     def createFeature(self, featName, commit=True):
         query = insert(self.dbtables.FeatureTable) \
@@ -129,6 +135,8 @@ class UserDao(object):
 
         if commit:
             self.db.session.commit()
+
+    # users
 
     def createUser(self, email, password, domain_id, role_id, commit=True):
 
@@ -261,6 +269,8 @@ class UserDao(object):
 
         if commit:
             self.db.session.commit()
+
+    # permissions
 
     def grantDomain(self, user_id, domain_id, commit=True):
 

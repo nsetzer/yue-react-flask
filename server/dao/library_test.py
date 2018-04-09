@@ -142,7 +142,9 @@ class LibraryTestCase(unittest.TestCase):
         domain_id = self.USER['domain_id']
 
         for song in self.songs:
-            self.libraryDao.insert(user_id, domain_id, song)
+            self.libraryDao.insert(user_id, domain_id, song, commit=False)
+
+        self.db.session.commit()
 
     def test_003a_all_text_search(self):
         user_id = self.USER['id']
@@ -381,6 +383,91 @@ class LibraryTestCase(unittest.TestCase):
 
         self.assertEqual(len(songs), 0)
 
+    def test_005_domain_info(self):
+
+        user_id = self.USER["id"]
+        domain_id = self.userDao.createDomain("test_info", commit=False)
+        self.userDao.grantDomain(user_id, domain_id, commit=False)
+
+        # create a set of songs
+        # every artist gets 3 albums, every album has 3 songs
+        # the three songs are either normal, banished by domain
+        # or blocked by the user
+
+        for a in range(3):
+            for b in range(3):
+                for t in range(3):
+                    song = {
+                        Song.artist: "Artist%03d" % a,
+                        Song.album: "Album%03d" % b,
+                        Song.title: "Title%03d" % t,
+                        Song.genre: "Genre%03d" % a,
+
+                    }
+
+                    if t==1:
+                        song[Song.blocked] = 1
+
+                    if t==2:
+                        song[Song.banished] = 1
+
+                    self.libraryDao.insert(user_id, domain_id, song, commit=False)
+
+        # an extra song with no genre
+        song = {
+            Song.artist: "extra",
+            Song.album: "extra",
+            Song.title: "extra",
+        }
+        self.libraryDao.insert(user_id, domain_id, song, commit=False)
+
+        self.db.session.commit()
+
+
+        # check that the domain info contains the correct fields
+        # domain info should include songs blocked by the user
+        info = self.libraryDao.domainSongInfo(domain_id)
+
+        self.assertTrue("artists" in info)
+        for art_info in info["artists"]:
+            self.assertTrue("name" in art_info)
+            if art_info["name"] == "extra":
+                continue
+            self.assertEqual(art_info["count"], 6)
+            self.assertEqual(len(art_info["albums"]), 3)
+            self.assertTrue("genres" in art_info)
+
+
+        self.assertTrue("genres" in info)
+        for gen_info in info["genres"]:
+            self.assertEqual(gen_info["count"], 6)
+            self.assertEqual(gen_info["artist_count"], 1)
+            self.assertTrue("name" in art_info)
+
+        self.assertTrue("num_songs" in info)
+        self.assertEqual(info["num_songs"], 3 * 3 * 2 + 1)
+
+        # check that the domain info contains the correct fields
+        # domain info should not include songs blocked or banished
+        info = self.libraryDao.domainSongUserInfo(user_id, domain_id)
+
+        self.assertTrue("artists" in info)
+        for art_info in info["artists"]:
+            self.assertTrue("name" in art_info)
+            if art_info["name"] == "extra":
+                continue
+            self.assertEqual(art_info["count"], 3)
+            self.assertEqual(len(art_info["albums"]), 3)
+            self.assertTrue("genres" in art_info)
+
+        self.assertTrue("genres" in info)
+        for gen_info in info["genres"]:
+            self.assertEqual(gen_info["count"], 3)
+            self.assertEqual(gen_info["artist_count"], 1)
+            self.assertTrue("name" in art_info)
+
+        self.assertTrue("num_songs" in info)
+        self.assertEqual(info["num_songs"], 3 * 3 + 1)
 
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(LibraryTestCase)

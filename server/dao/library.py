@@ -595,7 +595,6 @@ class LibraryDao(object):
             "genres": genres,
             "num_songs": total
         }
-        print("domain: %d/%d" % (total, n_records1))
 
         return data
 
