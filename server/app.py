@@ -192,7 +192,7 @@ def main():
                         help='enable verbose logging')
     parser.add_argument('-p', '--profile', dest='profile',
                         default=default_profile,
-                        help='default profile to use')
+                        help='default profile to use (%s)' % default_profile)
 
     args = parser.parse_args()
 
