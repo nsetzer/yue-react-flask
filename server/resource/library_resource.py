@@ -9,9 +9,29 @@ from ..dao.library import Song
 from ..dao.util import pathCorrectCase
 
 from ..framework.web_resource import WebResource, \
-    get, post, put, delete, param, compressed, httpError, int_range, int_min
+    get, post, put, delete, param, body, compressed, httpError, \
+    int_range, int_min
 
 from .util import requires_auth, datetime_validator, search_order_validator
+
+def song_validator(song):
+
+    for field in [Song.artist, Song.album, Song.title]:
+        if field not in song:
+            raise Exception("missing field: %s" % field)
+
+    return song
+
+def song_list_validator(songs):
+
+    for song in songs:
+        # every record must have a song id (to update), and
+        # at least one other field (that will be modified)
+        if Song.id not in song or len(song) < 2:
+            raise Exception("invalid song")
+
+    return songs
+
 
 class LibraryResource(WebResource):
     """LibraryResource
@@ -52,34 +72,27 @@ class LibraryResource(WebResource):
         })
 
     @put("")
+    @body(song_list_validator)
     @requires_auth("library_write")
     def update_song(self):
 
-        songs = request.json
+        for song in g.body:
+            self._correct_path(song)
 
-        response = self._validate_song_list(app, songs)
-        if response is not None:
-            return response
+        self.audio_service.updateSongs(g.current_user, g.body)
 
-        self.audio_service.updateSongs(g.current_user, songs)
+        return jsonify(result="OK"), 200
 
     @post("")
+    @body(song_validator)
     @requires_auth("library_write")
     def create_song(self):
-        song = request.json
 
-        response = self._validate_song_list(app, [song,])
-        if response is not None:
-            return response
+        self._correct_path(g.body)
 
-        # first quickly verify the data is well formed
-        for field in [Song.artist, Song.album, Song.title]:
-            if field not in song:
-                return httpError(400, "`%s` missing from song meta data" % field)
+        song_id = self.audio_service.createSong(g.current_user, g.body)
 
-        song_id = self.audio_service.createSong(g.current_user, song)
-
-        return jsonify(result=song_id)
+        return jsonify(result=song_id), 201
 
     @get("info")
     @requires_auth("library_read")
@@ -199,38 +212,24 @@ class LibraryResource(WebResource):
 
         return jsonify({"result": count, "records": len(records)})
 
-    def _validate_song_list(self, songs):
+    def _correct_path(self, song):
 
-        for song in songs:
-            # every record must have a song id (to update), and
-            # at least one other field (that will be modified)
-            if Song.id not in song or len(song) < 2:
-                return httpError(400, "invalid update request")
+        if Song.path in song:
+            root = self.audio_service.config.filesystem.media_root
+            path = song[Song.path]
+            if not os.path.isabs(path):
+                path = os.path.join(root, path)
 
-            # if a path is given, it must already exist
-            # see create_song and upload_song_audio for setting a path
-            # when the file does not yet exist.
-            if Song.path in song:
-                root = Config.instance().filesystem.media_root
-                path = song[Song.path]
-                if not os.path.isabs(path):
-                    path = os.path.join(root, path)
+            # fix any windows / linux path inconsistencies
+            # this ensures the path exists on the local filesystem
+            try:
+                path = pathCorrectCase(path)
+            except Exception as e:
+                return httpError(400, str(e))
 
-                # fix any windows / linux path inconsistencies
-                # this ensures the path exists on the local filesystem
-                try:
-                    path = pathCorrectCase(path)
-                except Exception as e:
-                    return httpError(400, str(e))
+            # enforce path to exist under media root
+            # in the future, I may allow more than one media root
+            if not path.startswith(root):
+                return httpError(400, "Invalid Path: `%s`" % path)
 
-                # enforce path to exist under media root
-                # in the future, I may allow more than one media root
-                if not path.startswith(root):
-                    return httpError(400, "Invalid Path: `%s`" % path)
-
-                song[Song.path] = path
-                logging.error("upload (w/ path): %s", song)
-            else:
-                logging.error("upload (no path): %s", song)
-
-        return None
+            song[Song.path] = path

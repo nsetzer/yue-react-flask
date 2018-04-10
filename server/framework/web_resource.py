@@ -56,8 +56,11 @@ def _endpoint_mapper(f):
                         "unable to validate query parameter: %s=%s" % (name, request.args[name]))
                 setattr(g.args, name, value)
         if hasattr(f, "_body"):
-            type_, json = f._body
-            g.body = type_(request.get_json())
+            try:
+                type_, json = f._body
+                g.body = type_(request.get_json())
+            except Exception as e:
+                return httpError(400, "unable to validate body")
         return f(*args, **kwargs)
 
     return wrapper

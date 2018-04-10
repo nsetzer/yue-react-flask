@@ -97,7 +97,7 @@ class TestApp(YueApp):
                     'max_size': '2MB',
                     'num_backups': 10,
                     'level': 'debug'},
-                'filesystem': {'media_root': '/mnt/data'},
+                'filesystem': {'media_root': os.getcwd()},
                 'transcode': {
                     'audio': {
                         'bin_path': ffmpeg_path,
@@ -192,7 +192,7 @@ def main():
                         help='enable verbose logging')
     parser.add_argument('-p', '--profile', dest='profile',
                         default=default_profile,
-                        help='default profile to use')
+                        help='default profile to use (%s)' % default_profile)
 
     args = parser.parse_args()
 
