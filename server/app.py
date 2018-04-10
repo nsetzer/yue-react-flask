@@ -97,7 +97,7 @@ class TestApp(YueApp):
                     'max_size': '2MB',
                     'num_backups': 10,
                     'level': 'debug'},
-                'filesystem': {'media_root': '/mnt/data'},
+                'filesystem': {'media_root': os.getcwd()},
                 'transcode': {
                     'audio': {
                         'bin_path': ffmpeg_path,
