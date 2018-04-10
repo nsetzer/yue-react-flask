@@ -1,7 +1,8 @@
 
-from ..dao.user import UserDao
-from ..dao.library import Song, LibraryDao
-from ..dao.tables.tables import DatabaseTables
+from .user import UserDao
+from .library import Song, LibraryDao
+from .tables.tables import DatabaseTables
+from .search import regexp
 
 import os
 import sys
@@ -32,10 +33,6 @@ def _abort_flush(*args, **kwargs):
     sys.stderr.write("ERROR: flush. Database open in readonly mode\n")
     return
 
-def _sqlite3_regex(expr, item):
-    reg = re.compile(expr, re.I)
-    return reg.search(item) is not None
-
 def db_connect(connection_string=None, readonly=False):
     """
     a reimplementation of the Flask-SqlAlchemy integration
@@ -50,9 +47,6 @@ def db_connect(connection_string=None, readonly=False):
     Session.configure(bind=engine)
 
     db = lambda : None
-    db.conn = engine.connect()
-    if connection_string.startswith("sqlite:"):
-        db.conn.connection.create_function('regexp', 2, _sqlite3_regex)
     db.metadata = MetaData()
     db.session = Session()
     if readonly:
@@ -61,6 +55,10 @@ def db_connect(connection_string=None, readonly=False):
     db.create_all = lambda: db.metadata.create_all(engine)
     db.disconnect = lambda: engine.dispose()
     db.connection_string = connection_string
+
+    db.conn = db.session.bind.connect()
+    if connection_string.startswith("sqlite:"):
+        db.conn.connection.create_function('REGEXP', 2, regexp)
 
     return db
 

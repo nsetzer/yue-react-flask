@@ -39,7 +39,7 @@ class Rule(object):
         return repr(self) == repr(othr)
 
     def sql(self):
-        """ return string representation and a list of values
+        """ return SQLite3 representation of this string
             the string should have question marks (?) in place
             of the values, which will be filled in when the sql
             is executed.
@@ -49,6 +49,11 @@ class Rule(object):
             see sqlstr()
         """
         raise NotImplementedError()
+
+    def psql(self):
+        """ return PostgresSQL representation of this rule
+        """
+        return self.sql()
 
     def __repr__(self):
         return "<%s>" % self.__class__.__name__
@@ -134,23 +139,20 @@ class RegExpSearchRule(ColumnSearchRule):
         try:
             rexcmp(value)
         except re.error as e:
-            if isPython3:
-                msg = "Regular Expression Error: %s at position %d in `%s`" % (e.msg, e.colno, value)
-            else:
-                msg = "Regular Expression Error: %s" % (e)
+            msg = "Regular Expression Error: %s at position %d in `%s`" % (e.msg, e.colno, value)
             raise ParseError(msg)
 
     def check(self, elem, ignoreCase=True):
-        # TODO: use ignoreCase...
         return regexp(self.value, elem[self.column.name])
 
     def __repr__(self):
-        return "<%s =~ \"%s\"" % (self.column, self.fmtval(self.value))
+        return "<%s =~ %s>" % (self.column, self.fmtval(self.value))
 
     def sql(self):
-        # TODO: this may not work for postgres, operator may instead be `~`
-        self.column.op("REGEXP")(self.value)
+        return self.column.op("REGEXP")(self.value)
 
+    def psql(self):
+        return self.column.op("~")(self.value)
 
 class PartialStringSearchRule(ColumnSearchRule):
     """matches if a value contains the given text"""
@@ -420,7 +422,7 @@ class MultiColumnSearchRule(SearchRule):
     def sql(self):
         return self.rule.sql()
 
-def naive_search(seq, rule, case_insensitive=True, orderby=None, reverse=False, limit=None, offset=0, echo=False):
+def naive_search(seq, rule, case_insensitive=True, orderby=None, reverse=False, limit=None, offset=0, echo=False, select=None):
     """ return elements from seq which match the given rule
 
     seq can be any iterable data structure containing table data
@@ -430,7 +432,10 @@ def naive_search(seq, rule, case_insensitive=True, orderby=None, reverse=False, 
 
     """
     # filter the sequence using the rule
-    out = [elem for elem in seq if rule.check(elem)]
+    if select is not None:
+        out = [{k: v for k, v in elem.items() if k in select} for elem in seq if rule.check(elem)]
+    else:
+        out = [elem for elem in seq if rule.check(elem)]
 
     if orderby is not None:
         if not isinstance(orderby, (tuple, list)):
