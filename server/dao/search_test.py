@@ -220,7 +220,6 @@ class SearchTestCase(unittest.TestCase, metaclass=TestSearchMeta):
         self.assertTrue(t3.rules[0] is r)
         self.assertTrue(t3.rules[1] is r)
 
-
 class SearchGrammarTestCase(unittest.TestCase):
     """
     """
@@ -440,6 +439,9 @@ class SearchGrammarTestCase(unittest.TestCase):
         with self.assertRaises(RHSError):
             self.sg.ruleFromString("count > 1 &&")
 
+        with self.assertRaises(RHSError):
+            self.sg.ruleFromString("count > 0 && ()")
+
         with self.assertRaises(LHSError):
             self.sg.ruleFromString("> 1")
 
@@ -458,12 +460,30 @@ class SearchGrammarTestCase(unittest.TestCase):
         with self.assertRaises(ParseError):
             self.sg.ruleFromString("\\")
 
+        with self.assertRaises(RHSError):
+            self.sg.parseTokens([StrPos("count", 0, 0),
+                                 StrPos("=", 0, 0)])
+
+        with self.assertRaises(RHSError):
+            r = self.sg.parseTokens([StrPos("count", 0, 0),
+                                 StrPos("=", 0, 0),
+                                 StrPos("&&", 0, 0, "special")])
+            print(r)
+
     def test_rulegen_alltext(self):
 
         r = self.sg.ruleFromString(" = this")
         self.assertTrue(isinstance(r, MultiColumnSearchRule))
         self.assertTrue(all([c in self.sg.text_fields for c in r.columns]))
 
+        # show that the default parameter is interpretted
+        r = self.sg.ruleFromString("count=1 =this")
+        self.assertTrue(isinstance(r, AndSearchRule), type(r))
+        self.assertEqual(r.rules[-1].colid, "text")
+
+        r = self.sg.ruleFromString("(count=0 || count=1) = this")
+        self.assertTrue(isinstance(r, AndSearchRule), type(r))
+        self.assertEqual(r.rules[-1].colid, "text")
 
 def main():
     suite = unittest.TestSuite()

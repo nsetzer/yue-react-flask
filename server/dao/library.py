@@ -149,12 +149,9 @@ class Song(object):
         by surrounding the query in semicolons, exact matches can be performed
         without a schema change
         """
-        gen = genre.replace(",", ";").strip()
-        if not gen:
-            gen = [ ]
-        else:
-            gen = [g.strip().title() for g in gen.split(";")]
-        return ";" + ";".join([ g for g in gen if g]) + ";"
+        gen = genre.replace(",", ";").strip().split(";")
+        gen = [g.strip().title() for g in gen]
+        return ";" + ";".join([g for g in gen if g]) + ";"
 
 
 class SongSearchGrammar(SearchGrammar):
