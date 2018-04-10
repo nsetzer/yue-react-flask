@@ -469,6 +469,36 @@ class LibraryTestCase(unittest.TestCase):
         self.assertTrue("num_songs" in info)
         self.assertEqual(info["num_songs"], 3 * 3 + 1)
 
+    def test_006_search_by_genre(self):
+
+        user_id = self.USER['id']
+        domain_id = self.USER['domain_id']
+        song = {
+            Song.artist: "test",
+            Song.album: "test",
+            Song.title: "test",
+        }
+
+        song_ids = []
+        for g in ["rock", "punk, rock", "punk rock"]:
+            song[Song.genre] = g
+
+            song_id = self.libraryDao.insert(user_id, domain_id, song)
+            song_ids.append(song_id)
+
+        songs = self.libraryDao.search(user_id, domain_id, "gen=rock")
+        self.assertEqual(len(songs), 3)
+
+        # does not match 'punk rock'
+        songs = self.libraryDao.search(user_id, domain_id, "gen=;rock;")
+        self.assertEqual(len(songs), 2)
+
+        songs = self.libraryDao.search(user_id, domain_id, 'gen="punk rock"')
+        self.assertEqual(len(songs), 1)
+
+        songs = self.libraryDao.search(user_id, domain_id, 'gen=";punk rock;"')
+        self.assertEqual(len(songs), 1)
+
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(LibraryTestCase)
     unittest.TextTestRunner().run(suite)

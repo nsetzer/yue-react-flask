@@ -422,7 +422,8 @@ class MultiColumnSearchRule(SearchRule):
     def sql(self):
         return self.rule.sql()
 
-def naive_search(seq, rule, case_insensitive=True, orderby=None, reverse=False, limit=None, offset=0, echo=False, select=None):
+def naive_search(seq, rule, case_insensitive=True, orderby=None, \
+    reverse=False, limit=None, offset=0, echo=False, columns=None):
     """ return elements from seq which match the given rule
 
     seq can be any iterable data structure containing table data
@@ -432,8 +433,9 @@ def naive_search(seq, rule, case_insensitive=True, orderby=None, reverse=False, 
 
     """
     # filter the sequence using the rule
-    if select is not None:
-        out = [{k: v for k, v in elem.items() if k in select} for elem in seq if rule.check(elem)]
+    if columns is not None:
+        out = [{k: v for k, v in elem.items() if k in columns}
+            for elem in seq if rule.check(elem)]
     else:
         out = [elem for elem in seq if rule.check(elem)]
 

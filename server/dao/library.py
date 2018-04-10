@@ -138,6 +138,25 @@ class Song(object):
             artist_name = artist_name[4:]
         return artist_name
 
+    @staticmethod
+    def repairGenre(genre):
+        """genres can be comma or semicolon separated.
+        However, when placed in a database genres are normalized to
+        use semicolons and extra spaces are removed.
+
+        this allows for better search performance i.e.:
+            ';rock;' and 'rock' will produce different results
+        by surrounding the query in semicolons, exact matches can be performed
+        without a schema change
+        """
+        gen = genre.replace(",", ";").strip()
+        if not gen:
+            gen = [ ]
+        else:
+            gen = [g.strip().title() for g in gen.split(";")]
+        return ";" + ";".join([ g for g in gen if g]) + ";"
+
+
 class SongSearchGrammar(SearchGrammar):
     """docstring for SongSearchGrammar"""
 
@@ -293,6 +312,9 @@ class LibraryDao(object):
         if Song.artist_key not in song:
             song[Song.artist_key] = Song.getArtistKey(song[Song.artist])
 
+        if Song.genre in song:
+            song[Song.genre] = Song.repairGenre(song[Song.genre])
+
         song_data = {k: song[k] for k in song.keys() if k in self.song_keys}
         song_data['domain_id'] = domain_id
 
@@ -325,9 +347,8 @@ class LibraryDao(object):
 
         user_data = {k: song[k] for k in song.keys() if k in self.user_keys}
 
-        if user_data:
-            user_data["user_id"] = user_id
-            user_data["song_id"] = song_id
+        user_data["user_id"] = user_id
+        user_data["song_id"] = song_id
 
         return user_data
 
@@ -440,7 +461,7 @@ class LibraryDao(object):
 
         return song_id
 
-    def bulkUpsertByRefId(self, user_id, domain_id, songs, commit = True):
+    def bulkUpsertByRefId(self, user_id, domain_id, songs, commit=True):
         """
         insert or update multiple song records in a single operation
         """
@@ -713,7 +734,5 @@ class LibraryDao(object):
                 order.append(direction(col_type))
 
         return order
-
-
 
 
