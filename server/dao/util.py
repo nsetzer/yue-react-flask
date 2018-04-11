@@ -87,23 +87,26 @@ def stripIllegalChars(x):
 
 def pathCorrectCase(path):
     """
-        return a normalized file path to the given path.
-        Fixes any potential case errors.
+        return an absolute path for the given file.
+
+        if the file does not exist, an attempt will be made
+        to find a file which matches the case, including
+        all sub directories. The first file found in this
+        way will be returned.
     """
 
     if os.path.exists(path):
-        return path
+        return os.path.abspath(path)
 
     parts = path.replace("\\", "/").split('/');
 
     if parts[0] == '~':
         newpath = os.path.expanduser('~')
-    elif parts[0] == ".":
-        newpath = os.getcwd()
+        parts.pop(0)
     else:
-        newpath = '/'+parts[0]
+        newpath = os.getcwd()
 
-    for i in range(1,len(parts)):
+    for i in range(0,len(parts)):
 
         if parts[i] == "." or parts[i] == "":
             # a dot is the same as the current directory
@@ -111,7 +114,9 @@ def pathCorrectCase(path):
             continue
         elif parts[i] == "..":
             # change to the parent directory
-            if newpath !="/":
+            # TODO: there is a subtle drive bug on windows here
+            # but also windows should never reach this line
+            if newpath == "/":
                 newpath = os.path.split(newpath)[0]
             continue
 
