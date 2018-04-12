@@ -191,7 +191,7 @@ class LibraryResourceTestCase(unittest.TestCase):
         username = "admin"
         with self.app.login(username, username) as app:
             result = app.put_json('/api/library', [song_update])
-            self.assertEqual(result.status_code, 500, result)
+            self.assertEqual(result.status_code, 400, result)
 
     def test_003a_create_song(self):
 

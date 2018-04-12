@@ -5,7 +5,7 @@ import logging
 
 from flask import jsonify, render_template, g, request, send_file
 
-from ..dao.library import Song
+from ..dao.library import Song, LibraryException
 from ..dao.util import pathCorrectCase
 
 from ..framework.web_resource import WebResource, \
@@ -79,7 +79,11 @@ class LibraryResource(WebResource):
         for song in g.body:
             self._correct_path(song)
 
-        self.audio_service.updateSongs(g.current_user, g.body)
+        try:
+            self.audio_service.updateSongs(g.current_user, g.body)
+        except LibraryException as e:
+            # logging.exception(e)
+            return jsonify(result="NOT OK"), 400
 
         return jsonify(result="OK"), 200
 

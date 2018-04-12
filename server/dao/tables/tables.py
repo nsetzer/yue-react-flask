@@ -1,4 +1,6 @@
 
+import logging
+
 from .user import DomainTable, RoleTable, UserTable, \
                   GrantedDomainTable, GrantedRoleTable, \
                   FeatureTable, RoleFeatureTable
@@ -25,6 +27,20 @@ class DatabaseTables(object):
         self.SongHistoryTable = SongHistoryTable(metadata)
         self.SongPlaylistTable = SongPlaylistTable(metadata)
 
+    def drop(self, engine):
+
+        self.SongPlaylistTable.drop(engine, checkfirst=True)
+        self.SongHistoryTable.drop(engine, checkfirst=True)
+        self.SongQueueTable.drop(engine, checkfirst=True)
+        self.SongUserDataTable.drop(engine, checkfirst=True)
+        self.SongDataTable.drop(engine, checkfirst=True)
+        self.RoleFeatureTable.drop(engine, checkfirst=True)
+        self.FeatureTable.drop(engine, checkfirst=True)
+        self.GrantedRoleTable.drop(engine, checkfirst=True)
+        self.GrantedDomainTable.drop(engine, checkfirst=True)
+        self.UserTable.drop(engine, checkfirst=True)
+        self.RoleTable.drop(engine, checkfirst=True)
+        self.DomainTable.drop(engine, checkfirst=True)
 
 
 

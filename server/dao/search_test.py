@@ -19,7 +19,7 @@ from sqlalchemy.schema import Table, Column
 from sqlalchemy.types import Integer, String
 
 from .tables.util import generate_uuid
-from .db import db_init_main, db_connect
+from .db import main_test, db_connect_test
 from .user import UserDao
 from .library import Song, LibraryDao
 
@@ -184,10 +184,10 @@ class SearchTestCase(unittest.TestCase, metaclass=TestSearchMeta):
     @classmethod
     def setUpClass(cls):
 
-        db = db_connect(None)
+        db = db_connect_test(cls.__name__)
         db.tables.TestSongTable = TestSongTable(db.metadata)
+        db.tables.TestSongTable.drop(db.engine, checkfirst=True)
         db.create_all()
-        db.delete_all()
 
         cls.SONGS = []
         for i in range(20):
@@ -497,16 +497,6 @@ class SearchGrammarTestCase(unittest.TestCase):
         self.assertTrue(isinstance(r, AndSearchRule), type(r))
         self.assertEqual(r.rules[-1].colid, "text")
 
-
-
-def main():
-    suite = unittest.TestSuite()
-
-    suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(SearchTestCase))
-    suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(SearchGrammarTestCase))
-
-    unittest.TextTestRunner().run(suite)
-
 if __name__ == '__main__':
-    main()
+    main_test(sys.argv, globals())
 

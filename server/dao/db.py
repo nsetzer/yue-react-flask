@@ -9,6 +9,9 @@ import sys
 import logging
 import time
 import random
+import logging
+import argparse
+import unittest
 
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm.session import sessionmaker
@@ -40,21 +43,24 @@ def db_connect(connection_string=None, readonly=False):
     Session = sessionmaker()
 
     # connect to a SQLite :memory: database
-    if connection_string is None:
+    if connection_string is None or connection_string == ":memory:":
         connection_string = 'sqlite://'
 
     engine = create_engine(connection_string)
     Session.configure(bind=engine)
 
-    db = lambda : None
+    db = lambda: None
+    db.engine = engine
     db.metadata = MetaData()
     db.session = Session()
     if readonly:
         db.session.flush = _abort_flush
     db.tables = DatabaseTables(db.metadata)
     db.create_all = lambda: db.metadata.create_all(engine)
+    db.delete_all = lambda: db.tables.drop(db.engine)
     db.disconnect = lambda: engine.dispose()
     db.connection_string = connection_string
+    db.kind = lambda: connection_string.split(":")[0]
 
     db.conn = db.session.bind.connect()
     if connection_string.startswith("sqlite:"):
@@ -355,4 +361,40 @@ def db_update_main(db, dbtables, data):
 
     return n_changes;
 
+_db_test_connection_string = ":memory:"
+def db_connect_test(name):
+    db = db_connect(_db_test_connection_string)
 
+    # TODO: prevent connecting to production databases if possible...
+    # query = db.tables.DomainTable.select() \
+    #     .where(db.tables.DomainTable.c.name == "production")
+    # result = db.session.execute(query)
+    # domains = result.fetchall()
+    # if len(domains) > 0:
+    #     sys.exit(1)
+
+    return db
+
+def set_test_db(connection_string):
+    global _db_test_connection_string
+    _db_test_connection_string = connection_string
+
+def main_test(argv, module_items):
+
+    parser = argparse.ArgumentParser(description='Process some integers.')
+
+    parser.add_argument('--db', default=":memory:",
+        help="database connection string (:memory:)")
+
+    args = parser.parse_args(argv[1:])
+
+    suite = unittest.TestSuite()
+
+    set_test_db(args.db)
+
+    for name, item in module_items.items():
+
+        if name.endswith("TestCase"):
+            suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(item))
+
+    unittest.TextTestRunner().run(suite)

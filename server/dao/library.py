@@ -633,7 +633,7 @@ class LibraryDao(object):
         SongTable = self.dbtables.SongDataTable.c
         UserTable = self.dbtables.SongUserDataTable.c
 
-        sql_rule = rule.sql()
+        sql_rule = rule.psql() if self.db.kind() == "postgresql" else rule.sql()
 
         if not showBanished:
             # remove entries that have either the blocked or banished bit set
