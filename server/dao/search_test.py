@@ -12,7 +12,13 @@ import sys
 import datetime
 import calendar
 import traceback
+import time
 
+from sqlalchemy import column, select
+from sqlalchemy.schema import Table, Column
+from sqlalchemy.types import Integer, String
+
+from .tables.util import generate_uuid
 from .db import db_init_main, db_connect
 from .user import UserDao
 from .library import Song, LibraryDao
@@ -45,6 +51,47 @@ from .search import SearchGrammar, \
 def extract(field, items):
     return set( item[field] for item in items )
 
+def TestSongTable(metadata):
+
+    return Table('test_song_data', metadata,
+        Column('id', String, primary_key=True, default=generate_uuid),
+        # string
+        Column('artist', String),
+        Column('album', String),
+        Column('title', String),
+        Column('file_path', String),
+        # number
+        Column('play_count', Integer, default=0),
+        # time
+        Column('length', Integer, default=0),
+        # year
+        Column('year', Integer, default=0),
+        # date
+        Column('date', Integer, default=lambda: int(time.time()))
+    )
+
+def db_insert(db, table, items):
+
+    uids = []
+    for item in items:
+        query = table.insert().values(item)
+        result = db.session.execute(query)
+        uid = result.inserted_primary_key[0]
+        uids.append(uid)
+
+    db.session.commit()
+    return uids
+
+def db_select(db, table, rule, columns=[]):
+    rule = rule.psql() if db.kind() == "postgresql" else rule.sql()
+    if not columns:
+        columns = [c.name for c in table.c]
+    query = select([column(c) for c in columns]).select_from(table).where(rule)
+
+    results = db.session.execute(query).fetchall()
+
+    return [{k: v for k, v in zip(columns, item)} for item in results]
+
 class TestSearchMeta(type):
     """
     Build a Search Test class.
@@ -55,68 +102,13 @@ class TestSearchMeta(type):
     """
     def __new__(cls, name, bases, attr):
 
-        db = db_connect(None)
-
-        env_cfg = {
-            'features': ['test', ],
-            'domains': ['test'],
-            'roles': [
-                {'test': { 'features': ['all',]}},
-            ],
-            'users': [
-                {'email': 'user000',
-                 'password': 'user000',
-                 'domains': ['test'],
-                 'roles': ['test']},
-                {'email': 'user001',
-                 'password': 'user001',
-                 'domains': ['test'],
-                 'roles': ['test']},
-                {'email': 'user002',
-                 'password': 'user002',
-                 'domains': ['test'],
-                 'roles': ['test']},
-            ]
-        }
-
-        db_init_main(db, db.tables, env_cfg)
-
-        cls.userDao = UserDao(db, db.tables)
-
-        cls.USERNAME = "user000"
-        cls.USER = cls.userDao.findUserByEmail(cls.USERNAME)
-
-        cls.libraryDao = LibraryDao(db, db.tables)
-
-        cls.SONGS = []
-        for i in range(20):
-            song = {Song.artist:"art%d"%i,
-                    Song.album :"alb%d"%i,
-                    Song.title :"ttl%d"%i,
-                    Song.path  :"/path/%d"%i,
-                    Song.play_count:i,
-                    Song.year:i%21+1990}
-            id = cls.libraryDao.insert(cls.USER["id"], cls.USER["domain_id"], song)
-            song[Song.id] = id
-            cls.SONGS.append(song)
-
-        cls.db = db
-
-        attr['db'] = cls.db
-        attr['SONGS'] = cls.SONGS
-        attr['libraryDao'] = cls.libraryDao
-        attr['libraryDao'] = cls.libraryDao
-        attr['USERNAME'] = cls.USERNAME
-        attr['USER'] = cls.USER
-
-
         def gen_compare_test(rule):
             """ check that a given rule returns the same results,
                 using the sql expression, or directly applying the rule """
             def test(self):
                 s1 = extract( Song.id, naive_search( self.SONGS, rule) )
-                s2 = extract( Song.id, self.libraryDao.search(
-                    self.USER["id"], self.USER["domain_id"], rule) )
+                s2 = extract( Song.id, db_select(
+                    self.db, self.db.tables.TestSongTable, rule) )
                 m = "\nrule: %s\ns1(naive): %s\ns2( sql ):%s\n"%(rule,s1,s2)
                 self.assertEqual(s1,s2,m)
             return test
@@ -124,18 +116,18 @@ class TestSearchMeta(type):
         def gen_compare_count_test(rule,count):
             """ check that a rule returns the expected number of results"""
             def test(self):
-                s1 = extract( Song.id, self.libraryDao.search(
-                    self.USER["id"], self.USER["domain_id"], rule) )
+                s1 = extract( Song.id, db_select(
+                    self.db, self.db.tables.TestSongTable, rule) )
                 self.assertEqual(len(s1), count)
             return test
 
         def gen_compare_rule_test(rule1,rule2):
             """ check that two different rules return the same results """
             def test(self):
-                r1 = self.libraryDao.search(
-                    self.USER["id"], self.USER["domain_id"], rule1)
-                r2 = self.libraryDao.search(
-                    self.USER["id"], self.USER["domain_id"], rule2)
+                r1 = db_select(
+                    self.db, self.db.tables.TestSongTable, rule1)
+                r2 = db_select(
+                    self.db, self.db.tables.TestSongTable, rule2)
                 s1 = extract(Song.id, r1)
                 s2 = extract(Song.id, r2)
                 a1 = ", ".join(sorted(extract(Song.artist, r1)))
@@ -143,24 +135,22 @@ class TestSearchMeta(type):
                 self.assertEqual(s1, s2, "\n%s\n%s" % (a1, a2))
             return test
 
-        c = lambda col:cls.libraryDao.grammar.getColumnType(col)
-
-        rng1 = RangeSearchRule(c('play_count'),1995,2005,type_=int)
-        rng2 = NotRangeSearchRule(c('play_count'),1995,2005,type_=int)
+        rng1 = RangeSearchRule(column('play_count'),1995,2005,type_=int)
+        rng2 = NotRangeSearchRule(column('play_count'),1995,2005,type_=int)
 
         # show that two rules combined using 'and' produce the expected result
-        gt1=GreaterThanEqualSearchRule(c('play_count'),1995,type_=int)
-        lt1=LessThanEqualSearchRule(c('play_count'),2005,type_=int)
+        gt1=GreaterThanEqualSearchRule(column('play_count'),1995,type_=int)
+        lt1=LessThanEqualSearchRule(column('play_count'),2005,type_=int)
 
         # show that two rules combined using 'or' produce the correct result
-        lt2=LessThanSearchRule(c('play_count'),1995,type_=int)
-        gt2=GreaterThanSearchRule(c('play_count'),2005,type_=int)
+        lt2=LessThanSearchRule(column('play_count'),1995,type_=int)
+        gt2=GreaterThanSearchRule(column('play_count'),2005,type_=int)
 
-        pl1 = PartialStringSearchRule(c('artist'),'art1')
-        pl2 = InvertedPartialStringSearchRule(c('artist'),'art1')
+        pl1 = PartialStringSearchRule(column('artist'),'art1')
+        pl2 = InvertedPartialStringSearchRule(column('artist'),'art1')
 
-        rex1 = RegExpSearchRule(c('artist'), "^art1.*$")
-        rex_cmp = PartialStringSearchRule(c('artist'), "art1")
+        rex1 = RegExpSearchRule(column('artist'), "^art1.*$")
+        rex_cmp = PartialStringSearchRule(column('artist'), "art1")
 
         and1 = AndSearchRule([gt1,lt1])
         or1 = OrSearchRule([lt2,gt2])
@@ -168,10 +158,10 @@ class TestSearchMeta(type):
         not1 = NotSearchRule([rng1,])
         rules = [ pl1,
                   pl2,
-                  ExactSearchRule(c('artist'),'art1'),
-                  ExactSearchRule(c('play_count'),2000,type_=int),
-                  InvertedExactSearchRule(c('artist'),'art1'),
-                  InvertedExactSearchRule(c('play_count'),2000,type_=int),
+                  ExactSearchRule(column('artist'),'art1'),
+                  ExactSearchRule(column('play_count'),2000,type_=int),
+                  InvertedExactSearchRule(column('artist'),'art1'),
+                  InvertedExactSearchRule(column('play_count'),2000,type_=int),
                   rng1, rng2, gt1, gt2, lt1, lt2, and1, or1, not1, rex1
                   ]
 
@@ -191,6 +181,29 @@ class TestSearchMeta(type):
 
 class SearchTestCase(unittest.TestCase, metaclass=TestSearchMeta):
 
+    @classmethod
+    def setUpClass(cls):
+
+        db = db_connect(None)
+        db.tables.TestSongTable = TestSongTable(db.metadata)
+        db.create_all()
+        db.delete_all()
+
+        cls.SONGS = []
+        for i in range(20):
+            song = {Song.artist:"art%d"%i,
+                    Song.album :"alb%d"%i,
+                    Song.title :"ttl%d"%i,
+                    Song.path  :"/path/%d"%i,
+                    Song.play_count:i,
+                    Song.year:i%21+1990}
+            cls.SONGS.append(song)
+
+        cls.SONGIDS = db_insert(db, db.tables.TestSongTable, cls.SONGS)
+        for song, song_id in zip(cls.SONGS, cls.SONGIDS):
+            song[Song.id] = song_id
+
+        cls.db = db
 
     def test_join_and(self):
 
@@ -468,7 +481,6 @@ class SearchGrammarTestCase(unittest.TestCase):
             r = self.sg.parseTokens([StrPos("count", 0, 0),
                                  StrPos("=", 0, 0),
                                  StrPos("&&", 0, 0, "special")])
-            print(r)
 
     def test_rulegen_alltext(self):
 
@@ -484,6 +496,8 @@ class SearchGrammarTestCase(unittest.TestCase):
         r = self.sg.ruleFromString("(count=0 || count=1) = this")
         self.assertTrue(isinstance(r, AndSearchRule), type(r))
         self.assertEqual(r.rules[-1].colid, "text")
+
+
 
 def main():
     suite = unittest.TestSuite()
