@@ -2,7 +2,12 @@
 import os, sys, argparse, json
 
 """
-python -u -m yue.core.api2 /d/Dropbox/ConsolePlayer/yue.db | \
+
+python -u -m yue.core.api2 yue.db > yue.json
+python -u server.tools.manage import D:/Dropbox/ConsolePlayer/yue.json
+cat /d/Dropbox/yue.json |
+
+/c/Python36/python -u -m yue.core.api2 /d/Dropbox/ConsolePlayer/yue.db | \
     python -u util/manage.py import -
 
 """
@@ -13,9 +18,9 @@ if (sys.version_info[0] == 2):
 from server.dao.util import hash_password
 from server.dao.db import db_remove, db_connect, db_init, \
     db_update, db_repopulate
-from server.server.app import YueApp
-from server.server.config import Config
-from server.server.util import get_features
+from server.app import YueApp
+from server.config import Config
+from server.resource.util import get_features
 
 def create(args):
     """Creates the db tables."""
