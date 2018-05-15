@@ -4,9 +4,16 @@ import logging
 from flask import jsonify, render_template, g, request
 
 from ..framework.web_resource import WebResource, \
-    get, post, put, delete, httpError
+    body, get, post, put, delete, httpError
 
 from .util import requires_auth
+
+def login_validator(info):
+    if 'email' not in info:
+        return Exception("invalid request body")
+    if 'password' not in info:
+        return Exception("invalid request body")
+    return info
 
 class UserResource(WebResource):
     """UserResource
@@ -29,24 +36,17 @@ class UserResource(WebResource):
         return jsonify(result=info)
 
     @post("login")
+    @body(login_validator)
     def login_user(self):
-        incoming = request.get_json()
-
-        if not incoming:
-            return httpError(400, "invalid request body")
-        if 'email' not in incoming:
-            return httpError(400, "email not specified")
-        if 'password' not in incoming:
-            return httpError(400, "password not specified")
 
         token = self.user_service.loginUser(
-            incoming["email"], incoming["password"])
+            g.body["email"], g.body["password"])
 
         return jsonify(token=token)
 
     @post("token")
     def is_token_valid(self):
-        # TODO: is this endpoint still requiered?
+        # TODO: is this endpoint still required?
 
         incoming = request.get_json()
 
@@ -64,6 +64,8 @@ class UserResource(WebResource):
     @requires_auth("user_create")
     def create_user(self):
         incoming = request.get_json()
+        # I think i could remove this try/catch block
+        # trust that the framework will catch the exception and log it
 
         try:
             user_id = user = self.user_service.createUser(
@@ -77,9 +79,7 @@ class UserResource(WebResource):
             logging.error("%s" % e)
             return httpError(400, "Unable to create user")
 
-        return jsonify(
-            id=user_id,
-        )
+        return jsonify(id=user_id)
 
     @put("password")
     @requires_auth("user_write")

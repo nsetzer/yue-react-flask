@@ -4,7 +4,7 @@ from ..dao.library import Song
 from .util import TranscodeServiceException, FFmpegEncoder
 
 class TranscodeService(object):
-    """docstring for UserService"""
+    """docstring for TranscodeService"""
 
     _instance = None
 

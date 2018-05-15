@@ -1,11 +1,12 @@
 
-
+import os, sys
 import logging
 
 from flask import jsonify, render_template, g, request, send_file
 
 from ..dao.library import Song
 from ..dao.util import parse_iso_format, pathCorrectCase
+
 
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, compressed, httpError
@@ -19,10 +20,11 @@ class FilesResource(WebResource):
         filesystem_read  - user can read files/dirs
         filesystem_write - user can upload files
     """
-    def __init__(self, user_service):
+    def __init__(self, user_service, filesys_service):
         super(FilesResource, self).__init__("/api/fs")
 
         self.user_service = user_service
+        self.filesys_service = filesys_service
 
     @get("<root>/path/")
     @requires_auth("filesystem_read")
@@ -47,23 +49,21 @@ class FilesResource(WebResource):
 
     def _list_path(self, root, path):
 
-
         if root != "default":
             return httpError(400, "invalid root `%s`" % root)
 
         # application config should define a number of valid roots
         # that can be listed.
-        os_root = Config.instance().filesystem.media_root
-        path = os.path.join(os_root, path)
+        abs_path = self.filesys_service.getPath(root, path)
 
-
-        if not os.path.exists(path):
+        if not os.path.exists(abs_path):
             return httpError(404, "path does not exist")
 
-        if os.path.isfile(path):
-            return send_file(path)
+        if os.path.isfile(abs_path):
+            return send_file(abs_path)
 
-        return list_directory(root, os_root, path)
+        result = self.filesys_service.listDirectory(root, path)
+        return jsonify(result=result)
 
 
 

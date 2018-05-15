@@ -14,6 +14,7 @@ from flask import jsonify, render_template
 from .service.audio_service import AudioService
 from .service.transcode_service import TranscodeService
 from .service.user_service import UserService
+from .service.filesys_service import FileSysService
 from .dao.library import Song
 
 from .resource.app_resource import AppResource
@@ -36,6 +37,7 @@ class YueApp(FlaskApp):
         self.user_service = UserService(config, self.db, self.db.tables)
         self.audio_service = AudioService(config, self.db, self.db.tables)
         self.transcode_service = TranscodeService(config, self.db, self.db.tables)
+        self.filesys_service = FileSysService(config, self.db, self.db.tables)
 
         self.add_resource(AppResource(self.config))
         self.add_resource(UserResource(self.user_service))
@@ -44,7 +46,7 @@ class YueApp(FlaskApp):
                                           self.transcode_service))
         self.add_resource(QueueResource(self.user_service,
                                         self.audio_service))
-        self.add_resource(FilesResource(self.user_service))
+        self.add_resource(FilesResource(self.user_service, self.filesys_service))
 
 class TestApp(YueApp):
     """docstring for TestApp"""

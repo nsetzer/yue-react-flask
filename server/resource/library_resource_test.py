@@ -224,6 +224,7 @@ class LibraryResourceTestCase(unittest.TestCase):
         with self.app.login(username, username) as app:
             result = app.post_json('/api/library', song)
             self.assertEqual(result.status_code, 400, result)
+
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(LibraryResourceTestCase)
     unittest.TextTestRunner().run(suite)

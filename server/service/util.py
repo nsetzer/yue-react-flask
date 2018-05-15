@@ -18,6 +18,9 @@ class UserServiceException(ServiceException):
 class TranscodeServiceException(ServiceException):
     pass
 
+class FileSysServiceException(ServiceException):
+    pass
+
 class FFmpegEncoder(object):
     def __init__(self,ffmpeg_path,logger=None,no_exec=False):
         super(FFmpegEncoder,self).__init__();
