@@ -15,6 +15,18 @@ def login_validator(info):
         return Exception("invalid request body")
     return info
 
+def change_password_validator(info):
+    if 'password' not in info:
+        return Exception("invalid request body")
+    return info
+
+def create_user_validator(info):
+    fields = ['email', 'password', 'domain', 'role']
+    for field in fields:
+        if field not in info:
+            return Exception("invalid request body")
+    return info
+
 class UserResource(WebResource):
     """UserResource
 
@@ -32,7 +44,7 @@ class UserResource(WebResource):
     @get("")
     @requires_auth("user_read")
     def get_user(self):
-        info=self.user_service.listUser(g.current_user['id'])
+        info = self.user_service.listUser(g.current_user['id'])
         return jsonify(result=info)
 
     @post("login")
@@ -62,38 +74,26 @@ class UserResource(WebResource):
 
     @post("create")
     @requires_auth("user_create")
+    @body(create_user_validator)
     def create_user(self):
         incoming = request.get_json()
-        # I think i could remove this try/catch block
-        # trust that the framework will catch the exception and log it
 
-        try:
-            user_id = user = self.user_service.createUser(
-                incoming["email"],
-                incoming["domain"],
-                incoming["role"],
-                incoming["password"]
-            )
-
-        except Exception as e:
-            logging.error("%s" % e)
-            return httpError(400, "Unable to create user")
+        user_id = user = self.user_service.createUser(
+            g.body["email"],
+            g.body["domain"],
+            g.body["role"],
+            g.body["password"]
+        )
 
         return jsonify(id=user_id)
 
     @put("password")
     @requires_auth("user_write")
+    @body(change_password_validator)
     def change_password(self):
-        incoming = request.get_json()
 
-        if not incoming:
-            return httpError(400, "invalid request body")
-        if 'password' not in incoming:
-            return httpError(400, "password not specified")
-
-        user = g.current_user
-
-        self.user_service.changeUserPassword(user, incoming['password'])
+        self.user_service.changeUserPassword(g.current_user,
+            g.body['password'])
 
         return jsonify(result="OK")
 
