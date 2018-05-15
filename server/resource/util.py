@@ -185,9 +185,9 @@ def datetime_validator(st):
     raise Exception("Invalid datetime")
 
 def search_order_validator(s):
-    if s not in Song.fields():
-        raise Exception("Invalid column name")
-    return s;
+    if s in Song.fields() or s.lower() == "random":
+        return s;
+    raise Exception("Invalid column name")
 
 
 def uuid_validator(uuid_string):

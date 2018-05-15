@@ -206,7 +206,9 @@ class UserService(object):
             # default role. I may want to remove this in the future
             # and upadte the frontend to correctly process this structure
             # added for compatability with the old framework
-            "features": features
+            "features": features,
+            # todo: I should only return this once on a successful login...
+            "apikey": user['apikey']
         }
 
         return user_info

@@ -52,6 +52,7 @@ def _endpoint_mapper(f):
                     else:
                         value = default
                 except Exception as e:
+                    logging.exception("%s" % e)
                     return httpError(400,
                         "unable to validate query parameter: %s=%s" % (name, request.args[name]))
                 setattr(g.args, name, value)

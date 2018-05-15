@@ -61,6 +61,8 @@ class UserResourceTestCase(unittest.TestCase):
             user_info = data['result']
 
             self.assertTrue('email' in user_info)
+            #an apikey is needed by non-clients
+            self.assertTrue('apikey' in user_info)
             self.assertEqual(user_info['email'], username)
 
     def test_get_user_by_token_v2(self):
@@ -78,6 +80,7 @@ class UserResourceTestCase(unittest.TestCase):
             user_info = data['result']
 
             self.assertTrue('email' in user_info)
+            self.assertTrue('apikey' in user_info)
             self.assertEqual(user_info['email'], username)
 
     def test_change_password(self):
