@@ -101,3 +101,13 @@ class FileSysService(object):
         }
 
         return result
+
+    def saveFile(self, fs_name, path, stream):
+
+        path = self.getPath(fs_name, path)
+
+        with open(path, "wb") as wb:
+            buf = stream.read(2048)
+            while buf:
+                wb.write(buf)
+                buf = stream.read(2048)

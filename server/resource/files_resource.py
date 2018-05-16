@@ -39,7 +39,10 @@ class FilesResource(WebResource):
     @post("<root>/path/<path:path>")
     @requires_auth("filesystem_write")
     def upload(self, root, path):
-        return jsonify(result="NOT OK"), 501
+
+        self.filesys_service.saveFile(root, path, request.stream)
+
+        return jsonify(result="OK"), 200
 
     @get("roots")
     @requires_auth("filesystem_read")

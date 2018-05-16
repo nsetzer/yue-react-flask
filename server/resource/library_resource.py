@@ -14,6 +14,8 @@ from ..framework.web_resource import WebResource, \
 
 from .util import requires_auth, datetime_validator, search_order_validator
 
+from ..service.util import AudioServiceException
+
 def song_validator(song):
 
     for field in [Song.artist, Song.album, Song.title]:
@@ -32,6 +34,15 @@ def song_list_validator(songs):
 
     return songs
 
+def song_audio_path_validator(info):
+
+    if 'root' not in info:
+        raise Exception("Invalid request body: missing root")
+
+    if 'path' not in info:
+        raise Exception("Invalid request body: missing path")
+
+    return info
 
 class LibraryResource(WebResource):
     """LibraryResource
@@ -42,12 +53,14 @@ class LibraryResource(WebResource):
         library_read_song  - can stream music
         library_write_song  - can upload music
     """
-    def __init__(self, user_service, audio_service, transcode_service):
+    def __init__(self, user_service, audio_service,
+      transcode_service, filesys_service):
         super(LibraryResource, self).__init__("/api/library")
 
         self.user_service = user_service
         self.audio_service = audio_service
         self.transcode_service = transcode_service
+        self.filesys_service = filesys_service
 
     @get("")
     @param("query", default=None)
@@ -141,8 +154,18 @@ class LibraryResource(WebResource):
 
     @post("<song_id>/audio")
     @requires_auth("library_write_song")
+    @body(song_audio_path_validator)
     def set_song_audio(self, song_id):
-        return jsonify(result="NOT OK"), 501
+
+        abs_path = self.filesys_service.getPath(g.body['root'], g.body['path'])
+
+        try:
+            self.audio_service.setSongFilePath(
+                g.current_user, song_id, abs_path)
+        except AudioServiceException as e:
+            return httpError(400, "Error updating path")
+
+        return jsonify(result="OK"), 200
 
     @get("<song_id>/art")
     @requires_auth("library_read_song")

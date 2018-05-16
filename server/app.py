@@ -43,7 +43,8 @@ class YueApp(FlaskApp):
         self.add_resource(UserResource(self.user_service))
         self.add_resource(LibraryResource(self.user_service,
                                           self.audio_service,
-                                          self.transcode_service))
+                                          self.transcode_service,
+                                          self.filesys_service))
         self.add_resource(QueueResource(self.user_service,
                                         self.audio_service))
         self.add_resource(FilesResource(self.user_service, self.filesys_service))

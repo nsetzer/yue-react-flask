@@ -69,6 +69,21 @@ class FilesResourceTestCase(unittest.TestCase):
             dat1 = open(path, "rb").read()
             self.assertEqual(dat0, dat1)
 
+    def test_upload_file(self):
+        """test file upload
+
+        show that a file can be uploaded to a pre-defined sub directory
+        """
+        username = "admin"
+        with self.app.login(username, username) as app:
+            dat0 = b"abc123"
+            path = 'test/upload.txt'
+            url = '/api/fs/default/path/' + path
+            response = app.post(url, data=dat0)
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(os.path.exists(path))
+            dat1 = open(path, "rb").read()
+            self.assertEqual(dat0, dat1)
 
 if __name__ == '__main__':
     main_test(sys.argv, globals())

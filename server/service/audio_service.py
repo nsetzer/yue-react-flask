@@ -1,4 +1,6 @@
 
+import os
+import logging
 
 from ..dao.user import UserDao
 from ..dao.library import LibraryDao, Song
@@ -7,6 +9,7 @@ from ..dao.history import HistoryDao
 from ..dao.shuffle import binshuffle
 
 from .util import AudioServiceException
+
 class AudioService(object):
     """docstring for AudioService"""
 
@@ -46,6 +49,17 @@ class AudioService(object):
     def findSongById(self, user, song_id):
 
         return self._getSongInfo(user, song_id)
+
+    def setSongFilePath(self, user, song_id, path):
+
+        if not os.path.exists(path):
+            logging.error("invalid path: %s" % path)
+            raise AudioServiceException(user, "invalid path")
+
+        uid = user['id']
+        did = user['domain_id']
+        song = {Song.path: path}
+        self.libraryDao.update(uid, did, song_id, song)
 
     def getSongAudioPath(self, user, song_id):
 

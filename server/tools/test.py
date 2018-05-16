@@ -11,11 +11,11 @@ if (sys.version_info[0] == 2):
 
 class Tests(object):
 
-    def run(self, verbose):
+    def run(self, pattern, verbose):
         test_loader = unittest.defaultTestLoader
         test_runner = unittest.TextTestRunner(verbosity=verbose)
-        # test_suite = collect_test_suite(package,args.pattern);
-        test_suite = test_loader.discover(".", pattern="*_test.py")
+        pattern = pattern + "_test.py"
+        test_suite = test_loader.discover(".", pattern=pattern)
         return test_runner.run(test_suite)
 
 class Coverage(object):
@@ -26,13 +26,13 @@ class Coverage(object):
     """
 
     def run(self):
-      self._exec("coverage run " + __file__)
-      self._exec("coverage html  --omit='/usr/*,*_test*.py'")
+        self._exec("coverage run " + __file__)
+        self._exec("coverage html  --omit='/usr/*,*_test*.py'")
 
-    def _exec(self,*args):
-      cmd=' '.join(args)
-      print(cmd)
-      os.system(cmd)
+    def _exec(self, *args):
+        cmd = ' '.join(args)
+        print(cmd)
+        os.system(cmd)
 
 def main():
     """run server tests"""
@@ -56,9 +56,7 @@ def main():
     if "coverage".startswith(args.mode):
         Coverage().run()
     else:
-        Tests().run(2 if args.verbose else 1)
-
-
+        Tests().run(args.pattern, 2 if args.verbose else 1)
 
 if __name__ == '__main__':
     main()

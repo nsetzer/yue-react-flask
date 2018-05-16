@@ -32,6 +32,9 @@ class FlaskApp(object):
             #static_folder=self.config.static_dir,
             #template_folder=self.config.build_dir)
 
+        # set the max upload file size limit to 100MB
+        self.app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
+
         self.log = self.app.logger
 
         if not os.path.exists(self.config.build_dir):

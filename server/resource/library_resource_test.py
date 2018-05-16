@@ -11,8 +11,6 @@ from io import BytesIO
 import gzip
 import datetime
 
-
-
 class LibraryResourceTestCase(unittest.TestCase):
 
     @classmethod
@@ -154,17 +152,21 @@ class LibraryResourceTestCase(unittest.TestCase):
 
     def test_002a_update_song(self):
 
+        # TODO: this test currently updates the file path
+        # in the future this should be disallowed, in favor of the
+        # setSongFilePath api.
+
         song = {
-            Song.artist: "update000",
-            Song.album: "update000",
-            Song.title: "update000",
+            Song.artist: "update002a",
+            Song.album: "update002a",
+            Song.title: "update002a",
 
         }
 
         song_id = self.app.audio_service.createSong(self.app.USER, song)
 
         song_update = {
-            Song.artist: "update001",
+            Song.artist: "update002a",
             Song.id: song_id,
             Song.path: "test/r160.mp3"
         }
@@ -191,6 +193,84 @@ class LibraryResourceTestCase(unittest.TestCase):
         username = "admin"
         with self.app.login(username, username) as app:
             result = app.put_json('/api/library', [song_update])
+            self.assertEqual(result.status_code, 400, result)
+
+    def test_002c_update_song_path(self):
+        """ test that the file path can be updated.
+
+        the file system service and audio service are used in conjunction
+        to update the path for a given song id. the services validate that
+        the file must exist.
+        """
+
+        # first create a new song for this test
+        song1 = {
+            Song.artist: "update002c",
+            Song.album: "update002c",
+            Song.title: "update002c",
+
+        }
+
+        song_id = self.app.audio_service.createSong(self.app.USER, song1)
+
+        info = {
+            "root": "default",
+            "path": "test/r160.mp3",
+        }
+
+        username = "admin"
+        with self.app.login(username, username) as app:
+            url = '/api/library/%s/audio' % song_id
+            result = app.post_json(url, info)
+            self.assertEqual(result.status_code, 200, result)
+
+        song2 = self.app.audio_service.findSongById(self.app.USER, song_id)
+
+        self.assertTrue(os.path.exists(song2[Song.path]))
+        self.assertTrue(os.path.samefile("./test/r160.mp3", song2[Song.path]))
+
+    def test_002d_update_song_path_error(self):
+        """ test set audio path can fail
+
+        missing parameters should cause the request to fail
+        """
+        song_id = self.app.SONGIDS[0]
+        url = '/api/library/%s/audio' % song_id
+
+        username = "admin"
+        with self.app.login(username, username) as app:
+
+            # no path given
+            info = {
+                "root": "default",
+            }
+            result = app.post_json(url, info)
+            self.assertEqual(result.status_code, 400, result)
+
+            # no root given
+            info = {
+                "path": "test/r160.mp3",
+            }
+            result = app.post_json(url, info)
+            self.assertEqual(result.status_code, 400, result)
+
+    def test_002e_update_song_path_dne(self):
+        """ test set audio path can fail
+
+        it should fail when the file does not exist
+        """
+        song_id = self.app.SONGIDS[0]
+        url = '/api/library/%s/audio' % song_id
+
+        username = "admin"
+        with self.app.login(username, username) as app:
+
+            # no path given
+            info = {
+                "root": "default",
+                "path": "/tmp/dne",
+            }
+            result = app.post_json(url, info)
             self.assertEqual(result.status_code, 400, result)
 
     def test_003a_create_song(self):
