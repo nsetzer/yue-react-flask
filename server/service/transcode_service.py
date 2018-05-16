@@ -3,6 +3,54 @@ import os, sys
 from ..dao.library import Song
 from .util import TranscodeServiceException, FFmpegEncoder
 
+from PIL import Image, ImageOps
+
+class ImageScale(object):
+    # square images
+    # Large:  512px x 512px
+    # Medium: 256px x 256px
+    # small:  128px x 128px
+    # 16x9 images
+    # landscape: 512px x 288px
+    # landscape_small: 256px x 144px
+
+    SMALL  = 1
+    MEDIUM = 2
+    LARGE  = 3
+
+    LANDSCAPE = 6
+    LANDSCAPE_SMALL = 7
+
+    _sizes = [
+        (0, 0),
+        (128, 128),
+        (256, 256),
+        (512, 512),
+        (1024, 1024),
+        (0, 0),
+        (512, 288),
+        (256, 144),
+    ]
+
+    _names = [
+        "unknown",
+        "small",
+        "medium",
+        "large",
+        "unknown",
+        "unknown",
+        "landscape",
+        "landscape_small"
+    ]
+
+    @staticmethod
+    def size(scale):
+        return ImageScale._sizes[scale]
+
+    @staticmethod
+    def name(scale):
+        return ImageScale._names[scale]
+
 class TranscodeService(object):
     """docstring for TranscodeService"""
 
@@ -55,14 +103,14 @@ class TranscodeService(object):
         tgtpath = self.config.transcode.audio.tmp_path
 
         if mode == "original":
-            return srcpath;
+            return srcpath
 
         if not os.path.exists(tgtpath):
             os.makedirs(tgtpath)
 
         tgtpath = os.path.join(tgtpath, song[Song.id] + ".mp3")
 
-        metadata=dict(
+        metadata = dict(
             artist=song[Song.artist],
             album=song[Song.album],
             title=song[Song.title]
@@ -76,9 +124,53 @@ class TranscodeService(object):
 
         bitrate = 320
         if srcpath.lower().endswith('mp3'):
-            bitrate=0
+            bitrate = 0
 
         if not os.path.exists(tgtpath):
-            self.encoder.transcode(srcpath,tgtpath,bitrate,vol=vol,metadata=metadata)
+            self.encoder.transcode(srcpath,
+                tgtpath,
+                bitrate,
+                vol=vol,
+                metadata=metadata)
 
-        return tgtpath;
+        return tgtpath
+
+    def scaleImage(self, src_path, tgt_path, scale):
+        """ scale the input image to the specified size.
+
+        src_path: the image to resize
+        tgt_path: the path to save the scaled image to
+        scale: an ImageScale enum
+
+        The image resolution is restricted to a small set of predefined
+        dimensions. The scaling is guaranteed to preserve the aspect ratio.
+
+        Square images are intended for icons, while the 16x9 aspect ratio
+        images can be used for banners.
+        """
+        img = Image.open(src_path)
+        width, height = img.size
+
+        tgt_width, tgt_height = ImageScale.size(scale)
+
+        wscale = (tgt_width / float(width))
+        hsize = int(wscale * height)
+        img = img.resize((tgt_width, hsize), Image.BILINEAR)
+
+        if img.size[1] < tgt_height:
+            # pad with black pixels on the top and bottom
+            d = tgt_height - img.size[1]
+            padding = (0, int(d / 2), 0, round(d / 2))
+            img = ImageOps.expand(img, padding)
+        elif img.size[1] > tgt_height:
+            # crop the image
+            img = ImageOps.fit(img, (tgt_width, tgt_height))
+
+        img.save(tgt_path)
+
+        return img.size
+
+
+
+
+
