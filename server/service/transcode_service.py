@@ -51,6 +51,13 @@ class ImageScale(object):
     def name(scale):
         return ImageScale._names[scale]
 
+    @staticmethod
+    def fromName(name):
+        try:
+            return ImageScale._names.index(name.lower())
+        except ValueError as e:
+            return 0
+
 class TranscodeService(object):
     """docstring for TranscodeService"""
 
@@ -169,6 +176,36 @@ class TranscodeService(object):
         img.save(tgt_path)
 
         return img.size
+
+    def getScaledAlbumArt(self, song, scale):
+        """
+        return the path to the album art for the given song
+
+        the image identified by the path will have dimensions
+        determined by the scale factor
+
+        return None if there is no art for this image at the requested size.
+
+        song: a song
+        scale: an ImageScale enum
+        """
+
+        src_path = song[Song.art_path]
+
+        if not src_path or not os.path.exists(src_path):
+            # when displaying album art as part of a resource, instead
+            # of returning the default path, return a 303 redirect
+            # to the url of the default art.
+            return None
+
+        dir, name  = os.path.split(src_path)
+        name, _ = os.path.splitext(name)
+        name = "%s.%s.png" % (name, ImageScale.name(scale))
+        tgt_path = os.path.join(dir, name)
+
+        self.scaleImage(src_path, tgt_path, scale)
+
+        return tgt_path
 
 
 

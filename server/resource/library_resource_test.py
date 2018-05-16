@@ -273,6 +273,51 @@ class LibraryResourceTestCase(unittest.TestCase):
             result = app.post_json(url, info)
             self.assertEqual(result.status_code, 400, result)
 
+    def test_002f_update_song_art_path(self):
+        """ test that the file art path can be updated.
+
+        the file system service and audio service are used in conjunction
+        to update the path for a given song id. the services validate that
+        the file must exist.
+        """
+
+        # first create a new song for this test
+        song1 = {
+            Song.artist: "update002f",
+            Song.album: "update002f",
+            Song.title: "update002f",
+
+        }
+
+        song_id = self.app.audio_service.createSong(self.app.USER, song1)
+
+        info = {
+            "root": "default",
+            "path": "test/blank.png",
+        }
+
+        username = "admin"
+        with self.app.login(username, username) as app:
+            url = '/api/library/%s/art' % song_id
+            result = app.post_json(url, info)
+            self.assertEqual(result.status_code, 200, result)
+
+        song2 = self.app.audio_service.findSongById(self.app.USER, song_id)
+
+        self.assertTrue(os.path.exists(song2[Song.art_path]))
+        self.assertTrue(os.path.samefile("./test/blank.png",
+            song2[Song.art_path]))
+
+        username = "admin"
+        with self.app.login(username, username) as app:
+            url = '/api/library/%s/art' % song_id
+            qs = {"scale": "small", }
+            result = app.get(url, query_string=qs)
+            self.assertEqual(result.status_code, 200, result)
+            # it should always return a png
+            # trust that the size is correct
+            self.assertEqual(result.data[:4], b"\x89PNG")
+
     def test_003a_create_song(self):
 
         song = {

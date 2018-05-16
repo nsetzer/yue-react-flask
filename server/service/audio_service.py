@@ -61,6 +61,17 @@ class AudioService(object):
         song = {Song.path: path}
         self.libraryDao.update(uid, did, song_id, song)
 
+    def setSongAlbumArtPath(self, user, song_id, path):
+
+        if not os.path.exists(path):
+            logging.error("invalid path: %s" % path)
+            raise AudioServiceException(user, "invalid path")
+
+        uid = user['id']
+        did = user['domain_id']
+        song = {Song.art_path: path}
+        self.libraryDao.update(uid, did, song_id, song)
+
     def getSongAudioPath(self, user, song_id):
 
         song = self._getSongInfo(user, song_id)

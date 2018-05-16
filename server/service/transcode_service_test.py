@@ -5,6 +5,7 @@ import json
 import time
 
 from ..dao.db import main_test
+from ..dao.library import Song
 from ..app import TestApp
 
 from .transcode_service import ImageScale
@@ -88,6 +89,16 @@ class FilesResourceTestCase(unittest.TestCase):
             w, h = self.service.scaleImage(src_path, tgt_path, scale)
             self.assertEqual((w, h), ImageScale.size(scale))
             self.assertTrue(os.path.exists(tgt_path))
+
+    def test_006_transcode_art(self):
+
+        song = {Song.art_path: self.images[0]}
+
+        path = self.service.getScaledAlbumArt(song, ImageScale.SMALL)
+
+        name = ImageScale.name(ImageScale.SMALL)
+        self.assertTrue(path.endswith(".%s.png" % name))
+        self.assertTrue(os.path.exists(path))
 
 if __name__ == '__main__':
     main_test(sys.argv, globals())

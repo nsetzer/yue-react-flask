@@ -15,6 +15,7 @@ from ..framework.web_resource import WebResource, \
 from .util import requires_auth, datetime_validator, search_order_validator
 
 from ..service.util import AudioServiceException
+from ..service.transcode_service import ImageScale
 
 def song_validator(song):
 
@@ -43,6 +44,13 @@ def song_audio_path_validator(info):
         raise Exception("Invalid request body: missing path")
 
     return info
+
+def image_scale_type(name):
+
+    index = ImageScale.fromName(name)
+    if index == 0:
+        raise Exception("invalid: %s" % name)
+    return index
 
 class LibraryResource(WebResource):
     """LibraryResource
@@ -153,8 +161,8 @@ class LibraryResource(WebResource):
         return send_file(path)
 
     @post("<song_id>/audio")
-    @requires_auth("library_write_song")
     @body(song_audio_path_validator)
+    @requires_auth("library_write_song")
     def set_song_audio(self, song_id):
 
         abs_path = self.filesys_service.getPath(g.body['root'], g.body['path'])
@@ -168,21 +176,19 @@ class LibraryResource(WebResource):
         return jsonify(result="OK"), 200
 
     @get("<song_id>/art")
+    @param("scale", type_=image_scale_type, default=ImageScale.MEDIUM)
     @requires_auth("library_read_song")
     def get_song_art(self, song_id):
         """ get album art for a specific song
 
-        TODO: query options should be used to specify
-            large: a standardized square image (e.g. 512 x 512)
-            medium: a standardized square image (eg 256 x 256)
-            small: a standardized square image (eg 128 x 128)
-            half: a standardized 16x9 image (e.g. 256 x 144)
-
-        Note: the art path should always point to the original file
-            the transcode service can be used to generate alternatives on demand
+        scale can be one of:
+            large, medium, small, landscape, landscape_small
+        which correspond to various square or rectangle image sizes
         """
 
-        path = self.audio_service.getSongArtPath(g.current_user, song_id)
+        song = self.audio_service.findSongById(g.current_user, song_id)
+
+        path = self.transcode_service.getScaledAlbumArt(song, g.args.scale)
 
         if not os.path.exists(path):
             logging.error("Art for %s not found at: `%s`" % (song_id, path))
@@ -191,9 +197,19 @@ class LibraryResource(WebResource):
         return send_file(path)
 
     @post("<song_id>/art")
+    @body(song_audio_path_validator)
     @requires_auth("library_write_song")
     def set_song_art(self, song_id):
-        return jsonify(result="NOT OK"), 501
+
+        abs_path = self.filesys_service.getPath(g.body['root'], g.body['path'])
+        try:
+            self.audio_service.setSongAlbumArtPath(
+                g.current_user, song_id, abs_path)
+        except AudioServiceException as e:
+            logging.exception("%s" % e)
+            return httpError(400, "Error updating path")
+
+        return jsonify(result="OK"), 200
 
     @get("history")
     @param("start", type_=datetime_validator, required=True)
