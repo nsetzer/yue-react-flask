@@ -206,8 +206,3 @@ class TranscodeService(object):
         self.scaleImage(src_path, tgt_path, scale)
 
         return tgt_path
-
-
-
-
-
