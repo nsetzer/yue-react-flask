@@ -1,3 +1,4 @@
 Flask==1.*
 bcrypt==3.1.*
 SQLAlchemy==1.*
+pillow==5.*

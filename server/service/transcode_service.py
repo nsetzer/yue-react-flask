@@ -3,6 +3,35 @@ import os, sys
 from ..dao.library import Song
 from .util import TranscodeServiceException, FFmpegEncoder
 
+from PIL import Image, ImageOps
+
+class ImageScale(object):
+    # Large:  512px x 512px
+    # Medium: 256px x 256px
+    # small:  128px x 128px
+    # portrait: 512px x 288px
+    # portrait_small: 256px x 144px
+
+    LARGE  = 1
+    MEDIUM = 2
+    SMALL  = 3
+    PORTRAIT = 4
+    PORTRAIT_SMALL = 5
+
+    _sizes = [
+        (0, 0),
+        (512, 512),
+        (256, 256),
+        (128, 128),
+        (512, 288),
+        (256, 144),
+    ]
+
+    @staticmethod
+    def size(scale):
+        return ImageScale._sizes[scale]
+
+
 class TranscodeService(object):
     """docstring for TranscodeService"""
 
@@ -81,4 +110,32 @@ class TranscodeService(object):
         if not os.path.exists(tgtpath):
             self.encoder.transcode(srcpath,tgtpath,bitrate,vol=vol,metadata=metadata)
 
-        return tgtpath;
+        return tgtpath
+
+    def scaleImage(self, src_path, tgt_path, scale):
+
+        img = Image.open(src_path)
+        width, height = img.size
+
+        tgt_width, tgt_height = ImageScale.size(scale)
+
+        wscale = (tgt_width / float(width))
+        hsize = int(wscale * height)
+        img = img.resize((tgt_width, hsize), Image.BILINEAR)
+
+        if img.size[1] < tgt_height:
+            d = tgt_height - img.size[1]
+            padding = (0, int(d / 2), 0, round(d / 2))
+            img = ImageOps.expand(img, padding)
+        elif img.size[1] > tgt_height:
+            # crop the image
+            img = ImageOps.fit(img, (tgt_width, tgt_height))
+
+        img.save(tgt_path)
+
+        return img.size
+
+
+
+
+
