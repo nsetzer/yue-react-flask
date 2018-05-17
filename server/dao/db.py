@@ -122,13 +122,13 @@ def db_repopulate(db, dbtables, user_name, domain_name, json_objects):
 
     domain = userDao.findDomainByName(domain_name)
     if domain is None:
-        sys.stdout.write("Domain with name `%s` not found" % domain_name)
-        return
+        sys.stdout.write("Domain with name `%s` not found\n" % domain_name)
+        return False
 
     user = userDao.findUserByEmail(user_name)
     if user is None:
-        sys.stdout.write("User with name `%s` not found" % user_name)
-        return
+        sys.stdout.write("User with name `%s` not found\n" % user_name)
+        return False
 
     start = time.time()
 
@@ -140,23 +140,24 @@ def db_repopulate(db, dbtables, user_name, domain_name, json_objects):
     t = end - start
     logging.info("updated %d songs in %.3f seconds" % (count, t))
 
+    return True
+
 class ConfigException(Exception):
     """docstring for ConfigException"""
-    def __init__(self, path, message):
+    def __init__(self, message):
 
-        message = "Configuration Error with %s: %s" % (
-            path, message)
+        message = "Configuration Error: %s" % (message)
 
         super(ConfigException, self).__init__(message)
 
 def yaml_assert_list_of_string(data, key):
 
     if not isinstance(data[key], list):
-        raise ConfigException(config_path, "%s must be a list" % key)
+        raise ConfigException("%s must be a list" % key)
 
     for feat in data[key]:
         if not isinstance(feat, str):
-            raise ConfigException(config_path,
+            raise ConfigException(
                 "%s must be a list of strings" % key)
 
 def yaml_assert(data):
@@ -166,19 +167,20 @@ def yaml_assert(data):
     yaml_assert_list_of_string(data, "domains")
 
     if not isinstance(data['roles'], list):
-        raise ConfigException(config_path, "roles must be a list")
+        raise ConfigException("roles must be a list")
 
     for role in data['roles']:
         for name, items in role.items():
             yaml_assert_list_of_string(items, "features")
+            for feat in items["features"]:
+                if feat not in data['features'] and feat != "all":
+                    raise ConfigException("unknown user feature: %s" % feat)
 
     for user in data['users']:
 
-        if "email" not in user:
-            raise ConfigException(config_path, "user must have an email")
-
-        if "password" not in user:
-            raise ConfigException(config_path, "user must have a password")
+        for field in ["email", "password", "domains", "roles"]:
+            if field not in user:
+                raise ConfigException("user must have field: %s" % field)
 
         yaml_assert_list_of_string(user, "domains")
         yaml_assert_list_of_string(user, "roles")
@@ -202,9 +204,11 @@ def _db_create_role(userDao, role_name, child):
         else:
             logging.info("adding feature %s to role %s" % (feat_name, role_name))
             feat = userDao.findFeatureByName(feat_name)
+            if feat is None:
+                raise ConfigException("Unknown feature: %s" % feat_name)
             feat_id = feat['id']
             userDao.addFeatureToRole(
-                role_id, feat_id,commit=False)
+                role_id, feat_id, commit=False)
             n_changes += 1
     return n_changes
 

@@ -4,7 +4,7 @@ import tempfile
 import json
 
 from .db import db_connect, db_populate, db_repopulate, \
-    db_init_main, db_update_main
+    db_init_main, db_update_main, ConfigException, yaml_assert
 from .user import UserDao
 from .library import Song, LibraryDao
 
@@ -30,10 +30,10 @@ class ManageDBTestCase(unittest.TestCase):
             ],
             'domains': ['production'],
             'roles': [
-                {'user': { 'features': [
-                    'read_user',]}},
+                {'user': {'features': [
+                    'read_user']}},
                 {'editor': {'features': [
-                    'read_user', 'write_user',]}},
+                    'read_user', 'write_user']}},
                 {'admin': {'features': ['all']}}
             ],
             'users': [
@@ -102,6 +102,52 @@ class ManageDBTestCase(unittest.TestCase):
             users = self.userDao.listUsers(domain.id)
             self.assertEqual(len(users), len(self.env_cfg['users']))
 
+    def test_000a_validate_yaml(self):
+
+        data = self.env_cfg.copy()
+        data['features'] = [1, 2, 3]
+
+        with self.assertRaises(ConfigException):
+            yaml_assert(data)
+
+        data['features'] = None
+        with self.assertRaises(ConfigException):
+            yaml_assert(data)
+
+        data = self.env_cfg.copy()
+        data['roles'] = None
+        with self.assertRaises(ConfigException):
+            yaml_assert(data)
+
+        # the listed features for a role must match the features list
+        data = self.env_cfg.copy()
+        data['roles'] = [{'user': {'features': ['dne']}}]
+        with self.assertRaises(ConfigException):
+            yaml_assert(data)
+
+        # users must have all parameters set correctly
+        user1 = {'password': 'admin',
+                 'domains': ['production'],
+                 'roles': ['admin']}
+
+        user2 = {'email': 'admin',
+                 'domains': ['production'],
+                 'roles': ['admin']}
+
+        user3 = {'email': 'admin',
+                 'password': 'admin',
+                 'roles': ["user"]}
+
+        user4 = {'email': 'admin',
+                 'password': 'admin',
+                 'domains': [None]}
+
+        for user in [user1, user2, user3, user4]:
+            data = self.env_cfg.copy()
+            data['users'] = [user]
+            with self.assertRaises(ConfigException):
+                yaml_assert(data)
+
     def test_001_db_populate(self):
 
         db = self.db
@@ -126,20 +172,40 @@ class ManageDBTestCase(unittest.TestCase):
         for song in self.songs:
             song[Song.rating] = 10 - song[Song.rating]
 
-        db_repopulate(db, db.tables, \
-            self.user_name, self.domain_name, self.songs)
+        self.assertTrue(db_repopulate(db, db.tables,
+            self.user_name, self.domain_name, self.songs))
 
         # check that the songs were added to the database
         results = self.libraryDao.search(self.user_id, self.domain_id, "")
         self.assertEqual(len(results), len(self.songs),
             "%d/%d" % (len(results), len(self.songs)))
 
-        songmap = {song[Song.ref_id]:song for song in results}
+        songmap = {song[Song.ref_id]: song for song in results}
 
         # check that the values in the database were updated.
         for song in self.songs:
             song2 = songmap[song[Song.ref_id]]
             self.assertEqual(song[Song.rating], song2[Song.rating])
+
+    def test_002a_db_repopulate_invalid_domain(self):
+
+        db = self.db
+        # update the original song meta data, and repopulate
+        for song in self.songs:
+            song[Song.rating] = 10 - song[Song.rating]
+
+        self.assertFalse(db_repopulate(db, db.tables,
+            self.user_name, "dne", self.songs))
+
+    def test_002b_db_repopulate_invalid_name(self):
+
+        db = self.db
+        # update the original song meta data, and repopulate
+        for song in self.songs:
+            song[Song.rating] = 10 - song[Song.rating]
+
+        self.assertFalse(db_repopulate(db, db.tables,
+            "dne", self.domain_name, self.songs))
 
     def test_003_db_update(self):
         db = self.db
@@ -154,6 +220,15 @@ class ManageDBTestCase(unittest.TestCase):
         n_changes = db_update_main(db, db.tables, self.env_cfg)
         # todo, check that roles were updated, features changed
         self.assertEqual(n_changes, 8, "changes: %d" % n_changes)
+
+        self.env_cfg['domains'] = ['test', ]
+        n_changes = db_update_main(db, db.tables, self.env_cfg)
+        self.assertEqual(n_changes, 1, "changes: %d" % n_changes)
+
+        role = {'test': {'features': ['delete_user', ]}}
+        self.env_cfg['roles'].append(role)
+        n_changes = db_update_main(db, db.tables, self.env_cfg)
+        self.assertEqual(n_changes, 1, "changes: %d" % n_changes)
 
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ManageDBTestCase)
