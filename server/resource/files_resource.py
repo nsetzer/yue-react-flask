@@ -31,16 +31,16 @@ class FilesResource(WebResource):
     def get_path1(self, root):
         return self._list_path(root, "")
 
-    @get("<root>/path/<path:path>")
+    @get("<root>/path/<path:resPath>")
     @requires_auth("filesystem_read")
-    def get_path2(self, root, path):
-        return self._list_path(root, path)
+    def get_path2(self, root, resPath):
+        return self._list_path(root, resPath)
 
-    @post("<root>/path/<path:path>")
+    @post("<root>/path/<path:resPath>")
     @requires_auth("filesystem_write")
-    def upload(self, root, path):
+    def upload(self, root, resPath):
 
-        self.filesys_service.saveFile(root, path, request.stream)
+        self.filesys_service.saveFile(root, resPath, request.stream)
 
         return jsonify(result="OK"), 200
 

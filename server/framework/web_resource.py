@@ -8,7 +8,8 @@ import gzip
 import datetime
 import logging
 
-WebEndpoint = namedtuple('WebEndpoint', ['path', 'methods', 'name', 'method'])
+WebEndpoint = namedtuple('WebEndpoint',
+    ['path', 'methods', 'name', 'method', 'params', 'body'])
 
 def validate(expr, value):
     if not expr:
@@ -167,7 +168,18 @@ class MetaWebResource(type):
                 fname = name + "." + func.__name__
                 path = func._endpoint
                 methods = func._methods
-                endpoint = WebEndpoint(path, methods, fname, func)
+
+                _body = (None, False)
+                if hasattr(func, "_body"):
+                    _body = func._body
+
+                _params = []
+                if hasattr(func, "_params"):
+                    _params = func._params
+
+                endpoint = WebEndpoint(path, methods, fname,
+                    func, _params, _body)
+
                 cls._class_endpoints.append( endpoint )
 
 class WebResource(object, metaclass = MetaWebResource):
@@ -193,14 +205,16 @@ class WebResource(object, metaclass = MetaWebResource):
 
         endpoints = self.__endpoints[:]
 
-        for path, methods, name, func in self._class_endpoints:
+        for path, methods, name, func, _params, _body in self._class_endpoints:
             # get the instance of the method which is bound to self
             bound_func = getattr(self, func.__name__)
             if path == "":
                 path = self.root
             elif not path.startswith("/"):
                 path = (self.root + '/' + path).replace("//","/")
-            endpoints.append( WebEndpoint(path, methods, name, bound_func) )
+
+            endpoints.append( WebEndpoint(path, methods, name,
+                bound_func, _params, _body) )
 
         return endpoints
 
@@ -208,4 +222,8 @@ class WebResource(object, metaclass = MetaWebResource):
         name = self.__class__.__name__ + "." + func.__name__
         if not path.startswith("/"):
             path = (self.root + '/' + path).replace("//","/")
-        self.__endpoints.append( WebEndpoint(path, methods, name, func) )
+        # todo, support _body, _params somehow
+        _body = (None, False)
+        _params = []
+        self.__endpoints.append( WebEndpoint(path, methods, name,
+            func, _params, _body) )
