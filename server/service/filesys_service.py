@@ -106,6 +106,10 @@ class FileSysService(object):
 
         path = self.getPath(fs_name, path)
 
+        dirpath, _ = os.path.split(path)
+        if not os.path.exists(dirpath):
+            os.makedirs(dirpath)
+
         with open(path, "wb") as wb:
             buf = stream.read(2048)
             while buf:

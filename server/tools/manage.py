@@ -20,8 +20,10 @@ from server.dao.db import db_remove, db_connect, db_init, \
 from server.app import YueApp
 from server.config import Config
 from server.resource.util import get_features
-from server.framework.client import AuthenticatedRestClient, split_auth
+from server.framework.client import AuthenticatedRestClient, split_auth, RegisteredEndpoint
+from server.framework.clientgen import generate_client
 from server.framework.application import FlaskAppClient
+from pprint import pformat
 
 def create(args):
     """Creates the db tables."""
@@ -113,6 +115,17 @@ def import_(args):
 
     db_repopulate(db, db.tables, args.username, args.domain, json_objects)
 
+def generate_client_(args):
+    """
+    generate a python package implementing a client Restful interface
+    to the endpoints defined by the application
+    """
+
+    app = YueApp(Config.null())
+
+    generate_client(app)
+
+
 def test_(args):
 
     app = YueApp(Config.null())
@@ -120,6 +133,15 @@ def test_(args):
     username = "admin"
     password = "admin"
     client = app.client(hostname, username, password, None, None)
+
+    print(dir(client.user_list_users))
+
+    print(client.endpoints())
+    #response = client.user_list_users("production")
+    #response = client.files_upload("default", "test/foo.md", open("README.md"))
+
+
+    #print(response.text)
 
 def main():
 
@@ -186,6 +208,10 @@ def main():
     parser_features = subparsers.add_parser('features',
         help='list known features used by the app')
     parser_features.set_defaults(func=features)
+
+    parser_test = subparsers.add_parser('generate_client',
+        help='generate a client package')
+    parser_test.set_defaults(func=generate_client_)
 
     parser_test = subparsers.add_parser('test',
         help='used for random tests')
