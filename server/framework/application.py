@@ -9,8 +9,20 @@ import argparse
 
 from collections import namedtuple
 RegisteredEndpoint = namedtuple('RegisteredEndpoint',
-    ['path', 'long_name', 'short_name', 'methods', 'params', 'body'])
+    ['path', 'long_name', 'doc', 'methods', 'params', 'body'])
 
+from .client import AuthenticatedRestClient
+
+class FlaskAppClient(object):
+    """docstring for FlaskAppClient"""
+    def __init__(self, rest_client, registered_endpoints):
+        super(FlaskAppClient, self).__init__()
+        self._registered_endpoints = registered_endpoints
+        self._client = rest_client
+
+    def _method_impl(self, *args, **kwargs):
+        print(args)
+        print(kwargs)
 """
     Application Stack:
         Flask Application
@@ -25,6 +37,118 @@ RegisteredEndpoint = namedtuple('RegisteredEndpoint',
         Database
             A database client to SQLite or PostgreSQL.
 """
+
+def generate_argparse(registered_endpoints):
+    """return an ArgumentParser instance enumerating all endpoints
+
+    use the registered endpoints to generate a series of subparsers.
+    Query parameters become optional arguments, and path parameters
+    become positional arguments. Requests that have a body will have
+    a final positional argument which can be a file path, or "-" for
+    stdin.
+
+    when arguments are parsed, the returned args object will have a
+    member function 'func' which is used to unpack the supplied
+    arguments into the url endpoint to call.
+
+    todo: write a function which generates a python client package
+    serialize the _registered_endpoints and refactor this method to
+    generate a class instance.
+    """
+
+    parser = argparse.ArgumentParser(description='yue client')
+
+    parser.add_argument('--username', required=True,
+                    help='username')
+    parser.add_argument('--password', required=False,
+                    help='password')
+    parser.add_argument('--hostname', dest='hostname',
+                    default="https://localhost:4200",
+                    help='the database connection string')
+
+    subparsers = parser.add_subparsers()
+
+    def unpack_args(endpoint, args):
+
+        method = endpoint.methods[0]
+        # use the arguments to construct the url for the request
+        url = endpoint.path
+        i = url.find('<')
+        while i >= 0:
+            j = url.find('>', i)
+            varname = url[i+1:j]
+            if ':' in varname:
+                varname = varname.split(":")[1]
+
+            url = url[:i] + getattr(args, varname) + url[j+1:]
+
+            i = url.find('<', i)
+
+        # unclear what to do about null params
+        params = []
+        for name, _type, _default, _required in endpoint.params:
+            params.append((name,getattr(args, name)))
+
+        body = None
+        _type, _json = endpoint.body
+        if _type is not None:
+            body = getattr(args, "data")
+
+        # TODO: one of the options should be 'requires_auth'
+        options = {}
+
+        if params:
+            options['params'] = {k:v for k,v in params}
+
+        if body is not None:
+            if body == "-":
+                options['data'] = sys.stdin
+            else:
+                options['data'] = open(body, "rb")
+
+        return [method, url, options]
+
+    for endpoint in registered_endpoints:
+        # need a way to hide/rename a _registered_endpoints
+        # when it is registered
+
+        name = endpoint.long_name.lower().replace("resource", "")
+
+        # create the subparser
+        doc = "%s\n%s" % (endpoint.path, endpoint.doc)
+        end_parser = subparsers.add_parser(name, help=doc)
+        end_parser.set_defaults(
+            func=lambda args,endpoint=endpoint: unpack_args(endpoint, args))
+
+        # parse the registered parameters, and generate optional arguments
+        for name, _type, _default, _required in endpoint.params:
+            end_parser.add_argument("--%s" % name,
+                help="%s (%s)" % (_type.__name__, _default),
+                default=_default,
+                required=_required)
+
+        # parse the URL path, and generate positional arguments
+        i = endpoint.path.find('<')
+        while i >= 0:
+            j = endpoint.path.find('>', i)
+            varname = endpoint.path[i+1:j]
+            if ':' in varname:
+                varname = varname.split(":")[1]
+            end_parser.add_argument(varname,
+                help="todo")
+
+            i = endpoint.path.find('<', i+1)
+
+        # todo: add optional methods, if more than 1, default to first
+
+        # if the endpoint requires a body, add a final positional argument
+        # used for uploading a document or stdin
+        _type, _json = endpoint.body
+        if _type is not None:
+            end_parser.add_argument("data",
+                help="file to upload (- for stdin'")
+
+    return parser
 
 class FlaskApp(object):
     """FlaskApp"""
@@ -63,7 +187,7 @@ class FlaskApp(object):
         try:
             self.app.add_url_rule(path, name, callback, **options)
 
-            endpoint = RegisteredEndpoint(path, name, callback.__name__,
+            endpoint = RegisteredEndpoint(path, name, callback.__doc__,
                 options['methods'], params or [], body or (None, False))
             self._registered_endpoints.append(endpoint)
 
@@ -100,115 +224,12 @@ class FlaskApp(object):
         return output
 
     def generate_argparse(self):
-        """return an ArgumentParser instance enumerating all endpoints
+        return generate_argparse(self._registered_endpoints)
 
-        use the registered endpoints to generate a series of subparsers.
-        Query parameters become optional arguments, and path parameters
-        become positional arguments. Requests that have a body will have
-        a final positional argument which can be a file path, or "-" for
-        stdin.
-
-        when arguments are parsed, the returned args object will have a
-        member function 'func' which is used to unpack the supplied
-        arguments into the url endpoint to call.
-
-        todo: write a function which generates a python client package
-        serialize the _registered_endpoints and refactor this method to
-        generate a class instance.
-        """
-
-        parser = argparse.ArgumentParser(description='yue client')
-
-        parser.add_argument('--username', required=True,
-                        help='username')
-        parser.add_argument('--password', required=False,
-                        help='password')
-        parser.add_argument('--hostname', dest='database_url',
-                        default="https://localhost:4200",
-                        help='the database connection string')
-
-        subparsers = parser.add_subparsers()
-
-        def unpack_args(endpoint, args):
-
-            method = endpoint.methods[0]
-            # use the arguments to construct the url for the request
-            url = endpoint.path
-            i = url.find('<')
-            while i >= 0:
-                j = url.find('>', i)
-                varname = url[i+1:j]
-                if ':' in varname:
-                    varname = varname.split(":")[1]
-
-                url = url[:i] + getattr(args, varname) + url[j+1:]
-
-                i = url.find('<', i)
-
-            # unclear what to do about null params
-            params = []
-            for name, _type, _default, _required in endpoint.params:
-                params.append((name,getattr(args, name)))
-
-            body = None
-            _type, _json = endpoint.body
-            if _type is not None:
-                body = getattr(args, "data")
-
-            # TODO: one of the options should be 'requires_auth'
-            options = {}
-
-            if params:
-                options['params'] = {k:v for k,v in params}
-
-            if body is not None:
-                if body == "-":
-                    options['data'] = sys.stdin
-                else:
-                    options['data'] = open(body, "rb")
-
-            return [method, url, options]
-
-        for endpoint in self._registered_endpoints:
-            # need a way to hide/rename a _registered_endpoints
-            # when it is registered
-
-            name = endpoint.long_name.lower().replace("resource", "")
-
-            # create the subparser
-            end_parser = subparsers.add_parser(name, help=endpoint.path)
-            end_parser.set_defaults(
-                func=lambda args,endpoint=endpoint: unpack_args(endpoint, args))
-
-            # parse the registered parameters, and generate optional arguments
-            for name, _type, _default, _required in endpoint.params:
-                end_parser.add_argument("--%s" % name,
-                    help="todo",
-                    default=_default,
-                    required=_required)
-
-            # parse the URL path, and generate positional arguments
-            i = endpoint.path.find('<')
-            while i >= 0:
-                j = endpoint.path.find('>', i)
-                varname = endpoint.path[i+1:j]
-                if ':' in varname:
-                    varname = varname.split(":")[1]
-                end_parser.add_argument(varname,
-                    help="todo")
-
-                i = endpoint.path.find('<', i+1)
-
-            # todo: add optional methods, if more than 1, default to first
-
-            # if the endpoint requires a body, add a final positional argument
-            # used for uploading a document or stdin
-            _type, _json = endpoint.body
-            if _type is not None:
-                end_parser.add_argument("data",
-                    help="file to upload (- for stdin'")
-
-        return parser
+    def client(self, hostname, username, password, domain, role):
+        client = AuthenticatedRestClient(hostname,
+            username, password, domain, role)
+        return FlaskAppClient(client, self._registered_endpoints)
 
     def test_client(self, token = None):
         return AppTestClientWrapper(self.app.test_client(), token)

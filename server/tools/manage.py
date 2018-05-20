@@ -21,6 +21,7 @@ from server.app import YueApp
 from server.config import Config
 from server.resource.util import get_features
 from server.framework.client import AuthenticatedRestClient, split_auth
+from server.framework.application import FlaskAppClient
 
 def create(args):
     """Creates the db tables."""
@@ -59,15 +60,15 @@ def cli(args):
     """
 
     parser = YueApp(Config.null()).generate_argparse()
-
+    print(args.args)
     cli_args = parser.parse_args(args.args)
     method, url, options = cli_args.func(cli_args)
 
     # create a client, connect to the server
-    username, domain, role = split_auth(args.username)
-    password = args.password
+    username, domain, role = split_auth(cli_args.username)
+    password = cli_args.password
 
-    client = AuthenticatedRestClient(args.database_url,
+    client = AuthenticatedRestClient(cli_args.hostname,
         username, password, domain, role)
 
     response = getattr(client, method.lower())(url, **options)
@@ -111,6 +112,14 @@ def import_(args):
     json_objects = _read_json(args.file)
 
     db_repopulate(db, db.tables, args.username, args.domain, json_objects)
+
+def test_(args):
+
+    app = YueApp(Config.null())
+    hostname = "https://localhost:4200"
+    username = "admin"
+    password = "admin"
+    client = app.client(hostname, username, password, None, None)
 
 def main():
 
@@ -177,6 +186,10 @@ def main():
     parser_features = subparsers.add_parser('features',
         help='list known features used by the app')
     parser_features.set_defaults(func=features)
+
+    parser_test = subparsers.add_parser('test',
+        help='used for random tests')
+    parser_test.set_defaults(func=test_)
 
     args = parser.parse_args()
 
