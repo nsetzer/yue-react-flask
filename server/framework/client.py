@@ -209,6 +209,63 @@ class AuthenticatedRestClient(object):
     def __repr__(self):
         return "<%s(%s)>" % (self.__class__.__name__, self.host)
 
+def _request_buider(endpoint, *args, **kwargs):
+    """
+    args: the positional arguments that compose the URL
+           for PUT and POST methods, the final positional
+           argument should be a file like object implementing read(),
+           the body of the request.
+
+    special kwarg options:
+        stream: set True for a streaming download of the response body
+        method: specifiy the exact method to use
+        json:   the request content body is a json document
+
+    returns:
+        method: the method name to process the request,
+                get, put, post, delete
+        url:    the request URL
+        options: an options dictionary formatted for the requests library
+
+    """
+
+    positional = list(args)
+
+    options = {}
+
+    if 'method' in kwargs:
+        # TODO: may want to assert that the chosen method
+        # is a valid method in the set of defined methods
+        # on this endpoint
+        method = kwargs['method'].lower()
+        del kwargs['method']
+    else:
+        method = endpoint.methods[0].lower()
+
+    _type, _json = endpoint.body
+    if _type is not None or method in ["put", "post"]:
+        options['data'] = positional.pop()
+
+    if json:
+        options['json'] = True
+
+    if 'stream' in kwargs:
+        options['stream'] = kwargs['stream']
+        del kwargs['stream']
+
+    param_names = {name for name, _, _, _ in endpoint.params}
+    for key in kwargs.keys():
+        if key not in param_names:
+            raise ParameterException("Unknown keyword argument: %s" % key)
+
+    if len(kwargs) > 0:
+        options['params'] = kwargs
+
+    # todo: validate correct number of arguments given
+    url = url_encode(endpoint.path, lambda v: positional.pop(0))
+
+    return method, url, options
+
 class FlaskAppClient(object):
     """docstring for FlaskAppClient
     """
@@ -241,53 +298,10 @@ class FlaskAppClient(object):
         name: the name of the endpoint to invoke.
               this is a normalized name, for an endpoint
               AppResource.index, name should be app_index
-
-        args: the positional arguments that compose the URL
-               for PUT and POST methods, the final positional
-               argument should be a file like object implementing read(),
-               the body of the request.
-
-        special kwarg options:
-            stream: set True for a streaming download of the response body
-            method: specifiy the exact method to use
-            json:   the request content body is a json document
-
         """
         endpoint = self._endpoints[name]
-        positional = list(args)
 
-        options = {}
-
-        if 'method' in kwargs:
-            # TODO: may want to assert that the chosen method
-            # is a valid method in the set of defined methods
-            # on this endpoint
-            method = kwargs['method'].lower()
-            del kwargs['method']
-        else:
-            method = endpoint.methods[0].lower()
-
-        _type, _json = endpoint.body
-        if _type is not None or method in ["put", "post"]:
-            options['data'] = positional.pop()
-
-        if json:
-            options['json'] = True
-
-        if 'stream' in kwargs:
-            options['stream'] = kwargs['stream']
-            del kwargs['stream']
-
-        param_names = {name for name, _, _, _ in endpoint.params}
-        for key in kwargs.keys():
-            if key not in param_names:
-                raise ParameterException("Unknown keyword argument: %s" % key)
-
-        if len(kwargs) > 0:
-            options['params'] = kwargs
-
-        # todo: validate correct number of arguments given
-        url = url_encode(endpoint.path, lambda v: positional.pop(0))
+        method, url, options = _request_buider(endpoint, *args, **kwargs)
 
         return Response(getattr(self._client, method)(url, **options))
 
@@ -325,6 +339,7 @@ def generate_argparse(registered_endpoints):
     subparsers = parser.add_subparsers()
 
     def unpack_args(endpoint, args):
+        # deprecated, replace with _request_buider
 
         method = endpoint.methods[0]
         # use the arguments to construct the url for the request
