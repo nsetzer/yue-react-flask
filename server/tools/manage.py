@@ -3,9 +3,8 @@ import os, sys, argparse, json
 
 """
 
-python -u -m yue.core.api2 yue.db > yue.json
-python -u server.tools.manage import D:/Dropbox/ConsolePlayer/yue.json
-cat /d/Dropbox/yue.json |
+python -u -m yue.core.api2 D:/Dropbox/ConsolePlayer/yue.db > yue.json
+python -u -m server.tools.manage import yue.json
 
 /c/Python36/python -u -m yue.core.api2 /d/Dropbox/ConsolePlayer/yue.db | \
     python -u util/manage.py import -
@@ -21,6 +20,10 @@ from server.dao.db import db_remove, db_connect, db_init, \
 from server.app import YueApp
 from server.config import Config
 from server.resource.util import get_features
+from server.framework.client import AuthenticatedRestClient, split_auth, RegisteredEndpoint
+from server.framework.clientgen import generate_client
+from server.framework.application import FlaskAppClient
+from pprint import pformat
 
 def create(args):
     """Creates the db tables."""
@@ -47,6 +50,36 @@ def routes(args):
     for endpoint, methods, url in routes:
         print("{:40s} {:20s} {}".format(endpoint, methods, url))
     sys.stdout.flush()
+
+def cli(args):
+    """List application endpoints
+
+    Note this usage:
+      python -m server.tools.manage cli -- --username admin library.get_song_audio
+
+    the -- after cli will cause all remaining arguments to be passed
+    to the cli arg parser
+    """
+
+    parser = YueApp(Config.null()).generate_argparse()
+    print(args.args)
+    cli_args = parser.parse_args(args.args)
+    method, url, options = cli_args.func(cli_args)
+
+    # create a client, connect to the server
+    username, domain, role = split_auth(cli_args.username)
+    password = cli_args.password
+
+    client = AuthenticatedRestClient(cli_args.hostname,
+        username, password, domain, role)
+
+    response = getattr(client, method.lower())(url, **options)
+
+    sys.stdout.write(response.text)
+    if response.status_code >= 400:
+        sys.stderr.write("%s\n" % response)
+        sys.exit(response.status_code)
+
 
 def features(args):
     for feat in sorted(get_features()):
@@ -82,6 +115,34 @@ def import_(args):
 
     db_repopulate(db, db.tables, args.username, args.domain, json_objects)
 
+def generate_client_(args):
+    """
+    generate a python package implementing a client Restful interface
+    to the endpoints defined by the application
+    """
+
+    app = YueApp(Config.null())
+
+    generate_client(app)
+
+
+def test_(args):
+
+    app = YueApp(Config.null())
+    hostname = "https://localhost:4200"
+    username = "admin"
+    password = "admin"
+    client = app.client(hostname, username, password, None, None)
+
+    print(dir(client.user_list_users))
+
+    print(client.endpoints())
+    #response = client.user_list_users("production")
+    #response = client.files_upload("default", "test/foo.md", open("README.md"))
+
+
+    #print(response.text)
+
 def main():
 
     parser = argparse.ArgumentParser(description='database utility')
@@ -99,6 +160,13 @@ def main():
                         help='the database connection string')
 
     subparsers = parser.add_subparsers()
+
+    parser_cli = subparsers.add_parser('cli',
+        help="command line interface client")
+    parser_cli.add_argument('args',
+                            nargs="*",
+                            help='cli arguments')
+    parser_cli.set_defaults(func=cli)
 
     parser_import = subparsers.add_parser('import',
         help="import json files containing song records")
@@ -140,6 +208,14 @@ def main():
     parser_features = subparsers.add_parser('features',
         help='list known features used by the app')
     parser_features.set_defaults(func=features)
+
+    parser_test = subparsers.add_parser('generate_client',
+        help='generate a client package')
+    parser_test.set_defaults(func=generate_client_)
+
+    parser_test = subparsers.add_parser('test',
+        help='used for random tests')
+    parser_test.set_defaults(func=test_)
 
     args = parser.parse_args()
 

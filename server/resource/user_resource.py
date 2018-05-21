@@ -100,6 +100,9 @@ class UserResource(WebResource):
     @get("list/domain/<domain>")
     @requires_auth("user_power")
     def list_users(self, domain):
+        """
+        list all users for a given domain
+        """
 
         user_info = self.user_service.listDomainUsers(domain)
 

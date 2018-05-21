@@ -30,6 +30,8 @@ server:
 
   filesystem:
     media_root: "D:\\Music"
+    other:
+      test: "./test"
 
   transcode:
     audio:

@@ -21,6 +21,12 @@ class FilesystemConfig(BaseConfig):
     def __init__(self, base):
 
         self.media_root = self.get_key(base, 'filesystem', 'media_root', default=os.getcwd())
+        self.media_root = os.path.abspath(self.media_root)
+
+        self.other = {}
+        other = self.get_key(base, 'filesystem', 'other', default={})
+        for k, v in other.items():
+            self.other[k] = os.path.abspath(v)
 
 class TranscodeAudioConfig(BaseConfig):
     def __init__(self, base):

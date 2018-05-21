@@ -5,6 +5,10 @@ import flask
 from flask import url_for, request, g, jsonify
 import json
 import gzip
+import argparse
+
+from .client import RegisteredEndpoint, AuthenticatedRestClient, \
+    FlaskAppClient, generate_argparse
 
 """
     Application Stack:
@@ -45,15 +49,23 @@ class FlaskApp(object):
 
         self.app.after_request(self._add_cors_headers)
 
+        self._registered_endpoints = []
+
     def add_resource(self, res):
 
-        for path, methods, name, func in res.endpoints():
-            self.register(path, name, func, methods=methods)
+        for path, methods, name, func, params, body in res.endpoints():
+            self.register(path, name, func,
+                params=params, body=body, methods=methods)
 
-    def register(self, path, name, callback, **options):
+    def register(self, path, name, callback, params=None, body=None, **options):
         msg = ""
         try:
             self.app.add_url_rule(path, name, callback, **options)
+
+            endpoint = RegisteredEndpoint(path, name, callback.__doc__,
+                options['methods'], params or [], body or (None, False))
+            self._registered_endpoints.append(endpoint)
+
             return
         except AssertionError as e:
             msg = "%s" % e
@@ -85,6 +97,14 @@ class FlaskApp(object):
         #    print("{:30s} {:20s} {}".format(endpoint, methods, url))
 
         return output
+
+    def generate_argparse(self):
+        return generate_argparse(self._registered_endpoints)
+
+    def client(self, hostname, username, password, domain, role):
+        client = AuthenticatedRestClient(hostname,
+            username, password, domain, role)
+        return FlaskAppClient(client, self._registered_endpoints)
 
     def test_client(self, token = None):
         return AppTestClientWrapper(self.app.test_client(), token)

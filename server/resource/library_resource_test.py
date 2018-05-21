@@ -268,7 +268,7 @@ class LibraryResourceTestCase(unittest.TestCase):
             # no path given
             info = {
                 "root": "default",
-                "path": "/tmp/dne",
+                "path": "++dne++",
             }
             result = app.post_json(url, info)
             self.assertEqual(result.status_code, 400, result)

@@ -2,6 +2,7 @@
 import os, sys
 from ..dao.library import Song
 from .util import TranscodeServiceException, FFmpegEncoder
+import logging
 
 from PIL import Image, ImageOps
 
@@ -196,7 +197,8 @@ class TranscodeService(object):
             # when displaying album art as part of a resource, instead
             # of returning the default path, return a 303 redirect
             # to the url of the default art.
-            return None
+            logging.info("album art found: `%s`" % src_path)
+            raise TranscodeServiceException(None, "file not found")
 
         dir, name  = os.path.split(src_path)
         name, _ = os.path.splitext(name)
