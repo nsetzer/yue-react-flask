@@ -3,7 +3,7 @@ import os
 import sys
 from datetime import datetime, timedelta
 from collections import OrderedDict
-
+from io import StringIO
 import bcrypt
 
 def hash_password(password, workfactor=12):
@@ -135,6 +135,37 @@ def pathCorrectCase(path):
                     newpath = os.path.join(newpath,item)
                     break;
             else:
-                raise Exception('Path `%s/%s` not found'%(newpath,temp))
+                raise Exception('Path `%s/%s` not found' % (newpath, temp))
 
     return newpath
+
+class CaptureOutput(object):
+    """docstring for CaptureOutput"""
+    def __init__(self):
+        self._stdout = None
+        self._stderr = None
+
+        self.s_stdout = StringIO()
+        self.s_stderr = StringIO()
+
+    def __enter__(self):
+        self._stdout = sys.stdout
+        self._stderr = sys.stderr
+
+        sys.stdout = self.s_stdout
+        sys.stderr = self.s_stderr
+
+        return self
+
+    def __exit__(self, type, value, traceback):
+        sys.stdout = self._stdout
+        sys.stderr = self._stderr
+
+    def stdout(self):
+        self.s_stdout.flush()
+        return self.s_stdout.getvalue()
+
+    def stderr(self):
+        self.s_stderr.flush()
+        return self.s_stderr.getvalue()
+

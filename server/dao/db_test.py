@@ -7,6 +7,7 @@ from .db import db_connect, db_populate, db_repopulate, \
     db_init_main, db_update_main, ConfigException, yaml_assert
 from .user import UserDao
 from .library import Song, LibraryDao
+from .util import CaptureOutput
 
 class ManageDBTestCase(unittest.TestCase):
 
@@ -194,8 +195,12 @@ class ManageDBTestCase(unittest.TestCase):
         for song in self.songs:
             song[Song.rating] = 10 - song[Song.rating]
 
-        self.assertFalse(db_repopulate(db, db.tables,
-            self.user_name, "dne", self.songs))
+        with CaptureOutput() as cap:
+            self.assertFalse(db_repopulate(db, db.tables,
+                self.user_name, "dne", self.songs))
+
+            self.assertEqual(cap.stderr().strip(),
+                             "Domain with name `dne` not found")
 
     def test_002b_db_repopulate_invalid_name(self):
 
@@ -204,8 +209,12 @@ class ManageDBTestCase(unittest.TestCase):
         for song in self.songs:
             song[Song.rating] = 10 - song[Song.rating]
 
-        self.assertFalse(db_repopulate(db, db.tables,
-            "dne", self.domain_name, self.songs))
+        with CaptureOutput() as cap:
+            self.assertFalse(db_repopulate(db, db.tables,
+                "dne", self.domain_name, self.songs))
+
+            self.assertEqual(cap.stderr().strip(),
+                             "User with name `dne` not found")
 
     def test_003_db_update(self):
         db = self.db

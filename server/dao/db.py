@@ -84,12 +84,12 @@ def db_populate(db, dbtables, user_name, domain_name, json_objects):
 
     domain = userDao.findDomainByName(domain_name)
     if domain is None:
-        sys.stdout.write("Domain with name `%s` not found" % domain_name)
+        sys.stderr.write("Domain with name `%s` not found" % domain_name)
         return
 
     user = userDao.findUserByEmail(user_name)
     if user is None:
-        sys.stdout.write("User with name `%s` not found" % user_name)
+        sys.stderr.write("User with name `%s` not found" % user_name)
         return
 
     start = time.time()
@@ -122,12 +122,12 @@ def db_repopulate(db, dbtables, user_name, domain_name, json_objects):
 
     domain = userDao.findDomainByName(domain_name)
     if domain is None:
-        sys.stdout.write("Domain with name `%s` not found\n" % domain_name)
+        sys.stderr.write("Domain with name `%s` not found\n" % domain_name)
         return False
 
     user = userDao.findUserByEmail(user_name)
     if user is None:
-        sys.stdout.write("User with name `%s` not found\n" % user_name)
+        sys.stderr.write("User with name `%s` not found\n" % user_name)
         return False
 
     start = time.time()

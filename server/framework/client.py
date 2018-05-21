@@ -1,4 +1,5 @@
 
+import sys
 import json
 import requests
 import base64
@@ -37,7 +38,43 @@ def split_auth(authas):
 
     return user, domain, role
 
+def url_encode(url, f):
+
+    i = url.find('<')
+    while i >= 0:
+        j = url.find('>', i)
+        varname = url[i + 1:j]
+        if ':' in varname:
+            varname = varname.split(":")[1]
+
+        s = quote(f(varname))
+        url = url[:i] + s + url[j + 1:]
+
+        i = url.find('<', i)
+
+    return url
+
+def url_decode(url):
+    variables = []
+    i = url.find('<')
+    while i >= 0:
+        j = url.find('>', i)
+        varname = url[i + 1:j]
+
+        typename = "str"
+        if ':' in varname:
+            typename, varname = varname.split(":")
+
+        variables.append((typename, varname))
+
+        i = url.find('<', i + 1)
+
+    return variables
+
 class ClientException(Exception):
+    pass
+
+class ParameterException(ClientException):
     pass
 
 class Response(object):
@@ -51,19 +88,19 @@ class Response(object):
 
     def __getattr__(self, attr):
 
-        if attr == "json":
-
-            data = self._response.json()
-            if self._response.status_code >= 400:
-                message = "server returned error statues: %s" % \
-                    self._response.status_code
-                if 'error' in data:
-                    message = data['error']
-                raise ClientException(message)
-            return self._response.json
-
         if hasattr(self._response, attr):
             return getattr(self._response, attr)
+
+    def json(self):
+
+        data = self._response.json()
+        if self._response.status_code >= 400:
+            message = "server returned error statues: %s" % \
+                self._response.status_code
+            if 'error' in data:
+                message = data['error']
+            raise ClientException(message)
+        return data
 
     def stream(self, chunk_size=1024):
         for chunk in self._response.iter_content(chunk_size=chunk_size):
@@ -85,7 +122,7 @@ class AuthenticatedRestClient(object):
 
         self._session = requests
 
-    def set_session(self, session):
+    def setSession(self, session):
         """
         set a session context to use for subsequent requests
 
@@ -172,8 +209,6 @@ class AuthenticatedRestClient(object):
     def __repr__(self):
         return "<%s(%s)>" % (self.__class__.__name__, self.host)
 
-
-
 class FlaskAppClient(object):
     """docstring for FlaskAppClient
     """
@@ -215,6 +250,7 @@ class FlaskAppClient(object):
         special kwarg options:
             stream: set True for a streaming download of the response body
             method: specifiy the exact method to use
+            json:   the request content body is a json document
 
         """
         endpoint = self._endpoints[name]
@@ -231,30 +267,27 @@ class FlaskAppClient(object):
         else:
             method = endpoint.methods[0].lower()
 
-        body = None
-        if endpoint.body[0] is not None or method in ["put", "post"]:
+        _type, _json = endpoint.body
+        if _type is not None or method in ["put", "post"]:
             options['data'] = positional.pop()
+
+        if json:
+            options['json'] = True
 
         if 'stream' in kwargs:
             options['stream'] = kwargs['stream']
             del kwargs['stream']
 
+        param_names = {name for name, _, _, _ in endpoint.params}
+        for key in kwargs.keys():
+            if key not in param_names:
+                raise ParameterException("Unknown keyword argument: %s" % key)
+
         if len(kwargs) > 0:
             options['params'] = kwargs
 
         # todo: validate correct number of arguments given
-        url = endpoint.path
-        i = url.find('<')
-        while i >= 0:
-            j = url.find('>', i)
-            varname = url[i+1:j]
-            if ':' in varname:
-                varname = varname.split(":")[1]
-
-            s = quote(positional.pop(0))
-            url = url[:i] + s + url[j+1:]
-
-            i = url.find('<', i)
+        url = url_encode(endpoint.path, lambda v: positional.pop(0))
 
         return Response(getattr(self._client, method)(url, **options))
 
@@ -295,22 +328,12 @@ def generate_argparse(registered_endpoints):
 
         method = endpoint.methods[0]
         # use the arguments to construct the url for the request
-        url = endpoint.path
-        i = url.find('<')
-        while i >= 0:
-            j = url.find('>', i)
-            varname = url[i+1:j]
-            if ':' in varname:
-                varname = varname.split(":")[1]
-
-            url = url[:i] + getattr(args, varname) + url[j+1:]
-
-            i = url.find('<', i)
+        url = url_encode(endpoint.path, lambda v: getattr(args, v))
 
         # unclear what to do about null params
         params = []
         for name, _type, _default, _required in endpoint.params:
-            params.append((name,getattr(args, name)))
+            params.append((name, getattr(args, name)))
 
         body = None
         _type, _json = endpoint.body
@@ -321,7 +344,7 @@ def generate_argparse(registered_endpoints):
         options = {}
 
         if params:
-            options['params'] = {k:v for k,v in params}
+            options['params'] = {k: v for k, v in params}
 
         if body is not None:
             if body == "-":
@@ -341,7 +364,7 @@ def generate_argparse(registered_endpoints):
         doc = "%s" % (endpoint.path)
         end_parser = subparsers.add_parser(name, help=doc)
         end_parser.set_defaults(
-            func=lambda args,endpoint=endpoint: unpack_args(endpoint, args))
+            func=lambda args, endpoint=endpoint: unpack_args(endpoint, args))
 
         # parse the registered parameters, and generate optional arguments
         for name, _type, _default, _required in endpoint.params:
@@ -351,16 +374,9 @@ def generate_argparse(registered_endpoints):
                 required=_required)
 
         # parse the URL path, and generate positional arguments
-        i = endpoint.path.find('<')
-        while i >= 0:
-            j = endpoint.path.find('>', i)
-            varname = endpoint.path[i+1:j]
-            if ':' in varname:
-                varname = varname.split(":")[1]
+        for typename, varname in url_decode(endpoint.path):
             end_parser.add_argument(varname,
                 help="todo")
-
-            i = endpoint.path.find('<', i+1)
 
         # todo: add optional methods, if more than 1, default to first
 
@@ -369,6 +385,7 @@ def generate_argparse(registered_endpoints):
         _type, _json = endpoint.body
         if _type is not None:
             end_parser.add_argument("data",
-                help="file to upload (- for stdin'")
+                help="file to upload (- for stdin)")
 
     return parser
+
