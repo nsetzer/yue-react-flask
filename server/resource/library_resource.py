@@ -165,7 +165,8 @@ class LibraryResource(WebResource):
     @requires_auth("library_write_song")
     def set_song_audio(self, song_id):
 
-        abs_path = self.filesys_service.getPath(g.body['root'], g.body['path'])
+        abs_path = self.filesys_service.getPath(
+            g.current_user, g.body['root'], g.body['path'])
 
         try:
             self.audio_service.setSongFilePath(
@@ -201,7 +202,8 @@ class LibraryResource(WebResource):
     @requires_auth("library_write_song")
     def set_song_art(self, song_id):
 
-        abs_path = self.filesys_service.getPath(g.body['root'], g.body['path'])
+        abs_path = self.filesys_service.getPath(
+            g.current_user, g.body['root'], g.body['path'])
         try:
             self.audio_service.setSongAlbumArtPath(
                 g.current_user, song_id, abs_path)

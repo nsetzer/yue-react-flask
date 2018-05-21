@@ -6,7 +6,7 @@ import argparse
 import requests.exceptions as exceptions
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-
+from requests.utils import quote
 import logging
 
 from collections import namedtuple
@@ -36,6 +36,39 @@ def split_auth(authas):
         user = authas
 
     return user, domain, role
+
+class ClientException(Exception):
+    pass
+
+class Response(object):
+    """
+    wrap the requests response object to throw an exception when the
+    json data is accessed and the response is successful
+    """
+    def __init__(self, response):
+        super(Response, self).__init__()
+        self._response = response
+
+    def __getattr__(self, attr):
+
+        if attr == "json":
+
+            data = self._response.json()
+            if self._response.status_code >= 400:
+                message = "server returned error statues: %s" % \
+                    self._response.status_code
+                if 'error' in data:
+                    message = data['error']
+                raise ClientException(message)
+            return self._response.json
+
+        if hasattr(self._response, attr):
+            return getattr(self._response, attr)
+
+    def stream(self, chunk_size=1024):
+        for chunk in self._response.iter_content(chunk_size=chunk_size):
+            if chunk:
+                yield chunk
 
 class AuthenticatedRestClient(object):
     """a basic https client for making authenticated requests"""
@@ -140,8 +173,10 @@ class AuthenticatedRestClient(object):
         return "<%s(%s)>" % (self.__class__.__name__, self.host)
 
 
+
 class FlaskAppClient(object):
-    """docstring for FlaskAppClient"""
+    """docstring for FlaskAppClient
+    """
     def __init__(self, rest_client, registered_endpoints):
         super(FlaskAppClient, self).__init__()
 
@@ -166,19 +201,43 @@ class FlaskAppClient(object):
             return impl
 
     def _method_impl(self, name, *args, **kwargs):
+        """
 
+        name: the name of the endpoint to invoke.
+              this is a normalized name, for an endpoint
+              AppResource.index, name should be app_index
+
+        args: the positional arguments that compose the URL
+               for PUT and POST methods, the final positional
+               argument should be a file like object implementing read(),
+               the body of the request.
+
+        special kwarg options:
+            stream: set True for a streaming download of the response body
+            method: specifiy the exact method to use
+
+        """
         endpoint = self._endpoints[name]
-        print(endpoint)
         positional = list(args)
-
-        # todo: unpack 'method' from kwargs, if more than one option
-        method = endpoint.methods[0]
 
         options = {}
 
+        if 'method' in kwargs:
+            # TODO: may want to assert that the chosen method
+            # is a valid method in the set of defined methods
+            # on this endpoint
+            method = kwargs['method'].lower()
+            del kwargs['method']
+        else:
+            method = endpoint.methods[0].lower()
+
         body = None
-        if endpoint.body[0] is not None or method in ["PUT", "POST"]:
+        if endpoint.body[0] is not None or method in ["put", "post"]:
             options['data'] = positional.pop()
+
+        if 'stream' in kwargs:
+            options['stream'] = kwargs['stream']
+            del kwargs['stream']
 
         if len(kwargs) > 0:
             options['params'] = kwargs
@@ -192,11 +251,12 @@ class FlaskAppClient(object):
             if ':' in varname:
                 varname = varname.split(":")[1]
 
-            url = url[:i] + positional.pop(0) + url[j+1:]
+            s = quote(positional.pop(0))
+            url = url[:i] + s + url[j+1:]
 
             i = url.find('<', i)
 
-        return getattr(self._client, method.lower())(url, **options)
+        return Response(getattr(self._client, method)(url, **options))
 
     def endpoints(self):
         return self._endpoints.keys()

@@ -4,6 +4,13 @@ import os, sys
 from stat import S_ISDIR, S_ISREG, S_IRGRP
 from .util import FileSysServiceException, FFmpegEncoder
 
+import logging
+
+from unicodedata import normalize
+
+# taken from werkzeug.util.secure_file
+_windows_device_files = ('CON', 'AUX', 'COM1', 'COM2', 'COM3', 'COM4', 'LPT1',
+                         'LPT2', 'LPT3', 'PRN', 'NUL')
 
 class FileSysService(object):
     """docstring for FileSysService"""
@@ -26,37 +33,73 @@ class FileSysService(object):
     def instance():
         return FileSysService._instance
 
-    def getPath(self, fs_name, path):
+    def getRoots(self, user):
+        roots = ["default"]
+        for k in self.config.filesystem.other.keys():
+            roots.append(k)
+        return sorted(roots)
+
+    def getRootPath(self, user, fs_name):
+
+        if fs_name == "default":
+            return self.config.filesystem.media_root
+        elif fs_name in self.config.filesystem.other:
+            return self.config.filesystem.other[fs_name]
+
+        raise FileSysServiceException(user, "invalid name: `%s`" % fs_name)
+
+    def getPath(self, user, fs_name, path):
         """
         returns a (possibly relative) file path given the name of a
         file system (which determines the base directory) and a path.
         the path is guaranteed to be a sub directory of the named fs.
         """
 
-        if fs_name != "default":
-            raise FileSysServiceException("invalid name: %s" % fs_name)
+        os_root = self.getRootPath(user, fs_name)
 
-        os_root = self.config.filesystem.media_root
+        path = normalize('NFKD', path)
+
+        if not path.strip():
+            return os_root
+
+        if os.path.isabs(path):
+            raise FileSysServiceException(user, "path must not be absolute")
+
+        parts = path.replace("\\", "/").split("/")
+        if any([p in (".", "..") for p in parts]):
+            # path must be relative to os_root...
+            raise FileSysServiceException(user, "relative paths not allowed")
+
+        if any([ (not p.strip()) for p in parts]):
+            raise FileSysServiceException(user, "empty path component")
+
+        if os.name == 'nt':
+            if any([p in _windows_device_files for p in parts]):
+                raise FileSysServiceException(user, "invalid windows path name")
+
         # todo: this does not provide the strong guarantee expected.
         # todo: this should always return an absolute path
-        return os.path.join(os_root, path)
+        abs_path = os.path.abspath(os.path.join(os_root, path))
 
-    def listDirectory(self, fs_name, path):
+        #if not parent.startswith(os_root):
+        #    parent = os_root
+
+        return abs_path
+
+    def listDirectory(self, user, fs_name, path):
         """
 
         todo: check for .yueignore in the root, or in the given path
         use to load filters to remove elements from the response
         """
 
-        if fs_name != "default":
-            raise FileSysServiceException("invalid name: %s" % fs_name)
+        os_root = self.getRootPath(user, fs_name)
+        abs_path = self.getPath(user, fs_name, path)
 
-        os_root = self.config.filesystem.media_root
-        abs_path = self.getPath(fs_name, path)
-
-        parent, _ = os.path.split(abs_path)
-        if not parent.startswith(os_root):
+        if abs_path == os_root:
             parent = os_root
+        else:
+            parent, _ = os.path.split(abs_path)
 
         files = []
         dirs = []
@@ -71,15 +114,18 @@ class FileSysService(object):
             if S_ISDIR(mode):
                 dirs.append(name)
             elif S_ISREG(mode):
-                files.append({"name": name, "size": st.st_size})
+                files.append({"name": name,
+                              "size": st.st_size,
+                              "mtime": int(st.st_mtime)})
 
         files.sort(key=lambda f: f['name'])
         dirs.sort()
 
+        os_root_normalized = os_root.replace("\\", "/")
         def trim_path(p):
             p = p.replace("\\", "/")
-            if p.startswith(os_root):
-                p = p[len(os_root):]
+            if p.startswith(os_root_normalized):
+                p = p[len(os_root_normalized):]
             while p.startswith("/"):
                 p = p[1:]
             return p
@@ -102,9 +148,9 @@ class FileSysService(object):
 
         return result
 
-    def saveFile(self, fs_name, path, stream):
+    def saveFile(self, user, fs_name, path, stream, mtime=None):
 
-        path = self.getPath(fs_name, path)
+        path = self.getPath(user, fs_name, path)
 
         dirpath, _ = os.path.split(path)
         if not os.path.exists(dirpath):
@@ -115,3 +161,6 @@ class FileSysService(object):
             while buf:
                 wb.write(buf)
                 buf = stream.read(2048)
+
+        if mtime is not None:
+            os.utime(path, (mtime, mtime))

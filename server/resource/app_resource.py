@@ -27,6 +27,10 @@ class AppResource(WebResource):
 
     @get("/<path:path>")
     def index2(self, path):
+        # return an error for malformed api requests, instead
+        # of returning the bundle
+        if path.startswith("api/"):
+            return httpError(400, "unknown path")
         path = os.path.join(self.config.build_dir, 'index.html')
         return open(path).read()
 

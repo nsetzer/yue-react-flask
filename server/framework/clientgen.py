@@ -44,7 +44,8 @@ def generate_client(app, name="client", outdir="."):
     py_cli = os.path.join(client_dir, "cli.py")
     with open(py_cli, "w") as wf:
         wf.write(header)
-        wf.write("from .client_impl import generate_argparse\n")
+        wf.write("import sys\n")
+        wf.write("from .client_impl import generate_argparse, split_auth, AuthenticatedRestClient\n")
         wf.write("from .endpoints import endpoints\n")
         wf.write("def main():\n")
         wf.write("    parser = generate_argparse(endpoints)\n")
@@ -54,7 +55,7 @@ def generate_client(app, name="client", outdir="."):
         wf.write("    username, domain, role = split_auth(args.username)\n")
         wf.write("    password = args.password\n")
 
-        wf.write("    client = AuthenticatedRestClient(cli_args.hostname,\n")
+        wf.write("    client = AuthenticatedRestClient(args.hostname,\n")
         wf.write("             username, password, domain, role)\n")
 
         wf.write("    response = getattr(client, method.lower())(\n")
@@ -75,7 +76,7 @@ def generate_client(app, name="client", outdir="."):
         wf.write("                         FlaskAppClient\n")
         wf.write("from .endpoints import endpoints\n")
 
-        wf.write("def client(self, hostname, username, password, domain, role):\n")
+        wf.write("def connect(hostname, username, password, domain=None, role=None):\n")
         wf.write("    client = AuthenticatedRestClient(hostname,\n")
         wf.write("             username, password, domain, role)\n")
         wf.write("    return FlaskAppClient(client, endpoints)\n")
