@@ -20,8 +20,7 @@ from server.dao.db import db_remove, db_connect, db_init, \
 from server.app import YueApp
 from server.config import Config
 from server.resource.util import get_features
-from server.framework.client import (AuthenticatedRestClient, Response,
-    split_auth, RegisteredEndpoint)
+from server.framework.client import cli_main
 from server.framework.clientgen import generate_client
 from server.framework.application import FlaskAppClient
 from pprint import pformat
@@ -62,34 +61,7 @@ def cli(args):
     to the cli arg parser
     """
 
-    parser = YueApp(Config.null()).generate_argparse()
-    cli_args = parser.parse_args(args.args)
-    method, url, options = cli_args.func(cli_args)
-
-    # create a client, connect to the server
-    username, domain, role = split_auth(cli_args.username)
-    password = cli_args.password
-
-    client = AuthenticatedRestClient(cli_args.host,
-        username, password, domain, role)
-
-    logging.basicConfig(format='%(asctime)-15s %(message)s',
-        level=logging.DEBUG if cli_args.verbose else logging.INFO)
-
-    response = Response(getattr(client, method.lower())(url, **options))
-
-    if cli_args.verbose:
-        for name, value in response.headers.items():
-            sys.stderr.write("%s: %s\n" % (name, value))
-
-    if response.status_code >= 400:
-        sys.stderr.write("%s\n" % response.text)
-        sys.exit(response.status_code)
-
-    for chunk in response.stream():
-        sys.stdout.buffer.write(chunk)
-
-
+    cli_main(YueApp(Config.null())._registered_endpoints, args.args)
 
 def features(args):
     for feat in sorted(get_features()):

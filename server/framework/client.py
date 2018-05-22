@@ -428,3 +428,31 @@ def generate_argparse(registered_endpoints):
 
     return parser
 
+def cli_main(endpoints, args):
+
+    parser = generate_argparse(endpoints)
+    cli_args = parser.parse_args(args)
+    method, url, options = cli_args.func(cli_args)
+
+    # create a client, connect to the server
+    username, domain, role = split_auth(cli_args.username)
+    password = cli_args.password
+
+    client = AuthenticatedRestClient(cli_args.host,
+        username, password, domain, role)
+
+    logging.basicConfig(format='%(asctime)-15s %(message)s',
+        level=logging.DEBUG if cli_args.verbose else logging.INFO)
+
+    response = Response(getattr(client, method.lower())(url, **options))
+
+    if cli_args.verbose:
+        for name, value in response.headers.items():
+            sys.stderr.write("%s: %s\n" % (name, value))
+
+    if response.status_code >= 400:
+        sys.stderr.write("%s\n" % response.text)
+        sys.exit(response.status_code)
+
+    for chunk in response.stream():
+        sys.stdout.buffer.write(chunk)
