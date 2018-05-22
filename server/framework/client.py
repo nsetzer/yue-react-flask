@@ -19,6 +19,9 @@ from collections import namedtuple
 RegisteredEndpoint = namedtuple('RegisteredEndpoint',
     ['path', 'long_name', 'doc', 'methods', 'params', 'body'])
 
+Parameter = namedtuple('Parameter',
+    ['name', 'type', 'default', 'required', 'doc'])
+
 def split_auth(authas):
     """ parse a string user@domain/role into basic parts
 
@@ -47,7 +50,15 @@ def url_encode(url, f):
         if ':' in varname:
             varname = varname.split(":")[1]
 
-        s = quote(f(varname))
+        error = None
+        try:
+            s = quote(f(varname))
+        except Exception as e:
+            error = "error formating variable: %s" % varname
+
+        if error is not None:
+            raise UrlEncodeException(error)
+
         url = url[:i] + s + url[j + 1:]
 
         i = url.find('<', i)
@@ -72,6 +83,9 @@ def url_decode(url):
     return variables
 
 class ClientException(Exception):
+    pass
+
+class UrlEncodeException(ClientException):
     pass
 
 class ParameterException(ClientException):
@@ -209,7 +223,7 @@ class AuthenticatedRestClient(object):
     def __repr__(self):
         return "<%s(%s)>" % (self.__class__.__name__, self.host)
 
-def _request_buider(endpoint, *args, **kwargs):
+def _request_builder(endpoint, *args, **kwargs):
     """
     args: the positional arguments that compose the URL
            for PUT and POST methods, the final positional
@@ -252,16 +266,25 @@ def _request_buider(endpoint, *args, **kwargs):
         options['stream'] = kwargs['stream']
         del kwargs['stream']
 
-    param_names = {name for name, _, _, _ in endpoint.params}
+    param_names = {p.name for p in endpoint.params}
     for key in kwargs.keys():
         if key not in param_names:
             raise ParameterException("Unknown keyword argument: %s" % key)
 
     if len(kwargs) > 0:
+        # we get this for free using the requests library, null parameters
+        # are not sent as part of the request. However, make this behavior
+        # explicit, so that we do not depend on the underlying library
+        # doing the right thing.
+        for key in list(kwargs.keys()):
+            if kwargs[key] is None:
+                del kwargs[key]
         options['params'] = kwargs
 
-    # todo: validate correct number of arguments given
     url = url_encode(endpoint.path, lambda v: positional.pop(0))
+
+    if len(positional) > 0:
+        raise UrlEncodeException("too many positional arguments provided")
 
     return method, url, options
 
@@ -271,7 +294,7 @@ def _request_args_builder(endpoint, args):
     for typename, varname in url_decode(endpoint.path):
         positional.append(getattr(args, varname))
 
-    kwargs = {param[0]:getattr(args, param[0]) for param in endpoint.params}
+    kwargs = {param[0]:getattr(args, param.name) for param in endpoint.params}
 
     for extra in ['stream', 'json', 'method']:
         if hasattr(args, extra):
@@ -286,7 +309,7 @@ def _request_args_builder(endpoint, args):
 
         positional.append(data)
 
-    return _request_buider(endpoint, *positional, **kwargs)
+    return _request_builder(endpoint, *positional, **kwargs)
 
 class FlaskAppClient(object):
     """docstring for FlaskAppClient
@@ -323,7 +346,7 @@ class FlaskAppClient(object):
         """
         endpoint = self._endpoints[name]
 
-        method, url, options = _request_buider(endpoint, *args, **kwargs)
+        method, url, options = _request_builder(endpoint, *args, **kwargs)
 
         return Response(getattr(self._client, method)(url, **options))
 
@@ -342,10 +365,6 @@ def generate_argparse(registered_endpoints):
     when arguments are parsed, the returned args object will have a
     member function 'func' which is used to unpack the supplied
     arguments into the url endpoint to call.
-
-    todo: write a function which generates a python client package
-    serialize the _registered_endpoints and refactor this method to
-    generate a class instance.
     """
 
     parser = argparse.ArgumentParser(description='yue client')
@@ -360,6 +379,8 @@ def generate_argparse(registered_endpoints):
 
     subparsers = parser.add_subparsers()
 
+    index_name = ["1st", "2nd", "3rd", "4th", "5th",
+                  "6th", "7th", "8th", "9th", "10th"]
     for endpoint in registered_endpoints:
         # need a way to hide/rename a _registered_endpoints
         # when it is registered
@@ -374,22 +395,23 @@ def generate_argparse(registered_endpoints):
                 _request_args_builder(endpoint, args))
 
         # parse the registered parameters, and generate optional arguments
-        for name, _type, _default, _required in endpoint.params:
-            end_parser.add_argument("--%s" % name,
-                help="todo",
-                default=_default,
-                required=_required)
+        for param in endpoint.params:
+            end_parser.add_argument("--%s" % param.name,
+                help=param.doc,
+                default=param.default,
+                required=param.required)
 
         # parse the URL path, and generate positional arguments
-        for typename, varname in url_decode(endpoint.path):
+
+        for i, (typename, varname) in enumerate(url_decode(endpoint.path)):
+            idx = index_name[i] if i <= len(index_name) else "%dth" % i
+            doc = "%s path component (type: %s)" % (idx, typename)
             end_parser.add_argument(varname,
-                help="todo")
+                help=doc)
 
         if len(endpoint.methods) > 1:
             end_parser.add_argument("--method", default=endpoints.methods[0],
-                type=str, help="todo")
-
-        # todo: add optional methods, if more than 1, default to first
+                type=str, help="specify http method to use for the request")
 
         # if the endpoint requires a body, add a final positional argument
         # used for uploading a document or stdin
@@ -397,7 +419,6 @@ def generate_argparse(registered_endpoints):
         if _type is not None:
             end_parser.add_argument("data",
                 help="file to upload (- for stdin)")
-
 
             end_parser.add_argument("--stream", default=True,
                 type=str, help="enable streaming upload")

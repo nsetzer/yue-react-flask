@@ -7,7 +7,7 @@ import json
 import gzip
 import argparse
 
-from .client import RegisteredEndpoint, AuthenticatedRestClient, \
+from .client import RegisteredEndpoint, Parameter, AuthenticatedRestClient, \
     FlaskAppClient, generate_argparse
 
 """
@@ -62,8 +62,20 @@ class FlaskApp(object):
         try:
             self.app.add_url_rule(path, name, callback, **options)
 
+            body = body or (None, False)
+
+            if body[0] is not None:
+                body = (body[0].__name__, body[1])
+
+            params = params or []
+            new_params = []
+            for param in params:
+                data = param._asdict()
+                data['type'] = param.type.__name__
+                new_params.append(Parameter(**data))
+
             endpoint = RegisteredEndpoint(path, name, callback.__doc__,
-                options['methods'], params or [], body or (None, False))
+                options['methods'], params, body)
             self._registered_endpoints.append(endpoint)
 
             return
@@ -113,7 +125,7 @@ class FlaskApp(object):
 
         routes = self.list_routes()
         for endpoint, methods, url in routes:
-            print("{:40s} {:20s} {}".format(endpoint, methods, url))
+            sys.stdout.write("{:40s} {:20s} {}\n".format(endpoint, methods, url))
         sys.stdout.flush()
 
         self.app.run(host=self.config.host,

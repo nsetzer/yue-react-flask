@@ -62,7 +62,6 @@ def cli(args):
     """
 
     parser = YueApp(Config.null()).generate_argparse()
-    print(args.args)
     cli_args = parser.parse_args(args.args)
     method, url, options = cli_args.func(cli_args)
 

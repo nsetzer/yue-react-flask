@@ -6,6 +6,7 @@ import time
 from ..app import TestApp
 from .util import uuid_validator
 from ..dao.library import Song
+from ..dao.util import CaptureOutput
 
 from io import BytesIO
 import gzip
@@ -134,21 +135,23 @@ class LibraryResourceTestCase(unittest.TestCase):
 
         username = "user000"
         song_id = self.app.SONGIDS[0]
-        with self.app.login(username, username) as app:
+        with CaptureOutput():
+            with self.app.login(username, username) as app:
 
-            qs = {"end": 0}
-            result = app.get("/api/library/history", query_string=qs)
-            self.assertEqual(result.status_code, 400, result)
+                qs = {"end": 0}
+                result = app.get("/api/library/history", query_string=qs)
+                self.assertEqual(result.status_code, 400, result)
 
     def test_001c_history_get_no_end(self):
 
         username = "user000"
         song_id = self.app.SONGIDS[0]
-        with self.app.login(username, username) as app:
+        with CaptureOutput():
+            with self.app.login(username, username) as app:
 
-            qs = {"start": 0}
-            result = app.get("/api/library/history", query_string=qs)
-            self.assertEqual(result.status_code, 400, result)
+                qs = {"start": 0}
+                result = app.get("/api/library/history", query_string=qs)
+                self.assertEqual(result.status_code, 400, result)
 
     def test_002a_update_song(self):
 
@@ -191,9 +194,11 @@ class LibraryResourceTestCase(unittest.TestCase):
         }
 
         username = "admin"
-        with self.app.login(username, username) as app:
-            result = app.put_json('/api/library', [song_update])
-            self.assertEqual(result.status_code, 400, result)
+
+        with CaptureOutput():
+            with self.app.login(username, username) as app:
+                result = app.put_json('/api/library', [song_update])
+                self.assertEqual(result.status_code, 400, result)
 
     def test_002c_update_song_path(self):
         """ test that the file path can be updated.
@@ -263,15 +268,16 @@ class LibraryResourceTestCase(unittest.TestCase):
         url = '/api/library/%s/audio' % song_id
 
         username = "admin"
-        with self.app.login(username, username) as app:
+        with CaptureOutput():
+            with self.app.login(username, username) as app:
 
-            # no path given
-            info = {
-                "root": "default",
-                "path": "++dne++",
-            }
-            result = app.post_json(url, info)
-            self.assertEqual(result.status_code, 400, result)
+                # no path given
+                info = {
+                    "root": "default",
+                    "path": "++dne++",
+                }
+                result = app.post_json(url, info)
+                self.assertEqual(result.status_code, 400, result)
 
     def test_002f_update_song_art_path(self):
         """ test that the file art path can be updated.
@@ -346,9 +352,10 @@ class LibraryResourceTestCase(unittest.TestCase):
         }
 
         username = "admin"
-        with self.app.login(username, username) as app:
-            result = app.post_json('/api/library', song)
-            self.assertEqual(result.status_code, 400, result)
+        with CaptureOutput():
+            with self.app.login(username, username) as app:
+                result = app.post_json('/api/library', song)
+                self.assertEqual(result.status_code, 400, result)
 
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(LibraryResourceTestCase)

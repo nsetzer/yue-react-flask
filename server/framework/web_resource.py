@@ -3,6 +3,8 @@ from functools import wraps
 from flask import after_this_request, request, g, jsonify
 from collections import namedtuple
 
+from .client import Parameter
+
 from io import BytesIO
 import gzip
 import datetime
@@ -16,14 +18,14 @@ def validate(expr, value):
         raise Exception("invalid input")
     return value
 
-def vmin(target,value):
+def vmin(target, value):
     return validate(target <= value, value)
 
 def vmax(target, value):
     return validate(target >= value, value)
 
 # validate that an integer is between two numbers
-int_range = lambda min_, max_: lambda v: vmax(max_,vmin(min_, int(v)))
+int_range = lambda min_, max_: lambda v: vmax(max_, vmin(min_, int(v)))
 # validate that an integer is larger than some number
 int_min = lambda min_: lambda v: vmin(min_, int(v))
 # validate that an integer is smaller than some number
@@ -41,22 +43,24 @@ def _endpoint_mapper(f):
     def wrapper(*args, **kwargs):
         g.args = lambda: None
         if hasattr(f, "_params"):
-            for name, type_, default, required in f._params:
-                if required and name not in request.args:
+            for param in f._params:
+                if param.required and param.name not in request.args:
                     return httpError(400,
-                        "required query parameter `%s` not found" % name)
+                        "required query parameter `%s` not found" % param.name)
 
                 # validate the query parameter and add it to the request args
                 try:
-                    if name in request.args:
-                        value = type_(request.args[name])
+                    if param.name in request.args:
+                        value = param.type(request.args[param.name])
                     else:
-                        value = default
+                        value = param.default
                 except Exception as e:
                     logging.exception("%s" % e)
                     return httpError(400,
-                        "unable to validate query parameter: %s=%s" % (name, request.args[name]))
-                setattr(g.args, name, value)
+                        "unable to validate query parameter: %s=%s" % (
+                            param.name, request.args[param.name]))
+
+                setattr(g.args, param.name, value)
         if hasattr(f, "_body"):
             try:
                 type_, json = f._body
@@ -99,13 +103,13 @@ def delete(path):
         return _endpoint_mapper(f)
     return decorator
 
-def param(name, type_=str, default=None, required=False):
+def param(name, type_=str, default=None, required=False, doc=""):
     """decorator which validates query parameters"""
 
     def decorator(f):
         if not hasattr(f, "_params"):
             f._params = []
-        f._params.append((name, type_, default, required))
+        f._params.append(Parameter(name, type_, default, required, doc))
         return f
     return decorator
 
@@ -180,7 +184,7 @@ class MetaWebResource(type):
                 endpoint = WebEndpoint(path, methods, fname,
                     func, _params, _body)
 
-                cls._class_endpoints.append( endpoint )
+                cls._class_endpoints.append(endpoint)
 
 class WebResource(object, metaclass = MetaWebResource):
     """base class for a WebResource
@@ -188,7 +192,6 @@ class WebResource(object, metaclass = MetaWebResource):
     A WebResource wraps a service with an http interface
 
     """
-
 
     def __init__(self, root="/"):
         super(WebResource, self).__init__()
@@ -211,10 +214,10 @@ class WebResource(object, metaclass = MetaWebResource):
             if path == "":
                 path = self.root
             elif not path.startswith("/"):
-                path = (self.root + '/' + path).replace("//","/")
+                path = (self.root + '/' + path).replace("//", "/")
 
-            endpoints.append( WebEndpoint(path, methods, name,
-                bound_func, _params, _body) )
+            endpoints.append(WebEndpoint(path, methods, name,
+                bound_func, _params, _body))
 
         return endpoints
 

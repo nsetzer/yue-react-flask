@@ -9,13 +9,13 @@ import time
 from io import StringIO
 
 from .client import (split_auth, AuthenticatedRestClient,
-    RegisteredEndpoint, FlaskAppClient, generate_argparse,
+    RegisteredEndpoint, Parameter, FlaskAppClient, generate_argparse,
     ClientException, ParameterException)
 
 test_endpoints = [
     RegisteredEndpoint("/api/get_json", "TestResource.get_json",
         "test documentation", ['GET'],
-        [("align", str, "left", False)], (None, False)),
+        [Parameter("align", str, "left", False, "")], (None, False)),
     RegisteredEndpoint("/api/put_json", "TestResource.put_json",
         "test documentation", ['PUT'], [], ('json', True)),
     RegisteredEndpoint("/api/post_json", "TestResource.post_json",
@@ -27,7 +27,7 @@ test_endpoints = [
     # same as get_json, with a required query parameter
     RegisteredEndpoint("/api/get_json_2", "TestResource.get_json_2",
         "test documentation", ['GET'],
-        [("align", str, "left", True)], (None, False)),
+        [Parameter("align", str, "left", True, "")], (None, False)),
 
     RegisteredEndpoint("/api/user/<user>", "TestResource.get_user",
         "test documentation", ['GET'], [], (None, False)),

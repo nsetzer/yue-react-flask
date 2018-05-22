@@ -118,7 +118,7 @@ class Song(object):
         # Song.last_played,  Song.date_added,
         return Song.id, Song.year, Song.album_index, Song.length, \
             Song.play_count, Song.skip_count, \
-            Song.rating, Song.blocked, Song.equalizer, \
+            Song.rating, Song.banished, Song.blocked, Song.equalizer, \
             Song.frequency
 
     @staticmethod

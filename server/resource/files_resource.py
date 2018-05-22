@@ -37,7 +37,7 @@ class FilesResource(WebResource):
         return self._list_path(root, resPath)
 
     @post("<root>/path/<path:resPath>")
-    @param("mtime", type_=int)
+    @param("mtime", type_=int, doc="set file modified time")
     @requires_auth("filesystem_write")
     def upload(self, root, resPath):
         """

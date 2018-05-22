@@ -20,17 +20,7 @@ def generate_client(app, name="client", outdir="."):
         wf.write("from .client_impl import RegisteredEndpoint\n")
         wf.write("endpoints = [\n")
         for endpoint in app._registered_endpoints:
-            data = endpoint._asdict()
-            # stringify function names before formatting.
-            if data['body'][0] is not None:
-                data['body'] = (data['body'][0].__name__, data['body'][1])
-            for i, param in enumerate(data['params']):
-                param = list(param)
-                param[1] = param[1].__name__
-                data['params'][i] = tuple(param)
-            endpoint = RegisteredEndpoint(**data)
-
-            f = pformat(endpoint,indent=4, width=70).rstrip()
+            f = pformat(endpoint, indent=4, width=70).rstrip()
             wf.write("    %s,\n" % f)
         wf.write("]\n")
 
