@@ -70,19 +70,14 @@ class FileSysService(object):
             # path must be relative to os_root...
             raise FileSysServiceException(user, "relative paths not allowed")
 
-        if any([ (not p.strip()) for p in parts]):
+        if any([(not p.strip()) for p in parts]):
             raise FileSysServiceException(user, "empty path component")
 
         if os.name == 'nt':
             if any([p in _windows_device_files for p in parts]):
                 raise FileSysServiceException(user, "invalid windows path name")
 
-        # todo: this does not provide the strong guarantee expected.
-        # todo: this should always return an absolute path
         abs_path = os.path.abspath(os.path.join(os_root, path))
-
-        #if not parent.startswith(os_root):
-        #    parent = os_root
 
         return abs_path
 

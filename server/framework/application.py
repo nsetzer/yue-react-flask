@@ -75,7 +75,7 @@ class FlaskApp(object):
                 new_params.append(Parameter(**data))
 
             endpoint = RegisteredEndpoint(path, name, callback.__doc__,
-                options['methods'], params, body)
+                options['methods'], new_params, body)
             self._registered_endpoints.append(endpoint)
 
             return
@@ -130,7 +130,7 @@ class FlaskApp(object):
 
         self.app.run(host=self.config.host,
                      port=self.config.port,
-                     ssl_context=ssl_context);
+                     ssl_context=ssl_context)
 
     def _add_cors_headers(self, response):
 

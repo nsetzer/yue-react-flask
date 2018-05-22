@@ -64,6 +64,7 @@ class FilesResource(WebResource):
         abs_path = self.filesys_service.getPath(g.current_user, root, path)
 
         if not os.path.exists(abs_path):
+            logging.error("not found: %s" % path)
             return httpError(404, "path does not exist")
 
         if os.path.isfile(abs_path):

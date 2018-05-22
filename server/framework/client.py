@@ -373,9 +373,12 @@ def generate_argparse(registered_endpoints):
                     help='username')
     parser.add_argument('--password', required=False,
                     help='password')
-    parser.add_argument('--hostname', dest='hostname',
+    parser.add_argument('--host', dest='host',
                     default="https://localhost:4200",
                     help='the database connection string')
+    parser.add_argument('-v', '--verbose', dest='verbose',
+                    action='store_true',
+                    help='enable verbose logging')
 
     subparsers = parser.add_subparsers()
 

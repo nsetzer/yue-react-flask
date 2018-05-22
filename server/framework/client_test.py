@@ -207,12 +207,12 @@ class ParserTestCase(unittest.TestCase):
 
         # check that the parser works with a simple example
         args = self.parser.parse_args([
-            "--hostname=localhost",
+            "--host=localhost",
             "--username=admin",
             "--password=admin",
             "test.get_json"])
 
-        self.assertEqual(args.hostname, "localhost")
+        self.assertEqual(args.host, "localhost")
         method, url, options = args.func(args)
         self.assertEqual(method, "get")
         self.assertEqual(url, "/api/get_json")
@@ -220,7 +220,7 @@ class ParserTestCase(unittest.TestCase):
     def test_put(self):
 
         args = self.parser.parse_args([
-            "--hostname=localhost",
+            "--host=localhost",
             "--username=admin",
             "--password=admin",
             "test.put_json",
@@ -234,7 +234,7 @@ class ParserTestCase(unittest.TestCase):
     def test_post(self):
 
         args = self.parser.parse_args([
-            "--hostname=localhost",
+            "--host=localhost",
             "--username=admin",
             "--password=admin",
             "test.post_json",
@@ -248,7 +248,7 @@ class ParserTestCase(unittest.TestCase):
     def test_post_file(self):
 
         args = self.parser.parse_args([
-            "--hostname=localhost",
+            "--host=localhost",
             "--username=admin",
             "--password=admin",
             "test.post_json",
@@ -266,7 +266,7 @@ class ParserTestCase(unittest.TestCase):
     def test_delete(self):
 
         args = self.parser.parse_args([
-            "--hostname=localhost",
+            "--host=localhost",
             "--username=admin",
             "--password=admin",
             "test.delete"])
@@ -279,7 +279,7 @@ class ParserTestCase(unittest.TestCase):
 
         # check that the parser works with a simple example
         args = self.parser.parse_args([
-            "--hostname=localhost",
+            "--host=localhost",
             "--username=admin",
             "--password=admin",
             "test.get_user",
@@ -293,7 +293,7 @@ class ParserTestCase(unittest.TestCase):
 
         # check that the parser works with a simple example
         args = self.parser.parse_args([
-            "--hostname=localhost",
+            "--host=localhost",
             "--username=admin",
             "--password=admin",
             "test.get_path",

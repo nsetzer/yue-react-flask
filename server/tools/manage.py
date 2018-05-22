@@ -1,5 +1,5 @@
 
-import os, sys, argparse, json
+import os, sys, argparse, json, logging
 
 """
 
@@ -20,7 +20,8 @@ from server.dao.db import db_remove, db_connect, db_init, \
 from server.app import YueApp
 from server.config import Config
 from server.resource.util import get_features
-from server.framework.client import AuthenticatedRestClient, split_auth, RegisteredEndpoint
+from server.framework.client import (AuthenticatedRestClient, Response,
+    split_auth, RegisteredEndpoint)
 from server.framework.clientgen import generate_client
 from server.framework.application import FlaskAppClient
 from pprint import pformat
@@ -69,15 +70,25 @@ def cli(args):
     username, domain, role = split_auth(cli_args.username)
     password = cli_args.password
 
-    client = AuthenticatedRestClient(cli_args.hostname,
+    client = AuthenticatedRestClient(cli_args.host,
         username, password, domain, role)
 
-    response = getattr(client, method.lower())(url, **options)
+    logging.basicConfig(format='%(asctime)-15s %(message)s',
+        level=logging.DEBUG if cli_args.verbose else logging.INFO)
 
-    sys.stdout.write(response.text)
+    response = Response(getattr(client, method.lower())(url, **options))
+
+    if cli_args.verbose:
+        for name, value in response.headers.items():
+            sys.stderr.write("%s: %s\n" % (name, value))
+
     if response.status_code >= 400:
-        sys.stderr.write("%s\n" % response)
+        sys.stderr.write("%s\n" % response.text)
         sys.exit(response.status_code)
+
+    for chunk in response.stream():
+        sys.stdout.buffer.write(chunk)
+
 
 
 def features(args):
