@@ -177,7 +177,7 @@ class LibraryResource(WebResource):
         return jsonify(result="OK"), 200
 
     @get("<song_id>/art")
-    @param("scale", type_=image_scale_type, default=ImageScale.MEDIUM)
+    @param("scale", type_=image_scale_type, default=ImageScale.name(ImageScale.MEDIUM))
     @requires_auth("library_read_song")
     def get_song_art(self, song_id):
         """ get album art for a specific song

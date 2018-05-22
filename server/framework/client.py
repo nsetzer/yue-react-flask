@@ -218,8 +218,7 @@ def _request_buider(endpoint, *args, **kwargs):
 
     special kwarg options:
         stream: set True for a streaming download of the response body
-        method: specifiy the exact method to use
-        json:   the request content body is a json document
+        method: specify the exact method to use (GET, PUT, POST, DELETE)
 
     returns:
         method: the method name to process the request,
@@ -246,7 +245,7 @@ def _request_buider(endpoint, *args, **kwargs):
     if _type is not None or method in ["put", "post"]:
         options['data'] = positional.pop()
 
-    if json:
+    if _json:
         options['json'] = True
 
     if 'stream' in kwargs:
@@ -265,6 +264,29 @@ def _request_buider(endpoint, *args, **kwargs):
     url = url_encode(endpoint.path, lambda v: positional.pop(0))
 
     return method, url, options
+
+def _request_args_builder(endpoint, args):
+
+    positional = []
+    for typename, varname in url_decode(endpoint.path):
+        positional.append(getattr(args, varname))
+
+    kwargs = {param[0]:getattr(args, param[0]) for param in endpoint.params}
+
+    for extra in ['stream', 'json', 'method']:
+        if hasattr(args, extra):
+            kwargs[extra] = getattr(args, extra)
+
+    if hasattr(args, 'data'):
+        data = getattr(args, 'data')
+        if data == "-":
+            data = sys.stdin
+        else:
+            data = open(data, "rb")
+
+        positional.append(data)
+
+    return _request_buider(endpoint, *positional, **kwargs)
 
 class FlaskAppClient(object):
     """docstring for FlaskAppClient
@@ -338,37 +360,6 @@ def generate_argparse(registered_endpoints):
 
     subparsers = parser.add_subparsers()
 
-    def unpack_args(endpoint, args):
-        # deprecated, replace with _request_buider
-
-        method = endpoint.methods[0]
-        # use the arguments to construct the url for the request
-        url = url_encode(endpoint.path, lambda v: getattr(args, v))
-
-        # unclear what to do about null params
-        params = []
-        for name, _type, _default, _required in endpoint.params:
-            params.append((name, getattr(args, name)))
-
-        body = None
-        _type, _json = endpoint.body
-        if _type is not None or method in ["PUT", "POST"]:
-            body = getattr(args, "data")
-
-        # TODO: one of the options should be 'requires_auth'
-        options = {}
-
-        if params:
-            options['params'] = {k: v for k, v in params}
-
-        if body is not None:
-            if body == "-":
-                options['data'] = sys.stdin
-            else:
-                options['data'] = open(body, "rb")
-
-        return [method, url, options]
-
     for endpoint in registered_endpoints:
         # need a way to hide/rename a _registered_endpoints
         # when it is registered
@@ -379,7 +370,8 @@ def generate_argparse(registered_endpoints):
         doc = "%s" % (endpoint.path)
         end_parser = subparsers.add_parser(name, help=doc)
         end_parser.set_defaults(
-            func=lambda args, endpoint=endpoint: unpack_args(endpoint, args))
+            func=lambda args, endpoint=endpoint:
+                _request_args_builder(endpoint, args))
 
         # parse the registered parameters, and generate optional arguments
         for name, _type, _default, _required in endpoint.params:
@@ -393,6 +385,10 @@ def generate_argparse(registered_endpoints):
             end_parser.add_argument(varname,
                 help="todo")
 
+        if len(endpoint.methods) > 1:
+            end_parser.add_argument("--method", default=endpoints.methods[0],
+                type=str, help="todo")
+
         # todo: add optional methods, if more than 1, default to first
 
         # if the endpoint requires a body, add a final positional argument
@@ -401,6 +397,10 @@ def generate_argparse(registered_endpoints):
         if _type is not None:
             end_parser.add_argument("data",
                 help="file to upload (- for stdin)")
+
+
+            end_parser.add_argument("--stream", default=True,
+                type=str, help="enable streaming upload")
 
     return parser
 

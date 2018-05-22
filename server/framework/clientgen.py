@@ -45,7 +45,7 @@ def generate_client(app, name="client", outdir="."):
     with open(py_cli, "w") as wf:
         wf.write(header)
         wf.write("import sys\n")
-        wf.write("from .client_impl import generate_argparse, split_auth, AuthenticatedRestClient\n")
+        wf.write("from .client_impl import generate_argparse, split_auth, Response, AuthenticatedRestClient\n")
         wf.write("from .endpoints import endpoints\n")
         wf.write("def main():\n")
         wf.write("    parser = generate_argparse(endpoints)\n")
@@ -58,10 +58,11 @@ def generate_client(app, name="client", outdir="."):
         wf.write("    client = AuthenticatedRestClient(args.hostname,\n")
         wf.write("             username, password, domain, role)\n")
 
-        wf.write("    response = getattr(client, method.lower())(\n")
-        wf.write("               url, **options)\n")
+        wf.write("    response = Response(getattr(client, method.lower())(\n")
+        wf.write("               url, **options))\n")
 
-        wf.write("    sys.stdout.write(response.text)\n")
+        wf.write("    for chunk in response.stream():\n")
+        wf.write("        sys.stdout.buffer.write(chunk)\n")
         wf.write("    if response.status_code >= 400:\n")
         wf.write("        sys.stderr.write(\"%s\\n\" % response)\n")
         wf.write("        sys.exit(response.status_code)\n")

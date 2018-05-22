@@ -69,6 +69,14 @@ class FilesResourceTestCase(unittest.TestCase):
             dat1 = open(path, "rb").read()
             self.assertEqual(dat0, dat1)
 
+    def test_list_file_not_found(self):
+
+        username = "admin"
+        with self.app.login(username, username) as app:
+            path = 'test/dne'
+            response = app.get('/api/fs/default/path/' + path)
+            self.assertEqual(response.status_code, 404)
+
     def test_upload_file(self):
         """test file upload
 

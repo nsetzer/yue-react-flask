@@ -33,6 +33,10 @@ test_endpoints = [
         "test documentation", ['GET'], [], (None, False)),
     RegisteredEndpoint("/api/path/<path:ResourePath>", "TestResource.get_path",
         "test documentation", ['GET'], [], (None, False)),
+
+    RegisteredEndpoint("/api/post_file", "TestResource.post_file",
+        "test documentation", ['POST'], [], ('json', True)),
+
 ]
 
 class CaptureOutput(object):
@@ -210,8 +214,22 @@ class ParserTestCase(unittest.TestCase):
 
         self.assertEqual(args.hostname, "localhost")
         method, url, options = args.func(args)
-        self.assertEqual(method, "GET")
+        self.assertEqual(method, "get")
         self.assertEqual(url, "/api/get_json")
+
+    def test_put(self):
+
+        args = self.parser.parse_args([
+            "--hostname=localhost",
+            "--username=admin",
+            "--password=admin",
+            "test.put_json",
+            "-"])
+
+        method, url, options = args.func(args)
+        self.assertEqual(method, "put")
+        self.assertEqual(url, "/api/put_json")
+        self.assertEqual(options['data'], sys.stdin)
 
     def test_post(self):
 
@@ -223,9 +241,39 @@ class ParserTestCase(unittest.TestCase):
             "-"])
 
         method, url, options = args.func(args)
-        self.assertEqual(method, "POST")
+        self.assertEqual(method, "post")
         self.assertEqual(url, "/api/post_json")
         self.assertEqual(options['data'], sys.stdin)
+
+    def test_post_file(self):
+
+        args = self.parser.parse_args([
+            "--hostname=localhost",
+            "--username=admin",
+            "--password=admin",
+            "test.post_json",
+            "./test/r160.mp3"])
+
+        method, url, options = args.func(args)
+        self.assertEqual(method, "post")
+        self.assertEqual(url, "/api/post_json")
+        # self.assertEqual(options['data'], sys.stdin)
+        file_length = len(options['data'].read())
+        with open("./test/r160.mp3", "rb") as rb:
+            actual_length = len(rb.read())
+        self.assertTrue(file_length, actual_length)
+
+    def test_delete(self):
+
+        args = self.parser.parse_args([
+            "--hostname=localhost",
+            "--username=admin",
+            "--password=admin",
+            "test.delete"])
+
+        method, url, options = args.func(args)
+        self.assertEqual(method, "delete")
+        self.assertEqual(url, "/api/delete")
 
     def test_url_substitution(self):
 
@@ -238,7 +286,7 @@ class ParserTestCase(unittest.TestCase):
             "admin"])
 
         method, url, options = args.func(args)
-        self.assertEqual(method, "GET")
+        self.assertEqual(method, "get")
         self.assertEqual(url, "/api/user/admin")
 
     def test_url_substitution_typed(self):
@@ -252,7 +300,7 @@ class ParserTestCase(unittest.TestCase):
             "test"])
 
         method, url, options = args.func(args)
-        self.assertEqual(method, "GET")
+        self.assertEqual(method, "get")
         self.assertEqual(url, "/api/path/test")
 
     def test_generate_help(self):
