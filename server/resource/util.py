@@ -8,6 +8,8 @@ from uuid import UUID
 from ..dao.util import parse_iso_format
 from ..dao.library import Song
 
+from ..service.util import ServiceException
+
 from ..framework.web_resource import httpError
 
 class HttpException(Exception):
@@ -22,12 +24,24 @@ def _handle_exceptions(f, args, kwargs):
     except HttpException as e:
         traceback.print_exc()
         return httpError(e.status, str(e))
+
+    except ServiceException as e:
+        traceback.print_exc()
+
+        reason = "Unhandled Exception: "
+        if hasattr(g, 'current_user') and g.current_user is not None:
+            reason = "Unhandled Exception (current user: %s): " % \
+                g.current_user['email']
+
+        return httpError(400, reason + str(e))
+
     except Exception as e:
         traceback.print_exc()
 
         reason = "Unhandled Exception: "
         if hasattr(g, 'current_user') and g.current_user is not None:
-            reason = "Unhandled Exception (current user: %s): " % g.current_user['email']
+            reason = "Unhandled Exception (current user: %s): " % \
+                g.current_user['email']
 
         return httpError(500, reason + str(e))
 

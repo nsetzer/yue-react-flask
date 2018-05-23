@@ -193,9 +193,10 @@ class AuthenticatedRestClient(object):
                 kwargs['headers']["Content-Type"] = "application/json"
             del kwargs['json']
 
-        kwargs['headers']["X-Yue-Domain"] = self.domain
+        if self.domain:
+            kwargs['headers']["X-Domain"] = self.domain
         if self.role:
-            kwargs['headers']["X-Yue-Role"]   = self.role
+            kwargs['headers']["X-Role"]   = self.role
 
         auth = "Basic %s" % (base64.b64encode(b"%s:%s" % (
             self.username.encode("utf-8"),
@@ -453,8 +454,15 @@ def cli_main(endpoints, args):
     response = Response(getattr(client, method.lower())(url, **options))
 
     if cli_args.verbose:
+        sys.stderr.write("url: %s\n" % response.url)
+        sys.stderr.write("status: %d\n" % response.status_code)
+        sys.stderr.write("Request Headers:\n")
+        for name, value in response.request.headers.items():
+            sys.stderr.write("  %s: %s\n" % (name, value))
+
+        sys.stderr.write("Response Headers:\n")
         for name, value in response.headers.items():
-            sys.stderr.write("%s: %s\n" % (name, value))
+            sys.stderr.write("  %s: %s\n" % (name, value))
 
     if response.status_code >= 400:
         sys.stderr.write("%s\n" % response.text)

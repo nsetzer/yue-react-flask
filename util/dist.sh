@@ -3,15 +3,19 @@ version=0.0.0
 
 mkdir -p dist
 
-
 cat <<EOF > start.sh
 #!/bin/bash
 cd `dirname $0`
 echo $PWD
-exec python3 ./app.py --config config/production/application.yml
+exec python3 ./wsgi.py --config config/production/application.yml
 EOF
 
-tar -cvf dist/yueserver-$version.tar config server build util/manage.py wsgi.py
+python3 -m server.tools.manage generate_client
+
+tar -czvf dist/yueserver-$version.tar.gz \
+    --exclude='*.pyc' \
+    --exclude='__pycache__' \
+    config server client build wsgi.py start.sh
 
 rm start.sh
 
