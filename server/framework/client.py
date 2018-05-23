@@ -130,11 +130,14 @@ class AuthenticatedRestClient(object):
         self.domain = domain
         self.role = role
 
-        self.host = host
+        self._host = host
 
         self.verify_ssl = False
 
         self._session = requests
+
+    def host(self):
+        return self._host
 
     def setSession(self, session):
         """
@@ -199,7 +202,7 @@ class AuthenticatedRestClient(object):
             self.password.encode("utf-8")))).decode("utf-8")
         kwargs['headers']["Authorization"] = auth
 
-        url = "%s%s" % (self.host, url)
+        url = "%s%s" % (self._host, url)
 
         # ignore the SSL cert
         kwargs['verify'] = self.verify_ssl
@@ -218,10 +221,10 @@ class AuthenticatedRestClient(object):
         return result
 
     def __str__(self):
-        return "%s" % (self.host)
+        return "%s" % (self._host)
 
     def __repr__(self):
-        return "<%s(%s)>" % (self.__class__.__name__, self.host)
+        return "<%s(%s)>" % (self.__class__.__name__, self._host)
 
 def _request_builder(endpoint, *args, **kwargs):
     """
@@ -325,6 +328,9 @@ class FlaskAppClient(object):
                 .replace("resource", "") \
                 .replace(".", "_")
             self._endpoints[name] = endpoint
+
+    def host(self):
+        return self._client.host()
 
     def __getattr__(self, attr):
 
