@@ -4,7 +4,7 @@ from ..dao.user import UserDao
 from ..dao.library import LibraryDao
 from ..dao.queue import SongQueueDao
 
-from .util import UserServiceException
+from .exception import UserServiceException
 
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
 from itsdangerous import SignatureExpired, BadSignature

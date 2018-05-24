@@ -2,7 +2,8 @@
 import os, sys
 
 from stat import S_ISDIR, S_ISREG, S_IRGRP
-from .util import FileSysServiceException, FFmpegEncoder
+from .util import FFmpegEncoder
+from .exception import FileSysServiceException
 
 import logging
 
@@ -46,7 +47,7 @@ class FileSysService(object):
         elif fs_name in self.config.filesystem.other:
             return self.config.filesystem.other[fs_name]
 
-        raise FileSysServiceException(user, "invalid name: `%s`" % fs_name)
+        raise FileSysServiceException("invalid name: `%s`" % fs_name)
 
     def getPath(self, user, fs_name, path):
         """
@@ -63,19 +64,19 @@ class FileSysService(object):
             return os_root
 
         if os.path.isabs(path):
-            raise FileSysServiceException(user, "path must not be absolute")
+            raise FileSysServiceException("path must not be absolute")
 
         parts = path.replace("\\", "/").split("/")
         if any([p in (".", "..") for p in parts]):
             # path must be relative to os_root...
-            raise FileSysServiceException(user, "relative paths not allowed")
+            raise FileSysServiceException("relative paths not allowed")
 
         if any([(not p.strip()) for p in parts]):
-            raise FileSysServiceException(user, "empty path component")
+            raise FileSysServiceException("empty path component")
 
         if os.name == 'nt':
             if any([p in _windows_device_files for p in parts]):
-                raise FileSysServiceException(user, "invalid windows path name")
+                raise FileSysServiceException("invalid windows path name")
 
         abs_path = os.path.abspath(os.path.join(os_root, path))
 

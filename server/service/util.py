@@ -2,26 +2,6 @@
 import os,sys
 import subprocess
 
-class ServiceException(Exception):
-
-    def __init__(self, user, message):
-        if user is not None:
-            name = "%s@%s/%s" % (user['email'], user['domain_id'], user['role_id'])
-            message = name + ": " + message
-        super(ServiceException, self).__init__(message)
-
-class AudioServiceException(ServiceException):
-    pass
-
-class UserServiceException(ServiceException):
-    pass
-
-class TranscodeServiceException(ServiceException):
-    pass
-
-class FileSysServiceException(ServiceException):
-    pass
-
 class FFmpegEncoder(object):
     def __init__(self,ffmpeg_path,logger=None,no_exec=False):
         super(FFmpegEncoder,self).__init__();

@@ -14,7 +14,6 @@ from ..framework.web_resource import WebResource, \
 
 from .util import requires_auth, datetime_validator, search_order_validator
 
-from ..service.util import AudioServiceException
 from ..service.transcode_service import ImageScale
 
 def song_validator(song):
@@ -169,11 +168,8 @@ class LibraryResource(WebResource):
         abs_path = self.filesys_service.getPath(
             g.current_user, g.body['root'], g.body['path'])
 
-        try:
-            self.audio_service.setSongFilePath(
-                g.current_user, song_id, abs_path)
-        except AudioServiceException as e:
-            return httpError(400, "Error updating path")
+        self.audio_service.setSongFilePath(
+            g.current_user, song_id, abs_path)
 
         return jsonify(result="OK"), 200
 
@@ -205,12 +201,8 @@ class LibraryResource(WebResource):
 
         abs_path = self.filesys_service.getPath(
             g.current_user, g.body['root'], g.body['path'])
-        try:
-            self.audio_service.setSongAlbumArtPath(
-                g.current_user, song_id, abs_path)
-        except AudioServiceException as e:
-            logging.exception("%s" % e)
-            return httpError(400, "Error updating path")
+        self.audio_service.setSongAlbumArtPath(
+            g.current_user, song_id, abs_path)
 
         return jsonify(result="OK"), 200
 

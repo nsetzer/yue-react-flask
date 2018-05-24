@@ -8,7 +8,7 @@ from uuid import UUID
 from ..dao.util import parse_iso_format
 from ..dao.library import Song
 
-from ..service.util import ServiceException
+from ..service.exception import ServiceException
 
 from ..framework.web_resource import httpError
 

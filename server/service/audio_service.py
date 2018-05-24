@@ -8,7 +8,7 @@ from ..dao.queue import SongQueueDao
 from ..dao.history import HistoryDao
 from ..dao.shuffle import binshuffle
 
-from .util import AudioServiceException
+from .exception import AudioServiceException
 
 class AudioService(object):
     """docstring for AudioService"""
@@ -41,7 +41,7 @@ class AudioService(object):
             user['id'], user['domain_id'], song_id)
 
         if not song:
-            raise AudioServiceException(user,
+            raise AudioServiceException(
                 "song not found for id: %s" % song_id)
 
         return song
@@ -54,7 +54,7 @@ class AudioService(object):
 
         if not os.path.exists(path):
             logging.error("invalid path: %s" % path)
-            raise AudioServiceException(user, "invalid path")
+            raise AudioServiceException("invalid path")
 
         uid = user['id']
         did = user['domain_id']
@@ -65,7 +65,7 @@ class AudioService(object):
 
         if not os.path.exists(path):
             logging.error("invalid path: %s" % path)
-            raise AudioServiceException(user, "invalid path")
+            raise AudioServiceException("invalid path")
 
         uid = user['id']
         did = user['domain_id']

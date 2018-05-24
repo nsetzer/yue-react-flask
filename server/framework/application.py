@@ -8,7 +8,7 @@ import gzip
 import argparse
 
 from .client import RegisteredEndpoint, Parameter, AuthenticatedRestClient, \
-    FlaskAppClient, generate_argparse
+    FlaskAppClient, generate_argparse, split_auth
 
 """
     Application Stack:
@@ -113,7 +113,8 @@ class FlaskApp(object):
     def generate_argparse(self):
         return generate_argparse(self._registered_endpoints)
 
-    def client(self, hostname, username, password, domain, role):
+    def client(self, hostname, username, password):
+        username, domain, role = split_auth(username)
         client = AuthenticatedRestClient(hostname,
             username, password, domain, role)
         return FlaskAppClient(client, self._registered_endpoints)

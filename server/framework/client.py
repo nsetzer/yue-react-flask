@@ -374,7 +374,7 @@ def generate_argparse(registered_endpoints):
     arguments into the url endpoint to call.
     """
 
-    parser = argparse.ArgumentParser(description='yue client')
+    parser = argparse.ArgumentParser(description='client')
 
     parser.add_argument('--username', required=True,
                     help='username')
@@ -470,3 +470,9 @@ def cli_main(endpoints, args):
 
     for chunk in response.stream():
         sys.stdout.buffer.write(chunk)
+
+def connect_impl(host, username, password, endpoints):
+    username, domain, role = split_auth(username)
+    client = AuthenticatedRestClient(host,
+             username, password, domain, role)
+    return FlaskAppClient(client, endpoints)
