@@ -26,7 +26,9 @@ class FilesystemConfig(BaseConfig):
         self.other = {}
         other = self.get_key(base, 'filesystem', 'other', default={})
         for k, v in other.items():
-            self.other[k] = os.path.abspath(v)
+            if "://" not in v:
+                v = os.path.abspath(v)
+            self.other[k] = v
 
 class TranscodeAudioConfig(BaseConfig):
     def __init__(self, base):

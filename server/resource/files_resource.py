@@ -7,6 +7,7 @@ from flask import jsonify, render_template, g, request, send_file
 from ..dao.library import Song
 from ..dao.util import parse_iso_format, pathCorrectCase
 
+from ..dao.filesys import FileSystem
 
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, compressed, param, httpError
@@ -59,15 +60,16 @@ class FilesResource(WebResource):
 
     def _list_path(self, root, path):
 
+        fs = FileSystem()
         # application config should define a number of valid roots
         # that can be listed.
         abs_path = self.filesys_service.getPath(g.current_user, root, path)
 
-        if not os.path.exists(abs_path):
-            logging.error("not found: %s" % path)
-            return httpError(404, "path does not exist")
+        # if not fs.exists(abs_path):
+        #    logging.error("not found: %s" % path)
+        #    return httpError(404, "path does not exist")
 
-        if os.path.isfile(abs_path):
+        if fs.isfile(abs_path):
             return send_file(abs_path)
 
         result = self.filesys_service.listDirectory(g.current_user, root, path)

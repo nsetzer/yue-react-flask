@@ -1,9 +1,10 @@
 
 import os, sys
 
-from stat import S_ISDIR, S_ISREG, S_IRGRP
+
 from .util import FFmpegEncoder
 from .exception import FileSysServiceException
+from ..dao.filesys import FileSystem
 
 import logging
 
@@ -24,6 +25,8 @@ class FileSysService(object):
         self.db = db
         self.dbtables = dbtables
 
+        self.fs = FileSystem()
+
     @staticmethod
     def init(config, db, dbtables):
         if not FileSysService._instance:
@@ -43,11 +46,13 @@ class FileSysService(object):
     def getRootPath(self, user, fs_name):
 
         if fs_name == "default":
-            return self.config.filesystem.media_root
+            path = self.config.filesystem.media_root
         elif fs_name in self.config.filesystem.other:
-            return self.config.filesystem.other[fs_name]
+            path = self.config.filesystem.other[fs_name]
+        else:
+            raise FileSysServiceException("invalid name: `%s`" % fs_name)
 
-        raise FileSysServiceException("invalid name: `%s`" % fs_name)
+        return path
 
     def getPath(self, user, fs_name, path):
         """
@@ -58,15 +63,16 @@ class FileSysService(object):
 
         os_root = self.getRootPath(user, fs_name)
 
+        logging.error(os_root)
         path = normalize('NFKD', path)
 
         if not path.strip():
             return os_root
 
-        if os.path.isabs(path):
+        if self.fs.isabs(path):
             raise FileSysServiceException("path must not be absolute")
 
-        parts = path.replace("\\", "/").split("/")
+        scheme, parts = self.fs.parts(path)
         if any([p in (".", "..") for p in parts]):
             # path must be relative to os_root...
             raise FileSysServiceException("relative paths not allowed")
@@ -74,11 +80,11 @@ class FileSysService(object):
         if any([(not p.strip()) for p in parts]):
             raise FileSysServiceException("empty path component")
 
-        if os.name == 'nt':
+        abs_path = self.fs.join(os_root, path)
+
+        if self.fs.islocal(abs_path) and os.name == 'nt':
             if any([p in _windows_device_files for p in parts]):
                 raise FileSysServiceException("invalid windows path name")
-
-        abs_path = os.path.abspath(os.path.join(os_root, path))
 
         return abs_path
 
@@ -95,24 +101,17 @@ class FileSysService(object):
         if abs_path == os_root:
             parent = os_root
         else:
-            parent, _ = os.path.split(abs_path)
+            parent, _ = self.fs.split(abs_path)
 
         files = []
         dirs = []
-        for name in os.listdir(abs_path):
-            pathname = os.path.join(abs_path, name)
-            st = os.stat(pathname)
-            mode = st.st_mode
+        for name, is_dir, size, mtime in self.fs.scandir(abs_path):
+            pathname = self.fs.join(abs_path, name)
 
-            if not (mode & S_IRGRP):
-                continue
-
-            if S_ISDIR(mode):
+            if is_dir:
                 dirs.append(name)
-            elif S_ISREG(mode):
-                files.append({"name": name,
-                              "size": st.st_size,
-                              "mtime": int(st.st_mtime)})
+            else:
+                files.append({"name": name, "size": size, "mtime": mtime})
 
         files.sort(key=lambda f: f['name'])
         dirs.sort()
@@ -148,15 +147,14 @@ class FileSysService(object):
 
         path = self.getPath(user, fs_name, path)
 
-        dirpath, _ = os.path.split(path)
-        if not os.path.exists(dirpath):
-            os.makedirs(dirpath)
+        dirpath, _ = self.fs.split(path)
+        self.fs.makedirs(dirpath)
 
-        with open(path, "wb") as wb:
+        with self.fs.open(path, "wb") as wb:
             buf = stream.read(2048)
             while buf:
                 wb.write(buf)
                 buf = stream.read(2048)
 
         if mtime is not None:
-            os.utime(path, (mtime, mtime))
+            self.fs.set_mtime(path, (mtime, mtime))
