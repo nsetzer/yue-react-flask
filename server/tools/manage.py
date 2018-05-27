@@ -17,11 +17,10 @@ if (sys.version_info[0] == 2):
 from server.dao.util import hash_password
 from server.dao.db import db_remove, db_connect, db_init, \
     db_update, db_repopulate
-from server.app import YueApp
+from server.app import YueApp, generate_client
 from server.config import Config
 from server.resource.util import get_features
 from server.framework.client import cli_main
-from server.framework.clientgen import generate_client
 from server.framework.application import FlaskAppClient
 from pprint import pformat
 

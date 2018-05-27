@@ -10,7 +10,7 @@ from ..dao.util import pathCorrectCase
 
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, param, body, compressed, httpError, \
-    int_range, int_min
+    int_range, int_min, send_file as send_file_v2
 
 from .util import requires_auth, datetime_validator, search_order_validator
 
@@ -151,6 +151,7 @@ class LibraryResource(WebResource):
             logging.error("Audio for %s not found at: `%s`" % (song_id, path))
             return httpError(404, "Audio File not found")
 
+        g.args.mode = "mp3_256_2ch"
         if self.transcode_service.shouldTranscodeSong(song, g.args.mode):
             path = self.transcode_service.transcodeSong(song, g.args.mode)
 
@@ -158,7 +159,7 @@ class LibraryResource(WebResource):
             logging.error("Audio for %s not found at: `%s`" % (song_id, path))
             return httpError(404, "Audio File not found")
 
-        return send_file(path)
+        return send_file_v2(path)
 
     @post("<song_id>/audio")
     @body(song_audio_path_validator)

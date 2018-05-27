@@ -6,6 +6,7 @@ from logging.handlers import RotatingFileHandler
 
 from .framework.application import FlaskApp
 from .framework.web_resource import WebResource, get
+from .framework.clientgen import generate_client as generate_client_impl
 
 from .config import Config
 
@@ -176,6 +177,27 @@ class TestApp(YueApp):
     def tearDown(self):
         # nothing to do
         pass
+
+def connect(host, username, password):
+    app = YueApp(Config.null())
+    return app.client(host, username, password)
+
+def generate_client(app, name="client", outdir="."):
+
+    header = "# This file was auto generated. do not modify\n"
+    client_dir = os.path.join(outdir, name)
+
+    generate_client_impl(app, name, outdir)
+
+    py_client_impl = os.path.join(client_dir, "sync.py")
+    with open(py_client_impl, "w") as wf:
+        wf.write(header)
+        with open("server/tools/sync.py", "r") as rf:
+            for line in rf:
+                if 'import connect' in line:
+                    wf.write("from .connect import connect\n")
+                else:
+                    wf.write(line)
 
 def main():
 

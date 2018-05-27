@@ -1,6 +1,9 @@
 
+import os
+import sys
 from functools import wraps
-from flask import after_this_request, request, g, jsonify
+from flask import (after_this_request, request, g, jsonify,
+    stream_with_context, Response, send_file as flask_send_file)
 from collections import namedtuple
 
 from .client import Parameter
@@ -9,6 +12,9 @@ from io import BytesIO
 import gzip
 import datetime
 import logging
+
+import mimetypes
+from re import findall
 
 WebEndpoint = namedtuple('WebEndpoint',
     ['path', 'methods', 'name', 'method', 'params', 'body'])
@@ -159,6 +165,78 @@ def compressed(f):
         return f(*args, **kwargs)
 
     return wrapper
+
+def local_file_generator(filepath, buffer_size=2048):
+
+    with open(filepath, "rb") as rb:
+        buf = rb.read(buffer_size)
+        while buf:
+            yield buf
+            buf = rb.read(buffer_size)
+
+def send_file(filepath):
+    """
+    this may not work on chrome, although that may also be a webkit
+    issue with mp3 files...
+    """
+
+    attachment_name = os.path.split(filepath)[1]
+    mimetype = mimetypes.guess_type(filepath)[0] or 'application/octet-stream'
+    file_size = os.stat(filepath).st_size
+
+    if not request.headers.has_key("Range"):
+
+        g = local_file_generator(filepath)
+        response = Response(g, mimetype=mimetype)
+    else:
+
+        ranges = findall(r"\d+", request.headers["Range"])
+        begin  = int( ranges[0] )
+
+        end = file_size
+        if len(ranges)>1:
+            end = min(file_size, int( ranges[1] ))
+
+        nbytes = max(end - begin, 1024)
+
+        with open(filepath,"rb") as rf:
+            rf.seek(begin)
+            data = rf.read(nbytes)
+
+        ext = os.path.splitext(filepath)[1]
+
+        response = Response(data, 200,
+            mimetype=mimetype, direct_passthrough=True)
+
+        byterange = 'bytes {0}-{1}/{2}'.format(
+            begin, begin+len(data), len(data))
+        response.headers.add('Content-Range', byterange)
+        response.headers.add('Accept-Ranges','bytes')
+
+    response.headers.set('Content-Length',file_size)
+
+    response.headers.add('Content-Disposition', 'attachment',
+        filename=attachment_name)
+
+    return response
+
+def send_generator(go, attachment_name, file_size=None):
+    """
+    this may not work on chrome, although that may also be a webkit
+    issue with mp3 files...
+    """
+
+    mimetype = mimetypes.guess_type(attachment_name)[0] or \
+        'application/octet-stream'
+
+    response = Response(go, mimetype=mimetype)
+
+    response.headers.set('Content-Length',file_size)
+
+    response.headers.add('Content-Disposition', 'attachment',
+        filename=attachment_name)
+
+    return response
 
 class MetaWebResource(type):
     """

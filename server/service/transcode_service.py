@@ -104,7 +104,7 @@ class TranscodeService(object):
             return False;
 
         srcpath = song[Song.path]
-        return not srcpath.lower().endswith('mp3')
+        return True # not srcpath.lower().endswith('mp3')
 
     def transcodeSong(self, song, mode):
 
@@ -114,10 +114,12 @@ class TranscodeService(object):
         if mode == "original":
             return srcpath
 
+        tgt_kind, tgt_rate, tgt_channels = mode.split("_")
+
         if not os.path.exists(tgtpath):
             os.makedirs(tgtpath)
 
-        tgtpath = os.path.join(tgtpath, song[Song.id] + ".mp3")
+        tgtpath = os.path.join(tgtpath, song[Song.id] + ".%s.mp3" % mode)
 
         metadata = dict(
             artist=song[Song.artist],
@@ -131,9 +133,9 @@ class TranscodeService(object):
         #    vol = 1.0
         vol = 1.0
 
-        bitrate = 320
-        if srcpath.lower().endswith('mp3'):
-            bitrate = 0
+        bitrate = int(tgt_rate)
+        #if srcpath.lower().endswith('mp3'):
+        #    bitrate = 0
 
         if not os.path.exists(tgtpath):
             self.encoder.transcode(srcpath,
