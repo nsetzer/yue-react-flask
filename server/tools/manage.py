@@ -138,7 +138,7 @@ def main():
 
     parser.add_argument('--db', dest='database_url',
                         default="sqlite:///database.sqlite",
-                        help='the database connection string')
+                        help='the database connection string (sqlite:///database.sqlite)')
 
     subparsers = parser.add_subparsers()
 
