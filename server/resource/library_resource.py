@@ -10,7 +10,7 @@ from ..dao.util import pathCorrectCase
 
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, param, body, compressed, httpError, \
-    int_range, int_min
+    int_range, int_min, send_file as send_file_v2
 
 from .util import requires_auth, datetime_validator, search_order_validator
 
@@ -132,8 +132,8 @@ class LibraryResource(WebResource):
         return jsonify(result=song)
 
     @get("<song_id>/audio")
-    @param("mode", default="default",
-        doc="one of default|raw|mp3_320_2ch")
+    @param("mode", default="non-mp3",
+        doc="one of original|non-mp3|mp3_320_2ch")
     @requires_auth("library_read_song")
     def get_song_audio(self, song_id):
 
@@ -151,6 +151,12 @@ class LibraryResource(WebResource):
             logging.error("Audio for %s not found at: `%s`" % (song_id, path))
             return httpError(404, "Audio File not found")
 
+        # todo: a normal-type user (one who only listens to audio)
+        # should be allowed to transcode non-mp3 to exactly one format,
+        # and should be denied the ability to transcode to any other format
+        # i.e. the user role must have library_write_song in order to
+        # transcode anything other than "non-mp3"
+
         if self.transcode_service.shouldTranscodeSong(song, g.args.mode):
             path = self.transcode_service.transcodeSong(song, g.args.mode)
 
@@ -158,7 +164,7 @@ class LibraryResource(WebResource):
             logging.error("Audio for %s not found at: `%s`" % (song_id, path))
             return httpError(404, "Audio File not found")
 
-        return send_file(path)
+        return send_file_v2(path)
 
     @post("<song_id>/audio")
     @body(song_audio_path_validator)
@@ -186,7 +192,8 @@ class LibraryResource(WebResource):
 
         song = self.audio_service.findSongById(g.current_user, song_id)
 
-        path = self.transcode_service.getScaledAlbumArt(song, g.args.scale)
+        scale = ImageScale.fromName(g.args.scale)
+        path = self.transcode_service.getScaledAlbumArt(song, scale)
 
         if not os.path.exists(path):
             logging.error("Art for %s not found at: `%s`" % (song_id, path))

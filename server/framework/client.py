@@ -134,7 +134,7 @@ class AuthenticatedRestClient(object):
 
         self.verify_ssl = False
 
-        self._session = requests
+        self._session = requests.Session()
 
     def host(self):
         return self._host

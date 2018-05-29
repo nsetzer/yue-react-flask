@@ -10,6 +10,17 @@ import argparse
 from .client import RegisteredEndpoint, Parameter, AuthenticatedRestClient, \
     FlaskAppClient, generate_argparse, split_auth
 
+
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+# monkey patch workzeug to remove Server header
+# found in workzeug.serving
+def _send_header(self, key, value):
+    if key not in ('Server', 'Date'):
+        BaseHTTPRequestHandler._send_header(self, key, value)
+BaseHTTPRequestHandler._send_header = BaseHTTPRequestHandler.send_header
+BaseHTTPRequestHandler.send_header = _send_header
+
 """
     Application Stack:
         Flask Application
@@ -140,7 +151,6 @@ class FlaskApp(object):
         response.headers["Access-Control-Allow-Methods"] = self.config.cors.methods
 
         return response
-
 
 class AppTestClientWrapper(object):
     """

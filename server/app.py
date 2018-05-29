@@ -6,6 +6,7 @@ from logging.handlers import RotatingFileHandler
 
 from .framework.application import FlaskApp
 from .framework.web_resource import WebResource, get
+from .framework.clientgen import generate_client as generate_client_impl
 
 from .config import Config
 
@@ -26,6 +27,8 @@ from .resource.files_resource import FilesResource
 from .dao.db import db_connect, db_init_main
 
 import ssl
+import argparse
+import codecs
 
 class YueApp(FlaskApp):
     """docstring for YueApp"""
@@ -177,10 +180,28 @@ class TestApp(YueApp):
         # nothing to do
         pass
 
-def main():
+def connect(host, username, password):
+    app = YueApp(Config.null())
+    return app.client(host, username, password)
 
-    import argparse
-    import codecs
+def generate_client(app, name="client", outdir="."):
+
+    header = "# This file was auto generated. do not modify\n"
+    client_dir = os.path.join(outdir, name)
+
+    generate_client_impl(app, name, outdir)
+
+    py_client_impl = os.path.join(client_dir, "sync.py")
+    with open(py_client_impl, "w") as wf:
+        wf.write(header)
+        with open("server/tools/sync.py", "r") as rf:
+            for line in rf:
+                if 'import connect' in line:
+                    wf.write("from .connect import connect\n")
+                else:
+                    wf.write(line)
+
+def parseArgs(argv, default_profile=None):
 
     encoding = "cp850"
     if sys.stdout.encoding != encoding:
@@ -189,7 +210,9 @@ def main():
       sys.stderr = codecs.getwriter(encoding)(sys.stderr.buffer, 'strict')
 
 
-    default_profile = "windev" if sys.platform == "win32" else "development"
+    if default_profile is None:
+        default_profile = "windev" if sys.platform == "win32" else "development"
+
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--config_dir', dest='config', default="./config",
                         help='enable verbose logging')
@@ -197,9 +220,13 @@ def main():
                         default=default_profile,
                         help='default profile to use (%s)' % default_profile)
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv[1:])
 
-    app_cfg_path = os.path.join(args.config, args.profile, "application.yml")
+    return args
+
+def getApp(config_dir, profile):
+
+    app_cfg_path = os.path.join(config_dir, profile, "application.yml")
     cfg = Config(app_cfg_path)
 
     if not os.path.exists(cfg.logging.directory):
@@ -221,9 +248,15 @@ def main():
         context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
         context.load_cert_chain(cfg.ssl.certificate, cfg.ssl.private_key)
 
-    # configure logging
-
     app = YueApp(cfg)
+
+    return app
+
+def main():
+
+    args = parseArgs(sys.argv)
+
+    app = getApp(args.config, args.profile)
 
     app.run(context)
 

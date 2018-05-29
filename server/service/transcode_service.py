@@ -104,20 +104,37 @@ class TranscodeService(object):
             return False;
 
         srcpath = song[Song.path]
-        return not srcpath.lower().endswith('mp3')
+        return True # not srcpath.lower().endswith('mp3')
 
     def transcodeSong(self, song, mode):
+        """
+        mode:
+            original: do not transcode file
+            non-mp3: only transcode if not already an mp3 file
+            <kind>_<bitrate>_2ch: transcode all files to kind at bitrate.
+                kind: mp3
+                bitrate: for mp3, kilobytes per second, e.g. 256, 320
+        """
 
         srcpath = song[Song.path]
         tgtpath = self.config.transcode.audio.tmp_path
 
         if mode == "original":
             return srcpath
+        elif mode == "non-mp3" and srcpath.endswith(".mp3"):
+            return srcpath
+        elif mode == "non-mp3":
+            tgt_kind = "mp3"
+            tgt_rate = 256
+            tgt_channels = "2ch"
+        else:
+            tgt_kind, tgt_rate, tgt_channels = mode.split("_")
 
         if not os.path.exists(tgtpath):
             os.makedirs(tgtpath)
 
-        tgtpath = os.path.join(tgtpath, song[Song.id] + ".mp3")
+        suffix = ".%s.%s.%s" % (tgt_rate, tgt_channels, tgt_kind)
+        tgtpath = os.path.join(tgtpath, song[Song.id] + suffix)
 
         metadata = dict(
             artist=song[Song.artist],
@@ -125,15 +142,9 @@ class TranscodeService(object):
             title=song[Song.title]
         )
 
-        #if Song.eqfactor > 0:
-        #    vol = song[Song.equalizer] / Song.eqfactor
-        #else:
-        #    vol = 1.0
         vol = 1.0
 
-        bitrate = 320
-        if srcpath.lower().endswith('mp3'):
-            bitrate = 0
+        bitrate = int(tgt_rate)
 
         if not os.path.exists(tgtpath):
             self.encoder.transcode(srcpath,

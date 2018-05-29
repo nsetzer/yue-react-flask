@@ -33,12 +33,6 @@ def generate_client(app, name="client", outdir="."):
         with open("server/framework/client.py", "r") as rf:
             wf.write(rf.read())
 
-    py_client_impl = os.path.join(client_dir, "sync.py")
-    with open(py_client_impl, "w") as wf:
-        wf.write(header)
-        with open("server/tools/sync.py", "r") as rf:
-            wf.write(rf.read())
-
     py_endpoints = os.path.join(client_dir, "connect.py")
     with open(py_endpoints, "w") as wf:
         wf.write(header)
