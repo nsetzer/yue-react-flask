@@ -74,8 +74,8 @@ class FileSysService(object):
 
         os_root = self.getRootPath(user, fs_name)
 
-        logging.error(os_root)
-        path = normalize('NFKD', path)
+        # normalizing loses information, making sync hard to implement
+        # path = normalize('NFKD', path)
 
         if not path.strip():
             return os_root
@@ -128,8 +128,6 @@ class FileSysService(object):
         dirs.sort()
 
         os_root_normalized = os_root.replace("\\", "/")
-
-
 
         result = {
             # name is the name of the file system, which

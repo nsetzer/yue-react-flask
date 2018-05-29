@@ -70,8 +70,12 @@ def _endpoint_mapper(f):
         if hasattr(f, "_body"):
             try:
                 type_, json = f._body
-                g.body = type_(request.get_json())
+                if json:
+                    g.body = type_(request.get_json())
+                else:
+                    g.body = type_(request.stream)
             except Exception as e:
+                logging.exception("unable to validate body")
                 return httpError(400, "unable to validate body")
         return f(*args, **kwargs)
 
@@ -124,6 +128,10 @@ def body(type_, json=True):
         f._body = (type_, json)
         return f
     return decorator
+
+def null_validator(item):
+    """ a validator which returns the object given """
+    return item
 
 def compressed(f):
     """
@@ -231,7 +239,8 @@ def send_generator(go, attachment_name, file_size=None):
 
     response = Response(go, mimetype=mimetype)
 
-    response.headers.set('Content-Length',file_size)
+    if file_size is not None:
+        response.headers.set('Content-Length', file_size)
 
     response.headers.add('Content-Disposition', 'attachment',
         filename=attachment_name)

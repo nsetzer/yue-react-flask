@@ -307,7 +307,7 @@ def _request_args_builder(endpoint, args):
     if hasattr(args, 'data'):
         data = getattr(args, 'data')
         if data == "-":
-            data = sys.stdin
+            data = sys.stdin.buffer
         else:
             data = open(data, "rb")
 

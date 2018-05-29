@@ -229,7 +229,7 @@ class ParserTestCase(unittest.TestCase):
         method, url, options = args.func(args)
         self.assertEqual(method, "put")
         self.assertEqual(url, "/api/put_json")
-        self.assertEqual(options['data'], sys.stdin)
+        self.assertEqual(options['data'], sys.stdin.buffer)
 
     def test_post(self):
 
@@ -243,7 +243,7 @@ class ParserTestCase(unittest.TestCase):
         method, url, options = args.func(args)
         self.assertEqual(method, "post")
         self.assertEqual(url, "/api/post_json")
-        self.assertEqual(options['data'], sys.stdin)
+        self.assertEqual(options['data'], sys.stdin.buffer)
 
     def test_post_file(self):
 

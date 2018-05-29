@@ -292,6 +292,9 @@ class S3FileSystemImpl(AbstractFileSystem):
             "--bucket", bucket,
             "--key", key
         ]
+
+        logging.info("execute: %s" % sh_escape(cmd))
+
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL)
         p.communicate()
