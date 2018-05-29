@@ -31,7 +31,11 @@ BaseHTTPRequestHandler.send_header = _send_header
         Service Layer
             Application logic built on top of Dao objects
         Dao Layer
-            object which have direct access to the database
+            objects which have direct access to the database or filesystem
+            This is made up of a database library, and an abstract file system
+            the db library  provides access to a sqlite or postgres database
+            the file system library provides access to either local storage,
+            s3 or an in-memory file system
         Database
             A database client to SQLite or PostgreSQL.
 """
@@ -130,14 +134,17 @@ class FlaskApp(object):
             username, password, domain, role)
         return FlaskAppClient(client, self._registered_endpoints)
 
-    def test_client(self, token = None):
+    def test_client(self, token=None):
         return AppTestClientWrapper(self.app.test_client(), token)
 
-    def run(self, ssl_context=None):
+    def run(self):
+
+        ssl_context = self.get_ssl_context()
 
         routes = self.list_routes()
         for endpoint, methods, url in routes:
-            sys.stdout.write("{:40s} {:20s} {}\n".format(endpoint, methods, url))
+            sys.stdout.write("{:40s} {:20s} {}\n".format(
+                endpoint, methods, url))
         sys.stdout.flush()
 
         self.app.run(host=self.config.host,
@@ -151,6 +158,19 @@ class FlaskApp(object):
         response.headers["Access-Control-Allow-Methods"] = self.config.cors.methods
 
         return response
+
+    def get_ssl_context(self):
+        context = None
+        if os.path.exists(self.config.ssl.private_key) and \
+           os.path.exists(self.config.ssl.certificate):
+            context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+            context.load_cert_chain(self.config.ssl.certificate,
+                                    self.config.ssl.private_key)
+        return context
+
+    def __call__(self, env, start_response):
+        # uwsgi support
+        return self.app(env, start_response)
 
 class AppTestClientWrapper(object):
     """

@@ -192,8 +192,7 @@ class LibraryResource(WebResource):
 
         song = self.audio_service.findSongById(g.current_user, song_id)
 
-        scale = ImageScale.fromName(g.args.scale)
-        path = self.transcode_service.getScaledAlbumArt(song, scale)
+        path = self.transcode_service.getScaledAlbumArt(song, g.args.scale)
 
         if not os.path.exists(path):
             logging.error("Art for %s not found at: `%s`" % (song_id, path))

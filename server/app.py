@@ -1,6 +1,10 @@
 
 import os
 import sys
+
+if (sys.version_info[0] == 2):
+    raise RuntimeError("python2 not supported")
+
 import logging
 from logging.handlers import RotatingFileHandler
 
@@ -243,11 +247,6 @@ def getApp(config_dir, profile):
 
     logging.info("using config: %s" % app_cfg_path)
 
-    context = None
-    if os.path.exists(cfg.ssl.private_key) and os.path.exists(cfg.ssl.certificate):
-        context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-        context.load_cert_chain(cfg.ssl.certificate, cfg.ssl.private_key)
-
     app = YueApp(cfg)
 
     return app
@@ -258,7 +257,7 @@ def main():
 
     app = getApp(args.config, args.profile)
 
-    app.run(context)
+    app.run()
 
 if __name__ == '__main__':
     main()

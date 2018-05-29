@@ -25,23 +25,37 @@ def _handle_exceptions(f, args, kwargs):
         traceback.print_exc()
         return httpError(e.status, str(e))
 
+    except FileNotFoundError as e:
+
+        reason = "File Not Found Error: "
+        if hasattr(g, 'current_user') and g.current_user is not None:
+            reason = "Unhandled Exception (current user: %s): " % \
+                g.current_user['email']
+
+        logging.exception(reason)
+
+        return httpError(404, reason + str(e))
+
     except ServiceException as e:
-        traceback.print_exc()
 
         reason = "Unhandled Exception: "
         if hasattr(g, 'current_user') and g.current_user is not None:
             reason = "Unhandled Exception (current user: %s): " % \
                 g.current_user['email']
+
+        logging.exception(reason)
 
         return httpError(400, reason + str(e))
 
     except Exception as e:
-        traceback.print_exc()
+        # traceback.print_exc()
 
         reason = "Unhandled Exception: "
         if hasattr(g, 'current_user') and g.current_user is not None:
             reason = "Unhandled Exception (current user: %s): " % \
                 g.current_user['email']
+
+        logging.exception(reason)
 
         return httpError(500, reason + str(e))
 
@@ -139,7 +153,7 @@ def _requires_apikey_auth_impl(service, f, args, kwargs, features, token):
 def requires_auth(features=None):
 
     if isinstance(features, str):
-        features = [features,]
+        features = [features]
     __add_feature(features)
 
     def impl(f):
@@ -156,13 +170,13 @@ def requires_auth(features=None):
             token = request.args.get('token', None)
             if token is not None:
                 bytes_token = (token).encode("utf-8")
-                return _requires_token_auth_impl(service, f, args, kwargs, \
+                return _requires_token_auth_impl(service, f, args, kwargs,
                     features, bytes_token)
 
             token = request.args.get('apikey', None)
             if token is not None:
                 bytes_token = ("APIKEY " + token).encode("utf-8")
-                return _requires_apikey_auth_impl(service, f, args, kwargs, \
+                return _requires_apikey_auth_impl(service, f, args, kwargs,
                     features, bytes_token)
 
             # check therequest headers for auth tokens
@@ -175,12 +189,12 @@ def requires_auth(features=None):
             token = request.headers['Authorization']
             bytes_token = token.encode('utf-8', 'ignore')
             if token.startswith("Basic "):
-                return _requires_basic_auth_impl(service, f, args, kwargs, \
+                return _requires_basic_auth_impl(service, f, args, kwargs,
                     features, bytes_token)
             elif token.startswith("APIKEY "):
-                return _requires_apikey_auth_impl(service, f, args, kwargs, \
+                return _requires_apikey_auth_impl(service, f, args, kwargs,
                     features, bytes_token)
-            return _requires_token_auth_impl(service, f, args, kwargs, \
+            return _requires_token_auth_impl(service, f, args, kwargs,
                 features, bytes_token)
         return wrapper
     return impl

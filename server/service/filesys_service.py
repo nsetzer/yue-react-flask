@@ -14,6 +14,17 @@ from unicodedata import normalize
 _windows_device_files = ('CON', 'AUX', 'COM1', 'COM2', 'COM3', 'COM4', 'LPT1',
                          'LPT2', 'LPT3', 'PRN', 'NUL')
 
+def trim_path(p, root):
+    # todo, this seems problematic, and I think I have several
+    # implementations throughout the source code. unify the implementations
+    # under the file system api.
+    p = p.replace("\\", "/")
+    if p.startswith(root):
+        p = p[len(root):]
+    while p.startswith("/"):
+        p = p[1:]
+    return p
+
 class FileSysService(object):
     """docstring for FileSysService"""
 
@@ -90,7 +101,6 @@ class FileSysService(object):
 
     def listDirectory(self, user, fs_name, path):
         """
-
         todo: check for .yueignore in the root, or in the given path
         use to load filters to remove elements from the response
         """
@@ -105,6 +115,7 @@ class FileSysService(object):
 
         files = []
         dirs = []
+
         for name, is_dir, size, mtime in self.fs.scandir(abs_path):
             pathname = self.fs.join(abs_path, name)
 
@@ -117,13 +128,8 @@ class FileSysService(object):
         dirs.sort()
 
         os_root_normalized = os_root.replace("\\", "/")
-        def trim_path(p):
-            p = p.replace("\\", "/")
-            if p.startswith(os_root_normalized):
-                p = p[len(os_root_normalized):]
-            while p.startswith("/"):
-                p = p[1:]
-            return p
+
+
 
         result = {
             # name is the name of the file system, which
@@ -131,10 +137,10 @@ class FileSysService(object):
             "name": fs_name,
             # return the relative path, suitable for the request url
             # that would reproduce this result
-            "path": trim_path(path),
+            "path": trim_path(path, os_root_normalized),
             # return the relative path to the parent, suitable to produce
             # a directory listing on the parent
-            "parent": trim_path(parent),
+            "parent": trim_path(parent, os_root_normalized),
             # return the list of files as a dictionary
             "files": files,
             # return the names of all sub directories
