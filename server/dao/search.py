@@ -28,6 +28,7 @@ class StrPos(str):
         inst.pos = pos
         inst.end = end
         inst.kind = kind
+        inst.name = strval
         return inst
 
 class Rule(object):
@@ -429,7 +430,7 @@ def naive_search(seq, rule, case_insensitive=True, orderby=None, \
     seq can be any iterable data structure containing table data
     for example a list-of-dict, or a sql database view.
 
-    TODO: reverse is depracted. it is handled by order by
+    TODO: reverse is deprecated. it is handled by order by
 
     """
     # filter the sequence using the rule
@@ -1048,7 +1049,7 @@ class Grammar(object):
 
     def addMeta(self, colid, tok, value, top):
         """ meta options control sql parameters of the query
-        They are independant of any database.
+        They are independent of any database.
         """
         if not top:
             raise ParseError("Option `%s` at position %d can only be provided at the top level." % (colid, colid.pos))

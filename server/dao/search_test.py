@@ -46,7 +46,8 @@ from .search import SearchGrammar, \
         ParseError, \
         RHSError, \
         LHSError, \
-        StrPos
+        StrPos, \
+        naive_search
 
 def extract(field, items):
     return set( item[field] for item in items )
@@ -179,7 +180,7 @@ class TestSearchMeta(type):
 
         return super(TestSearchMeta,cls).__new__(cls, name, bases, attr)
 
-class SearchTestCase(unittest.TestCase, metaclass=TestSearchMeta):
+class SearchOperatorTestCase(unittest.TestCase, metaclass=TestSearchMeta):
 
     @classmethod
     def setUpClass(cls):
@@ -496,6 +497,133 @@ class SearchGrammarTestCase(unittest.TestCase):
         r = self.sg.ruleFromString("(count=0 || count=1) = this")
         self.assertTrue(isinstance(r, AndSearchRule), type(r))
         self.assertEqual(r.rules[-1].colid, "text")
+
+    def test_rulegen_negate(self):
+
+        r = self.sg.ruleFromString("! count=1")
+        self.assertTrue(isinstance(r, NotSearchRule), type(r))
+
+    def test_rulegen_meta(self):
+        r = self.sg.ruleFromString("limit=5 count=1")
+        self.assertTrue(isinstance(r, ExactSearchRule), type(r))
+        self.assertEqual(self.sg.meta_options['limit'], 5)
+
+        r = self.sg.ruleFromString("debug=0 count=1")
+        self.assertEqual(self.sg.meta_options['debug'], 0)
+
+        with self.assertRaises(ParseError):
+            self.sg.ruleFromString("(debug=0) count=1")
+
+        with self.assertRaises(ParseError):
+            self.sg.ruleFromString("debug=0 debug=1")
+
+class SearchTestCase(unittest.TestCase):
+    """
+    """
+    def __init__(self,*args,**kwargs):
+        super(SearchTestCase,self).__init__(*args,**kwargs)
+
+    def setUp(self):
+
+        self.dtn = datetime.datetime(2018,3,12)
+        self.sg = SearchGrammar(self.dtn);
+
+        self.sg.autoset_datetime = False
+        self.sg.text_fields = ["value1", "value2"]
+        self.sg.date_fields = ["date", ]
+        self.sg.year_fields = ["year", ]
+        self.sg.time_fields = ["elapsed", ]
+        self.sg.number_fields = ["count", ]
+
+    def tearDown(self):
+        pass
+
+    def test_naive_search(self):
+
+        items = [{"number": 0,}, {"number": 9,}]
+        rule = LessThanSearchRule(StrPos("number", 0, 0), 5)
+
+        result = naive_search(items, rule)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['number'], 0)
+
+    def test_naive_search(self):
+
+        items = [{"number": 0,}, {"number": 9,}]
+        rule = LessThanSearchRule(StrPos("number", 0, 0), 5)
+
+        result = naive_search(items, BlankSearchRule())
+
+        self.assertEqual(len(result), 2)
+
+    def test_naive_search_order(self):
+        # the orderby kwarg should control the order of returned elements
+
+        items=[{"number": i,} for i in range(10)]
+        rule = LessThanSearchRule(StrPos("number", 0, 0), 5)
+
+        result = naive_search(items, rule, orderby="number")
+        self.assertEqual(len(result), 5)
+        for i in range(1, len(result)):
+            self.assertEqual(result[i-1]['number'], result[i]['number']-1)
+
+        result = naive_search(items, rule, orderby=["number"])
+        self.assertEqual(len(result), 5)
+        for i in range(1, len(result)):
+            self.assertEqual(result[i-1]['number'], result[i]['number']-1)
+
+        result = naive_search(items, rule, orderby=[("number", "ASC")])
+        self.assertEqual(len(result), 5)
+        for i in range(1, len(result)):
+            self.assertEqual(result[i-1]['number'], result[i]['number']-1)
+
+        result = naive_search(items, rule, orderby=[("number", "DESC")])
+        self.assertEqual(len(result), 5)
+        for i in reversed(range(1, len(result))):
+            self.assertEqual(result[i-1]['number'], result[i]['number']+1)
+
+    def test_naive_search_columns(self):
+        # the columns kwarg should filter results to only return the named keys
+
+        items = [{"number": 0, "string": "a"}, {"number": 9, "string": "b"}]
+
+        rule = LessThanSearchRule(StrPos("number", 0, 0), 5)
+        result = naive_search(items, rule, columns=['string'])
+        self.assertEqual(len(result), 1)
+        self.assertTrue("string" in result[0], "a")
+        self.assertTrue("number" not in result[0], "a")
+        self.assertEqual(result[0]['string'], "a")
+
+    def test_naive_search_limit(self):
+        items=[{"number": i,} for i in range(10)]
+        rule = LessThanSearchRule(StrPos("number", 0, 0), 5)
+
+        result = naive_search(items, rule, orderby="number", offset=1, limit=2)
+
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]['number'], 1)
+        self.assertEqual(result[1]['number'], 2)
+
+    def test_naive_search_meta(self):
+        # the orderby kwarg should control the order of returned elements
+
+        items=[{"number": i,} for i in range(10)]
+        rulea = LessThanSearchRule(StrPos("number", 0, 0), 8)
+        ruleb = GreaterThanSearchRule(StrPos("number", 0, 0), 2)
+        rule = AndSearchRule([rulea, ruleb])
+        result = naive_search(items, rule)
+        for r in result:
+            self.assertTrue(r['number'] > 2)
+            self.assertTrue(r['number'] < 8)
+
+    def test_rule(self):
+
+        rulea = LessThanSearchRule(StrPos("number", 0, 0), 8)
+        ruleb = GreaterThanSearchRule(StrPos("number", 0, 0), 2)
+
+        self.assertEqual(rulea, rulea)
+        self.assertNotEqual(rulea, ruleb)
 
 if __name__ == '__main__':
     main_test(sys.argv, globals())
