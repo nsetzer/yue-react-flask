@@ -7,11 +7,11 @@ from flask import jsonify, render_template, g, request, send_file
 from ..dao.library import Song
 from ..dao.util import parse_iso_format, pathCorrectCase
 
-
 from ..framework.web_resource import WebResource, \
-    get, post, put, delete, compressed, param, httpError
+    get, post, put, delete, body, compressed, param, httpError, \
+    send_generator, null_validator
 
-from .util import requires_auth
+from .util import requires_auth, files_generator
 
 class FilesResource(WebResource):
     """QueueResource
@@ -38,6 +38,7 @@ class FilesResource(WebResource):
 
     @post("<root>/path/<path:resPath>")
     @param("mtime", type_=int, doc="set file modified time")
+    @body(null_validator, content_type="application/octet-stream")
     @requires_auth("filesystem_write")
     def upload(self, root, resPath):
         """
@@ -46,7 +47,7 @@ class FilesResource(WebResource):
         """
 
         self.filesys_service.saveFile(
-            g.current_user, root, resPath, request.stream, mtime=g.args.mtime)
+            g.current_user, root, resPath, g.body, mtime=g.args.mtime)
 
         return jsonify(result="OK"), 200
 
@@ -59,16 +60,19 @@ class FilesResource(WebResource):
 
     def _list_path(self, root, path):
 
+        fs = self.filesys_service.fs
         # application config should define a number of valid roots
         # that can be listed.
         abs_path = self.filesys_service.getPath(g.current_user, root, path)
 
-        if not os.path.exists(abs_path):
-            logging.error("not found: %s" % path)
-            return httpError(404, "path does not exist")
+        # if not fs.exists(abs_path):
+        #    logging.error("not found: %s" % path)
+        #    return httpError(404, "path does not exist")
 
-        if os.path.isfile(abs_path):
-            return send_file(abs_path)
+        if self.filesys_service.fs.isfile(abs_path):
+            _, name = self.filesys_service.fs.split(abs_path)
+            go = files_generator(self.filesys_service.fs, abs_path)
+            return send_generator(go, name, file_size=None)
 
         result = self.filesys_service.listDirectory(g.current_user, root, path)
         return jsonify(result=result)

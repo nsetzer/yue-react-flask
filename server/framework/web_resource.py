@@ -44,7 +44,6 @@ def httpError(code, message):
 
 def _endpoint_mapper(f):
 
-
     @wraps(f)
     def wrapper(*args, **kwargs):
         g.args = lambda: None
@@ -69,9 +68,13 @@ def _endpoint_mapper(f):
                 setattr(g.args, param.name, value)
         if hasattr(f, "_body"):
             try:
-                type_, json = f._body
-                g.body = type_(request.get_json())
+                type_, content_type = f._body
+                if content_type == 'application/json':
+                    g.body = type_(request.get_json())
+                else:
+                    g.body = type_(request.stream)
             except Exception as e:
+                logging.exception("unable to validate body")
                 return httpError(400, "unable to validate body")
         return f(*args, **kwargs)
 
@@ -97,7 +100,7 @@ def post(path):
     """decorator which registers a class method as a POST handler"""
     def decorator(f):
         f._endpoint = path
-        f._methods = ['POST',]
+        f._methods = ['POST']
         return _endpoint_mapper(f)
     return decorator
 
@@ -119,11 +122,15 @@ def param(name, type_=str, default=None, required=False, doc=""):
         return f
     return decorator
 
-def body(type_, json=True):
+def body(type_, content_type="application/json"):
     def decorator(f):
-        f._body = (type_, json)
+        f._body = (type_, content_type)
         return f
     return decorator
+
+def null_validator(item):
+    """ a validator which returns the object given """
+    return item
 
 def compressed(f):
     """
@@ -231,7 +238,8 @@ def send_generator(go, attachment_name, file_size=None):
 
     response = Response(go, mimetype=mimetype)
 
-    response.headers.set('Content-Length',file_size)
+    if file_size is not None:
+        response.headers.set('Content-Length', file_size)
 
     response.headers.add('Content-Disposition', 'attachment',
         filename=attachment_name)
@@ -251,7 +259,7 @@ class MetaWebResource(type):
                 path = func._endpoint
                 methods = func._methods
 
-                _body = (None, False)
+                _body = (None, None)
                 if hasattr(func, "_body"):
                     _body = func._body
 
@@ -302,9 +310,9 @@ class WebResource(object, metaclass = MetaWebResource):
     def register(self, path, func, methods):
         name = self.__class__.__name__ + "." + func.__name__
         if not path.startswith("/"):
-            path = (self.root + '/' + path).replace("//","/")
+            path = (self.root + '/' + path).replace("//", "/")
         # todo, support _body, _params somehow
-        _body = (None, False)
+        _body = (None, None)
         _params = []
-        self.__endpoints.append( WebEndpoint(path, methods, name,
-            func, _params, _body) )
+        self.__endpoints.append(WebEndpoint(path, methods, name,
+            func, _params, _body))

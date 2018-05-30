@@ -10,9 +10,10 @@ from ..dao.util import pathCorrectCase
 
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, param, body, compressed, httpError, \
-    int_range, int_min, send_file as send_file_v2
+    int_range, int_min, send_generator, null_validator
 
-from .util import requires_auth, datetime_validator, search_order_validator
+from .util import requires_auth, datetime_validator, search_order_validator, \
+    files_generator
 
 from ..service.transcode_service import ImageScale
 
@@ -132,8 +133,8 @@ class LibraryResource(WebResource):
         return jsonify(result=song)
 
     @get("<song_id>/audio")
-    @param("mode", default="default",
-        doc="one of default|raw|mp3_320_2ch")
+    @param("mode", default="non-mp3",
+        doc="one of original|non-mp3|mp3_320_2ch")
     @requires_auth("library_read_song")
     def get_song_audio(self, song_id):
 
@@ -147,19 +148,26 @@ class LibraryResource(WebResource):
         if not path:
             return httpError(404, "No audio for %s" % (song_id))
 
-        if not os.path.exists(path):
-            logging.error("Audio for %s not found at: `%s`" % (song_id, path))
-            return httpError(404, "Audio File not found")
+        #if not os.path.exists(path):
+        #    logging.error("Audio for %s not found at: `%s`" % (song_id, path))
+        #    return httpError(404, "Audio File not found")
 
-        g.args.mode = "mp3_256_2ch"
+        # todo: a normal-type user (one who only listens to audio)
+        # should be allowed to transcode non-mp3 to exactly one format,
+        # and should be denied the ability to transcode to any other format
+        # i.e. the user role must have library_write_song in order to
+        # transcode anything other than "non-mp3"
+
         if self.transcode_service.shouldTranscodeSong(song, g.args.mode):
             path = self.transcode_service.transcodeSong(song, g.args.mode)
 
-        if not os.path.exists(path):
+        if not self.audio_service.fs.exists(path):
             logging.error("Audio for %s not found at: `%s`" % (song_id, path))
             return httpError(404, "Audio File not found")
 
-        return send_file_v2(path)
+        _, name = self.audio_service.fs.split(path)
+        go = files_generator(self.audio_service.fs, path)
+        return send_generator(go, name, file_size=None)
 
     @post("<song_id>/audio")
     @body(song_audio_path_validator)
@@ -175,7 +183,7 @@ class LibraryResource(WebResource):
         return jsonify(result="OK"), 200
 
     @get("<song_id>/art")
-    @param("scale", type_=image_scale_type, default=ImageScale.name(ImageScale.MEDIUM))
+    @param("scale", type_=image_scale_type, default=ImageScale.MEDIUM)
     @requires_auth("library_read_song")
     def get_song_art(self, song_id):
         """ get album art for a specific song
@@ -189,11 +197,13 @@ class LibraryResource(WebResource):
 
         path = self.transcode_service.getScaledAlbumArt(song, g.args.scale)
 
-        if not os.path.exists(path):
+        if not self.audio_service.fs.exists(path):
             logging.error("Art for %s not found at: `%s`" % (song_id, path))
             return httpError(404, "Album art not found")
 
-        return send_file(path)
+        _, name = self.audio_service.fs.split(path)
+        go = files_generator(self.audio_service.fs, path)
+        return send_generator(go, name, file_size=None)
 
     @post("<song_id>/art")
     @body(song_audio_path_validator)
@@ -233,6 +243,7 @@ class LibraryResource(WebResource):
         })
 
     @post("history")
+    @body(null_validator)
     @requires_auth("user_write")
     def update_history(self):
         """

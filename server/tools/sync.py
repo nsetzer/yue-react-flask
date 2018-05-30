@@ -206,12 +206,12 @@ class SyncManager(object):
         if self.remote_base is None and self.local_base is None:
             # first time this is run, scan the root directory
             self._check("", self.local_root)
-        elif pull and self.dld:
+        elif self.dld:
             # scan directories to download
-            self._check(*self.dld.pop(0))
-        elif push and self.uld:
+            self._check(*self.dld.pop())
+        elif self.uld:
             # scan directires to upload
-            self._check(*self.uld.pop(0))
+            self._check(*self.uld.pop())
         elif self._force:
             # force a re-check
             self._check(self.remote_base, self.local_base)

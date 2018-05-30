@@ -106,7 +106,7 @@ def pathCorrectCase(path):
     else:
         newpath = os.getcwd()
 
-    for i in range(0,len(parts)):
+    for i in range(0, len(parts)):
 
         if parts[i] == "." or parts[i] == "":
             # a dot is the same as the current directory
@@ -122,18 +122,18 @@ def pathCorrectCase(path):
 
         # test that the given part is a valid file or folder
 
-        testpath = os.path.join(newpath,parts[i])
+        testpath = os.path.join(newpath, parts[i])
 
         if os.path.exists(testpath):
-            newpath = testpath;
+            newpath = testpath
         else:
             # scan the directory for files with the
             # same name, ignoring case.
-            temp = parts[i].lower();
+            temp = parts[i].lower()
             for item in os.listdir(newpath):
                 if item.lower() == temp:
-                    newpath = os.path.join(newpath,item)
-                    break;
+                    newpath = os.path.join(newpath, item)
+                    break
             else:
                 raise Exception('Path `%s/%s` not found' % (newpath, temp))
 

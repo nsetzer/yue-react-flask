@@ -1,6 +1,7 @@
 
 import os, sys
 from ..dao.library import Song
+from ..dao.filesys import FileSystem
 from .util import FFmpegEncoder
 from .exception import TranscodeServiceException
 import logging
@@ -71,6 +72,8 @@ class TranscodeService(object):
         self.db = db
         self.dbtables = dbtables
 
+        self.fs = FileSystem()
+
         enc_path = config.transcode.audio.bin_path
 
         if enc_path and not os.path.exists(enc_path):
@@ -107,19 +110,34 @@ class TranscodeService(object):
         return True # not srcpath.lower().endswith('mp3')
 
     def transcodeSong(self, song, mode):
+        """
+        mode:
+            original: do not transcode file
+            non-mp3: only transcode if not already an mp3 file
+            <kind>_<bitrate>_2ch: transcode all files to kind at bitrate.
+                kind: mp3
+                bitrate: for mp3, kilobytes per second, e.g. 256, 320
+        """
 
         srcpath = song[Song.path]
         tgtpath = self.config.transcode.audio.tmp_path
 
         if mode == "original":
             return srcpath
-
-        tgt_kind, tgt_rate, tgt_channels = mode.split("_")
+        elif mode == "non-mp3" and srcpath.endswith(".mp3"):
+            return srcpath
+        elif mode == "non-mp3":
+            tgt_kind = "mp3"
+            tgt_rate = 256
+            tgt_channels = "2ch"
+        else:
+            tgt_kind, tgt_rate, tgt_channels = mode.split("_")
 
         if not os.path.exists(tgtpath):
             os.makedirs(tgtpath)
 
-        tgtpath = os.path.join(tgtpath, song[Song.id] + ".%s.mp3" % mode)
+        suffix = ".%s.%s.%s" % (tgt_rate, tgt_channels, tgt_kind)
+        tgtpath = os.path.join(tgtpath, song[Song.id] + suffix)
 
         metadata = dict(
             artist=song[Song.artist],
@@ -127,15 +145,9 @@ class TranscodeService(object):
             title=song[Song.title]
         )
 
-        #if Song.eqfactor > 0:
-        #    vol = song[Song.equalizer] / Song.eqfactor
-        #else:
-        #    vol = 1.0
         vol = 1.0
 
         bitrate = int(tgt_rate)
-        #if srcpath.lower().endswith('mp3'):
-        #    bitrate = 0
 
         if not os.path.exists(tgtpath):
             self.encoder.transcode(srcpath,
@@ -159,7 +171,11 @@ class TranscodeService(object):
         Square images are intended for icons, while the 16x9 aspect ratio
         images can be used for banners.
         """
-        img = Image.open(src_path)
+
+        with self.fs.open(src_path, "rb") as rb:
+            img = Image.open(rb)
+            img.load()
+
         width, height = img.size
 
         tgt_width, tgt_height = ImageScale.size(scale)
@@ -177,7 +193,10 @@ class TranscodeService(object):
             # crop the image
             img = ImageOps.fit(img, (tgt_width, tgt_height))
 
-        img.save(tgt_path)
+        # todo: file object must implement seek, tell, and write
+        # this will not work with the current s3 implementation
+        with self.fs.open(tgt_path, "wb") as wb:
+            img.save(wb, format="png")
 
         return img.size
 
@@ -196,17 +215,17 @@ class TranscodeService(object):
 
         src_path = song[Song.art_path]
 
-        if not src_path or not os.path.exists(src_path):
+        if not src_path or not self.fs.exists(src_path):
             # when displaying album art as part of a resource, instead
             # of returning the default path, return a 303 redirect
             # to the url of the default art.
             logging.info("album art found: `%s`" % src_path)
             raise TranscodeServiceException("file not found")
 
-        dir, name  = os.path.split(src_path)
-        name, _ = os.path.splitext(name)
+        dir, name  = self.fs.split(src_path)
+        name, _ = self.fs.splitext(name)
         name = "%s.%s.png" % (name, ImageScale.name(scale))
-        tgt_path = os.path.join(dir, name)
+        tgt_path = self.fs.join(dir, name)
 
         self.scaleImage(src_path, tgt_path, scale)
 
