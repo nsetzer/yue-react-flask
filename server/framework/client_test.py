@@ -15,27 +15,27 @@ from .client import (split_auth, AuthenticatedRestClient,
 test_endpoints = [
     RegisteredEndpoint("/api/get_json", "TestResource.get_json",
         "test documentation", ['GET'],
-        [Parameter("align", str, "left", False, "")], (None, False)),
+        [Parameter("align", str, "left", False, "")], (None, None)),
     RegisteredEndpoint("/api/put_json", "TestResource.put_json",
-        "test documentation", ['PUT'], [], ('json', True)),
+        "test documentation", ['PUT'], [], ('json', 'application/json')),
     RegisteredEndpoint("/api/post_json", "TestResource.post_json",
-        "test documentation", ['POST'], [], ('json', True)),
+        "test documentation", ['POST'], [], ('json', 'application/json')),
 
     RegisteredEndpoint("/api/delete", "TestResource.delete",
-        "test documentation", ['DELETE'], [], (None, False)),
+        "test documentation", ['DELETE'], [], (None, None)),
 
     # same as get_json, with a required query parameter
     RegisteredEndpoint("/api/get_json_2", "TestResource.get_json_2",
         "test documentation", ['GET'],
-        [Parameter("align", str, "left", True, "")], (None, False)),
+        [Parameter("align", str, "left", True, "")], (None, None)),
 
     RegisteredEndpoint("/api/user/<user>", "TestResource.get_user",
-        "test documentation", ['GET'], [], (None, False)),
+        "test documentation", ['GET'], [], (None, None)),
     RegisteredEndpoint("/api/path/<path:ResourePath>", "TestResource.get_path",
-        "test documentation", ['GET'], [], (None, False)),
+        "test documentation", ['GET'], [], (None, None)),
 
     RegisteredEndpoint("/api/post_file", "TestResource.post_file",
-        "test documentation", ['POST'], [], ('json', True)),
+        "test documentation", ['POST'], [], ('json', 'application/json')),
 
 ]
 

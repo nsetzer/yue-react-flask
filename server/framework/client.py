@@ -248,7 +248,7 @@ def _request_builder(endpoint, *args, **kwargs):
 
     positional = list(args)
 
-    options = {}
+    options = {"headers": {}}
 
     if 'method' in kwargs:
         # TODO: may want to assert that the chosen method
@@ -259,16 +259,20 @@ def _request_builder(endpoint, *args, **kwargs):
     else:
         method = endpoint.methods[0].lower()
 
-    _type, _json = endpoint.body
-    if _type is not None or method in ["put", "post"]:
-        options['data'] = positional.pop()
-
-    if _json:
-        options['json'] = True
+    if 'headers' in kwargs:
+        options['headers'] = kwargs['headers']
+        del kwargs['headers']
 
     if 'stream' in kwargs:
         options['stream'] = kwargs['stream']
         del kwargs['stream']
+
+    _type, _mimetype = endpoint.body
+    if _type is not None or method in ["put", "post"]:
+        options['data'] = positional.pop()
+
+        if 'Content-Type' not in options['headers']:
+            options['headers']['Content-Type'] = _mimetype
 
     param_names = {p.name for p in endpoint.params}
     for key in kwargs.keys():
@@ -298,11 +302,24 @@ def _request_args_builder(endpoint, args):
     for typename, varname in url_decode(endpoint.path):
         positional.append(getattr(args, varname))
 
-    kwargs = {param[0]:getattr(args, param.name) for param in endpoint.params}
+    kwargs = {param[0]: getattr(args, param.name) for param in endpoint.params}
 
     for extra in ['stream', 'json', 'method']:
         if hasattr(args, extra):
             kwargs[extra] = getattr(args, extra)
+
+    headers = {}
+
+    if hasattr(args, "content_type"):
+        headers["Content-Type"] = getattr(args, "content_type")
+    for hstr in args.headers:
+        if ':' not in hstr:
+            raise Exception("Invalid header string: `%s`" % hstr)
+        name, value = hstr.split(":", 1)
+        value = value.lstrip()
+        name = name.rstrip()
+        headers[name] = value
+    kwargs['headers'] = headers
 
     if hasattr(args, 'data'):
         data = getattr(args, 'data')
@@ -392,8 +409,6 @@ def generate_argparse(registered_endpoints):
     index_name = ["1st", "2nd", "3rd", "4th", "5th",
                   "6th", "7th", "8th", "9th", "10th"]
     for endpoint in registered_endpoints:
-        # need a way to hide/rename a _registered_endpoints
-        # when it is registered
 
         name = endpoint.long_name.lower().replace("resource", "")
 
@@ -403,6 +418,10 @@ def generate_argparse(registered_endpoints):
         end_parser.set_defaults(
             func=lambda args, endpoint=endpoint:
                 _request_args_builder(endpoint, args))
+
+        end_parser.add_argument("-H", "--header", action="append", type=str,
+            default=[], dest="headers",
+            help="add additional headers to the request", )
 
         # parse the registered parameters, and generate optional arguments
         for param in endpoint.params:
@@ -425,13 +444,18 @@ def generate_argparse(registered_endpoints):
 
         # if the endpoint requires a body, add a final positional argument
         # used for uploading a document or stdin
-        _type, _json = endpoint.body
+        _type, _mimetype = endpoint.body
         if _type is not None:
             end_parser.add_argument("data",
                 help="file to upload (- for stdin)")
 
-            end_parser.add_argument("--stream", default=True,
-                type=str, help="enable streaming upload")
+            end_parser.add_argument("--no-stream", action="store_false",
+                dest="stream",
+                help="disable streaming uploads")
+
+            end_parser.add_argument("--content-type", default=_mimetype,
+                type=str, dest="content_type",
+                help="the body content type (%s)" % _mimetype)
 
     return parser
 

@@ -79,10 +79,22 @@ class FlaskApp(object):
         try:
             self.app.add_url_rule(path, name, callback, **options)
 
-            body = body or (None, False)
+            body_name = None
+            body_type = None
+
+            body = body or (None, None)
 
             if body[0] is not None:
-                body = (body[0].__name__, body[1])
+                body_name = body[0].__name__
+
+                # if we have a body, determine the default mimetype
+                if body[1] is not None:
+                    body_type = body[1]
+                else:
+                    # TODO: what should the default be?
+                    body_type = "application/octet-stream"
+
+            new_body = (body_name, body_type)
 
             params = params or []
             new_params = []
@@ -92,7 +104,7 @@ class FlaskApp(object):
                 new_params.append(Parameter(**data))
 
             endpoint = RegisteredEndpoint(path, name, callback.__doc__,
-                options['methods'], new_params, body)
+                options['methods'], new_params, new_body)
             self._registered_endpoints.append(endpoint)
 
             return
