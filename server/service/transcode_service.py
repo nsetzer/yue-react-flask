@@ -1,6 +1,7 @@
 
 import os, sys
 from ..dao.library import Song
+from ..dao.filesys import FileSystem
 from .util import FFmpegEncoder
 from .exception import TranscodeServiceException
 import logging
@@ -70,6 +71,8 @@ class TranscodeService(object):
         self.config = config
         self.db = db
         self.dbtables = dbtables
+
+        self.fs = FileSystem()
 
         enc_path = config.transcode.audio.bin_path
 
@@ -168,7 +171,11 @@ class TranscodeService(object):
         Square images are intended for icons, while the 16x9 aspect ratio
         images can be used for banners.
         """
-        img = Image.open(src_path)
+
+        with self.fs.open(src_path, "rb") as rb:
+            img = Image.open(rb)
+            img.load()
+
         width, height = img.size
 
         tgt_width, tgt_height = ImageScale.size(scale)
@@ -186,7 +193,10 @@ class TranscodeService(object):
             # crop the image
             img = ImageOps.fit(img, (tgt_width, tgt_height))
 
-        img.save(tgt_path)
+        # todo: file object must implement seek, tell, and write
+        # this will not work with the current s3 implementation
+        with self.fs.open(tgt_path, "wb") as wb:
+            img.save(wb, format="png")
 
         return img.size
 
@@ -205,17 +215,17 @@ class TranscodeService(object):
 
         src_path = song[Song.art_path]
 
-        if not src_path or not os.path.exists(src_path):
+        if not src_path or not self.fs.exists(src_path):
             # when displaying album art as part of a resource, instead
             # of returning the default path, return a 303 redirect
             # to the url of the default art.
             logging.info("album art found: `%s`" % src_path)
             raise TranscodeServiceException("file not found")
 
-        dir, name  = os.path.split(src_path)
-        name, _ = os.path.splitext(name)
+        dir, name  = self.fs.split(src_path)
+        name, _ = self.fs.splitext(name)
         name = "%s.%s.png" % (name, ImageScale.name(scale))
-        tgt_path = os.path.join(dir, name)
+        tgt_path = self.fs.join(dir, name)
 
         self.scaleImage(src_path, tgt_path, scale)
 

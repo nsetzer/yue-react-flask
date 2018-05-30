@@ -183,7 +183,7 @@ class LibraryResource(WebResource):
         return jsonify(result="OK"), 200
 
     @get("<song_id>/art")
-    @param("scale", type_=image_scale_type, default=ImageScale.name(ImageScale.MEDIUM))
+    @param("scale", type_=image_scale_type, default=ImageScale.MEDIUM)
     @requires_auth("library_read_song")
     def get_song_art(self, song_id):
         """ get album art for a specific song
@@ -197,11 +197,13 @@ class LibraryResource(WebResource):
 
         path = self.transcode_service.getScaledAlbumArt(song, g.args.scale)
 
-        if not os.path.exists(path):
+        if not self.audio_service.fs.exists(path):
             logging.error("Art for %s not found at: `%s`" % (song_id, path))
             return httpError(404, "Album art not found")
 
-        return send_file(path)
+        _, name = self.audio_service.fs.split(path)
+        go = files_generator(self.audio_service.fs, path)
+        return send_generator(go, name, file_size=None)
 
     @post("<song_id>/art")
     @body(song_audio_path_validator)
