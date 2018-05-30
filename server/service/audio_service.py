@@ -7,6 +7,7 @@ from ..dao.library import LibraryDao, Song
 from ..dao.queue import SongQueueDao
 from ..dao.history import HistoryDao
 from ..dao.shuffle import binshuffle
+from ..dao.filesys import FileSystem
 
 from .exception import AudioServiceException
 
@@ -25,6 +26,7 @@ class AudioService(object):
         self.libraryDao = LibraryDao(db, dbtables)
         self.queueDao = SongQueueDao(db, dbtables)
         self.historyDao = HistoryDao(db, dbtables)
+        self.fs = FileSystem()
 
     @staticmethod
     def init(config, db, dbtables):
@@ -52,7 +54,7 @@ class AudioService(object):
 
     def setSongFilePath(self, user, song_id, path):
 
-        if not os.path.exists(path):
+        if not self.fs.exists(path):
             logging.error("invalid path: %s" % path)
             raise AudioServiceException("invalid path")
 
@@ -63,7 +65,7 @@ class AudioService(object):
 
     def setSongAlbumArtPath(self, user, song_id, path):
 
-        if not os.path.exists(path):
+        if not self.fs.exists(path):
             logging.error("invalid path: %s" % path)
             raise AudioServiceException("invalid path")
 

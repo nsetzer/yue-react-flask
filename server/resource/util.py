@@ -231,3 +231,11 @@ def uuid_validator(uuid_string):
 
 def uuid_list_validator(lst):
     return [uuid_validator(s) for s in lst]
+
+def files_generator(fs, filepath, buffer_size=2048):
+
+    with fs.open(filepath, "rb") as rb:
+        buf = rb.read(buffer_size)
+        while buf:
+            yield buf
+            buf = rb.read(buffer_size)

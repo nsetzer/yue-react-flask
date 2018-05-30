@@ -11,16 +11,7 @@ from ..framework.web_resource import WebResource, \
     get, post, put, delete, body, compressed, param, httpError, \
     send_generator, null_validator
 
-from .util import requires_auth
-
-def files_generator(fs, filepath, buffer_size=2048):
-
-    with fs.open(filepath, "rb") as rb:
-        buf = rb.read(buffer_size)
-        while buf:
-            yield buf
-            buf = rb.read(buffer_size)
-
+from .util import requires_auth, files_generator
 
 class FilesResource(WebResource):
     """QueueResource

@@ -7,6 +7,8 @@ import json
 import gzip
 import argparse
 
+import ssl
+
 from .client import RegisteredEndpoint, Parameter, AuthenticatedRestClient, \
     FlaskAppClient, generate_argparse, split_auth
 

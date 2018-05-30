@@ -151,6 +151,7 @@ class FileSysService(object):
 
         path = self.getPath(user, fs_name, path)
 
+        logging.info("saving: %s" % path)
         dirpath, _ = self.fs.split(path)
         self.fs.makedirs(dirpath)
 
