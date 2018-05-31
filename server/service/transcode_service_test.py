@@ -50,7 +50,25 @@ class FilesResourceTestCase(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
 
-    def test_001_resize_image_large(self):
+    def test_001a_transcode_song(self):
+
+        song = {
+            Song.id: "transcode-test",
+            Song.artist: "Test",
+            Song.album: "Test",
+            Song.title: "Test",
+            Song.path: "./test/r160.mp3",
+        }
+
+        path = self.service.transcodeSong(song, "mp3_256_2ch")
+
+        # the transcode process should produce a new file with non-zero size
+        self.assertNotEqual(song[Song.path], path)
+        self.assertTrue(os.path.exists(path))
+        st = os.stat(path)
+        self.assertTrue(st.st_size > 0)
+
+    def test_002a_resize_image_large(self):
         tgt_path = "./test/blank-out.png"
         scale = ImageScale.LARGE
         for src_path in self.images:
@@ -58,7 +76,7 @@ class FilesResourceTestCase(unittest.TestCase):
             self.assertEqual((w, h), ImageScale.size(scale))
             self.assertTrue(os.path.exists(tgt_path))
 
-    def test_002_resize_image_medium(self):
+    def test_002b_resize_image_medium(self):
         tgt_path = "./test/blank-out.png"
         scale = ImageScale.MEDIUM
         for src_path in self.images:
@@ -66,7 +84,7 @@ class FilesResourceTestCase(unittest.TestCase):
             self.assertEqual((w, h), ImageScale.size(scale))
             self.assertTrue(os.path.exists(tgt_path))
 
-    def test_003_resize_image_small(self):
+    def test_002c_resize_image_small(self):
         tgt_path = "./test/blank-out.png"
         scale = ImageScale.SMALL
         for src_path in self.images:
@@ -74,7 +92,7 @@ class FilesResourceTestCase(unittest.TestCase):
             self.assertEqual((w, h), ImageScale.size(scale))
             self.assertTrue(os.path.exists(tgt_path))
 
-    def test_004_resize_image_landscape(self):
+    def test_002d_resize_image_landscape(self):
         tgt_path = "./test/blank-out.png"
         scale = ImageScale.LANDSCAPE
         for src_path in self.images:
@@ -82,7 +100,7 @@ class FilesResourceTestCase(unittest.TestCase):
             self.assertEqual((w, h), ImageScale.size(scale))
             self.assertTrue(os.path.exists(tgt_path))
 
-    def test_005_resize_image_landscape_small(self):
+    def test_002e_resize_image_landscape_small(self):
         tgt_path = "./test/blank-out.png"
         scale = ImageScale.LANDSCAPE_SMALL
         for src_path in self.images:
@@ -90,7 +108,7 @@ class FilesResourceTestCase(unittest.TestCase):
             self.assertEqual((w, h), ImageScale.size(scale))
             self.assertTrue(os.path.exists(tgt_path))
 
-    def test_006_transcode_art(self):
+    def test_003_transcode_art(self):
 
         song = {Song.art_path: self.images[0]}
 

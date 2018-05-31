@@ -99,6 +99,13 @@ class AbstractFileSystem(object):
     def set_mtime(self, path, mtime):
         pass
 
+    def file_info(self, path):
+        """ a stat-like interface for querying information about a file
+
+        returns name, is_dir, file_size, mtime
+        """
+        pass
+
 class LocalFileSystemImpl(AbstractFileSystem):
     """docstring for LocalFileSystemImpl"""
     scheme = "file://"
@@ -117,17 +124,13 @@ class LocalFileSystemImpl(AbstractFileSystem):
 
         entries = []
         for name in os.listdir(path):
-            pathname = os.path.join(path, name)
-            st = os.stat(pathname)
-            mode = st.st_mode
+            fullpath = os.path.join(path, name)
 
-            if not (mode & S_IRGRP):
-                continue
+            try:
+                entries.append(self.file_info(fullpath))
+            except FileNotFoundError:
+                pass
 
-            is_dir = bool(S_ISDIR(mode))
-
-            if is_dir or S_ISREG(mode):
-                entries.append((name, is_dir, st.st_size, int(st.st_mtime)))
         return entries
 
     def makedirs(self, path):
@@ -136,6 +139,21 @@ class LocalFileSystemImpl(AbstractFileSystem):
 
     def set_mtime(self, path, mtime):
         os.utime(path, (mtime, mtime))
+
+    def file_info(self, path):
+        st = os.stat(path)
+
+        _, name = self.split(path)
+
+        if not (st.st_mode & S_IRGRP):
+            return FileNotFoundError(path)
+
+        is_dir = bool(S_ISDIR(st.st_mode))
+
+        if is_dir or S_ISREG(st.st_mode):
+            return (name, is_dir, st.st_size, int(st.st_mtime))
+
+        return FileNotFoundError(path)
 
 class MemoryFileSystemImpl(AbstractFileSystem):
     """An In-Memory filesystem
@@ -165,6 +183,7 @@ class MemoryFileSystemImpl(AbstractFileSystem):
         if 'w' in mode:
             f = io.BytesIO() if 'b' in mode else io.StringIO()
             f.close = lambda: f.seek(0)
+            f.fileno = lambda: -1
             dt = datetime.datetime.now()
             mtime = int(time.mktime(dt.timetuple()))
             MemoryFileSystemImpl._mem_store[path] = [f, mtime]
@@ -201,6 +220,17 @@ class MemoryFileSystemImpl(AbstractFileSystem):
 
     def set_mtime(self, path, mtime):
         MemoryFileSystemImpl._mem_store[path][1] = mtime
+
+    def file_info(self, path):
+
+        if path not in MemoryFileSystemImpl._mem_store:
+            raise FileNotFoundError(path)
+
+        f, mtime = MemoryFileSystemImpl._mem_store[path]
+        _, name = self.split(path)
+
+        return (name, False, len(f.getvalue()), mtime)
+
 
 def sh_escape(args):
     """
@@ -362,6 +392,9 @@ class S3FileSystemImpl(AbstractFileSystem):
     def set_mtime(self, path, mtime):
         # this is a no-op, I'm not sure it *can* be implemented at this time
         pass
+
+    def file_info(self, path):
+        raise NotImplementedError(path)
 
 class FileSystem(object):
     """Generic FileSystem Interface

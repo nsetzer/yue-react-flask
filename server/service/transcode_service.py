@@ -2,7 +2,7 @@
 import os, sys
 from ..dao.library import Song
 from ..dao.filesys import FileSystem
-from .util import FFmpegEncoder
+from ..dao.transcode import FFmpeg
 from .exception import TranscodeServiceException
 import logging
 import io
@@ -75,12 +75,12 @@ class TranscodeService(object):
 
         self.fs = FileSystem()
 
-        enc_path = config.transcode.audio.bin_path
+        path = config.transcode.audio.bin_path
 
-        if enc_path and not os.path.exists(enc_path):
-            raise FileNotFoundError(enc_path)
+        if path and not os.path.exists(path):
+            raise FileNotFoundError(path)
 
-        self.encoder = FFmpegEncoder(enc_path)
+        self.transcoder = FFmpeg(path)
 
     @staticmethod
     def init(config, db, dbtables):
@@ -105,10 +105,14 @@ class TranscodeService(object):
         """
 
         if mode == "original":
-            return False;
+            return False
 
         srcpath = song[Song.path]
-        return True # not srcpath.lower().endswith('mp3')
+
+        if mode == "non-mp3":
+            return not srcpath.lower().endswith('.mp3')
+
+        return True
 
     def transcodeSong(self, song, mode):
         """
@@ -146,16 +150,23 @@ class TranscodeService(object):
             title=song[Song.title]
         )
 
-        vol = 1.0
-
-        bitrate = int(tgt_rate)
+        volume = 1.0
 
         if not os.path.exists(tgtpath):
-            self.encoder.transcode(srcpath,
-                tgtpath,
-                bitrate,
-                vol=vol,
-                metadata=metadata)
+            opts = {
+                "nchannels": 2,
+                "volume": volume,
+                "samplerate": 44100,
+                "bitrate": int(tgt_rate),
+                "metadata": {
+                    "artist": song.get(Song.artist, "Unknown Artist"),
+                    "title": song.get(Song.title, "Unknown Title"),
+                    "album": song.get(Song.album, "Unknown Album"),
+                }
+            }
+            with self.fs.open(srcpath, "rb") as rb:
+                with self.fs.open(tgtpath, "wb") as wb:
+                    self.transcoder.transcode(rb, wb, **opts)
 
         return tgtpath
 

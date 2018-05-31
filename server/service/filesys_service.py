@@ -2,7 +2,6 @@
 import os, sys
 
 
-from .util import FFmpegEncoder
 from .exception import FileSysServiceException
 from ..dao.filesys import FileSystem
 

@@ -5,34 +5,35 @@ import sys
 if (sys.version_info[0] == 2):
     raise RuntimeError("python2 not supported")
 
+import ssl
+import argparse
+import codecs
+
 import logging
 from logging.handlers import RotatingFileHandler
+
+from flask import jsonify, render_template
+
+from .config import Config
+
+from .dao.library import Song
+from .dao.transcode import find_ffmpeg
+from .dao.db import db_connect, db_init_main
 
 from .framework.application import FlaskApp
 from .framework.web_resource import WebResource, get
 from .framework.clientgen import generate_client as generate_client_impl
 
-from .config import Config
-
-from flask import jsonify, render_template
-
 from .service.audio_service import AudioService
 from .service.transcode_service import TranscodeService
 from .service.user_service import UserService
 from .service.filesys_service import FileSysService
-from .dao.library import Song
 
 from .resource.app_resource import AppResource
 from .resource.user_resource import UserResource
 from .resource.library_resource import LibraryResource
 from .resource.queue_resource import QueueResource
 from .resource.files_resource import FilesResource
-
-from .dao.db import db_connect, db_init_main
-
-import ssl
-import argparse
-import codecs
 
 class YueApp(FlaskApp):
     """docstring for YueApp"""
@@ -69,22 +70,12 @@ class TestApp(YueApp):
 
         self.USER = self.user_service.getUserByPassword("user000", "user000")
 
-    def _find_ffmpeg(self):
-        ffmpeg_paths = [
-            '/bin/ffmpeg',
-            '/usr/bin/ffmpeg',
-            '/usr/local/bin/ffmpeg',
-            'C:\\ffmpeg\\bin\\ffmpeg.exe'
-        ]
-
-        for path in ffmpeg_paths:
-            if os.path.exists(path):
-                return path
-        return None
-
     def _init_config(self, test_name):
 
-        ffmpeg_path = self._find_ffmpeg()
+        ffmpeg_path = find_ffmpeg()
+
+        if ffmpeg_path is None:
+            raise Exception("FFmpeg not found")
 
         tmp_path = os.path.join(os.getcwd(), "tmp")
         log_path = tmp_path
