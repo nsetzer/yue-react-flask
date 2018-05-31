@@ -5,6 +5,7 @@ from ..dao.filesys import FileSystem
 from .util import FFmpegEncoder
 from .exception import TranscodeServiceException
 import logging
+import io
 
 from PIL import Image, ImageOps
 
@@ -193,10 +194,15 @@ class TranscodeService(object):
             # crop the image
             img = ImageOps.fit(img, (tgt_width, tgt_height))
 
-        # todo: file object must implement seek, tell, and write
-        # this will not work with the current s3 implementation
-        with self.fs.open(tgt_path, "wb") as wb:
-            img.save(wb, format="png")
+        # the current FileSystem framework does not support seek()
+        # img.save requires a seekable file object, and as the only
+        # use case at present, this is a workaround until other use
+        # cases are determined.
+        with io.BytesIO() as bImg:
+            img.save(bImg, format="png")
+            bImg.seek(0)
+            with self.fs.open(tgt_path, "wb") as wb:
+                wb.write(bImg.read())
 
         return img.size
 
@@ -215,11 +221,12 @@ class TranscodeService(object):
 
         src_path = song[Song.art_path]
 
-        if not src_path or not self.fs.exists(src_path):
+        if not src_path:
             # when displaying album art as part of a resource, instead
             # of returning the default path, return a 303 redirect
             # to the url of the default art.
-            logging.info("album art found: `%s`" % src_path)
+            # TODO: this should be a 404 error
+            logging.info("album art not found: `%s`" % src_path)
             raise TranscodeServiceException("file not found")
 
         dir, name  = self.fs.split(src_path)
@@ -227,6 +234,7 @@ class TranscodeService(object):
         name = "%s.%s.png" % (name, ImageScale.name(scale))
         tgt_path = self.fs.join(dir, name)
 
-        self.scaleImage(src_path, tgt_path, scale)
+        if not self.fs.exists(tgt_path):
+            self.scaleImage(src_path, tgt_path, scale)
 
         return tgt_path

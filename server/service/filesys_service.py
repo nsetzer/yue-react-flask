@@ -91,6 +91,10 @@ class FileSysService(object):
         if any([(not p.strip()) for p in parts]):
             raise FileSysServiceException("empty path component")
 
+        # in case the client sends an invalid url. the client should
+        # use posixpath when joining path components
+        path = path.replace("\\", "/")
+
         abs_path = self.fs.join(os_root, path)
 
         if self.fs.islocal(abs_path) and os.name == 'nt':
@@ -162,4 +166,4 @@ class FileSysService(object):
                 buf = stream.read(2048)
 
         if mtime is not None:
-            self.fs.set_mtime(path, (mtime, mtime))
+            self.fs.set_mtime(path, mtime)

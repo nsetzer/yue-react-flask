@@ -1,6 +1,6 @@
 server:
 
-  host: localhost
+  host: 0.0.0.0
   port: 4200
 
   env: production
@@ -18,8 +18,8 @@ server:
     # sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
     # -keyout selfsigned.key -out selfsigned.crt
     #
-    private_key: "config/production/selfsigned.key"
-    certificate: "config/production/selfsigned.crt"
+    private_key: "" #"config/production/selfsigned.key"
+    certificate: "" #"config/production/selfsigned.crt"
 
   logging:
     directory: "./logs"
@@ -29,11 +29,11 @@ server:
     level: debug
 
   filesystem:
-    media_root: "/mnt/Data/Music"
+    media_root: "/mnt/data/Music"
 
   transcode:
     audio:
-      bin_path: /usr/local/bin/ffmpeg
-      tmp_path: "/tmp/yue-audio"
+      bin_path: /bin/ffmpeg
+      tmp_path: /tmp/yue-audio
     image: {}
 

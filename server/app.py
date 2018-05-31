@@ -207,11 +207,11 @@ def generate_client(app, name="client", outdir="."):
 
 def parseArgs(argv, default_profile=None):
 
-    encoding = "cp850"
-    if sys.stdout.encoding != encoding:
-      sys.stdout = codecs.getwriter(encoding)(sys.stdout.buffer, 'strict')
-    if sys.stderr.encoding != encoding:
-      sys.stderr = codecs.getwriter(encoding)(sys.stderr.buffer, 'strict')
+    #encoding = "cp850"
+    #if sys.stdout.encoding != encoding:
+    #  sys.stdout = codecs.getwriter(encoding)(sys.stdout.buffer, 'strict')
+    #if sys.stderr.encoding != encoding:
+    #  sys.stderr = codecs.getwriter(encoding)(sys.stderr.buffer, 'strict')
 
 
     if default_profile is None:

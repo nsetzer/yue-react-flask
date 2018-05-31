@@ -2,6 +2,10 @@
 import os,sys
 import subprocess
 
+# cat input.mp3 | \
+#   ffmpeg -i pipe:0 -acodec mp3 -ab 256k -ar 44.1k -ac 2 -f mp3 pipe:1 > \
+#   output.mp3
+
 class FFmpegEncoder(object):
     def __init__(self,ffmpeg_path,logger=None,no_exec=False):
         super(FFmpegEncoder,self).__init__();

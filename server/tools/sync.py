@@ -96,7 +96,7 @@ def _pull(client, root, remote_base, local_base, dlf, dryrun):
         if dryrun:
             continue
         local_path = os.path.join(local_base, name)
-        remote_path = os.path.join(remote_base, name)
+        remote_path = posixpath.join(remote_base, name)
         response = client.files_get_path(root, remote_path, stream=True)
         parent, _ = os.path.split(local_path)
         if not os.path.exists(parent):
@@ -109,11 +109,12 @@ def _pull(client, root, remote_base, local_base, dlf, dryrun):
 def _push(client, root, remote_base, local_base, ulf, dryrun):
     # upload all files marked for upload
     for name, mtime, size in ulf:
-        logging.info("push: %s/%s" % (local_base,name,))
+        logging.info("push: %s/%s => %s/api/fs/%s/%s/%s" % (local_base,name,
+            client.host(), root, remote_base, name))
         if dryrun:
             continue
         local_path = os.path.join(local_base, name)
-        remote_path = os.path.join(remote_base, name)
+        remote_path = posixpath.join(remote_base, name)
         with open(local_path, "rb") as rb:
             response = client.files_upload(root, remote_path, rb,
                 mtime=mtime)

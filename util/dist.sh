@@ -5,9 +5,9 @@ mkdir -p dist
 
 cat <<EOF > start.sh
 #!/bin/bash
-cd `dirname $0`
+cd \$(dirname $0)
 echo $PWD
-exec python3 ./wsgi.py --config config/production/application.yml
+exec python3 ./wsgi.py -p production
 EOF
 
 python3 -m server.tools.manage generate_client
