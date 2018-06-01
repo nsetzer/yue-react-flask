@@ -60,6 +60,10 @@ class FilesResourceTestCase(unittest.TestCase):
             Song.path: "./test/r160.mp3",
         }
 
+        expected_path = "./tmp/transcode-test.256.2ch.mp3"
+        if os.path.exists(expected_path):
+            os.remove(expected_path)
+
         path = self.service.transcodeSong(song, "mp3_256_2ch")
 
         # the transcode process should produce a new file with non-zero size

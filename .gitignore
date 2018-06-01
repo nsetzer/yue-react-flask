@@ -29,3 +29,5 @@ yarn-error.log*
 *.sqlite
 logs/
 .well-known
+tmp/
+dist/

@@ -231,7 +231,6 @@ class MemoryFileSystemImpl(AbstractFileSystem):
 
         return (name, False, len(f.getvalue()), mtime)
 
-
 def sh_escape(args):
     """
     print an argument list so that it can be copy and pasted to a terminal
@@ -274,6 +273,7 @@ class _ProcFile(object):
 
         self.returncode = -1
         self.mode = mode
+        self.cmd = cmd
 
     def __enter__(self):
         return self
@@ -299,36 +299,25 @@ class S3FileSystemImpl(AbstractFileSystem):
 
     def __init__(self):
         super(S3FileSystemImpl, self).__init__()
+        self.pfile = _ProcFile
 
     def samefile(self, patha, pathb):
         return self.exists(patha) and patha == pathb
 
     def isfile(self, path):
-        # TODO:
-        return self.exists(path)
+        _, is_dir, _, _ = self.file_info(path)
+        return not is_dir
 
     def isdir(self, path):
-        # TODO:
-        return False
+        _, is_dir, _, _ = self.file_info(path)
+        return is_dir
 
     def exists(self, path):
         try:
-            temp = path.replace(S3FileSystemImpl.scheme, "")
-            bucket, key = temp.split("/", 1)
-        except ValueError:
+            self.file_info(path)
+            return True
+        except FileNotFoundError:
             return False
-        cmd = [
-            "aws", "s3api", "head-object",
-            "--bucket", bucket,
-            "--key", key
-        ]
-
-        logging.info("execute: %s" % sh_escape(cmd))
-
-        p = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL)
-        p.communicate()
-        return p.returncode == 0
 
     def open(self, path, mode):
         if 'b' not in mode:
@@ -343,58 +332,55 @@ class S3FileSystemImpl(AbstractFileSystem):
         else:
             raise ValueError("mode not supported")
 
-        return _ProcFile(cmd, mode)
+        return self.pfile(cmd, mode)
 
-    def listdir(self, path):
-
-        if not path.endswith("/"):
-            path += "/"
-
-        names = []
-        cmd = ["aws", "s3", "ls", path]
-        with _ProcFile(cmd, "r") as rb:
-            data = rb.read()
-            for line in data.decode("utf-8").splitlines():
-                # date time size name
-                items = line.split(None, 3)
-                if len(items) == 4:
-                    names.append(items[-1])
-                elif items[0] == 'PRE':
-                    names.append(items[-1].rstrip(self.impl.sep))
-
-        return names
-
-    def scandir(self, path):
-
+    def _parse_line(self, line):
         fmt = "%Y-%m-%d %H:%M:%S"
+
+        items = line.split(None, 3)
+        if len(items) == 4:
+            fdate, ftime, size, name = items
+            dt = datetime.datetime.strptime(fdate + " " + ftime, fmt)
+            epoch = int(time.mktime(dt.timetuple()))
+            return (name, False, int(size), epoch)
+        elif len(items) > 0 and items[0] == 'PRE':
+            # re-split, in case the directory name contains a space
+            items = line.split(None, 1)
+            name = items[-1].rstrip(self.impl.sep)
+            return (name, True, 0, 0)
+
+        raise Exception("Invalid Line: `%s`" % line)
+
+    def _scandir_impl(self, path):
 
         if not path.endswith("/"):
             path += "/"
 
         entries = []
         cmd = ["aws", "s3", "ls", path]
-        with _ProcFile(cmd, "r") as rb:
+        with self.pfile(cmd, "rb") as rb:
             data = rb.read()
             for line in data.decode("utf-8").splitlines():
-                # date time size name
-                items = line.split(None, 3)
-                if len(items) == 4:
-                    fdate, ftime, size, name = items
-                    dt = datetime.datetime.strptime(fdate + " " + ftime, fmt)
-                    epoch = int(time.mktime(dt.timetuple()))
-                    entries.append((name, False, int(size), epoch))
-                elif items[0] == 'PRE':
-                    name = items[-1].rstrip(self.impl.sep)
-                    entries.append((name, True, 0, 0))
+                if line.strip():
+                    yield self._parse_line(line)
 
-        return entries
+    def listdir(self, path):
+        return [name for name, _, _, _ in self._scandir_impl(path)]
+
+    def scandir(self, path):
+        return [entry for entry in self._scandir_impl(path)]
 
     def set_mtime(self, path, mtime):
         # this is a no-op, I'm not sure it *can* be implemented at this time
         pass
 
     def file_info(self, path):
-        raise NotImplementedError(path)
+        cmd = ["aws", "s3", "ls", path]
+        with self.pfile(cmd, "rb") as rb:
+            for line in rb.read().decode("utf-8").splitlines():
+                if line.strip():
+                    return self._parse_line(line)
+        raise FileNotFoundError(path)
 
 class FileSystem(object):
     """Generic FileSystem Interface
@@ -424,13 +410,35 @@ class FileSystem(object):
                 path, *args, **kwargs)
 
 def main():
-    # for name in FileSystem().listdir(sys.argv[1]):
-    #     print("%s" % (name))
 
-    for name, is_dir, size, mtime in FileSystem().scandir(sys.argv[1]):
-        print("%s %12d %6d %s" % (
-            'd' if is_dir else 'f',
-            mtime, size, name))
+    mode = sys.argv[1]
+    path = sys.argv[2]
+
+    fs = FileSystem()
+
+    if mode == "scan":
+        for name, is_dir, size, mtime in fs.scandir(path):
+            print("%s %15d %15d %s" % (
+                'd' if is_dir else 'f',
+                mtime, size, name))
+    elif mode == "exists":
+        print("True" if fs.exists(path) else "False")
+    elif mode == "list":
+        for name in fs.listdir(path):
+            print(name)
+    elif mode == "stat":
+        name, is_dir, size, mtime = fs.file_info(path)
+        print("%s %15d %15d %s" % (
+                'd' if is_dir else 'f',
+                mtime, size, name))
+    elif mode == "cat":
+        # read a file form the path to stdout
+        with fs.open(path, "rb") as rb:
+            sys.stdout.buffer.write(rb.read())
+    elif mode == "write":
+        # write a file from stdin to the path
+        with fs.open(path, "wb") as wb:
+            wb.write(sys.stdin.buffer.read())
 
 if __name__ == '__main__':
     main()

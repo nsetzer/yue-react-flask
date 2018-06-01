@@ -264,6 +264,9 @@ class LibraryResource(WebResource):
 
     def _correct_path(self, song):
 
+        # TODO: revisit this: I may want to disable the feature entirely
+        # or use the filesystem service to handle the path correction.
+
         if Song.path in song:
             root = self.audio_service.config.filesystem.media_root
             path = song[Song.path]
