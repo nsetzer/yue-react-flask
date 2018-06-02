@@ -200,25 +200,27 @@ class MemoryFileSystemImpl(AbstractFileSystem):
             return f
         raise ValueError("Invalid mode: %s" % mode)
 
-    def listdir(self, path):
-        if not path.endswith(self.impl.sep):
+    def _scandir_impl(self, path):
+        if not path.endswith("/"):
             path += self.impl.sep
-        names = []
-        for fpath in MemoryFileSystemImpl._mem_store.keys():
-            dir, name = self.split(fpath)
+        for fpath, (f, mtime) in MemoryFileSystemImpl._mem_store.items():
             if fpath.startswith(path):
-                names.append(name)
-        return names
+                name = fpath.replace(path, "")
+                if '/' in name:
+                    name = name.split('/')[0]
+                    yield (name, True, 0, 0)
+                else:
+                    yield (name, False, len(f.getvalue()), mtime)
+
+    def listdir(self, path):
+        return [name for name, _, _, _ in self._scandir_impl(path)]
 
     def scandir(self, path):
-        names = []
-        for fpath, (f, mtime) in MemoryFileSystemImpl._mem_store.items():
-            dir, name = self.split(fpath)
-            if dir == path:
-                names.append((name, False, len(f.getvalue()), mtime))
-        return names
+        return [entry for entry in self._scandir_impl(path)]
 
     def set_mtime(self, path, mtime):
+        if path not in MemoryFileSystemImpl._mem_store:
+            raise FileNotFoundError(path)
         MemoryFileSystemImpl._mem_store[path][1] = mtime
 
     def file_info(self, path):
@@ -230,6 +232,10 @@ class MemoryFileSystemImpl(AbstractFileSystem):
         _, name = self.split(path)
 
         return (name, False, len(f.getvalue()), mtime)
+
+    @staticmethod
+    def clear():
+        MemoryFileSystemImpl._mem_store = {}
 
 def sh_escape(args):
     """

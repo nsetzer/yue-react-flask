@@ -60,7 +60,7 @@ class FilesResourceTestCase(unittest.TestCase):
             Song.path: "./test/r160.mp3",
         }
 
-        expected_path = "./tmp/transcode-test.256.2ch.mp3"
+        expected_path = "./test/transcode-test.256.2ch.mp3"
         if os.path.exists(expected_path):
             os.remove(expected_path)
 

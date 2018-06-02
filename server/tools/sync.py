@@ -45,12 +45,12 @@ def _check(client, root, remote_base, local_base, match_size=False):
                 if entry.name in files:
                     remote_mtime, remote_size = files[entry.name]
 
-                    if not match_size and local_size == remote_size:
-                        # the files are the same if the size is equal
-                        logging.debug("file size equal: %s" % entry.name)
-                    elif local_mtime == remote_mtime:
+                    if local_mtime == remote_mtime and local_size == remote_size:
                         # if the time is the same, there is nothing to sync
                         logging.debug("files are synced: %s" % entry.name)
+                    elif not match_size and local_size == remote_size:
+                        # the files are the same if the size is equal
+                        logging.debug("file size equal: %s" % entry.name)
                     elif local_mtime < remote_mtime:
                         # download files where remote is newer
                         logging.debug("remote is newer: %s" % entry.name)
@@ -61,7 +61,7 @@ def _check(client, root, remote_base, local_base, match_size=False):
                         ulf.append((entry.name, local_mtime, local_size))
                     elif local_size != remote_size:
                         # unclear whether to upload or download
-                        print("size differs: %s/%s" % (local_base, entry.name))
+                        logging.debug("size differs: %s/%s" % (local_base, entry.name))
 
                     del files[entry.name]
                 else:
@@ -177,6 +177,9 @@ class SyncManager(object):
             self.remote_base, self.local_base, self.dlf, self.dryrun)
         self.dlf = []
 
+    def _remove(self, lst):
+        pass
+
     def setDirectory(self, dir_path):
 
         if not dir_path.startswith(self.local_root):
@@ -202,7 +205,10 @@ class SyncManager(object):
 
         self._force = True
 
-    def next(self,pull=True, push=True):
+    def next(self,pull=True, push=True, remove=False):
+
+        if pull and push and remove:
+            raise ValueError("cannot remove files when syncing.")
 
         if self.remote_base is None and self.local_base is None:
             # first time this is run, scan the root directory
@@ -222,9 +228,15 @@ class SyncManager(object):
 
         if pull:
             self._pull()
+        elif remove:
+            self._remove(self.dlf)
+            self.dlf = []
 
         if push:
             self._push()
+        elif remove:
+            self._remove(self.ulf)
+            self.ulf = []
 
         return bool(self.dld or self.uld)
 
@@ -271,7 +283,7 @@ def _get_config(args):
 
     return cfg
 
-def _sync(args):
+def _sync(args, client):
 
     cfg = _get_config(args)
 
@@ -289,7 +301,7 @@ def _sync(args):
 
     pwd = os.path.abspath(args.pwd)
     name, local_root = prefix_match(cfg['items'], pwd)
-    client = connect(args.host, args.username, args.password)
+
     mgr = SyncManager(client, name, local_root, args.dryrun)
     mgr.setDirectory(pwd)
 
@@ -297,7 +309,7 @@ def _sync(args):
     while cont:
         cont = mgr.next(pull=args.pull, push=args.push) and args.recursive
 
-def _copy(args):
+def _copy(args, client):
     """ copy a file to/from a remote server
     """
     def usage():
@@ -315,8 +327,6 @@ def _copy(args):
     if args.password is None:
         sys.stderr.write("password not provided")
         usage()
-
-    client = connect(args.host, args.username, args.password)
 
     if args.src_file.startswith("server://"):
         root, path = args.src_file.replace("server://", "").split("/", 1)
@@ -353,7 +363,7 @@ def _copy(args):
     else:
         usage()
 
-def _list(args):
+def _list(args, client):
 
     def usage():
         sys.stderr.write("usage:\n")
@@ -369,8 +379,6 @@ def _list(args):
     if args.password is None:
         sys.stderr.write("password not provided")
         usage()
-
-    client = connect(args.host, args.username, args.password)
 
     if not args.path.startswith("server://"):
         usage()
@@ -397,7 +405,7 @@ def _list(args):
                 sys.stdout.write("%s %10d %s\n" % (
                     fdate, int(item['size']), item['name']))
 
-def _config(args):
+def _config(args, client):
 
     cfg = _get_config(args)
 
@@ -416,7 +424,7 @@ def _config(args):
     with open(args.config, "w") as wf:
         json.dump(cfg, wf, sort_keys=True, indent=4)
 
-def _list_config(args):
+def _list_config(args, client):
 
     cfg = _get_config(args)
 
@@ -432,7 +440,7 @@ def _list_config(args):
     for name, path in sorted(cfg['items'].items()):
         sys.stdout.write("%s: %s\n" % (name, path))
 
-def _remove_config(args):
+def _remove_config(args, client):
 
     cfg = _get_config(args)
 
@@ -538,8 +546,9 @@ def main():
     args = parseArgs(sys.argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
     logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
+    client = connect(args.host, args.username, args.password)
     try:
-        args.func(args)
+        args.func(args, client)
     except KeyboardInterrupt:
         sys.exit(1)
 

@@ -12,7 +12,6 @@ import ssl
 from .client import RegisteredEndpoint, Parameter, AuthenticatedRestClient, \
     FlaskAppClient, generate_argparse, split_auth
 
-
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # monkey patch workzeug to remove Server header
@@ -149,7 +148,9 @@ class FlaskApp(object):
         return FlaskAppClient(client, self._registered_endpoints)
 
     def test_client(self, token=None):
-        return AppTestClientWrapper(self.app.test_client(), token)
+        client = AppTestClientWrapper(self.app.test_client(), token)
+        client.host = lambda: "test://localhost"
+        return client
 
     def run(self):
 
@@ -225,13 +226,8 @@ class AppTestClientWrapper(object):
             if "headers" not in kwargs:
                 kwargs['headers'] = {}
             kwargs['headers']["Accept-Encoding"] = "gzip"
-        res = self._wrapper(self.app.get, args, kwargs)
-        if res.status_code < 200 or res.status_code >= 300:
-            raise Exception(res.data)
-        data = res.data
-        if compressed:
-            data = gzip.decompress(data)
-        body = json.loads(data.decode("utf-8"))
+        response = self._wrapper(self.app.get, args, kwargs)
+        body =  self._get_response_json(response, compressed)
         return body['result']
 
     def post_json(self, url, data, *args, **kwargs):
@@ -253,4 +249,30 @@ class AppTestClientWrapper(object):
             kwargs['headers'] = self.headers
         else:
             kwargs['headers'].update(self.headers)
-        return method(*args, **kwargs)
+        # convert the client format arguments into flask format
+        if 'params' in kwargs:
+            kwargs['query_string'] = kwargs['params']
+            del kwargs['params']
+        # stream is not supported on the test client
+        # required as part of the client interface
+        if 'stream' in kwargs:
+            del kwargs['stream']
+
+        response = method(*args, **kwargs)
+        response.json = lambda: self._get_response_json(response)
+        # iter content is not supported on the test client
+        # required as part of the client interface
+        response.iter_content = lambda chunk_size=0: [response.data]
+        return response
+
+    def _get_response_json(self, response, compressed=False):
+        if response.status_code < 200 or response.status_code >= 300:
+            raise Exception(response.data)
+        data = response.data
+        if compressed:
+            data = gzip.decompress(data)
+        return json.loads(data.decode("utf-8"))
+
+
+
+

@@ -77,7 +77,7 @@ class TestApp(YueApp):
         if ffmpeg_path is None:
             raise Exception("FFmpeg not found")
 
-        tmp_path = os.path.join(os.getcwd(), "tmp")
+        tmp_path = os.path.join(os.getcwd(), "test")
         log_path = tmp_path
 
         self.app_cfg = {
@@ -98,7 +98,12 @@ class TestApp(YueApp):
                     'max_size': '2MB',
                     'num_backups': 10,
                     'level': 'debug'},
-                'filesystem': {'media_root': os.getcwd()},
+                'filesystem': {
+                    'media_root': os.getcwd(),
+                    'other': {
+                        "mem": "mem://test",
+                    },
+                },
                 'transcode': {
                     'audio': {
                         'bin_path': ffmpeg_path,
