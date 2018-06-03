@@ -106,6 +106,9 @@ class AbstractFileSystem(object):
         """
         pass
 
+    def remove(self, path):
+        raise NotImplementedError(path)
+
 class LocalFileSystemImpl(AbstractFileSystem):
     """docstring for LocalFileSystemImpl"""
     scheme = "file://"
@@ -154,6 +157,14 @@ class LocalFileSystemImpl(AbstractFileSystem):
             return (name, is_dir, st.st_size, int(st.st_mtime))
 
         return FileNotFoundError(path)
+
+    def remove(self, path):
+
+        os.remove(path)
+
+        dir, _ = self.split(path)
+        if len(self.listdir(dir))==0:
+            os.rmdir(dir)
 
 class MemoryFileSystemImpl(AbstractFileSystem):
     """An In-Memory filesystem
@@ -232,6 +243,12 @@ class MemoryFileSystemImpl(AbstractFileSystem):
         _, name = self.split(path)
 
         return (name, False, len(f.getvalue()), mtime)
+
+    def remove(self, path):
+        if path not in MemoryFileSystemImpl._mem_store:
+            raise FileNotFoundError(path)
+
+        del MemoryFileSystemImpl._mem_store[path]
 
     @staticmethod
     def clear():
@@ -388,6 +405,11 @@ class S3FileSystemImpl(AbstractFileSystem):
                     return self._parse_line(line)
         raise FileNotFoundError(path)
 
+    def remove(self, path):
+        cmd = ["aws", "s3", "rm", path]
+        with self.pfile(cmd, "rb") as rb:
+            rb.read()
+
 class FileSystem(object):
     """Generic FileSystem Interface
 
@@ -445,6 +467,9 @@ def main():
         # write a file from stdin to the path
         with fs.open(path, "wb") as wb:
             wb.write(sys.stdin.buffer.read())
+    elif mode == "remove":
+        fs.remove(path)
+
 
 if __name__ == '__main__':
     main()

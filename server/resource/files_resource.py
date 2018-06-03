@@ -51,6 +51,14 @@ class FilesResource(WebResource):
 
         return jsonify(result="OK"), 200
 
+    @delete("<root>/path/<path:resPath>")
+    @requires_auth("filesystem_delete")
+    def delete(self, root, resPath):
+
+        self.filesys_service.remove(g.current_user, root, resPath)
+
+        return jsonify(result="OK")
+
     @get("roots")
     @requires_auth("filesystem_read")
     def get_roots(self):

@@ -32,6 +32,7 @@ server:
     media_root: "D:\\Music"
     other:
       test: "./test"
+      mem: "mem://test/"
 
   transcode:
     audio:

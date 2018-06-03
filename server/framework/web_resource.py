@@ -108,7 +108,7 @@ def delete(path):
     """decorator which registers a class method as a DELETE handler"""
     def decorator(f):
         f._endpoint = path
-        f._methods = ['DELET',]
+        f._methods = ['DELETE',]
         return _endpoint_mapper(f)
     return decorator
 

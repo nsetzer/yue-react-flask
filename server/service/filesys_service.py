@@ -166,3 +166,16 @@ class FileSysService(object):
 
         if mtime is not None:
             self.fs.set_mtime(path, mtime)
+
+    def remove(self, user, fs_name, path):
+
+        path = self.getPath(user, fs_name, path)
+
+        try:
+            return self.fs.remove(path)
+        except FileNotFoundError as e:
+            raise e
+        except Exception as e:
+            logging.exception("unable to delete: %s" % path)
+
+        raise FileSysServiceException(path)

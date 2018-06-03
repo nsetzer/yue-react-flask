@@ -13,7 +13,8 @@ from ..app import TestApp
 from ..framework.client import FlaskAppClient
 from ..framework.application import AppTestClientWrapper
 
-from .sync import (_check, _pull, _push, SyncManager,
+from .sync import (_check, _pull, _push, _delete_remote, _delete_local,
+    SyncManager,
     _sync, _copy, _list, _config, _list_config, _remove_config, parseArgs)
 
 def setUpClass(cls):
@@ -67,7 +68,7 @@ class SyncTestCase(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
 
-    def test_001_check_a(self):
+    def test_001a_check(self):
 
         MemoryFileSystemImpl.clear()
         fs = FileSystem()
@@ -91,7 +92,7 @@ class SyncTestCase(unittest.TestCase):
         self.assertEqual(len(ulf), 1)
         self.assertEqual(ulf[0][0], 'file0')
 
-    def test_001_check_b(self):
+    def test_001b_check(self):
 
         fs = FileSystem()
 
@@ -178,13 +179,6 @@ class SyncTestCase(unittest.TestCase):
         self.assertTrue("dir0" in uld)
         self.assertTrue("dir1" in dld)
 
-    def test_001b_check(self):
-
-        # create files that exist in both locations
-        # set mtime and run _check and validate results
-        pass
-
-
     def test_002a_push(self):
         # test uploading a file
         # first do a dryrun, which should not alter state
@@ -222,6 +216,35 @@ class SyncTestCase(unittest.TestCase):
             dlf, False)
         self.assertTrue(fs.exists(self.local_path_file0))
 
+    def test_004a_delete_remote(self):
+
+        MemoryFileSystemImpl.clear()
+        fs = FileSystem()
+        fs.open(self.remote_path_file0, "wb").close()
+
+        dlf = [("file0", 0, 0)]
+
+        self.assertTrue(fs.exists(self.remote_path_file0))
+        _delete_remote(self.client, self.root, self.remote_base,
+            dlf, True)
+        self.assertTrue(fs.exists(self.remote_path_file0))
+        _delete_remote(self.client, self.root, self.remote_base,
+            dlf, False)
+        self.assertFalse(fs.exists(self.remote_path_file0))
+
+    def test_004a_delete_local(self):
+
+        fs = FileSystem()
+        fs.open(self.local_path_file0, "wb").close()
+
+        ulf = [("file0", 0, 0)]
+
+        self.assertTrue(fs.exists(self.local_path_file0))
+        _delete_local(self.local_base, ulf, True)
+        self.assertTrue(fs.exists(self.local_path_file0))
+        _delete_local(self.local_base, ulf, False)
+        self.assertFalse(fs.exists(self.local_path_file0))
+
 class SyncManagerTestCase(unittest.TestCase):
 
     @classmethod
@@ -246,19 +269,17 @@ class SyncCLITestCase(unittest.TestCase):
 
         setUpClass(cls)
 
-        if not os.path.exists(cls.local_path_dir0):
-            os.makedirs(cls.local_path_dir0)
-        if not os.path.exists(cls.local_path_dir1):
-            os.makedirs(cls.local_path_dir1)
-
     @classmethod
     def tearDownClass(cls):
         cls.app.tearDown()
 
-        shutil.rmtree(cls.local_base)
-
     def setUp(self):
         super().setUp()
+
+        if not os.path.exists(self.local_path_dir0):
+            os.makedirs(self.local_path_dir0)
+        if not os.path.exists(self.local_path_dir1):
+            os.makedirs(self.local_path_dir1)
 
         self.username = "admin"
         self.rest_client = self.app.login(self.username, self.username)
@@ -277,15 +298,18 @@ class SyncCLITestCase(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
 
+        if os.path.exists(self.local_base):
+            shutil.rmtree(self.local_base)
+
     def test_sync(self):
 
         MemoryFileSystemImpl.clear()
         fs = FileSystem()
 
-        open(self.local_path_file0, "w").close()
-        open(self.local_path_file1, "w").close()
-        open(self.local_path_file2, "w").close()
-        open(self.local_path_file3, "w").close()
+        fs.open(self.local_path_file0, "wb").close()
+        fs.open(self.local_path_file1, "wb").close()
+        fs.open(self.local_path_file2, "wb").close()
+        fs.open(self.local_path_file3, "wb").close()
 
         args = parseArgs([
             "sync",
@@ -336,6 +360,145 @@ class SyncCLITestCase(unittest.TestCase):
         self.assertTrue(fs.exists(self.local_path_file1))
         self.assertTrue(fs.exists(self.local_path_file2))
         self.assertTrue(fs.exists(self.local_path_file3))
+
+    def test_sync_push(self):
+
+        MemoryFileSystemImpl.clear()
+        fs = FileSystem()
+
+        fs.open(self.local_path_file0, "wb").close()
+        fs.open(self.remote_path_file0, "wb").close()
+
+        fs.open(self.local_path_file1, "wb").close()
+
+        fs.open(self.remote_path_file2, "wb").close()
+
+        args = parseArgs([
+            "sync",
+            "--username", "admin",
+            "--password", "admin",
+            "--host", "",
+            "--config", "./test",
+            "config", self.root, self.local_base,
+        ])
+
+        _config(args, self.client)
+
+        args = parseArgs([
+            "sync",
+            "--config", "./test",
+            "push", "-r", "--delete", self.local_base
+        ])
+
+        _sync(args, self.client)
+
+        # this should copy local file 1 up,
+        # and delete remote file 2
+        self.assertTrue(fs.exists(self.local_path_file0))
+        self.assertTrue(fs.exists(self.local_path_file1))
+        self.assertFalse(fs.exists(self.local_path_file2))
+
+        self.assertTrue(fs.exists(self.remote_path_file0))
+        self.assertTrue(fs.exists(self.remote_path_file1))
+        self.assertFalse(fs.exists(self.remote_path_file2))
+
+    def test_sync_pull(self):
+
+        MemoryFileSystemImpl.clear()
+        fs = FileSystem()
+
+        fs.open(self.local_path_file0, "wb").close()
+        fs.open(self.remote_path_file0, "wb").close()
+
+        fs.open(self.local_path_file1, "wb").close()
+
+        fs.open(self.remote_path_file2, "wb").close()
+
+        args = parseArgs([
+            "sync",
+            "--username", "admin",
+            "--password", "admin",
+            "--host", "",
+            "--config", "./test",
+            "config", self.root, self.local_base,
+        ])
+
+        _config(args, self.client)
+
+        args = parseArgs([
+            "sync",
+            "--config", "./test",
+            "pull", "-r", "--delete", self.local_base
+        ])
+
+        _sync(args, self.client)
+
+        # this should copy local file 1 up,
+        # and delete remote file 2
+        self.assertTrue(fs.exists(self.local_path_file0))
+        self.assertFalse(fs.exists(self.local_path_file1))
+        self.assertTrue(fs.exists(self.local_path_file2))
+
+        self.assertTrue(fs.exists(self.remote_path_file0))
+        self.assertFalse(fs.exists(self.remote_path_file1))
+        self.assertTrue(fs.exists(self.remote_path_file2))
+
+    def test_copy_up(self):
+
+        MemoryFileSystemImpl.clear()
+        fs = FileSystem()
+
+        fs.open(self.local_path_file0, "wb").close()
+
+        args = parseArgs([
+            "sync",
+            "--username", "admin",
+            "--password", "admin",
+            "--host", "",
+            "--config", "./test",
+            "config", self.root, self.local_base,
+        ])
+
+        _config(args, self.client)
+
+        args = parseArgs([
+            "sync",
+            "--config", "./test",
+            "copy", self.local_path_file0, "server://mem/foo"
+        ])
+
+        _copy(args, self.client)
+
+        self.assertTrue(fs.exists("mem://test/foo"))
+
+
+    def test_copy_down(self):
+
+        MemoryFileSystemImpl.clear()
+        fs = FileSystem()
+
+        fs.open(self.remote_path_file0, "wb").close()
+
+        args = parseArgs([
+            "sync",
+            "--username", "admin",
+            "--password", "admin",
+            "--host", "",
+            "--config", "./test",
+            "config", self.root, self.local_base,
+        ])
+
+        _config(args, self.client)
+
+        args = parseArgs([
+            "sync",
+            "--config", "./test",
+            "copy", "server://mem/foo", self.local_path_file0
+        ])
+
+        _copy(args, self.client)
+
+        self.assertTrue(fs.exists(self.local_path_file0))
 
 if __name__ == '__main__':
     main_test(sys.argv, globals())

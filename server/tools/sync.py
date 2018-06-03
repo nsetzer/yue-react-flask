@@ -89,7 +89,15 @@ def _check(client, root, remote_base, local_base, match_size=False):
     return dld, uld, dlf, ulf
 
 def _pull(client, root, remote_base, local_base, dlf, dryrun):
-    # download all files marked for download
+    """
+    download all files marked for download
+
+    the tuple (client, root, remote_base, local_base) is used to define
+    a pair of directories, one on the local file system and one made available
+    by the server. dlf contains a list of file names that exist in the
+    remote system. These files will be downloaded, replacing any files that
+    already exist.
+    """
     for name, mtime, size in dlf:
         logging.info("pull: %s/api/fs/%s/path/%s" % (client.host(), root,
                     posixpath.join(remote_base, name)))
@@ -107,7 +115,15 @@ def _pull(client, root, remote_base, local_base, dlf, dryrun):
         os.utime(local_path, (mtime, mtime))
 
 def _push(client, root, remote_base, local_base, ulf, dryrun):
-    # upload all files marked for upload
+    """
+    upload all files marked for download
+
+    the tuple (client, root, remote_base, local_base) is used to define
+    a pair of directories, one on the local file system and one made available
+    by the server. ulf contains a list of file names that exist in the
+    local system. These files will be uploaded, replacing any files that
+    already exist.
+    """
     for name, mtime, size in ulf:
         logging.info("push: %s/%s => %s/api/fs/%s/%s/%s" % (local_base,name,
             client.host(), root, remote_base, name))
@@ -118,6 +134,33 @@ def _push(client, root, remote_base, local_base, ulf, dryrun):
         with open(local_path, "rb") as rb:
             response = client.files_upload(root, remote_path, rb,
                 mtime=mtime)
+
+def _delete_local(local_base, files, dryrun):
+    for name, mtime, size in files:
+        logging.info("rem_: %s/%s" % (local_base, name))
+        if dryrun:
+            continue
+        local_path = os.path.join(local_base, name)
+        try:
+            os.remove(local_path)
+        except Exception as e:
+            logging.Exception("unable to delete: %s" % local_path)
+
+def _delete_remote(client, root, remote_base, files, dryrun):
+
+    for name, _, _ in files:
+        logging.info("rem_: %s/api/fs/%s/%s/%s" % (
+            client.host(), root, remote_base, name))
+        if dryrun:
+            continue
+        remote_path = posixpath.join(remote_base, name)
+        response = client.files_delete(root, remote_path)
+        if response.status_code == 404:
+            logging.error("not found: %s/api/fs/%s/%s/%s" % (
+                client.host(), root, remote_base, name))
+        elif response.status_code != 200:
+            logging.error("unable to delete: %s/api/fs/%s/%s/%s" % (
+                client.host(), root, remote_base, name))
 
 class SyncManager(object):
     """docstring for SyncClient"""
@@ -177,8 +220,14 @@ class SyncManager(object):
             self.remote_base, self.local_base, self.dlf, self.dryrun)
         self.dlf = []
 
-    def _remove(self, lst):
-        pass
+    def _delete_local(self):
+        _delete_local(self.local_base, self.ulf, self.dryrun)
+        self.ulf = []
+
+    def _delete_remote(self):
+        _delete_remote(self.client, self.name,
+            self.remote_base, self.dlf, self.dryrun)
+        self.dlf = []
 
     def setDirectory(self, dir_path):
 
@@ -205,10 +254,10 @@ class SyncManager(object):
 
         self._force = True
 
-    def next(self,pull=True, push=True, remove=False):
+    def next(self,pull=True, push=True, delete=False):
 
-        if pull and push and remove:
-            raise ValueError("cannot remove files when syncing.")
+        if pull and push and delete:
+            raise ValueError("cannot delete files when syncing.")
 
         if self.remote_base is None and self.local_base is None:
             # first time this is run, scan the root directory
@@ -228,15 +277,13 @@ class SyncManager(object):
 
         if pull:
             self._pull()
-        elif remove:
-            self._remove(self.dlf)
-            self.dlf = []
+        elif delete:
+            self._delete_remote()
 
         if push:
             self._push()
-        elif remove:
-            self._remove(self.ulf)
-            self.ulf = []
+        elif delete:
+            self._delete_local()
 
         return bool(self.dld or self.uld)
 
@@ -305,9 +352,10 @@ def _sync(args, client):
     mgr = SyncManager(client, name, local_root, args.dryrun)
     mgr.setDirectory(pwd)
 
+    settings = {'pull': args.pull, 'push': args.push, 'delete': args.delete}
     cont = True
     while cont:
-        cont = mgr.next(pull=args.pull, push=args.push) and args.recursive
+        cont = mgr.next(**settings) and args.recursive
 
 def _copy(args, client):
     """ copy a file to/from a remote server
@@ -484,7 +532,7 @@ def parseArgs(argv):
     subparsers = parser.add_subparsers()
 
     sync_parser = subparsers.add_parser("sync")
-    sync_parser.set_defaults(func=_sync, pull=True, push=True)
+    sync_parser.set_defaults(func=_sync, pull=True, push=True, delete=False)
     sync_parser.add_argument('-r', '--recursive',
         action='store_true',
         help='descend into directories')
@@ -497,6 +545,9 @@ def parseArgs(argv):
     pull_parser.add_argument('-r', '--recursive',
         action='store_true',
         help='descend into directories')
+    pull_parser.add_argument('--delete',
+        action='store_true',
+        help='delete local files not found on remote')
     pull_parser.add_argument('pwd', default = os.getcwd(),
         metavar="directory",
         help='local dir to sync (current director)')
@@ -506,6 +557,9 @@ def parseArgs(argv):
     push_parser.add_argument('-r', '--recursive',
         action='store_true',
         help='descend into directories')
+    push_parser.add_argument('--delete',
+        action='store_true',
+        help='delete remote files not found locally')
     push_parser.add_argument('pwd', default = os.getcwd(),
         metavar="directory",
         help='local dir to sync (current director)')

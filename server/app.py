@@ -115,11 +115,17 @@ class TestApp(YueApp):
         }
 
         self.env_cfg = {
-            'features': ["user_read", "user_write",
-                         "user_create", "user_power",
-                         "library_read", "library_write",
-                         "library_read_song", "library_write_song",
-                         "filesystem_read","filesystem_write"],
+            'features': ["user_read",
+                         "user_write",
+                         "user_create",
+                         "user_power",
+                         "library_read",
+                         "library_write",
+                         "library_read_song",
+                         "library_write_song",
+                         "filesystem_read",
+                         "filesystem_write",
+                         "filesystem_delete"],
             'domains': ['test'],
             'roles': [
                 {'null': { 'features': []}},

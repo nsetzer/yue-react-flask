@@ -5,6 +5,7 @@ import json
 import time
 
 from ..dao.db import main_test
+from ..dao.filesys import FileSystem
 from ..app import TestApp
 
 class FilesResourceTestCase(unittest.TestCase):
@@ -92,6 +93,23 @@ class FilesResourceTestCase(unittest.TestCase):
             self.assertTrue(os.path.exists(path))
             dat1 = open(path, "rb").read()
             self.assertEqual(dat0, dat1)
+
+    def test_delete_file(self):
+        """ test remove file
+
+        create an in-memory file, then use the file system end
+        point to delete it
+        """
+        fs = FileSystem()
+        fs.open("mem://test/test", "wb").close()
+
+        username = "admin"
+        with self.app.login(username, username) as app:
+            url = '/api/fs/mem/path/test'
+            self.assertTrue(fs.exists("mem://test/test"))
+            response = app.delete(url)
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(fs.exists("mem://test/test"))
 
 if __name__ == '__main__':
     main_test(sys.argv, globals())
