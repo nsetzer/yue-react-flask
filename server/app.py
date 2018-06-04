@@ -1,4 +1,30 @@
+"""
+Application Stack:
 
+Flask Application
+    A collection of resources, the confgiuration
+    database and web resources that make up a web app.
+
+Web Resource Layer
+    REST Endpoints for Service logic
+
+Service Layer
+   Application logic built on top of Dao objects
+
+Dao Layer
+    Objects which have direct access to the database or filesystem
+    This is made up of a database library, and an abstract file system.
+
+    The db library  provides access to a sqlite or postgres database
+
+    The file system library provides access to either local storage,
+    s3 or an in-memory (for testing) file system
+
+Database
+    A database client to SQLite or PostgreSQL.
+
+
+"""
 import os
 import sys
 

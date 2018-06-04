@@ -1,4 +1,14 @@
+"""
 
+A declaritive web application framework.
+
+Create Web Resources and define RESTful endpoints using python
+decorators. The resources can then be registered add run time to build
+an application.
+
+The mix of declaritive and imperitive styles enables
+easy testing and development
+"""
 import os
 import sys
 import flask
@@ -22,27 +32,11 @@ def _send_header(self, key, value):
 BaseHTTPRequestHandler._send_header = BaseHTTPRequestHandler.send_header
 BaseHTTPRequestHandler.send_header = _send_header
 
-"""
-    Application Stack:
-        Flask Application
-            A collection of resources, the confgiuration
-            database and web resources that make up a web app.
-        Web Resource Layer
-            REST Endpoints for Service logic
-        Service Layer
-            Application logic built on top of Dao objects
-        Dao Layer
-            objects which have direct access to the database or filesystem
-            This is made up of a database library, and an abstract file system
-            the db library  provides access to a sqlite or postgres database
-            the file system library provides access to either local storage,
-            s3 or an in-memory file system
-        Database
-            A database client to SQLite or PostgreSQL.
-"""
-
 class FlaskApp(object):
-    """FlaskApp"""
+    """FlaskApp is a flask application wrapper
+
+    resources can be registered to add endpoints to the application
+    """
     def __init__(self, config):
         super(FlaskApp, self).__init__()
         self.config = config
