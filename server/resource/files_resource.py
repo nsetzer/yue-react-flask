@@ -1,4 +1,7 @@
 
+"""
+A resource for browsing parts of the file system, and uploading files
+"""
 import os, sys
 import logging
 

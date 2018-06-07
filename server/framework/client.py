@@ -1,4 +1,13 @@
 
+"""
+Framework to auto generate a Python Requests client.
+
+When the application registers a WebResource, the endpoints are stored
+in an array of RegisteredEndpoints. This file defines a way to generate
+an argument parser and RESTful client using that list of endpoints.
+
+"""
+
 import sys
 import json
 import requests
@@ -12,20 +21,26 @@ import logging
 
 from collections import namedtuple
 
-"""
-
-"""
-
+##
+# A tuple describing a RESTful endpoint
 RegisteredEndpoint = namedtuple('RegisteredEndpoint',
     ['path', 'long_name', 'doc', 'methods', 'params', 'body'])
 
+##
+# A tuple describing a query parameter
 Parameter = namedtuple('Parameter',
     ['name', 'type', 'default', 'required', 'doc'])
 
 def split_auth(authas):
-    """ parse a string user@domain/role into basic parts
+    """ parse a string into authorization parts
+
+    e.g. user@domain/role into (user, domain, role)
+
 
     returns a 3-tuple: user, domain, role
+    domain and role are optional, if not provided an empty
+    string will be returned
+
     """
     domain = ""
     role = ""
@@ -42,7 +57,16 @@ def split_auth(authas):
     return user, domain, role
 
 def url_encode(url, f):
+    """
+    format a url-string by populating the elements to replace
 
+    a url can be of the form "/api/<foo>". this function will replace the
+    section "<foo>" with the result from calling f("foo").
+
+    optionally, the url may contain type information. e.g.:
+        <path:MyPath> (value is a string and may contain path separators)
+
+    """
     i = url.find('<')
     while i >= 0:
         j = url.find('>', i)
@@ -52,7 +76,7 @@ def url_encode(url, f):
 
         error = None
         try:
-            s = quote(f(varname))
+            s = str(quote(f(varname)))
         except Exception as e:
             error = "error formating variable: %s" % varname
 
@@ -66,6 +90,10 @@ def url_encode(url, f):
     return url
 
 def url_decode(url):
+    """ return the list of variable names inside the url string
+
+    see url_encode
+    """
     variables = []
     i = url.find('<')
     while i >= 0:
@@ -496,7 +524,10 @@ def cli_main(endpoints, args):
         sys.stdout.buffer.write(chunk)
 
 def connect_impl(host, username, password, endpoints):
+    """ return a new REST client which implements the given endpoints"""
     username, domain, role = split_auth(username)
     client = AuthenticatedRestClient(host,
              username, password, domain, role)
     return FlaskAppClient(client, endpoints)
+
+

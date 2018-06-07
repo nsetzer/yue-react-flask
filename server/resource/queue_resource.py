@@ -1,4 +1,7 @@
 
+"""
+A resource for manipulating the users song queue.
+"""
 import os
 import sys
 import logging

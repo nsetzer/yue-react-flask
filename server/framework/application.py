@@ -1,12 +1,12 @@
 """
 
-A declaritive web application framework.
+A declarative web application framework.
 
 Create Web Resources and define RESTful endpoints using python
 decorators. The resources can then be registered add run time to build
 an application.
 
-The mix of declaritive and imperitive styles enables
+The mix of declarative and imperative styles enables
 easy testing and development
 """
 import os

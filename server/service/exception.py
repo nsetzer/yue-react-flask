@@ -1,4 +1,7 @@
 
+"""
+Definitions for exceptions thrown by the service layer
+"""
 
 class ServiceException(Exception):
     pass

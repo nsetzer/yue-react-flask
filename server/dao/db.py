@@ -1,4 +1,9 @@
 
+"""
+A collection of functions for configuring a database
+using a YAML configuration file and utility functions
+for creating a database connection.
+"""
 from .user import UserDao
 from .library import Song, LibraryDao
 from .tables.tables import DatabaseTables
@@ -294,7 +299,6 @@ def db_update(db, dbtables, config_path):
     logging.info("reading configuration: %s" % config_path)
     with open(config_path, "r") as rf:
         data = yaml.load(rf, Loader=Loader)
-
 
     return db_update_main(db, dbtables, data)
 

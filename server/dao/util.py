@@ -1,3 +1,7 @@
+
+"""
+A collection of helper functions for managing the database
+"""
 import time
 import os
 import sys

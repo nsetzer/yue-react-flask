@@ -1,4 +1,10 @@
 
+"""
+The user service handles user management and authentication.
+
+User can be created or removed, A user can authenticate and change their
+password.
+"""
 
 from ..dao.user import UserDao
 from ..dao.library import LibraryDao

@@ -1,30 +1,47 @@
-"""
-Application Stack:
 
-Flask Application
-    A collection of resources, the confgiuration
-    database and web resources that make up a web app.
+## @mainpage
+#
+# @par Yue Server
+#
+# A Web application for streaming music
 
-Web Resource Layer
-    REST Endpoints for Service logic
+## @page stack Application Stack
+#
+# @par Flask Application
+#
+#  A collection of resources, the configuration
+#  database and web resources that make up a web app.
+#
+# @par Web Resource Layer
+#
+# Declarative definitions for REST Endpoints in the application.
+# Each resource declares the mapping of a url path and HTTP verb to one or
+# more functions in the service layer.
+#
+# @par Service Layer
+#
+# Services build the business logic by building on top of database.
+#
+# @par Dao Layer
+#
+# Data access objects for interacting with the database or filesystem
+# This is made up of a database library, and an abstract file system.
+#
+# The db library  provides access to a sqlite or postgres database
+#
+# The file system library provides access to either local storage,
+#  s3 or an in-memory (for testing) file system
+#
+# @par Database
+#
+# A database client to SQLite or PostgreSQL.
 
-Service Layer
-   Application logic built on top of Dao objects
+## @package server.app
+#
+#  The Application Backend
+#
+#
 
-Dao Layer
-    Objects which have direct access to the database or filesystem
-    This is made up of a database library, and an abstract file system.
-
-    The db library  provides access to a sqlite or postgres database
-
-    The file system library provides access to either local storage,
-    s3 or an in-memory (for testing) file system
-
-Database
-    A database client to SQLite or PostgreSQL.
-
-
-"""
 import os
 import sys
 
@@ -84,7 +101,7 @@ class YueApp(FlaskApp):
         self.add_resource(FilesResource(self.user_service, self.filesys_service))
 
 class TestApp(YueApp):
-    """docstring for TestApp"""
+    """An app with helper functions for testing"""
     def __init__(self, test_name=""):
         config = self._init_config(test_name)
         super(TestApp, self).__init__(config)
@@ -188,10 +205,14 @@ class TestApp(YueApp):
         return config
 
     def login(self, username, password):
+        """ return a test client which sends credentials with every request
+        """
         token = self.user_service.loginUser(username, password)
         return self.test_client(token)
 
     def create_test_songs(self):
+        """ add tests songs to the database
+        """
         self.SONGS = []
         self.SONGIDS = []
         for a in range(3):
@@ -213,10 +234,19 @@ class TestApp(YueApp):
         pass
 
 def connect(host, username, password):
+    """ return a client which sends credentials with every request"""
     app = YueApp(Config.null())
     return app.client(host, username, password)
 
 def generate_client(app, name="client", outdir="."):
+    """generate a client python package
+
+    the generated package will implement a rest client with endpoint
+    definitions for the application server
+
+    This wraps the framework implementation of the same function,
+    and bundles in a sync tool which utilizes the file api.
+    """
 
     header = "# This file was auto generated. do not modify\n"
     client_dir = os.path.join(outdir, name)
@@ -234,6 +264,10 @@ def generate_client(app, name="client", outdir="."):
                     wf.write(line)
 
 def parseArgs(argv, default_profile=None):
+    """ parse the command line arguments used for launching an app
+
+    builds an arg parser with the common options needed to create an app.
+    """
 
     #encoding = "cp850"
     #if sys.stdout.encoding != encoding:
@@ -257,6 +291,12 @@ def parseArgs(argv, default_profile=None):
     return args
 
 def getApp(config_dir, profile):
+    """ get the application for a specific profile
+
+    Loads the configuration for the specified profile and returns a new
+    App instance.
+
+    """
 
     app_cfg_path = os.path.join(config_dir, profile, "application.yml")
     cfg = Config(app_cfg_path)

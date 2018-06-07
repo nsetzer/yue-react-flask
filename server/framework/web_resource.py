@@ -1,4 +1,10 @@
 
+"""
+
+A Web Resource defines the mapping between a url endpoint and the function
+that will be executed. This file contains all of the python decorators
+for creating a resource.
+"""
 import os
 import sys
 from functools import wraps

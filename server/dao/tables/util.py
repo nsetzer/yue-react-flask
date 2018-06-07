@@ -1,3 +1,7 @@
+
+"""
+Helper functions for defining database tables
+"""
 import os, sys
 import json
 from sqlalchemy.types import Integer, String, TypeDecorator

@@ -1,4 +1,7 @@
 
+"""
+A resource for serving the application bundle
+"""
 import os
 import logging
 
@@ -13,7 +16,8 @@ from ..framework.web_resource import WebResource, \
 from .util import requires_auth
 
 class AppResource(WebResource):
-    """docstring for AppResource
+    """
+    The AppResource defines a set of generic endpoints for the web application
     """
 
     def __init__(self, config):
@@ -21,12 +25,16 @@ class AppResource(WebResource):
         self.config = config
 
     @get("/")
-    def index1(self):
+    def index_root(self):
+        """ return the application bundle when no url path is given
+        """
         path = os.path.join(self.config.build_dir, 'index.html')
         return open(path).read()
 
     @get("/<path:path>")
-    def index2(self, path):
+    def index_path(self, path):
+        """ return the application bundle when no other url path matches
+        """
         # return an error for malformed api requests, instead
         # of returning the bundle
         if path.startswith("api/"):
@@ -36,13 +44,22 @@ class AppResource(WebResource):
 
     @get("/static/<path:path>")
     def static(self, path):
+        """ retrieve static files
+        """
         return send_from_directory(self.config.static_dir, path)
 
     @get("/health")
     def health(self):
+        """ return status information about the application
+        """
         return jsonify(result="OK")
 
     @get("/.well-known/<path:path>")
     def webroot(self, path):
+        """ return files from a well known directory
+
+        support for Lets Encrypt certificates
+        """
         base = os.path.join(os.getcwd(), ".well-known")
         return send_from_directory(base, path)
+

@@ -1,4 +1,10 @@
 
+"""
+Implements a grammar for querying a SQL-like database
+
+Both a flat array of elements or a database may be queried
+using a common grammar
+"""
 from .nlpdatesearch import NLPDateRange
 
 from .util import format_delta, format_date, string_quote

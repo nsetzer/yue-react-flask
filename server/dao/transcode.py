@@ -1,4 +1,9 @@
 
+"""
+An FFmpeg transcode class
+
+convert any audio format into an mp3
+"""
 import os, sys
 import subprocess
 import threading

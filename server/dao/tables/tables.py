@@ -1,4 +1,7 @@
 
+"""
+A class which describes the set of tables defined in this package.
+"""
 import logging
 
 from .user import DomainTable, RoleTable, UserTable, \
@@ -9,7 +12,7 @@ from .song import SongDataTable, SongUserDataTable, \
 
 
 class DatabaseTables(object):
-    """docstring for AppTables"""
+    """define all tables required for the database"""
     def __init__(self, metadata):
         super(DatabaseTables, self).__init__()
 
@@ -28,6 +31,7 @@ class DatabaseTables(object):
         self.SongPlaylistTable = SongPlaylistTable(metadata)
 
     def drop(self, engine):
+        """ drop all tables, using engine as the db connection """
 
         self.SongPlaylistTable.drop(engine, checkfirst=True)
         self.SongHistoryTable.drop(engine, checkfirst=True)

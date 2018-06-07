@@ -1,4 +1,7 @@
 
+"""
+A Resource for accessing the music library
+"""
 import os
 import sys
 import logging

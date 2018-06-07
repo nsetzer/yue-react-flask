@@ -1,4 +1,14 @@
 
+"""
+A tool for syncing directories on a remote server.
+
+This uses the File System Endpoints exposed as part of the application.
+
+The command line interface in this file can compare a local directory
+with a named directory on the remote server. It compares file using
+the last modified time and the file size to determine which files
+should be uploaded or downloaded.
+"""
 import os, posixpath, sys
 import argparse
 import logging
@@ -9,7 +19,7 @@ from ..app import connect
 
 def _check(client, root, remote_base, local_base, match_size=False):
     """
-    foo : sync files, even if the size is equal
+    match_size : when true sync files, even if the size is equal
     returns 4 lists:
         a list of folders which need to be synced down
         a list of folders which need to be synced up
@@ -163,7 +173,10 @@ def _delete_remote(client, root, remote_base, files, dryrun):
                 client.host(), root, remote_base, name))
 
 class SyncManager(object):
-    """docstring for SyncClient"""
+    """ Synchronize a local and remote folder
+
+    automate recursion into sub directories.
+    """
     def __init__(self, client, name, local_root, dryrun):
         super(SyncManager, self).__init__()
 

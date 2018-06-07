@@ -1,4 +1,7 @@
 
+"""
+Helper functions for implementing Web Resources
+"""
 import logging
 from functools import wraps
 from flask import after_this_request, request, jsonify, g

@@ -1,3 +1,7 @@
+
+"""
+The set of tables which represent a song and records pertaining to the user
+"""
 from sqlalchemy.schema import Table, Column, ForeignKey
 from sqlalchemy.types import Integer, String
 
@@ -27,7 +31,7 @@ def SongDataTable(metadata):
     length: length of the song in seconds
     equalizer: measure of volume of the song
     year: year the track was released
-    banished: song should not appear in queries for any user
+    banished: song should not appear in queries for any user of this domain
     date_added: date song was added to the database
     """
     return Table('song_data', metadata,
@@ -56,6 +60,19 @@ def SongDataTable(metadata):
     )
 
 def SongUserDataTable(metadata):
+    """
+    Construct a table representing the user specific song data
+
+    song_id: Foreign key referencing a song
+    user_id: Foreign key referencing a user
+    comment: a user specified comment. used for notes and to improve search
+    rating: the users rating of the song
+    play_count: the number of time the user has played this song
+    skip_count: the number of time the user has skipped this song during playback
+    blocked: the user does not want this song appearing in search results
+    frequency: an average rate of playback, in days
+    last_played: the date of the last time the user played the song
+    """
     return Table('song_user_data', metadata,
         # index
         Column('song_id', String, ForeignKey("song_data.id")),
@@ -74,7 +91,7 @@ def SongUserDataTable(metadata):
 
 def SongHistoryTable(metadata):
     """
-    returns a table represnting playback date of songs by users
+    returns a table representing playback date of songs by users
 
     when playback completes normally (the song is not skipped) an entry
     is added recording the song, user, and date of completion
@@ -99,6 +116,9 @@ def SongQueueTable(metadata):
     )
 
 def SongPlaylistTable(metadata):
+    """
+    A table containing user defined playlists
+    """
     return Table('song_playlist', metadata,
         Column('user_id', Integer, ForeignKey('user.id')),
         Column('name', String),

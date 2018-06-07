@@ -1,4 +1,8 @@
 
+"""
+A cli tool to manage the application database and query information about
+the application
+"""
 import os, sys, argparse, json, logging
 
 """

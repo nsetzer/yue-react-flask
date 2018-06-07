@@ -1,4 +1,7 @@
 
+"""
+a resource for user management and authentication
+"""
 import logging
 
 from flask import jsonify, render_template, g, request

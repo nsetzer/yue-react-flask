@@ -1,4 +1,11 @@
 
+"""
+The transcode service enables file format conversion of media.
+
+Audio files can be converted using FFmpeg
+
+Image files can be processed using the pillow library.
+"""
 import os, sys
 from ..dao.library import Song
 from ..dao.filesys import FileSystem

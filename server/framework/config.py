@@ -1,4 +1,7 @@
 
+"""
+A YAML config parser
+"""
 import os, sys
 
 import yaml

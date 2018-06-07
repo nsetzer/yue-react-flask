@@ -1,4 +1,9 @@
-#! python34 $this
+
+"""
+Utility module for converting strings into dates,
+used as part of the search grammar
+"""
+
 import re
 """
 

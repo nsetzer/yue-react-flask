@@ -1,4 +1,8 @@
 
+"""
+A Data Access Object for manipulating the queue table
+
+"""
 from sqlalchemy import and_, or_, not_, select, column, update, insert
 
 from .library import Song, SongQueryFormatter

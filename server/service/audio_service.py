@@ -1,4 +1,9 @@
 
+"""
+The Audio service handles the interaction with the database for a particular
+user. The methods exposed allow a user to search the database for songs,
+as well as update metadata and statistics
+"""
 import os
 import logging
 
@@ -49,11 +54,13 @@ class AudioService(object):
         return song
 
     def findSongById(self, user, song_id):
-
+        """ return a song object given the user and song id
+        """
         return self._getSongInfo(user, song_id)
 
     def setSongFilePath(self, user, song_id, path):
-
+        """ set the location of the audio file for the song by song id
+        """
         if not self.fs.exists(path):
             logging.error("invalid path: %s" % path)
             raise AudioServiceException("invalid path")
@@ -64,7 +71,8 @@ class AudioService(object):
         self.libraryDao.update(uid, did, song_id, song)
 
     def setSongAlbumArtPath(self, user, song_id, path):
-
+        """ set the location of the album art for the song by song id
+        """
         if not self.fs.exists(path):
             logging.error("invalid path: %s" % path)
             raise AudioServiceException("invalid path")
@@ -75,13 +83,15 @@ class AudioService(object):
         self.libraryDao.update(uid, did, song_id, song)
 
     def getSongAudioPath(self, user, song_id):
-
+        """ retrieve the path for audio file for the song by song id
+        """
         song = self._getSongInfo(user, song_id)
 
         return song['file_path']
 
     def getSongArtPath(self, user, song_id):
-
+        """ retrieve the path for album art file for the song by song id
+        """
         song = self._getSongInfo(user, song_id)
 
         return song['art_path']
@@ -92,6 +102,10 @@ class AudioService(object):
         orderby=None,
         limit=None,
         offset=None):
+        """ query the library and return a list of songs
+
+        query results are restricted by the users domain and role
+        """
 
         shuffle = False
         limit_save = limit
@@ -111,6 +125,14 @@ class AudioService(object):
         return result;
 
     def updateSongs(self, user, songs):
+        """
+        update metadata for a set of songs
+
+        songs can be partial song objects (i.e. at minimum 2 fields, one
+        of which is the song id)
+
+        updates are restricted by the users domain and role
+        """
 
         # TODO: check user role features
 
@@ -123,7 +145,11 @@ class AudioService(object):
         self.db.session.commit()
 
     def createSong(self, user, song):
+        """ create a new song record and return the song_id
 
+        restricted by the users domain and role
+
+        """
         uid = user['id']
         did = user['domain_id']
 
@@ -133,30 +159,52 @@ class AudioService(object):
         return song_id
 
     def getDomainSongInfo(self, domain_id):
+        """
+        return information about the set of artists and albums in the given
+        domain
+        """
         return self.libraryDao.domainSongInfo(domain_id)
 
     def getDomainSongUserInfo(self, user):
+        """
+        return information about the set of artists and albums in the given
+        domain.
+
+        results are restricted by the given users domain
+        """
         return self.libraryDao.domainSongUserInfo(user['id'], user['domain_id'])
 
     def getQueue(self, user):
+        """ return the list of songs (not song ids) from a users queue """
         return self.queueDao.get(user['id'], user['domain_id'])
 
     def setQueue(self, user, song_ids):
+        """ set the queue for a user to be a list of songs """
         self.queueDao.set(user['id'], user['domain_id'], song_ids)
 
     def getQueueHead(self, user):
+        """ return the song at the head of the queue """
         return self.queueDao.head(user['id'], user['domain_id'])
 
     def getQueueRest(self, user):
+        """ return every song in the queue, except the head element
+        """
         return self.queueDao.rest(user['id'], user['domain_id'])
 
     def defaultQuery(self, user):
+        """ retrieve the current default query used by the user
+        """
         return self.queueDao.getDefaultQuery(user['id'])
 
     def setDefaultQuery(self, user, query_str):
+        """ set the default query to use when populating the queue for the user
+        """
         return self.queueDao.setDefaultQuery(user['id'], query_str)
 
     def populateQueue(self, user):
+        """
+        use the default query to add new songs to the queue
+        """
         songs = self.queueDao.get(user['id'], user['domain_id'])
 
         query = self.defaultQuery(user)

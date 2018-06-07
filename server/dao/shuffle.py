@@ -1,4 +1,14 @@
 
+"""
+An efficient shuffle algorithm which prevents elements
+of a similar type from being next to each other.
+
+This address the psychological effect of true random
+shuffling. An ordering that produces, for example, multiple
+Spades in a row for a deck of cards may be the result of
+a random shuffle, but is not perceived as such.
+
+"""
 # https://labs.spotify.com/2014/02/28/how-to-shuffle-songs/
 # Fisher-Yates
 import math

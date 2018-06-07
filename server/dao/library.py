@@ -1,4 +1,8 @@
 
+"""
+A Data Access Object for manipulating the library table
+
+"""
 
 from sqlalchemy.orm import relationship
 from sqlalchemy.exc import IntegrityError
@@ -152,7 +156,6 @@ class Song(object):
         gen = genre.replace(",", ";").strip().split(";")
         gen = [g.strip().title() for g in gen]
         return ";" + ";".join([g for g in gen if g]) + ";"
-
 
 class SongSearchGrammar(SearchGrammar):
     """docstring for SongSearchGrammar"""

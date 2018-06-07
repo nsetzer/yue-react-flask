@@ -1,4 +1,12 @@
 
+"""
+The File System Service exposes sand boxed parts of the file systems.
+
+A directory mapping is used to map a common name to a location on the
+file system. The location can either be local, an s3 path, or an in-memory
+file system.
+
+"""
 import os, sys
 
 

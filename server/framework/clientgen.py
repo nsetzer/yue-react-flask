@@ -1,4 +1,10 @@
 
+"""
+Client Package Generator
+
+generate a python package which implements both an Argument Parser and
+a RESTful client which can communicate with the given application.
+"""
 import os
 import sys
 from .client import RegisteredEndpoint

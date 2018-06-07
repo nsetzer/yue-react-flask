@@ -1,3 +1,8 @@
+
+"""
+A Data Access Object for manipulating the user table
+
+"""
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import and_, or_, not_, select, column, update, insert, delete
 
