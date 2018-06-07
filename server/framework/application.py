@@ -20,7 +20,7 @@ import argparse
 import ssl
 
 from .client import RegisteredEndpoint, Parameter, AuthenticatedRestClient, \
-    FlaskAppClient, generate_argparse, split_auth
+    FlaskAppClient, generate_argparse, split_auth, Response
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -181,6 +181,26 @@ class FlaskApp(object):
         # uwsgi support
         return self.app(env, start_response)
 
+class TestResponse(Response):
+
+    def json(self):
+
+        if self._response.status_code < 200 or self._response.status_code >= 300:
+            raise Exception(self._response.data)
+        data = self._response.data
+
+        if 'Content-Encoding' in self._response.headers:
+            if self._response.headers['Content-Encoding'] == "gzip":
+                data = gzip.decompress(data)
+
+        return json.loads(data.decode("utf-8"))
+
+    def stream(self, chunk_size=1024):
+        return [self._response.data]
+
+    def iter_content(self, chunk_size=1024):
+        return self.stream()
+
 class AppTestClientWrapper(object):
     """
     A Test client wrapper for a flask application
@@ -221,8 +241,9 @@ class AppTestClientWrapper(object):
                 kwargs['headers'] = {}
             kwargs['headers']["Accept-Encoding"] = "gzip"
         response = self._wrapper(self.app.get, args, kwargs)
-        body =  self._get_response_json(response, compressed)
-        return body['result']
+        # TODO: deprecate getting the result by default,
+        # and / or deprecate the json specific functions
+        return response.json()['result']
 
     def post_json(self, url, data, *args, **kwargs):
         args = list(args)
@@ -252,20 +273,10 @@ class AppTestClientWrapper(object):
         if 'stream' in kwargs:
             del kwargs['stream']
 
-        response = method(*args, **kwargs)
-        response.json = lambda: self._get_response_json(response)
-        # iter content is not supported on the test client
-        # required as part of the client interface
-        response.iter_content = lambda chunk_size=0: [response.data]
+        response = TestResponse(method(*args, **kwargs))
+
         return response
 
-    def _get_response_json(self, response, compressed=False):
-        if response.status_code < 200 or response.status_code >= 300:
-            raise Exception(response.data)
-        data = response.data
-        if compressed:
-            data = gzip.decompress(data)
-        return json.loads(data.decode("utf-8"))
 
 
 

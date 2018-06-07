@@ -18,11 +18,11 @@ from .sync import (_check, _pull, _push, _delete_remote, _delete_local,
     _sync, _copy, _list, _config, _list_config, _remove_config, parseArgs)
 
 def setUpClass(cls):
-    cls.app = TestApp(cls.__name__);
+    cls.app = TestApp(cls.__name__)
 
     cls.root = "mem"
     cls.remote_base = ""
-    cls.local_base="./test/sync"
+    cls.local_base = "./test/sync"
     cls.remote_path = cls.app.config.filesystem.other['mem']
 
     cls.local_path_file0 = os.path.join(cls.local_base, "file0")
