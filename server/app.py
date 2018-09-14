@@ -285,6 +285,11 @@ def parseArgs(argv, default_profile=None):
     parser.add_argument('-p', '--profile', dest='profile',
                         default=default_profile,
                         help='default profile to use (%s)' % default_profile)
+    parser.add_argument('-w', '--workers', type=int,
+                        default=1,
+                        help='number of workers')
+    parser.add_argument('appname', default='wsgi:app',
+        help="the name of the app for running using wsgi (file:varname)")
 
     args = parser.parse_args(argv[1:])
 
