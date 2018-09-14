@@ -192,8 +192,9 @@ def yaml_assert(data):
 
 def db_drop_all(db, dbtables):
     """ drop all tables from database """
-    db.drop_all()
-    db.session.commit()
+    # TODO: this *only* drops known tables
+    # testing tables will not be dropped.
+    db.tables.drop(db.engine)
 
 def _db_create_role(userDao, role_name, child):
     n_changes = 0

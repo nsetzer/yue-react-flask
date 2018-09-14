@@ -50,8 +50,10 @@ from .search import SearchGrammar, \
         naive_search
 
 def extract(field, items):
-    return set( item[field] for item in items )
+    return set(item[field] for item in items)
 
+# TODO: manage drop does not clean up this table
+# move this class somewhere else so that it can
 def TestSongTable(metadata):
 
     return Table('test_song_data', metadata,

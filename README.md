@@ -22,7 +22,7 @@ pip install -r requirements.txt
 
 ##### Create a development database:
 ```bash
-python manage.py create
+python -m server.tools.manage create
 ```
 
 ##### Start the frontend
@@ -66,7 +66,7 @@ npm test
 
 ### Backend Unit Tests
 ```bash
-python util/test.py
+python -m server.tools.test
 ```
 
 ## Profiles
@@ -81,16 +81,15 @@ The config directory contains several sample profiles.
 The environment config defines the set of features, roles, and domains for the application.
 It also lists the default set of users.
 
-
-initialize a sqlite or PostgreSQL database with a given environment
+initialize a sqlite or PostgreSQL database with a given environment configuration
 ```bash
-python manage.py create --db sqlite:///database.sqlite --profile <profile>
+python -m server.tools.manage create --db sqlite:///database.sqlite --profile <profile>
 ```
 
-update the database environment a given environment
+update the database if the environment configuration has changed
 
 ```bash
-python manage.py update --db sqlite:///database.sqlite --profile <profile>
+python -m server.tools.manage update --db sqlite:///database.sqlite --profile <profile>
 ```
 
 #### Application config
@@ -119,5 +118,5 @@ $ cat music.json
      "ref_id": 1
     },
   ]
-$ python -u manage.py import music.json
+$ python -m manage.py import music.json
 ```

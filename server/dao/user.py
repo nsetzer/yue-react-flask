@@ -147,6 +147,10 @@ class UserDao(object):
 
         hashed = hash_password(password, self.workfactor)
 
+        # bytes need to be encoded as strings when storing in postgres
+        if self.db.kind() == "postgresql":
+            hashed = hashed.decode("utf-8")
+
         user_ = {
             "email": email,
             "password": hashed,
@@ -187,6 +191,8 @@ class UserDao(object):
 
         if user:
             hash = user[self.dbtables.UserTable.c.password]
+            if self.db.kind() == "postgresql":
+                 hash = hash.encode("utf-8")
             if check_password_hash(hash, password):
                 return user
 
@@ -201,7 +207,13 @@ class UserDao(object):
     def changeUserPassword(self, user_id, password, commit=True):
 
         hash = hash_password(password, self.workfactor)
-        data = {"password": hash}
+
+        # bytes need to be encoded as strings when storing in postgres
+        if self.db.kind() == "postgresql":
+            data = {"password": hash.decode("utf-8")}
+        else:
+            data = {"password": hash}
+
         query = update(self.dbtables.UserTable) \
             .values(data) \
             .where(self.dbtables.UserTable.c.id == user_id)
