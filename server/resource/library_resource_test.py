@@ -17,7 +17,7 @@ class LibraryResourceTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
 
-        cls.app = TestApp(cls.__name__);
+        cls.app = TestApp(cls.__name__)
 
         cls.app.create_test_songs()
 

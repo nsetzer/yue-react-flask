@@ -27,7 +27,7 @@ class BaseConfig(object):
             if not required:
                 return default
 
-        raise KeyError(",".join(keys))
+        raise KeyError("/".join(keys))
 
     def parse_bytes(self, value):
         """

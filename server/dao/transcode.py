@@ -86,9 +86,37 @@ class FFmpeg(object):
                 args.append("-metadata")
                 args.append("%s=%s" % (key, value))
 
+        args.append("-write_xing")
+        args.append("0")
+
+        args.append("-id3v2_version")
+        args.append("3")
+
+        args.append("-write_id3v1")
+        args.append("1")
+
         args.append("-f")
-        args.append("mp3")
+        args.append("ogg")
         args.append("pipe:1")
+
+        print(' '.join(args))
 
         async_transcode(args, infile, outfile)
 
+    def transcode_ogg(self, infile, outfile, **kwargs):
+
+        args = [self.binpath, "-i", "pipe:0"]
+
+        args.append("-c:a")
+        args.append("libvorbis")
+
+        args.append("-b:a")
+        args.append("256k")
+
+        args.append("-f")
+        args.append("ogg")
+        args.append("pipe:1")
+
+        print(' '.join(args))
+
+        async_transcode(args, infile, outfile)

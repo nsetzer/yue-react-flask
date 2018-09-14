@@ -68,7 +68,7 @@ class FileSysService(object):
         elif fs_name in self.config.filesystem.other:
             path = self.config.filesystem.other[fs_name]
         else:
-            raise FileSysServiceException("invalid name: `%s`" % fs_name)
+            raise FileSysServiceException("invalid root fs name: `%s`" % fs_name)
 
         return path
 

@@ -58,6 +58,18 @@ class AudioService(object):
         """
         return self._getSongInfo(user, song_id)
 
+    def findSongByReferenceId(self, user, ref_id):
+        """ return a song object given the user and song id
+        """
+        song = self.libraryDao.findSongByReferenceId(
+            user['id'], user['domain_id'], ref_id)
+
+        if not song:
+            raise AudioServiceException(
+                "song not found for id: %s" % ref_id)
+
+        return song
+
     def setSongFilePath(self, user, song_id, path):
         """ set the location of the audio file for the song by song id
         """

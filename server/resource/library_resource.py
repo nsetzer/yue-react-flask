@@ -129,6 +129,12 @@ class LibraryResource(WebResource):
         data = self.audio_service.getDomainSongUserInfo(g.current_user)
         return jsonify(result=data)
 
+    @get("ref/<ref_id>")
+    @requires_auth("library_read")
+    def get_song_by_reference(self, ref_id):
+        song = self.audio_service.findSongByReferenceId(g.current_user, int(ref_id))
+        return jsonify(result=song)
+
     @get("<song_id>")
     @requires_auth("library_read")
     def get_song(self, song_id):
@@ -137,7 +143,7 @@ class LibraryResource(WebResource):
 
     @get("<song_id>/audio")
     @param("mode", default="non-mp3",
-        doc="one of original|non-mp3|mp3_320_2ch")
+        doc="one of original|non-mp3|mp3_ 320_2ch")
     @requires_auth("library_read_song")
     def get_song_audio(self, song_id):
 
@@ -161,8 +167,8 @@ class LibraryResource(WebResource):
         # i.e. the user role must have library_write_song in order to
         # transcode anything other than "non-mp3"
 
-        if self.transcode_service.shouldTranscodeSong(song, g.args.mode):
-            path = self.transcode_service.transcodeSong(song, g.args.mode)
+        #if self.transcode_service.shouldTranscodeSong(song, g.args.mode):
+        #    path = self.transcode_service.transcodeSong(song, g.args.mode)
 
         if not self.audio_service.fs.exists(path):
             logging.error("Audio for %s not found at: `%s`" % (song_id, path))

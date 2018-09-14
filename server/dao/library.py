@@ -439,6 +439,14 @@ class LibraryDao(object):
             return results[0]
         return None
 
+    def findSongByReferenceId(self, user_id, domain_id, ref_id):
+        results = self._query(user_id, domain_id,
+                             self.dbtables.SongDataTable.c.ref_id == ref_id)
+
+        if len(results) > 0:
+            return results[0]
+        return None
+
     def insertOrUpdateByReferenceId(self, user_id, domain_id, ref_id, song, commit=True):
         """
         insert or update a single song record
