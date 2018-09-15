@@ -197,22 +197,22 @@ def send_file(filepath):
     mimetype = mimetypes.guess_type(filepath)[0] or 'application/octet-stream'
     file_size = os.stat(filepath).st_size
 
-    if not request.headers.has_key("Range"):
+    if "Range" not in request.headers:
 
         g = local_file_generator(filepath)
         response = Response(g, mimetype=mimetype)
     else:
 
         ranges = findall(r"\d+", request.headers["Range"])
-        begin  = int( ranges[0] )
+        begin  = int(ranges[0])
 
         end = file_size
-        if len(ranges)>1:
-            end = min(file_size, int( ranges[1] ))
+        if len(ranges) > 1:
+            end = min(file_size, int(ranges[1]))
 
         nbytes = max(end - begin, 1024)
 
-        with open(filepath,"rb") as rf:
+        with open(filepath, "rb") as rf:
             rf.seek(begin)
             data = rf.read(nbytes)
 
@@ -222,11 +222,11 @@ def send_file(filepath):
             mimetype=mimetype, direct_passthrough=True)
 
         byterange = 'bytes {0}-{1}/{2}'.format(
-            begin, begin+len(data), len(data))
+            begin, begin + len(data), len(data))
         response.headers.add('Content-Range', byterange)
-        response.headers.add('Accept-Ranges','bytes')
+        response.headers.add('Accept-Ranges', 'bytes')
 
-    response.headers.set('Content-Length',file_size)
+    response.headers.set('Content-Length', file_size)
 
     response.headers.add('Content-Disposition', 'attachment',
         filename=attachment_name)
@@ -248,6 +248,8 @@ def send_generator(go, attachment_name, file_size=None):
     if file_size is not None:
         response.headers.set('Content-Length', file_size)
 
+    # TODO: do i need this?
+
     #response.headers.add('Content-Disposition', 'attachment',
     #    filename=attachment_name)
 
@@ -260,7 +262,7 @@ class MetaWebResource(type):
     def __init__(cls, name, bases, namespace):
         cls._class_endpoints = []
         for key, value in namespace.items():
-            if hasattr(value,"_endpoint"):
+            if hasattr(value, "_endpoint"):
                 func = value
                 fname = name + "." + func.__name__
                 path = func._endpoint
@@ -279,7 +281,7 @@ class MetaWebResource(type):
 
                 cls._class_endpoints.append(endpoint)
 
-class WebResource(object, metaclass = MetaWebResource):
+class WebResource(object, metaclass=MetaWebResource):
     """base class for a WebResource
 
     A WebResource wraps a service with an http interface

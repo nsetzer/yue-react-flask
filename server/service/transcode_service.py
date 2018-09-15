@@ -119,6 +119,9 @@ class TranscodeService(object):
         if mode == "non-mp3":
             return not srcpath.lower().endswith('.mp3')
 
+        if mode == "non-ogg":
+            return not srcpath.lower().endswith('.ogg')
+
         return True
 
     def transcodeSong(self, song, mode):
@@ -138,10 +141,18 @@ class TranscodeService(object):
             return srcpath
         elif mode == "non-mp3" and srcpath.endswith(".mp3"):
             return srcpath
+        elif mode == "non-ogg" and srcpath.endswith(".ogg"):
+            return srcpath
         elif mode == "non-mp3":
             tgt_kind = "mp3"
             tgt_rate = 256
             tgt_channels = "2ch"
+            method = self.transcoder.transcode
+        elif mode == "non-ogg":
+            tgt_kind = "ogg"
+            tgt_rate = 256
+            tgt_channels = "2ch"
+            method = self.transcoder.transcode_ogg
         else:
             tgt_kind, tgt_rate, tgt_channels = mode.split("_")
 
@@ -173,7 +184,7 @@ class TranscodeService(object):
             }
             with self.fs.open(srcpath, "rb") as rb:
                 with self.fs.open(tgtpath, "wb") as wb:
-                    self.transcoder.transcode(rb, wb, **opts)
+                    method(rb, wb, **opts)
 
         return tgtpath
 

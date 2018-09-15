@@ -142,8 +142,8 @@ class LibraryResource(WebResource):
         return jsonify(result=song)
 
     @get("<song_id>/audio")
-    @param("mode", default="non-mp3",
-        doc="one of original|non-mp3|mp3_ 320_2ch")
+    @param("mode", default="non-ogg",
+        doc="one of original|non-ogg|non-mp3|mp3_320_2ch")
     @requires_auth("library_read_song")
     def get_song_audio(self, song_id):
 
