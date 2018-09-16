@@ -2,6 +2,7 @@
 import os
 import sys
 import base64
+import logging
 
 from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
@@ -55,6 +56,9 @@ class CryptoManager(object):
 
     def encrypt(self, public_key, data):
 
+        if b'PUBLIC' not in public_key:
+            raise Exception("encryption key does not look like a public key")
+
         key = RSA.import_key(public_key)
 
         session_key = get_random_bytes(16)
@@ -68,6 +72,9 @@ class CryptoManager(object):
         return enc_session_key + cipher_aes.nonce + tag + ciphertext
 
     def decrypt(self, private_key, data):
+
+        if b'PRIVATE' not in private_key:
+            raise Exception("decryption key does not look like a private key")
 
         key = RSA.import_key(private_key)
 
@@ -111,14 +118,11 @@ class CipherConfigDecryptor(object):
     def __init__(self):
         super(CipherConfigDecryptor, self).__init__()
         self.cm = CryptoManager()
-        self.pem = None
-
-    def init(self):
-        """ initialize the secret decryptor
-        this module expects the secret key to be passed in via stdin
-        """
-        if not sys.stdin.isatty():
-            self.pem = sys.stdin.read()
+        if 'YUE_PRIVATE_KEY' in os.environ:
+            self.pem = os.environ['YUE_PRIVATE_KEY'].encode("utf-8")
+        else:
+            self.pem = None
+            logging.warning("YUE_PRIVATE_KEY not set: no private key found for decrypting")
 
     def decrypt(self, data):
         """ decrypts a base64 encoded string prefixed with prefix
@@ -133,9 +137,6 @@ class ParameterStoreConfigDecryptor(object):
 
     def __init__(self):
         super(ParameterStoreConfigDecryptor, self).__init__()
-
-    def init(self):
-        pass
 
     def decrypt(self, data):
         """ retrieve a value from a parameter store given a key

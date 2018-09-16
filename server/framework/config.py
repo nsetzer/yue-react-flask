@@ -90,8 +90,8 @@ class CORSConfig(BaseConfig):
 
 class LoggingConfig(BaseConfig):
     def __init__(self, base):
-        self.directory =  self.get_key(base, 'logging', 'directory', default="./log")
-        self.filename =  self.get_key(base, 'logging', 'filename', default="server.log")
+        self.directory = self.get_key(base, 'logging', 'directory', default="./log")
+        self.filename = self.get_key(base, 'logging', 'filename', default="server.log")
         self.max_size = self.parse_bytes(self.get_key(base, 'logging', 'max_size', default="2048k"))
         self.num_backups = int(self.get_key(base, 'logging', 'num_backups', default=10))
         self.level = self.parse_loglevel(self.get_key(base, 'logging', 'level', default="error"))
@@ -131,7 +131,9 @@ class ApplicationBaseConfig(BaseConfig):
         logging.warning("encryption mode: %s" % mode)
         if mode == "rsa":
             self.decryptor = CipherConfigDecryptor()
-            self.decryptor.init()
+            self._decrypt_inplace(data)
+        if mode == "ssm":
+            self.decryptor = ParameterStoreConfigDecryptor()
             self._decrypt_inplace(data)
 
         # TODO implement true sub classes

@@ -10,9 +10,13 @@ options: none, rsa, ssm
 * ssm: use AWS parameter store to retrieve secrets
 `mysecret: ENC:<parameter store path>`
 
-> note: when using rsa encryption, the private key must be passed in via stdin
-> when the server starts, for example:
-`cat ./crypto/rsa.pem | python3 wsgi.py`
+> note: when using rsa encryption, the private key must be passed in via
+> an environment variable when the server starts, for example:
+```bash
+YUE_PRIVATE_KEY=$(cat ./crypto/rsa.pem)
+export YUE_PRIVATE_KEY
+python3 wsgi.py
+```
 
 **_server.host_**
 
