@@ -27,6 +27,8 @@ from server.config import Config
 from server.resource.util import get_features
 from server.framework.client import cli_main
 from server.framework.application import FlaskAppClient
+from server.framework.crypto import CryptoManager
+
 from pprint import pformat
 
 def drop(args):
@@ -92,6 +94,28 @@ def setpw(args):
     print(user)
     dao.changeUserPassword(user['id'], args.password)
     print(dao.findUserByEmail(args.username))
+
+def generate_secret(args):
+
+    cm = CryptoManager()
+
+    cm.generate_key(args.outdir, args.name, args.size)
+
+def encrypt64(args):
+
+    with open(args.key, "rb") as rb:
+        key = rb.read()
+    cm = CryptoManager()
+    dat = args.data.encode("utf-8")
+    sys.stdout.write("%s\n" % cm.encrypt64(key, dat))
+
+def decrypt64(args):
+
+    with open(args.key, "rb") as rb:
+        key = rb.read()
+    cm = CryptoManager()
+    dec = cm.decrypt64(key, args.data).decode("utf-8")
+    sys.stdout.write("%s\n" % dec)
 
 def create_user(args):
 
@@ -277,6 +301,48 @@ def main():
                                help='the password to hash')
 
     ###########################################################################
+    # generate_secret - generate a public/private keypair
+
+    parser_gensecret = subparsers.add_parser('generate_keypair',
+        help='generate a public/private keypair')
+    parser_gensecret.set_defaults(func=generate_secret)
+
+    parser_gensecret.add_argument('--outdir', type=str, default="./",
+        help='directory to write keys to')
+
+    parser_gensecret.add_argument('--size', type=int, default=2048,
+        help='RSA key size')
+
+    parser_gensecret.add_argument('name',
+        help='basename for the public and private key')
+
+    ###########################################################################
+    # encrypt64 - encrypt a string and encode as a base64 string
+
+    parser_encrypt64 = subparsers.add_parser('encrypt64',
+        help='encrypt a string and encode as a base64 string')
+    parser_encrypt64.set_defaults(func=encrypt64)
+
+    parser_encrypt64.add_argument('key',
+        help='path to the public key to use for encryption')
+
+    parser_encrypt64.add_argument('data',
+        help='text string to encrypt')
+
+    ###########################################################################
+    # decrypt64 - decrypt a base64 encoded
+
+    parser_decrypt64 = subparsers.add_parser('decrypt64',
+        help='decrypt a base64 encoded')
+    parser_decrypt64.set_defaults(func=decrypt64)
+
+    parser_decrypt64.add_argument('key',
+        help='path to the private key to use for encryption')
+
+    parser_decrypt64.add_argument('data',
+        help='text string to encrypt')
+
+    ###########################################################################
     # CREATE_USER - create a user
 
     parser_hash = subparsers.add_parser('create_user', help='create a user')
@@ -333,7 +399,10 @@ def main():
         sys.stderr.write("cannot find env cfg: %s" % args.env_cfg_path)
         sys.exit(1)
 
-    args.func(args)
+    if not hasattr(args, 'func'):
+        parser.print_help()
+    else:
+        args.func(args)
 
 if __name__ == '__main__':
 

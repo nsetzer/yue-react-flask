@@ -1,4 +1,4 @@
-#! cd ../.. && python -m server.tools.upload --username admin --password admin beast.json test
+#! cd ../.. && python -m server.tools.upload --host http://104.248.122.206:80 --username admin --password admin clutch.json temp
 
 import os
 import sys
@@ -31,17 +31,22 @@ def _transcode_upload(transcoder, client, local_path, root, remote_path, opts):
         f = io.BytesIO()
         with open(local_path, "rb") as rb:
             transcoder.transcode_ogg(rb, f, **opts)
+        print("uploading")
 
         f.seek(0)
         response = client.files_upload(root, remote_path, f.getvalue())
         if response.status_code != 200:
-            print("failed: %s" % mp3_path)
+            print(response.text)
+            print(response.status_code)
+            print("failed upload 1: %s" % remote_path)
+            sys.exit(1)
         f.close()
     else:
         with open(local_path, "rb") as rb:
             response = client.files_upload(root, remote_path, rb)
             if response.status_code != 200:
-                print("failed: %s" % mp3_path)
+                print(response.status_code)
+                print("failed uplaod 2: %s" % remote_path)
 
 def _create_song(client, song):
 
@@ -181,6 +186,9 @@ def parseArgs(argv):
                     help='media root to upload file to')
 
     args = parser.parse_args()
+
+    if args.password is None:
+        args.password = input("password:")
 
     return args
 

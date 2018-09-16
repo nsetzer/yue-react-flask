@@ -12,6 +12,8 @@ except ImportError:
 
 import logging
 
+from .crypto import CipherConfigDecryptor, ParameterStoreConfigDecryptor
+
 class BaseConfig(object):
     def __init__(self):
         super(BaseConfig, self).__init__()
@@ -105,12 +107,34 @@ class ApplicationBaseConfig(BaseConfig):
 
         self.init(data)
 
+    def _decrypt_inplace(self, data):
+        """ recursivley decrypt all secretes """
+
+        for key, value in data.items():
+            if isinstance(value, str):
+                if value.startswith(self.decryptor.prefix):
+                    value = value.encode("utf-8")
+                    data[key] = self.decryptor.decrypt(value).decode("utf-8")
+                    print(value)
+                    print(data[key])
+
+            elif isinstance(value, dict):
+                self._decrypt_inplace(value)
+
     def init(self, data):
 
         self.build_dir = os.path.join(os.getcwd(), "build")
         self.static_dir = os.path.join(os.getcwd(), "build", "static")
 
         base = self.get_key(data, "server")
+
+        mode = self.get_key(data, "encryption_mode")
+
+        logging.warning("encryption mode: %s" % mode)
+        if mode == "rsa":
+            self.decryptor = CipherConfigDecryptor()
+            self.decryptor.init()
+            self._decrypt_inplace(data)
 
         # TODO implement true sub classes
         self.host = self.get_key(base, 'host', default="localhost")

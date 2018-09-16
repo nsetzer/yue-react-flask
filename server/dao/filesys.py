@@ -417,56 +417,6 @@ class S3FileSystemImpl(AbstractFileSystem):
         with self.pfile(cmd, "rb") as rb:
             rb.read()
 
-class BotoFileSystemImpl(AbstractFileSystem):
-    """docstring for S3FileSystemImpl"""
-    scheme = "boto://"
-
-    def __init__(self):
-        super(BotoFileSystemImpl, self).__init__()
-        self.pfile = _ProcFile
-        self.s3 = boto3.client('s3')
-
-    def samefile(self, patha, pathb):
-        return self.exists(patha) and patha == pathb
-
-    def isfile(self, path):
-        pass
-
-    def isdir(self, path):
-        pass
-
-    def exists(self, path):
-        pass
-
-    def open(self, path, mode):
-        # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3.html#S3.Client.list_objects
-        # bucket = self.s3.Bucket('my-bucket-name')
-        # all_objects = s3.list_objects(Bucket = 'my-bucket-name'
-        #                               Prefix  = '/'
-        #                               MaxKeys=123)
-        #with open("tmp.txt", "rb") as f:
-        #   self.s3.upload_fileobj(f, "bucket-name", "key-name")
-        #with open("tmp.txt", "wb") as f:
-        #   self.s3.download_fileobj("bucket-name", "key-name", f)
-        pass
-
-
-
-    def listdir(self, path):
-        pass
-
-    def scandir(self, path):
-        pass
-
-    def set_mtime(self, path, mtime):
-        pass
-
-    def file_info(self, path):
-        pass
-
-    def remove(self, path):
-        pass
-
 class FileSystem(object):
     """Generic FileSystem Interface
 
@@ -480,9 +430,6 @@ class FileSystem(object):
             S3FileSystemImpl.scheme: S3FileSystemImpl(),
             MemoryFileSystemImpl.scheme: MemoryFileSystemImpl(),
         }
-
-        if boto3 is not None:
-            self._fs[BotoFileSystemImpl.scheme] = BotoFileSystemImpl()
 
         self._fs_default = LocalFileSystemImpl()
 

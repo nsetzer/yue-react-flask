@@ -295,13 +295,23 @@ def parseArgs(argv, default_profile=None):
     parser.add_argument('-p', '--profile', dest='profile',
                         default=default_profile,
                         help='default profile to use (%s)' % default_profile)
-    parser.add_argument('-w', '--workers', type=int,
-                        default=1,
-                        help='number of workers')
-    parser.add_argument('appname', default='wsgi:app',
-        help="the name of the app for running using wsgi (file:varname)")
+    # workers and bind are for gunicorn support
+    # todo: the default bind should be none
+    # then use the config to set the default bind,
+    #parser.add_argument('--bind', type=str, default="0.0.0.0:4200",
+    #                    help="bind server to host:port")
+    #parser.add_argument('-w', '--workers', type=int,
+    #                    default=1,
+    #                    help='number of workers')
+    #parser.add_argument('appname', default='wsgi:app', nargs='?'
+    #    help="the name of the app for running using wsgi (file:varname)")
 
-    args = parser.parse_args(argv[1:])
+    args, _ = parser.parse_known_args(argv[1:])
+
+
+    #app.logger.handlers = gunicorn_logger.handlers
+    #app.logger.setLevel(gunicorn_logger.level)
+
 
     return args
 
@@ -319,7 +329,7 @@ def getApp(config_dir, profile):
     if not os.path.exists(cfg.logging.directory):
         os.makedirs(cfg.logging.directory)
 
-    FORMAT = '%(asctime)-15s %(message)s'
+    FORMAT = '%(levelname)-8s: %(asctime)-15s %(message)s'
     logging.basicConfig(format=FORMAT, level=cfg.logging.level)
     log_path = os.path.join(cfg.logging.directory, cfg.logging.filename)
     handler = RotatingFileHandler(log_path,
@@ -329,6 +339,10 @@ def getApp(config_dir, profile):
     logging.getLogger().addHandler(handler)
 
     logging.info("using config: %s" % app_cfg_path)
+
+    #gunicorn_logger = logging.getLogger('gunicorn.error')
+    #print(list(sorted(logging.Logger.manager.loggerDict.keys())))
+    #print(gunicorn_logger.level)
 
     app = YueApp(cfg)
 

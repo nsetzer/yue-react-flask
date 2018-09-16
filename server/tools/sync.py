@@ -539,7 +539,7 @@ def parseArgs(argv):
                     help='print changes without taking any action')
 
     parser.add_argument('--config', dest='configdir',
-                    default = configd,
+                    default=configd,
                     help='settings directory')
 
     subparsers = parser.add_subparsers()
@@ -549,7 +549,7 @@ def parseArgs(argv):
     sync_parser.add_argument('-r', '--recursive',
         action='store_true',
         help='descend into directories')
-    sync_parser.add_argument('pwd', default = os.getcwd(),
+    sync_parser.add_argument('pwd', default=os.getcwd(),
         metavar="directory",
         help='local dir to sync (current director)')
 
@@ -561,7 +561,7 @@ def parseArgs(argv):
     pull_parser.add_argument('--delete',
         action='store_true',
         help='delete local files not found on remote')
-    pull_parser.add_argument('pwd', default = os.getcwd(),
+    pull_parser.add_argument('pwd', default=os.getcwd(),
         metavar="directory",
         help='local dir to sync (current director)')
 
@@ -573,7 +573,7 @@ def parseArgs(argv):
     push_parser.add_argument('--delete',
         action='store_true',
         help='delete remote files not found locally')
-    push_parser.add_argument('pwd', default = os.getcwd(),
+    push_parser.add_argument('pwd', default=os.getcwd(),
         metavar="directory",
         help='local dir to sync (current director)')
 
@@ -585,7 +585,6 @@ def parseArgs(argv):
     copy_parser = subparsers.add_parser("list", aliases=['ls'])
     copy_parser.set_defaults(func=_list)
     copy_parser.add_argument('path', help='list a remote directory')
-
 
     config_parser = subparsers.add_parser("config")
     config_parser.set_defaults(func=_config)
