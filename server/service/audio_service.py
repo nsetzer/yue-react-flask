@@ -12,7 +12,7 @@ from ..dao.library import LibraryDao, Song
 from ..dao.queue import SongQueueDao
 from ..dao.history import HistoryDao
 from ..dao.shuffle import binshuffle
-from ..dao.filesys import FileSystem
+from ..dao.filesys.filesys import FileSystem
 
 from .exception import AudioServiceException
 

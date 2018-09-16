@@ -96,10 +96,8 @@ class FFmpeg(object):
         args.append("1")
 
         args.append("-f")
-        args.append("ogg")
+        args.append("mp3")
         args.append("pipe:1")
-
-        print(' '.join(args))
 
         async_transcode(args, infile, outfile)
 

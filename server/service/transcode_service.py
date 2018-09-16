@@ -8,7 +8,7 @@ Image files can be processed using the pillow library.
 """
 import os, sys
 from ..dao.library import Song
-from ..dao.filesys import FileSystem
+from ..dao.filesys.filesys import FileSystem
 from ..dao.transcode import FFmpeg
 from .exception import TranscodeServiceException
 import logging
@@ -137,6 +137,8 @@ class TranscodeService(object):
         srcpath = song[Song.path]
         tgtpath = self.config.transcode.audio.tmp_path
 
+        method = self.transcoder.transcode
+
         if mode == "original":
             return srcpath
         elif mode == "non-mp3" and srcpath.endswith(".mp3"):
@@ -147,7 +149,6 @@ class TranscodeService(object):
             tgt_kind = "mp3"
             tgt_rate = 256
             tgt_channels = "2ch"
-            method = self.transcoder.transcode
         elif mode == "non-ogg":
             tgt_kind = "ogg"
             tgt_rate = 256

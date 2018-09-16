@@ -4,3 +4,7 @@ SQLAlchemy==1.*
 pillow==5.*
 psycopg2-binary==2.*
 requests==2.*
+boto3==1.*
+PyYAML==3.*
+pycryptodome==3.*
+

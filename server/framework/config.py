@@ -108,15 +108,13 @@ class ApplicationBaseConfig(BaseConfig):
         self.init(data)
 
     def _decrypt_inplace(self, data):
-        """ recursivley decrypt all secretes """
+        """ recursivley decrypt all secrets """
 
         for key, value in data.items():
             if isinstance(value, str):
                 if value.startswith(self.decryptor.prefix):
                     value = value.encode("utf-8")
                     data[key] = self.decryptor.decrypt(value).decode("utf-8")
-                    print(value)
-                    print(data[key])
 
             elif isinstance(value, dict):
                 self._decrypt_inplace(value)

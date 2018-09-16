@@ -27,7 +27,7 @@ class DatabaseConfig(BaseConfig):
                 self.url = "sqlite:///" + path
             self.dbhost = path
         elif self.kind == "postgresql":
-            self.dbhost = self.get_key(base, 'database', 'path', required=True)
+            self.dbhost = self.get_key(base, 'database', 'hostname', required=True)
             self.dbuser = self.get_key(base, 'database', 'username', required=True)
             # TODO: password should come from an environment variable
             #      or configured in the environment by default

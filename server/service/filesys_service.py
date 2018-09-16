@@ -11,7 +11,7 @@ import os, sys
 
 
 from .exception import FileSysServiceException
-from ..dao.filesys import FileSystem
+from ..dao.filesys.filesys import FileSystem
 
 import logging
 

@@ -5,7 +5,7 @@ import json
 import time
 
 from ..dao.db import main_test
-from ..dao.filesys import FileSystem
+from ..dao.filesys.filesys import FileSystem
 from ..app import TestApp
 
 class FilesResourceTestCase(unittest.TestCase):

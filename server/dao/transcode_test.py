@@ -2,7 +2,7 @@
 import sys
 import unittest
 
-from .filesys import FileSystem
+from .filesys.filesys import FileSystem
 from .db import main_test
 from .transcode import find_ffmpeg, FFmpeg
 

@@ -3,7 +3,9 @@ import unittest
 import json
 import io
 
-from .filesys import FileSystem, S3FileSystemImpl, sh_escape
+from .util import sh_escape
+from .filesys import FileSystem, sh_escape
+from .s3fs import S3FileSystemImpl
 
 head_object = b"""
 {

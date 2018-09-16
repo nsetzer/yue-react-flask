@@ -7,7 +7,7 @@ import posixpath
 import logging
 
 from ..dao.db import main_test
-from ..dao.filesys import FileSystem, MemoryFileSystemImpl
+from ..dao.filesys.filesys import FileSystem, MemoryFileSystemImpl
 
 from ..app import TestApp
 from ..framework.client import FlaskAppClient

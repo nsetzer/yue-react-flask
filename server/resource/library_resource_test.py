@@ -50,7 +50,7 @@ class LibraryResourceTestCase(unittest.TestCase):
                              content_type="application/json")
             self.assertEqual(result.status_code, 200, result)
             json_data = gzip.decompress(result.data)
-            data = json.loads(json_data)['result']
+            data = json.loads(json_data.decode("utf-8"))['result']
             self.assertEqual(len(self.app.SONGS), len(data))
 
             # demonstrate a cleaner api for compressed requests
