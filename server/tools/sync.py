@@ -17,6 +17,18 @@ import time
 
 from ..app import connect
 
+def split_server_path(path):
+
+    temp = path.replace("server://", "")
+
+    if '/' in temp:
+        root, path = temp.split("/", 1)
+    else:
+        root = temp
+        path = ""
+
+    return root, path
+
 def _check(client, root, remote_base, local_base, match_size=False):
     """
     match_size : when true sync files, even if the size is equal
@@ -348,15 +360,15 @@ def _sync(args, client):
     cfg = _get_config(args)
 
     if args.username is None:
-        sys.stderr.write("username not provided")
+        sys.stderr.write("username not provided\n")
         sys.exit(1)
 
     if args.password is None:
-        sys.stderr.write("password not provided")
+        sys.stderr.write("password not provided\n")
         sys.exit(1)
 
     if len(cfg['items']) == 0:
-        sys.stderr.write("invalid config")
+        sys.stderr.write("invalid config\n")
         sys.exit(1)
 
     pwd = os.path.abspath(args.pwd)
@@ -382,11 +394,11 @@ def _copy(args, client):
     cfg = _get_config(args)
 
     if args.username is None:
-        sys.stderr.write("username not provided")
+        sys.stderr.write("username not provided\n")
         usage()
 
     if args.password is None:
-        sys.stderr.write("password not provided")
+        sys.stderr.write("password not provided\n")
         usage()
 
     if args.src_file.startswith("server://"):
@@ -434,23 +446,37 @@ def _list(args, client):
     cfg = _get_config(args)
 
     if args.username is None:
-        sys.stderr.write("username not provided")
+        sys.stderr.write("username not provided\n")
         usage()
 
     if args.password is None:
-        sys.stderr.write("password not provided")
+        sys.stderr.write("password not provided\n")
         usage()
 
     if not args.path.startswith("server://"):
         usage()
     else:
-        root, path = args.path.replace("server://", "").split("/", 1)
-        response = client.files_get_path(root, path)
+        root, path = split_server_path(args.path)
+
+        # TODO: unsure if this should be done server side or not
+        #       or if it should be replicated to other methods in this file
+        if path.endswith("/"):
+            path = path.rstrip("/")
+
+        if args.dryrun:
+            sys.stdout.write("list %s/api/fs/%s/path/%s\n" % (
+                client.host(), root, path))
+            return
+
+        response = client.files_get_path(root, path, list=True)
 
         if response.status_code == 404:
-            sys.stderr.write("not found: %s" % args.path)
+            sys.stderr.write("not found: %s\n" % args.path)
             sys.exit(1)
 
+        elif response.headers['content-type'] != "application/json":
+            raise Exception("Server responded with unexpected type: %s" %
+                response.headers['content-type'])
         else:
             data = response.json()['result']
 
@@ -458,7 +484,6 @@ def _list(args, client):
                 sys.stdout.write("%s%s\n" % (" " * (18+13), dirname))
 
             for item in data['files']:
-
 
                 ftime = time.localtime(item['mtime'])
                 fdate = time.strftime('%Y-%m-%d %H:%M:%S', ftime)
@@ -476,9 +501,12 @@ def _config(args, client):
     if args.username is not None:
         cfg['username'] = args.username
 
+    # TODO: use local encryption for passwords
     if args.password is not None:
         cfg['password'] = args.password
 
+    # if the user supplied a different connection string
+    # override the default value
     if args.host != "https://localhost:4200":
         cfg['host'] = args.host
 
@@ -617,8 +645,6 @@ def main():
         args.func(args, client)
     except KeyboardInterrupt:
         sys.exit(1)
-
-
 
 if __name__ == '__main__':
     main()

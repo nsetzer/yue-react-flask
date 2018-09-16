@@ -35,9 +35,12 @@ class FilesResource(WebResource):
         return self._list_path(root, "")
 
     @get("<root>/path/<path:resPath>")
+    @param("list", type_=bool, default=False,
+        doc="do not retrieve contents for files if true")
     @requires_auth("filesystem_read")
     def get_path(self, root, resPath):
-        return self._list_path(root, resPath)
+        sys.stderr.write(">%s>%s>\n" % (type(g.args.list), g.args.list))
+        return self._list_path(root, resPath, g.args.list)
 
     @post("<root>/path/<path:resPath>")
     @param("mtime", type_=int, doc="set file modified time")
@@ -69,7 +72,7 @@ class FilesResource(WebResource):
         roots = self.filesys_service.getRoots(g.current_user)
         return jsonify(result=roots)
 
-    def _list_path(self, root, path):
+    def _list_path(self, root, path, list_=False):
 
         fs = self.filesys_service.fs
         # application config should define a number of valid roots
@@ -81,9 +84,14 @@ class FilesResource(WebResource):
         #    return httpError(404, "path does not exist")
 
         if self.filesys_service.fs.isfile(abs_path):
-            _, name = self.filesys_service.fs.split(abs_path)
-            go = files_generator(self.filesys_service.fs, abs_path)
-            return send_generator(go, name, file_size=None)
+
+            if list_:
+                result = self.filesys_service.listSingleFile(g.current_user, root, path)
+                return jsonify(result=result)
+            else:
+                _, name = self.filesys_service.fs.split(abs_path)
+                go = files_generator(self.filesys_service.fs, abs_path)
+                return send_generator(go, name, file_size=None)
 
         result = self.filesys_service.listDirectory(g.current_user, root, path)
         return jsonify(result=result)

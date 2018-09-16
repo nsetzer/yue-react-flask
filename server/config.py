@@ -61,6 +61,21 @@ class TranscodeConfig(BaseConfig):
         self.audio = TranscodeAudioConfig(self.get_key(base,'transcode',"audio"))
         self.image = None
 
+class AwsConfig(BaseConfig):
+    """
+    Amazon Web Services Credentials
+
+    used for s3 bucket access
+    """
+    def __init__(self, base):
+
+        creds = self.get_key(base, 'aws', 'creds', default={})
+
+        self.endpoint = self.get_key(creds, 'endpoint', default=None)
+        self.access_key = self.get_key(creds, 'access_key', default=None)
+        self.secret_key = self.get_key(creds, 'secret_key', default=None)
+        self.region = self.get_key(creds, 'region', default=None)
+
 class Config(ApplicationBaseConfig):
     """base class for application configurations"""
 
@@ -75,6 +90,7 @@ class Config(ApplicationBaseConfig):
         self.database = DatabaseConfig(base)
         self.filesystem = FilesystemConfig(base)
         self.transcode = TranscodeConfig(base)
+        self.aws = AwsConfig(base)
 
     @staticmethod
     def null():

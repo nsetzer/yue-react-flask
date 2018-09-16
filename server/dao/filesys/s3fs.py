@@ -4,7 +4,7 @@ import os
 import sys
 import datetime
 import time
-
+from threading import Thread, Lock
 try:
     import boto3
     import botocore
@@ -12,8 +12,8 @@ except ImportError:
     boto3 = None
     botocore = None
 
-from .util import sh_escape, AbstractFileSystem, _ProcFile \
-    BytesFIFO, BytesFIFOWriter, BytesFIFOReader
+from .util import sh_escape, AbstractFileSystem, _ProcFile, \
+    BytesFIFO, BytesFIFOWriter, BytesFIFOReader, FileRecord
 
 class S3FileSystemImpl(AbstractFileSystem):
     """docstring for S3FileSystemImpl"""
@@ -119,13 +119,18 @@ class BotoReaderThread(Thread):
 
     def run(self):
         writer = BytesFIFOWriter(self.fifo)
-        self.bucket.download_fileobj(self.key, writer)
-        writer.close()
+        try:
+            self.bucket.download_fileobj(self.key, writer)
+        finally:
+            writer.close()
 
 class BotoReaderFile(object):
     """docstring for BotoReaderFile"""
     def __init__(self, bucket, key):
         super(BotoReaderFile, self).__init__()
+
+        if not key:
+            raise Exception("%s: invalid key" % bucket)
 
         self.lock = Lock()
         self.fifo = BytesFIFO(lock=self.lock)
@@ -160,14 +165,19 @@ class BotoWriterThread(Thread):
 
     def run(self):
         reader = BytesFIFOReader(self.fifo)
-        self.bucket.upload_fileobj(reader, self.key)
-        reader.close()
+        try:
+            self.bucket.upload_fileobj(reader, self.key)
+        finally:
+            reader.close()
 
 class BotoWriterFile(object):
     """docstring for BotoWriterFile"""
 
     def __init__(self, bucket, key):
         super(BotoWriterFile, self).__init__()
+
+        if not key:
+            raise Exception("%s: invalid key" % bucket)
 
         self.lock = Lock()
         self.fifo = BytesFIFO(lock=self.lock)
@@ -192,11 +202,11 @@ class BotoWriterFile(object):
     def __exit__(self, type, value, tb):
         self.close()
 
-class BotoFileSystemImpl():
+class BotoFileSystemImpl(AbstractFileSystem):
     """docstring for S3FileSystemImpl"""
     scheme = "s3://"
 
-    def __init__(self, endpoint_url, region, access_key, secret_key, bucket_name):
+    def __init__(self, endpoint_url, region, access_key, secret_key):
         super(BotoFileSystemImpl, self).__init__()
 
         # -----------
@@ -219,7 +229,10 @@ class BotoFileSystemImpl():
         """extract bucket name and key from the path"""
         if not path.startswith(self.scheme):
             raise Exception(path)
-        bucket_name, key = path[len(self.scheme):].split("/", 1)
+        path = path[len(self.scheme):]
+        if '/' not in path:
+            return path, ""
+        bucket_name, key = path.split("/", 1)
         return bucket_name, key
 
     def samefile(self, patha, pathb):
@@ -228,7 +241,8 @@ class BotoFileSystemImpl():
 
     def isfile(self, path):
         """ returns true if the path exists"""
-        return self.exists(path)
+        bucket_name, key = self._parse_path(path)
+        return key and self.exists(path)
 
     def isdir(self, path):
         """returns true if the prefix path exists"""
@@ -248,8 +262,10 @@ class BotoFileSystemImpl():
         """ returns true if the key exists """
         bucket_name, key = self._parse_path(path)
         bucket = self.s3.Bucket(bucket_name)
-        for obj in bucket.objects.filter(Prefix=key):
-            return True
+        for obj in bucket.objects.filter(Prefix=key, Delimiter="/"):
+            sys.stderr.write(">%s>\n" % obj)
+            if not obj.key.endswith("/"):
+                return True
         return False
 
     def open(self, path, mode):
@@ -266,6 +282,7 @@ class BotoFileSystemImpl():
             raise Exception(mode)
 
         bucket_name, key = self._parse_path(path)
+        bucket = self.s3.Bucket(bucket_name)
 
         if 'w' in mode:
             return BotoWriterFile(bucket, key)

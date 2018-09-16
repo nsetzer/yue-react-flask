@@ -61,6 +61,8 @@ from .config import Config
 
 from .dao.library import Song
 from .dao.transcode import find_ffmpeg
+from .dao.filesys.filesys import FileSystem
+from .dao.filesys.s3fs import BotoFileSystemImpl
 from .dao.db import db_connect, db_init_main
 
 from .framework.application import FlaskApp
@@ -94,6 +96,12 @@ class YueApp(FlaskApp):
         if nbTablesExpected != nbTablesActual:
             logging.warning("database contains %d tables. expected %d." % (
                 nbTablesActual, nbTablesExpected))
+
+        if config.aws.endpoint is not None:
+            aws = config.aws
+            s3fs = BotoFileSystemImpl(aws.endpoint, aws.region,
+                aws.access_key, aws.secret_key)
+            FileSystem.register(BotoFileSystemImpl.scheme, s3fs)
 
         self.user_service = UserService(config, self.db, self.db.tables)
         self.audio_service = AudioService(config, self.db, self.db.tables)
@@ -312,7 +320,6 @@ def parseArgs(argv, default_profile=None):
     #app.logger.handlers = gunicorn_logger.handlers
     #app.logger.setLevel(gunicorn_logger.level)
 
-
     return args
 
 def getApp(config_dir, profile):
@@ -339,6 +346,8 @@ def getApp(config_dir, profile):
     logging.getLogger().addHandler(handler)
 
     logging.info("using config: %s" % app_cfg_path)
+
+
 
     #gunicorn_logger = logging.getLogger('gunicorn.error')
     #print(list(sorted(logging.Logger.manager.loggerDict.keys())))

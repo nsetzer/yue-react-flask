@@ -4,6 +4,7 @@ the keys which can be used are given in bold below.
 
 **_encryption_mode_**
 options: none, rsa, ssm
+
 * rsa: use a public/private keypair to encrypt/decrypt secrets in this configuration
 `mysecret: ENC:<bas64endoded string>`
 * ssm: use AWS parameter store to retrieve secrets
@@ -14,10 +15,12 @@ options: none, rsa, ssm
 `cat ./crypto/rsa.pem | python3 wsgi.py`
 
 **_server.host_**
+
 in development this is the hostname to listen on, e.g. `localhost`
 set to '0.0.0.0' to access the server on the local network
 
 **_server.port_**
+
 in development this is the port to listen on, e.g. `4200`
 
 **_server.env_**
@@ -28,22 +31,28 @@ in development this is the port to listen on, e.g. `4200`
 
 **_server.database.kind_**
 options: sqlite, postgresql
+
 * sqlite: use a local sqlite database
 * postgresql: use a PostgreSQL database
 
 **_server.database.path_**
+
 if the database kind is set to sqlite, this is the path to that database
 
 **_server.database.hostname_**
+
 for postgresql, the hostname and port of the database
 
 **_server.database.username_**
+
 for postgresql, the username to use when connecting
 
 **_server.database.password_**
+
 for postgresql, the password to use when connecting
 
 **_server.database.database_**
+
 for postgresql, the name of the database to connect to
 
 **_server.ssl.private_key_**
@@ -61,3 +70,19 @@ for postgresql, the name of the database to connect to
 **_server.transcode.audio.bin_path_**
 **_server.transcode.audio.tmp_path_**
 **_server.transcode.image_**
+
+**_server.aws.creds.endpoint_**
+
+the s3 api endpoint url
+
+**_server.aws.creds.access_key_**
+
+the users access key
+
+**_server.aws.creds.secret_key_**
+
+the users secret access key
+
+**_server.aws.creds.region_**
+
+the aws region

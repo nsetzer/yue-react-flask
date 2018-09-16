@@ -110,6 +110,46 @@ class FileSysService(object):
 
         return abs_path
 
+    def listSingleFile(self, user, fs_name, path):
+
+        os_root = self.getRootPath(user, fs_name)
+        abs_path = self.getPath(user, fs_name, path)
+
+        if abs_path == os_root:
+            parent = os_root
+        else:
+            parent, _ = self.fs.split(abs_path)
+
+        name, is_dir, size, mtime = self.fs.file_info(abs_path)
+
+        files = []
+        dirs = []
+
+        if is_dir:
+            dirs.append(name)
+        else:
+            files.append({"name": name, "size": size, "mtime": mtime})
+
+        os_root_normalized = os_root.replace("\\", "/")
+
+        result = {
+            # name is the name of the file system, which
+            # is used to determine the media root
+            "name": fs_name,
+            # return the relative path, suitable for the request url
+            # that would reproduce this result
+            "path": trim_path(path, os_root_normalized),
+            # return the relative path to the parent, suitable to produce
+            # a directory listing on the parent
+            "parent": trim_path(parent, os_root_normalized),
+            # return the list of files as a dictionary
+            "files": files,
+            # return the names of all sub directories
+            "directories": dirs
+        }
+
+        return result
+
     def listDirectory(self, user, fs_name, path):
         """
         todo: check for .yueignore in the root, or in the given path

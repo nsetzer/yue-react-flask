@@ -175,17 +175,20 @@ class FileSystem(object):
     all paths must be absolute file file paths, the correct
     implementation of open depends on the path scheme
     """
+    default_fs = dict()
+
     def __init__(self):
         super(FileSystem, self).__init__()
 
-        self._fs = {
-            MemoryFileSystemImpl.scheme: MemoryFileSystemImpl(),
-        }
+        self._fs = dict(FileSystem.default_fs)
+
+        self._fs[MemoryFileSystemImpl.scheme] = MemoryFileSystemImpl()
 
         self._fs_default = LocalFileSystemImpl()
 
-    def register(self, scheme, fs):
-        self._fs[scheme] = fs
+    @staticmethod
+    def register(scheme, fs):
+        FileSystem.default_fs[scheme] = fs
 
     def getFileSystemForPath(self, path):
         for scheme, fs in self._fs.items():
