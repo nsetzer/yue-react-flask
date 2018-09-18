@@ -27,6 +27,8 @@ class CryptoManager(object):
         super(CryptoManager, self).__init__()
 
     def new_key(self, size=2048):
+        """ generate a public and private key
+        """
 
         key = RSA.generate(size)
         private_key = key.export_key()
@@ -35,6 +37,8 @@ class CryptoManager(object):
         return private_key, public_key
 
     def generate_key(self, outdir, name, size=2048):
+        """ generate a public (.pub) and private (.pem) key
+        """
 
         pub_name = os.path.join(outdir, name + ".pub")
         pem_name = os.path.join(outdir, name + ".pem")
@@ -55,6 +59,17 @@ class CryptoManager(object):
         return private_key, public_key
 
     def encrypt(self, public_key, data):
+        """ encrypt a block of data
+
+        returns a byte array containing:
+            - a unique session key
+            - nonce: 16 bytes
+            - tag: 16 bytes, a cryptographc checksum
+            - cyphertext
+
+        multiple calls to this function with the same input will
+        produce different output because a random nonce is used.
+        """
 
         if b'PUBLIC' not in public_key:
             raise Exception("encryption key does not look like a public key")
@@ -72,6 +87,14 @@ class CryptoManager(object):
         return enc_session_key + cipher_aes.nonce + tag + ciphertext
 
     def decrypt(self, private_key, data):
+        """ decrypt a block of data
+
+        data should be the concatenation of:
+            - the session key
+            - nonce: 16 bytes
+            - tag: 16 bytes, a cryptographic checksum
+            - cyphertext
+        """
 
         if b'PRIVATE' not in private_key:
             raise Exception("decryption key does not look like a private key")
@@ -98,10 +121,12 @@ class CryptoManager(object):
         return data
 
     def encrypt64(self, public_key, data):
-        """ data must be bytes and not string """
+        """encrypt bytes and return a base64 encoded string"""
+        # data must be bytes and not a string
         return base64.b64encode(self.encrypt(public_key, data)).decode("utf-8")
 
     def decrypt64(self, private_key, string):
+        """decrypt a base64 encoded string"""
         return self.decrypt(private_key, base64.b64decode(string))
 
 class CipherConfigDecryptor(object):
@@ -122,7 +147,7 @@ class CipherConfigDecryptor(object):
             self.pem = os.environ['YUE_PRIVATE_KEY'].encode("utf-8")
         else:
             self.pem = None
-            logging.warning("YUE_PRIVATE_KEY not set: no private key found for decrypting")
+            logging.warning("environment variable YUE_PRIVATE_KEY not set: no private key found for decrypting")
 
     def decrypt(self, data):
         """ decrypts a base64 encoded string prefixed with prefix

@@ -20,6 +20,7 @@ import unittest
 
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm.session import sessionmaker
+from sqlalchemy.orm import scoped_session
 
 import yaml
 try:
@@ -45,19 +46,21 @@ def db_connect(connection_string=None, readonly=False):
     """
     a reimplementation of the Flask-SqlAlchemy integration
     """
-    Session = sessionmaker()
 
     # connect to a SQLite :memory: database
     if connection_string is None or connection_string == ":memory:":
         connection_string = 'sqlite://'
 
     engine = create_engine(connection_string)
-    Session.configure(bind=engine)
+    Session = scoped_session(sessionmaker(bind=engine))
 
     db = lambda: None
     db.engine = engine
     db.metadata = MetaData()
-    db.session = Session()
+    # TODO: to better support sqlite and thread this may need to be changed to:
+    # db.session = lambda: Session()
+    # which would require a code change to every dao
+    db.session = Session
     if readonly:
         db.session.flush = _abort_flush
     db.tables = DatabaseTables(db.metadata)
