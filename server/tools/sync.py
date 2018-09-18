@@ -41,18 +41,18 @@ def _check(client, root, remote_base, local_base, match_size=False):
     response = client.files_get_path(root, remote_base)
 
     if response.status_code == 404:
-        data = {'directories':[], 'files':[]}
+        data = {'directories': [], 'files': []}
     else:
         data = response.json()['result']
 
     # data structures to easily process remote files
     directories = set(data['directories'])
-    files = {d['name']:(d['mtime'], d['size']) for d in data['files']}
+    files = {d['name']: (d['mtime'], d['size']) for d in data['files']}
 
-    uld = [] # directories to sync up
-    dld = [] # directories to sync down
-    ulf = [] # files to sync up
-    dlf = [] # files to sync down
+    uld = []  # directories to sync up
+    dld = []  # directories to sync down
+    ulf = []  # files to sync up
+    dlf = []  # files to sync down
 
     if os.path.exists(local_base):
 
@@ -355,7 +355,7 @@ def _get_config(args):
 
     return cfg
 
-def _sync(args, client):
+def _sync(args):
 
     cfg = _get_config(args)
 
@@ -366,6 +366,8 @@ def _sync(args, client):
     if args.password is None:
         sys.stderr.write("password not provided\n")
         sys.exit(1)
+
+    client = args.client or connect(args.host, args.username, args.password)
 
     if len(cfg['items']) == 0:
         sys.stderr.write("invalid config\n")
@@ -382,7 +384,7 @@ def _sync(args, client):
     while cont:
         cont = mgr.next(**settings) and args.recursive
 
-def _copy(args, client):
+def _copy(args):
     """ copy a file to/from a remote server
     """
     def usage():
@@ -400,6 +402,8 @@ def _copy(args, client):
     if args.password is None:
         sys.stderr.write("password not provided\n")
         usage()
+
+    client = args.client or connect(args.host, args.username, args.password)
 
     if args.src_file.startswith("server://"):
         root, path = args.src_file.replace("server://", "").split("/", 1)
@@ -436,7 +440,7 @@ def _copy(args, client):
     else:
         usage()
 
-def _list(args, client):
+def _list(args):
 
     def usage():
         sys.stderr.write("usage:\n")
@@ -452,6 +456,8 @@ def _list(args, client):
     if args.password is None:
         sys.stderr.write("password not provided\n")
         usage()
+
+    client = args.client or connect(args.host, args.username, args.password)
 
     if not args.path.startswith("server://"):
         usage()
@@ -491,7 +497,7 @@ def _list(args, client):
                 sys.stdout.write("%s %10d %s\n" % (
                     fdate, int(item['size']), item['name']))
 
-def _config(args, client):
+def _config(args):
 
     cfg = _get_config(args)
 
@@ -513,7 +519,7 @@ def _config(args, client):
     with open(args.config, "w") as wf:
         json.dump(cfg, wf, sort_keys=True, indent=4)
 
-def _list_config(args, client):
+def _list_config(args):
 
     cfg = _get_config(args)
 
@@ -529,7 +535,7 @@ def _list_config(args, client):
     for name, path in sorted(cfg['items'].items()):
         sys.stdout.write("%s: %s\n" % (name, path))
 
-def _remove_config(args, client):
+def _remove_config(args):
 
     cfg = _get_config(args)
 
@@ -538,6 +544,24 @@ def _remove_config(args, client):
 
     with open(args.config, "w") as wf:
         json.dump(cfg, wf, sort_keys=True, indent=4)
+
+def _roots(args):
+    """
+    roots are the available file systems a user can access
+    available roots depend on the user role
+    """
+
+    cfg = _get_config(args)
+    client = args.client or connect(args.host, args.username, args.password)
+
+    response = client.files_get_roots()
+
+    if response.status_code != 200:
+        sys.stderr.write(response.text())
+
+    roots = response.json()['result']
+    for root in roots:
+        print(root)
 
 def parseArgs(argv):
     """
@@ -548,10 +572,10 @@ def parseArgs(argv):
 
     parser = argparse.ArgumentParser(description='Sync tool')
 
-    parser.add_argument('--username', default=None,
-                    help='username')
+    parser.add_argument('-u', '--username', default=None,
+                    help='username to log in as format: username@domain/role:password')
 
-    parser.add_argument('--password', default=None,
+    parser.add_argument('-p', '--password', default=None,
                     help='password')
 
     parser.add_argument('--host', dest='host',
@@ -629,9 +653,24 @@ def parseArgs(argv):
     remove_parser.add_argument('name', type=str,
                     help='the name of the shared folder to remove')
 
+    roots_parser = subparsers.add_parser("roots")
+    roots_parser.set_defaults(func=_roots)
+
     args = parser.parse_args(argv[1:])
 
     args.config = os.path.join(args.configdir, "sync.json")
+
+    if args.password is None and args.username is not None:
+        if ':' in args.username:
+            args.username, args.password = args.username.split(":", 1)
+        else:
+            args.password = input("password:")
+
+    if not hasattr(args, 'func'):
+        parser.print_help()
+        sys.exit(1)
+
+    args.client = None
 
     return args
 
@@ -640,9 +679,9 @@ def main():
     args = parseArgs(sys.argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
     logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
-    client = connect(args.host, args.username, args.password)
+
     try:
-        args.func(args, client)
+        args.func(args)
     except KeyboardInterrupt:
         sys.exit(1)
 

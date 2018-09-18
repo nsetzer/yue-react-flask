@@ -39,7 +39,6 @@ class FilesResource(WebResource):
         doc="do not retrieve contents for files if true")
     @requires_auth("filesystem_read")
     def get_path(self, root, resPath):
-        sys.stderr.write(">%s>%s>\n" % (type(g.args.list), g.args.list))
         return self._list_path(root, resPath, g.args.list)
 
     @post("<root>/path/<path:resPath>")

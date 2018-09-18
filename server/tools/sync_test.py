@@ -320,13 +320,16 @@ class SyncCLITestCase(unittest.TestCase):
             "config", self.root, self.local_base,
         ])
 
-        _config(args, self.client)
+        args.client = self.client
+        _config(args)
 
         args = parseArgs([
             "sync",
             "--config", "./test",
             "sync", "-r", self.local_base
         ])
+
+        args.client = self.client
 
         # test upload
 
@@ -335,7 +338,7 @@ class SyncCLITestCase(unittest.TestCase):
         self.assertFalse(fs.exists(self.remote_path_file2))
         self.assertFalse(fs.exists(self.remote_path_file3))
 
-        _sync(args, self.client)
+        _sync(args)
 
         self.assertTrue(fs.exists(self.remote_path_file0))
         self.assertTrue(fs.exists(self.remote_path_file1))
@@ -354,7 +357,7 @@ class SyncCLITestCase(unittest.TestCase):
         self.assertFalse(fs.exists(self.local_path_file2))
         self.assertFalse(fs.exists(self.local_path_file3))
 
-        _sync(args, self.client)
+        _sync(args)
 
         self.assertTrue(fs.exists(self.local_path_file0))
         self.assertTrue(fs.exists(self.local_path_file1))
@@ -382,7 +385,9 @@ class SyncCLITestCase(unittest.TestCase):
             "config", self.root, self.local_base,
         ])
 
-        _config(args, self.client)
+        args.client = self.client
+
+        _config(args)
 
         args = parseArgs([
             "sync",
@@ -390,7 +395,9 @@ class SyncCLITestCase(unittest.TestCase):
             "push", "-r", "--delete", self.local_base
         ])
 
-        _sync(args, self.client)
+        args.client = self.client
+
+        _sync(args)
 
         # this should copy local file 1 up,
         # and delete remote file 2
@@ -423,7 +430,9 @@ class SyncCLITestCase(unittest.TestCase):
             "config", self.root, self.local_base,
         ])
 
-        _config(args, self.client)
+        args.client = self.client
+
+        _config(args)
 
         args = parseArgs([
             "sync",
@@ -431,7 +440,9 @@ class SyncCLITestCase(unittest.TestCase):
             "pull", "-r", "--delete", self.local_base
         ])
 
-        _sync(args, self.client)
+        args.client = self.client
+
+        _sync(args)
 
         # this should copy local file 1 up,
         # and delete remote file 2
@@ -459,7 +470,9 @@ class SyncCLITestCase(unittest.TestCase):
             "config", self.root, self.local_base,
         ])
 
-        _config(args, self.client)
+        args.client = self.client
+
+        _config(args)
 
         args = parseArgs([
             "sync",
@@ -467,7 +480,9 @@ class SyncCLITestCase(unittest.TestCase):
             "copy", self.local_path_file0, "server://mem/foo"
         ])
 
-        _copy(args, self.client)
+        args.client = self.client
+
+        _copy(args)
 
         self.assertTrue(fs.exists("mem://test/foo"))
 
@@ -488,7 +503,9 @@ class SyncCLITestCase(unittest.TestCase):
             "config", self.root, self.local_base,
         ])
 
-        _config(args, self.client)
+        args.client = self.client
+
+        _config(args)
 
         args = parseArgs([
             "sync",
@@ -496,7 +513,9 @@ class SyncCLITestCase(unittest.TestCase):
             "copy", "server://mem/foo", self.local_path_file0
         ])
 
-        _copy(args, self.client)
+        args.client = self.client
+
+        _copy(args)
 
         self.assertTrue(fs.exists(self.local_path_file0))
 
