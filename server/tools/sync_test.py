@@ -321,6 +321,7 @@ class SyncCLITestCase(unittest.TestCase):
         ])
 
         args.client = self.client
+
         _config(args)
 
         args = parseArgs([

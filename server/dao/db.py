@@ -393,7 +393,7 @@ def set_test_db(connection_string):
 
 def main_test(argv, module_items):
 
-    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser = argparse.ArgumentParser(description='simple test runner')
 
     parser.add_argument('--db', default=":memory:",
         help="database connection string (:memory:)")

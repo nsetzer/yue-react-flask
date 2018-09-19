@@ -1,6 +1,25 @@
-#! cd ../.. && python -m server.tools.upload --host http://localhost:4200 --username admin --password admin mark.json test
+#! cd ../.. && python -m server.tools.upload --host http://localhost:4200 --bucket "s3://yueapp/upload-test/" --username admin --password admin beast.json test
 #! cd ../.. && python -m server.tools.upload --host http://104.248.122.206:80 --username admin --password admin clutch.json temp
 
+"""
+Upload songs to a remote server and update the database
+
+sample of what a song record should be formatted as:
+see server.dao.library for the complete documentation
+on keys that are available for songs
+
+
+    song = {
+        "ref_id": 1234
+        "static_path": "artist/album/title"
+        "file_path" : "/mnt/music/artist/album/title.mp3"
+        "art_path" : "/mnt/music/artist/album/folder.jpg"
+        "artist": "artistname"
+        "album": "albumname"
+        "title": "title"
+    }
+
+"""
 import os
 import sys
 import argparse
@@ -12,6 +31,40 @@ import posixpath
 
 from server.app import connect
 from server.dao.transcode import FFmpeg
+
+from server.dao.filesys.s3fs import BotoFileSystemImpl
+
+try:
+    import boto3
+    import botocore
+except ImportError:
+    boto3 = None
+    botocore = None
+
+
+
+class S3Upload(object):
+    """docstring for S3Upload"""
+    def __init__(self, bucket):
+        super(S3Upload, self).__init__()
+        self.bucket = bucket
+
+        access_key = "MMC27NAZUZBZTU2AZNW5" # os.environ['AWS_ACCESS_KEY_ID']
+        secret_key = "lEKnzvq1GZifdjL4vi4rGtRMMWIXxAwAF4kyZgvY71g" # os.environ['AWS_SECRET_ACCESS_KEY']
+        endpoint = "https://nyc3.digitaloceanspaces.com" # os.environ['AWS_ENDPOINT_URL']
+        region = "nyc3" # os.environ['AWS_DEFAULT_REGION']
+
+        self.fs = BotoFileSystemImpl(endpoint, region, access_key, secret_key)
+
+    def upload(self, remote_path, fo):
+        path = posixpath.join(self.bucket, remote_path)
+        print("uploading to %s" % path)
+        with self.fs.open(path, "wb") as wf:
+            for buf in iter(lambda: fo.read(4096), b""):
+                wf.write(buf)
+
+        sys.exit(1)
+
 
 class JsonUploader(object):
     """upload songs and art to a remote server
@@ -29,17 +82,23 @@ class JsonUploader(object):
     all other song keys can be provided.
 
     """
-    def __init__(self, client, transcoder):
+    def __init__(self, client, transcoder, root, bucket):
         super(JsonUploader, self).__init__()
         self.client = client
         self.transcoder = transcoder
+        self.root = root
 
-    def upload(self, songs, root):
+        if bucket is not None:
+            self.s3fs = S3Upload(bucket)
+        else:
+            self.s3fs = None
+
+    def upload(self, songs):
         self.dircache = {}
         for song in songs:
-            self._upload_one(song, root)
+            self._upload_one(song)
 
-    def _upload_one(self, song, root):
+    def _upload_one(self, song):
 
         file_path = song['file_path']
         static_path = song['static_path']
@@ -67,21 +126,22 @@ class JsonUploader(object):
 
         response = self.client.library_get_song_by_reference(ref_id)
         if response.status_code == 200:
+            print(response.text)
             print("found a song with reference: %s" % ref_id)
             self._update_song(song)
 
         else:
             print("creating song with reference: %s" % ref_id)
 
-            items = self._list_dir(root, static_path)
+            items = self._list_dir(static_path)
 
             if aud_name not in items:
-                self._transcode_upload(file_path, root, aud_path, opts)
+                self._transcode_upload(file_path, aud_path, opts)
 
             song_id = self._create_song(song)
 
             payload = {
-                "root": root,
+                "root": self.root,
                 "path": aud_path,
             }
             response = self.client.library_set_song_audio(song_id,
@@ -90,39 +150,46 @@ class JsonUploader(object):
                 print(response)
                 print(response.status_code)
 
-    def _list_dir(self, root, dir_path):
+    def _list_dir(self, dir_path):
         if dir_path not in self.dircache:
-            response = self.client.files_get_path(root, dir_path)
+            response = self.client.files_get_path(self.root, dir_path)
             if response.status_code != 404:
                 data = response.json()['result']
                 if data['files']:
                     self.dircache[dir_path] = [o['name'] for o in data['files']]
         return self.dircache.get(dir_path, [])
 
-    def _transcode_upload(self, local_path, root, remote_path, opts):
+    def _transcode_upload(self, local_path, remote_path, opts):
         if not local_path.endswith("ogg"):
-            print("transcoding")
-
             # transcode the file into memory
             f = io.BytesIO()
-            with open(local_path, "rb") as rb:
-                self.transcoder.transcode_ogg(rb, f, **opts)
-            print("uploading")
 
-            f.seek(0)
-            response = self.client.files_upload(root, remote_path, f.getvalue())
-            if response.status_code != 200:
-                print(response.text)
-                print(response.status_code)
-                print("failed upload 1: %s" % remote_path)
-                sys.exit(1)
-            f.close()
+            try:
+                with open(local_path, "rb") as rb:
+                    self.transcoder.transcode_ogg(rb, f, **opts)
+
+                f.seek(0)
+                if self.s3fs is not None:
+                    self.s3fs.upload(remote_path, f)
+                else:
+                    self._api_upload(remote_path, f)
+            finally:
+                f.close()
+
         else:
             with open(local_path, "rb") as rb:
-                response = self.client.files_upload(root, remote_path, rb)
-                if response.status_code != 200:
-                    print(response.status_code)
-                    print("failed uplaod 2: %s" % remote_path)
+                if self.s3fs is not None:
+                    self.s3fs.upload(remote_path, rb)
+                else:
+                    self._api_upload(remote_path, rb)
+
+    def _api_upload(self, remote_path, fo):
+        response = self.client.files_upload(self.root, remote_path, fo)
+        if response.status_code != 200:
+            print(response.text)
+            print(response.status_code)
+            print("failed upload 1: %s" % remote_path)
+            sys.exit(1)
 
     def _prepare_song_for_transport(self, song):
 
@@ -144,6 +211,9 @@ class JsonUploader(object):
         if response.status_code != 201:
             print(response)
             print(response.status_code)
+            print(remote_song)
+            print(response.text)
+
         song_id = response.json()['result']
         return song_id
 
@@ -155,6 +225,8 @@ class JsonUploader(object):
         if response.status_code != 200:
             print(response)
             print(response.status_code)
+            print(remote_song)
+            print(response.text)
 
 def _read_json(path):
 
@@ -169,7 +241,8 @@ def _read_json(path):
 
 def parseArgs(argv):
 
-    parser = argparse.ArgumentParser(description='Sync tool')
+    parser = argparse.ArgumentParser(
+        description='upload songs to a remote server')
 
     parser.add_argument('--username', default=None,
                     help='username')
@@ -177,9 +250,12 @@ def parseArgs(argv):
     parser.add_argument('--password', default=None,
                     help='password')
 
-    parser.add_argument('--host', dest='host',
+    parser.add_argument('--host',
                     default="http://localhost:4200",
                     help='the database connection string')
+
+    parser.add_argument('--bucket', default=None,
+                    help='an s3 bucket name and path, e.g. s3://bucket/path')
 
     parser.add_argument('file',
                     help='json file containing songs to upload')
@@ -204,7 +280,7 @@ def main():
 
     transcoder = FFmpeg("C:\\ffmpeg\\bin\\ffmpeg.exe")
 
-    JsonUploader(client, transcoder).upload(data, args.root)
+    JsonUploader(client, transcoder, args.root, args.bucket).upload(data)
 
 
 if __name__ == '__main__':

@@ -43,7 +43,7 @@ def main():
     parser.add_argument('-v', '--verbose', dest='verbose', action='store_true',
                         help='enable verbose logging')
     parser.add_argument('-p', '--pattern', dest='pattern', default="*",
-                        help='filter for tests ot run')
+                        help='filter for tests to run')
 
     parser.add_argument('--mode', dest='mode', default="test",
                         help='test or coverage')

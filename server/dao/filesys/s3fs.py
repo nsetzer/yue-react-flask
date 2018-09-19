@@ -165,9 +165,14 @@ class BotoWriterThread(Thread):
 
     def run(self):
         reader = BytesFIFOReader(self.fifo)
+        sys.stderr.write("boto write: reader opened\n")
         try:
             self.bucket.upload_fileobj(reader, self.key)
+        except Exception as e:
+            sys.stderr.write("boto write: reader error:\n")
+            sys.stderr.write("%s\n" % e)
         finally:
+            sys.stderr.write("boto write: reader closed\n")
             reader.close()
 
 class BotoWriterFile(object):
@@ -190,6 +195,7 @@ class BotoWriterFile(object):
         return self.writer.write(data)
 
     def close(self):
+        sys.stderr.write("boto write: writer closed\n")
         self.writer.close()  # order matters
         self.thread.join()
 

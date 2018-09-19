@@ -5,7 +5,7 @@ import sys
 import posixpath
 
 from collections import namedtuple
-from threading import Thread, Condition, Lock
+from threading import Thread, Condition, Lock, current_thread
 
 FileRecord = namedtuple('FileRecord', ['name', 'isDir', 'size', 'mtime'])
 
@@ -161,7 +161,7 @@ class BytesFIFO(object):
     """
     A FIFO that can store a fixed number of bytes.
     """
-    def __init__(self, init_size=1024, incr_size=1204, lock=None):
+    def __init__(self, init_size=2048, incr_size=2048, lock=None):
         """ Create a FIFO of ``init_size`` bytes. """
         self._buffer = io.BytesIO(b"\x00" * init_size)
         self._size = init_size
@@ -188,44 +188,59 @@ class BytesFIFO(object):
         #       filled size is empty
 
         with self._lock:
-            sys.stderr.write("read : enter\n")
+            return self._read(request_size)
 
-            # Figure out how many bytes we can really read
-            if request_size < 0:
-                size = self._filled
+    def _read_size_impl(self, request_size):
+
+        if request_size < 0:
+            size = self._filled
+        else:
+            size = min(request_size, self._filled)
+        contig = self._size - self._read_ptr
+        contig_read = min(contig, size)
+
+        return contig_read, size
+
+    def _read_size(self, request_size, blocking):
+        contig_read, size = self._read_size_impl(request_size)
+
+        # block until some bytes are avilable
+        # do not block if some bytes are available
+        if blocking:
+            if (request_size == -1):
+                while not self._writer_closed:
+                    self._cond.wait()
+                    contig_read, size = self._read_size_impl(request_size)
             else:
-                size = min(request_size, self._filled)
-            contig = self._size - self._read_ptr
-            contig_read = min(contig, size)
+                while not self._writer_closed and contig_read == 0:
+                    self._cond.wait()
+                    contig_read, size = self._read_size_impl(request_size)
 
-            # block until some bytes are avilable
-            # do not block if some bytes are available
-            while not self._writer_closed and contig_read == 0:
-                sys.stderr.write("read : wait\n")
-                self._cond.wait()
-                sys.stderr.write("read : wake\n")
+        return contig_read, size
 
-                if request_size < 0:
-                    size = self._filled
-                else:
-                    size = min(request_size, self._filled)
-                contig = self._size - self._read_ptr
-                contig_read = min(contig, size)
+    def _read(self, request_size, blocking=True):
 
-            # Go to read pointer
-            self._buffer.seek(self._read_ptr)
+        #TODO: refactor this duplicate logic which waits for data
+        # to be available
+        # Figure out how many bytes we can really read
 
-            ret = self._buffer.read(contig_read)
-            self._read_ptr += contig_read
-            if contig_read < size:
-                leftover_size = size - contig_read
-                self._buffer.seek(0)
-                ret += self._buffer.read(leftover_size)
-                self._read_ptr = leftover_size
+        # sys.stderr.write("[%s] read 1\n" % current_thread())
 
-            self._filled -= size
-            sys.stderr.write("read : exit\n")
-            return ret
+        contig_read, size = self._read_size(request_size, blocking)
+
+        # Go to read pointer
+        self._buffer.seek(self._read_ptr)
+
+        ret = self._buffer.read(contig_read)
+        self._read_ptr += contig_read
+        if contig_read < size:
+            leftover_size = size - contig_read
+            self._buffer.seek(0)
+            ret += self._buffer.read(leftover_size)
+            self._read_ptr = leftover_size
+
+        self._filled -= size
+        return ret
 
     def write(self, data):
         """
@@ -236,42 +251,39 @@ class BytesFIFO(object):
         """
 
         with self._lock:
-            sys.stderr.write("write: enter %d\n" % len(data))
             write_size = len(data)
 
-            if self._size < self._filled + write_size:
-                self.resize(self.filled + write_size + self._capacity_increase)
-                sys.stderr.write("write: resize\n")
+            try:
+                if self._size < self._filled + write_size:
+                    new_size = self._filled + write_size + self._capacity_increase
+                    self._resize(new_size)
 
-            if write_size:
-                sys.stderr.write("write: writing\n")
-                contig = self._size - self._write_ptr
-                contig_write = min(contig, write_size)
-                # TODO: avoid 0 write
-                # TODO: avoid copy
-                # TODO: test performance of above
-                self._buffer.seek(self._write_ptr)
-                self._buffer.write(data[:contig_write])
-                self._write_ptr += contig_write
-                sys.stderr.write("write: writing\n")
+                if write_size:
+                    contig = self._size - self._write_ptr
+                    contig_write = min(contig, write_size)
+                    # TODO: avoid 0 write
+                    # TODO: avoid copy
+                    # TODO: test performance of above
+                    self._buffer.seek(self._write_ptr)
+                    self._buffer.write(data[:contig_write])
+                    self._write_ptr += contig_write
 
-                if contig < write_size:
-                    self._buffer.seek(0)
-                    self._buffer.write(data[contig_write:write_size])
-                    #self._buffer.write(buffer(data, contig_write, write_size - contig_write))
-                    self._write_ptr = write_size - contig_write
-                sys.stderr.write("write: writing\n")
+                    if contig < write_size:
+                        self._buffer.seek(0)
+                        self._buffer.write(data[contig_write:write_size])
+                        #self._buffer.write(buffer(data, contig_write, write_size - contig_write))
+                        self._write_ptr = write_size - contig_write
 
-            self._filled += write_size
+                self._filled += write_size
+            except Exception as e:
+                logging.error("write: exception: %s\n" % e)
 
-            sys.stderr.write("write: notify\n")
             self._cond.notify()
 
-            sys.stderr.write("write: exit %s\n" % write_size)
             return write_size
 
     def close(self):
-        sys.stdout.write("close\n")
+        pass
 
     def flush(self):
         pass
@@ -302,7 +314,11 @@ class BytesFIFO(object):
     def __exit__(self, type, value, tb):
         self.close()
 
-    def resize(self, new_size):
+    #def resize(self, new_size):
+    #    with self._lock:
+    #        return self._resize(new_size)
+
+    def _resize(self, new_size):
         """
         Resize FIFO to contain ``new_size`` bytes. If FIFO currently has
         more than ``new_size`` bytes filled, :exc:`ValueError` is raised.
@@ -310,18 +326,18 @@ class BytesFIFO(object):
         If ``new_size`` is smaller than the current size, the internal
         buffer is not contracted (yet).
         """
+
         if new_size < 1:
             raise ValueError("Cannot resize to zero or less bytes.")
 
         if new_size < self._filled:
             raise ValueError("Cannot contract FIFO to less than {} bytes, "
                              "or data will be lost.".format(self._filled))
-
         # original data is non-contiguous. we need to copy old data,
         # re-write to the beginning of the buffer, and re-sync
         # the read and write pointers.
         if self._read_ptr >= self._write_ptr:
-            old_data = self.read(self._filled)
+            old_data = self._read(self._filled, False)
             self._buffer.seek(0)
             self._buffer.write(old_data)
             self._filled = len(old_data)
@@ -344,7 +360,6 @@ class BytesFIFOWriter(object):
             self.fifo._writer_closed = True
             self.fifo._cond.notify()
             self.fifo.close()
-            sys.stdout.write("writer closed\n")
 
     def flush(self):
         self.fifo.flush()
