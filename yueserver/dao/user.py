@@ -141,7 +141,7 @@ class UserDao(object):
         if commit:
             self.db.session.commit()
 
-    # users
+     # users
 
     def createUser(self, email, password, domain_id, role_id, commit=True):
 
@@ -335,6 +335,37 @@ class UserDao(object):
         if commit:
             self.db.session.commit()
 
+    def addFileSystemToRole(self, role_id, file_id, commit=True):
+        query = insert(self.dbtables.FileSystemPermissionTable) \
+            .values({"role_id": role_id, "file_id": file_id})
+
+        result = self.db.session.execute(query)
+
+        if commit:
+            self.db.session.commit()
+
+    def removeFileSystemFromRole(self, role_id, file_id, commit=True):
+
+        query = delete(self.dbtables.FileSystemPermissionTable) \
+            .where(
+                and_(self.dbtables.FileSystemPermissionTable.c.role_id == role_id,
+                     self.dbtables.FileSystemPermissionTable.c.file_id == file_id,
+                     ))
+
+        self.db.session.execute(query)
+
+        if commit:
+            self.db.session.commit()
+
+    def roleHasFileSystem(self, role_id, file_id):
+        query = self.dbtables.FileSystemPermissionTable.select() \
+            .where(
+                and_(self.dbtables.FileSystemPermissionTable.c.role_id == role_id,
+                     self.dbtables.FileSystemPermissionTable.c.file_id == file_id,
+                     ))
+        result = self.db.session.execute(query)
+        return len(result.fetchall()) != 0
+
     def addFeatureToRole(self, role_id, feature_id, commit=True):
         query = insert(self.dbtables.RoleFeatureTable) \
             .values({"role_id": role_id, "feature_id": feature_id})
@@ -349,7 +380,7 @@ class UserDao(object):
             .where(
                 and_(self.dbtables.RoleFeatureTable.c.role_id == role_id,
                      self.dbtables.RoleFeatureTable.c.feature_id == feature_id,
-                    ))
+                     ))
 
         self.db.session.execute(query)
 
@@ -370,7 +401,7 @@ class UserDao(object):
             .where(
                 and_(self.dbtables.RoleFeatureTable.c.role_id == role_id,
                      self.dbtables.RoleFeatureTable.c.feature_id == feature_id,
-                    ))
+                     ))
         result = self.db.session.execute(query)
         return len(result.fetchall()) != 0
 

@@ -2,7 +2,8 @@
 
 from sqlalchemy.orm import relationship
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import and_, or_, not_, case, select, update, column, func, asc, desc
+from sqlalchemy import and_, or_, not_, select, column, update, insert, delete
+
 from sqlalchemy.sql.expression import bindparam
 from .search import SearchGrammar, ParseError, Rule
 from .filesys.filesys import FileSystem
@@ -17,6 +18,46 @@ class StorageDao(object):
         self.db = db
         self.dbtables = dbtables
         self.fs = FileSystem()
+
+    # FileSystem CRUD
+
+    def createFileSystem(self, name, path, commit=True):
+
+        query = insert(self.dbtables.FileSystemTable) \
+            .values({'name': name, 'path': path})
+        result = self.db.session.execute(query)
+        if commit:
+            self.db.session.commit()
+        return result.inserted_primary_key[0]
+
+    def findFileSystemById(self, file_id):
+        query = self.dbtables.FileSystemTable.select() \
+            .where(self.dbtables.FileSystemTable.c.id == file_id)
+        result = self.db.session.execute(query)
+        return result.fetchone()
+
+    def findFileSystemByName(self, name):
+        query = self.dbtables.FileSystemTable.select() \
+            .where(self.dbtables.FileSystemTable.c.name == name)
+        result = self.db.session.execute(query)
+        return result.fetchone()
+
+    def listFileSystems(self):
+        query = self.dbtables.FileSystemTable.select()
+        result = self.db.session.execute(query)
+        return result.fetchall()
+
+    def removeFileSystem(self, file_id, commit=True):
+        # TODO ensure file system is not used for any role
+
+        query = delete(self.dbtables.FileSystemTable) \
+            .where(self.dbtables.FileSystemTable.c.id == file_id)
+        self.db.session.execute(query)
+
+        if commit:
+            self.db.session.commit()
+
+    # FileSystem Operations
 
     def insert_path(self, user_id, path):
 
