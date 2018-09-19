@@ -9,7 +9,8 @@ from .user import DomainTable, RoleTable, UserTable, \
                   FeatureTable, RoleFeatureTable
 from .song import SongDataTable, SongUserDataTable, \
                   SongQueueTable, SongHistoryTable, SongPlaylistTable
-
+from .storage import FileSystemStorageTable, FileSystemTable, \
+                     FileSystemPermissionTable
 
 class DatabaseTables(object):
     """define all tables required for the database"""
@@ -29,6 +30,10 @@ class DatabaseTables(object):
         self.SongQueueTable = SongQueueTable(metadata)
         self.SongHistoryTable = SongHistoryTable(metadata)
         self.SongPlaylistTable = SongPlaylistTable(metadata)
+
+        self.FileSystemStorageTable = FileSystemStorageTable(metadata)
+        self.FileSystemTable = FileSystemTable(metadata)
+        self.FileSystemPermissionTable = FileSystemPermissionTable(metadata)
 
     def drop(self, engine):
         """ drop all tables, using engine as the db connection """
