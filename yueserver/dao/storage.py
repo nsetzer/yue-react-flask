@@ -7,17 +7,72 @@ from sqlalchemy import and_, or_, not_, select, column, update, insert, delete
 from sqlalchemy.sql.expression import bindparam
 from .search import SearchGrammar, ParseError, Rule
 from .filesys.filesys import FileSystem
+from .filesys.util import FileRecord
 
+import sys
 import datetime, time
 import uuid
+import posixpath
+
+class StorageException(Exception):
+    pass
+
+class StorageNotFoundException(StorageException):
+    pass
 
 class StorageDao(object):
-    """docstring for StorageDao"""
+    """
+
+    a file path takes on different meaning if it ends with a delimiter.
+    A path which does not end with a delimiter is assumed to be an
+    absolute file path. Otherwise it is consumed as a path prefix, which
+    means it
+    """
     def __init__(self, db, dbtables):
         super(StorageDao, self).__init__()
         self.db = db
         self.dbtables = dbtables
         self.fs = FileSystem()
+
+    # FileSystem util
+
+    def localPathToNormalPath(self, local_path):
+        """ convert a local path (on the local file system)
+        into a normalized path which can be stored in the database
+
+        this prefix the path with a scheme (file://)
+        on windows this will also convert back slash (\\) to forward slash (/)
+
+        this is purely a path computation
+        """
+
+        if not local_path.startswith("file://"):
+            local_path = "file://" + local_path
+
+        if sys.platform == 'win32':
+            local_path.replace("\\", "/")
+
+        return local_path
+
+    def NormalPathTolocalPath(self, normal_path):
+        """
+        this is purely a path computation
+        """
+
+        _, path = self.splitScheme(normal_path)
+
+        if sys.platform == 'win32':
+            path.replace("/", "\\")
+
+        return path
+
+    def splitScheme(self, path):
+
+        idx = path.index("://")
+        scheme = path[:idx]
+        path = path[idx + 3:]
+
+        return scheme, path
 
     # FileSystem CRUD
 
@@ -65,7 +120,11 @@ class StorageDao(object):
 
         return self.insert(user_id, path, size, mtime)
 
-    def insert(self, user_id, path, size, mtime):
+    def insert(self, user_id, path, size, mtime, commit=True):
+
+        # TODO: required?
+        #if path.endswith(delimiter):
+        #    raise StorageException("invalid directory path")
 
         record = {
             'user_id': user_id,
@@ -73,39 +132,150 @@ class StorageDao(object):
             'path': path,
             'mtime': mtime,
             'size': size,
-
         }
+
         query = self.dbtables.FileSystemStorageTable.insert() \
             .values(record)
 
-        result = self.db.session.execute(query)
+        ex = None
+        try:
+            self.db.session.execute(query)
 
-    def listdir(self, user_id, path, delimiter='/'):
+            if commit:
+                self.db.session.commit()
+        except IntegrityError as e:
+            ex = StorageException("%s" % e.args[0])
+
+        if ex is not None:
+            raise ex
+
+    def update(self, user_id, path, size=None, mtime=None, commit=True):
+
+        record = {
+            'version': self.dbtables.FileSystemStorageTable.c.version + 1,
+        }
+
+        if mtime is not None:
+            record['mtime'] = mtime
+
+        if size is not None:
+            record['size'] = size
+
+        query = update(self.dbtables.FileSystemStorageTable) \
+            .values(record) \
+            .where(
+                and_(self.dbtables.FileSystemStorageTable.c.user_id == user_id,
+                     self.dbtables.FileSystemStorageTable.c.path == path,
+                     ))
+
+        self.db.session.execute(query)
+
+        if commit:
+            self.db.session.commit()
+
+    def rename(self, user_id, src_path, dst_path, commit=True):
+
+        record = {
+            'path': dst_path,
+        }
+
+        query = update(self.dbtables.FileSystemStorageTable) \
+            .values(record) \
+            .where(
+                and_(self.dbtables.FileSystemStorageTable.c.user_id == user_id,
+                     self.dbtables.FileSystemStorageTable.c.path == src_path,
+                     ))
+
+        ex = None
+        try:
+            self.db.session.execute(query)
+
+            if commit:
+                self.db.session.commit()
+        except IntegrityError as e:
+            ex = StorageException("%s" % e.args[0])
+
+        if ex is not None:
+            raise ex
+
+    def remove(self, user_id, path, commit=True):
+
+        query = delete(self.dbtables.FileSystemStorageTable) \
+            .where(
+                and_(self.dbtables.FileSystemStorageTable.c.user_id == user_id,
+                     self.dbtables.FileSystemStorageTable.c.path == path,
+                     ))
+
+        self.db.session.execute(query)
+
+        if commit:
+            self.db.session.commit()
+
+    def _item2record(self, item, path_prefix, delimiter):
+        item_path = item['path'].replace(path_prefix, "")
+        if delimiter in item_path:
+            name, _ = item_path.split(delimiter, 1)
+            return FileRecord(name, True, 0, 0)
+        else:
+            return FileRecord(item_path, False, item['size'], item['mtime'])
+
+    def listdir(self, user_id, path_prefix, delimiter='/'):
         # search for persistent objects with prefix, that also do not contain
         # the delimiter
 
         FsTab = self.dbtables.FileSystemStorageTable
 
+        if not path_prefix.endswith(delimiter):
+            raise StorageException("invalid directory path")
+
+        where = FsTab.c.path.startswith(bindparam('path', path_prefix))
+        where = and_(FsTab.c.user_id == user_id, where)
+
         query = select(['*']) \
             .select_from(FsTab) \
-            .where(bindparam('path', path).startswith(path))
+            .where(where)
 
         dirs = set()
         for item in self.db.session.execute(query).fetchall():
-            item_path = item['path'].replace(path, "")
-            if delimiter in item_path:
-                name, _ = item_path.split(delimiter, 1)
-                is_dir = True
-                if name not in dirs:
-                    dirs.add(name)
-                    yield (name, True, item['size'], item['mtime'])
+
+            rec = self._item2record(item, path_prefix, delimiter)
+
+            if rec.isDir:
+                if rec.name not in dirs:
+                    dirs.add(rec.name)
+                    yield rec
             else:
-                yield (item_path, False, item['size'], item['mtime'])
+                yield rec
 
-    def file_info(self, user_id, path):
-        pass
+    def file_info(self, user_id, path_prefix, delimiter='/'):
+        FsTab = self.dbtables.FileSystemStorageTable
 
-    def file_size(self, path):
-        # return file info ignoring user permissions
-        # the back end can allow any user to query the file size of songs
-        pass
+        scheme, base_path = self.splitScheme(path_prefix)
+
+        if not base_path:
+            raise StorageException("empty path component")
+
+        if path_prefix.endswith(delimiter):
+            where = FsTab.c.path.startswith(bindparam('path', path_prefix))
+            where = and_(FsTab.c.user_id == user_id, where)
+            exact = False
+        else:
+            where = FsTab.c.path == path_prefix
+            exact = True
+
+        query = select(['*']) \
+            .select_from(FsTab) \
+            .where(where).limit(1)
+
+        result = self.db.session.execute(query)
+        item = result.fetchone()
+
+        if item is None:
+            raise StorageNotFoundException(path_prefix)
+        elif exact:
+            # an exact match for a file record
+            name = path_prefix.split(delimiter)[-1]
+            return FileRecord(name, False, item['size'], item['mtime'], item['version'])
+        else:
+            name = base_path.rstrip(delimiter).split(delimiter)[-1]
+            return FileRecord(name, True, 0, 0, 0)
