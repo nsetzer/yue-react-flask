@@ -20,7 +20,7 @@ if (sys.version_info[0] == 2):
 
 from ..dao.util import hash_password
 from ..dao.db import db_remove, db_connect, db_init, \
-    db_update, db_repopulate, db_drop_all
+    db_update, db_repopulate, db_drop_all, db_drop_songs
 from ..dao.user import UserDao
 from ..app import YueApp, generate_client
 from ..config import Config
@@ -34,6 +34,14 @@ from pprint import pformat
 def drop(args):
     """Creates the db tables."""
 
+    if not args.force:
+        string = input("drop? [y/N]").lower()
+        if not string or string[0] != 'y':
+            sys.stderr.write("drop action canceled by user\n")
+            return
+
+    sys.stderr.write("dropping database\n")
+
     if args.database_url.startswith("sqlite:"):
         db_path = args.database_url.replace("sqlite:///","")
         if not db_remove(db_path):
@@ -41,6 +49,25 @@ def drop(args):
     else:
         db = db_connect(args.database_url)
         db_drop_all(db, db.tables)
+
+    sys.stderr.write("sucess\n")
+
+def drop_songs(args):
+    """Creates the db tables."""
+
+    if not args.force:
+        string = input("drop? [y/N]").lower()
+        if not string or string[0] != 'y':
+            sys.stderr.write("drop action canceled by user\n")
+            return
+
+    sys.stderr.write("dropping songs database\n")
+
+    db = db_connect(args.database_url)
+    db_drop_all(db, db.tables)
+
+    sys.stderr.write("sucess\n")
+
 
 def create(args):
     """Creates the db tables."""
@@ -248,9 +275,20 @@ def main():
     ###########################################################################
     # DROP - drop all tables
 
-    parser_create = subparsers.add_parser('drop',
+    parser_drop = subparsers.add_parser('drop',
         help='drop all tables')
-    parser_create.set_defaults(func=drop)
+    parser_drop.add_argument('--force', action="store_true",
+                               help='skip confirmation')
+    parser_drop.set_defaults(func=drop)
+
+    ###########################################################################
+    # DROP_SONGS - drop all songs
+
+    parser_drop_songs = subparsers.add_parser('drop_songs',
+        help='drop all songs leaving basic account info intact')
+    parser_drop_songs.add_argument('--force', action="store_true",
+                               help='skip confirmation')
+    parser_drop_songs.set_defaults(func=drop_songs)
 
     ###########################################################################
     # CREATE - initialize a database
@@ -288,17 +326,17 @@ def main():
     ###########################################################################
     # SETPW - change a users password
 
-    parser_hash = subparsers.add_parser('setpw', help='change a password')
-    parser_hash.set_defaults(func=setpw)
+    parser_setpw = subparsers.add_parser('setpw', help='change a password')
+    parser_setpw.set_defaults(func=setpw)
 
-    parser_hash.add_argument('--workfactor', type=int, default=12,
-                               help='bcrypt workfactor')
+    parser_setpw.add_argument('--workfactor', type=int, default=12,
+                              help='bcrypt workfactor')
 
-    parser_hash.add_argument('username', type=str,
-                               help='the user to update')
+    parser_setpw.add_argument('username', type=str,
+                              help='the user to update')
 
-    parser_hash.add_argument('password', type=str,
-                               help='the password to hash')
+    parser_setpw.add_argument('password', type=str,
+                              help='the password to hash')
 
     ###########################################################################
     # generate_secret - generate a public/private keypair
@@ -345,29 +383,29 @@ def main():
     ###########################################################################
     # CREATE_USER - create a user
 
-    parser_hash = subparsers.add_parser('create_user', help='create a user')
-    parser_hash.set_defaults(func=create_user)
+    parser_create_user = subparsers.add_parser('create_user', help='create a user')
+    parser_create_user.set_defaults(func=create_user)
 
-    parser_hash.add_argument('username', type=str,
-                               help='the user to update')
+    parser_create_user.add_argument('username', type=str,
+                                    help='the user to update')
 
-    parser_hash.add_argument('domain', type=str,
-                               help='the users default domain')
+    parser_create_user.add_argument('domain', type=str,
+                                    help='the users default domain')
 
-    parser_hash.add_argument('role', type=str,
-                               help='the users default role')
+    parser_create_user.add_argument('role', type=str,
+                                    help='the users default role')
 
-    parser_hash.add_argument('password', type=str,
-                               help='the password to hash')
+    parser_create_user.add_argument('password', type=str,
+                                    help='the password to hash')
 
     ###########################################################################
     # REMOVE_USER - remove a user
 
-    parser_hash = subparsers.add_parser('remove_user', help='remove a user')
-    parser_hash.set_defaults(func=remove_user)
+    parser_remove_user = subparsers.add_parser('remove_user', help='remove a user')
+    parser_remove_user.set_defaults(func=remove_user)
 
-    parser_hash.add_argument('username', type=str,
-                               help='the user to update')
+    parser_remove_user.add_argument('username', type=str,
+                                    help='the user to update')
 
     ###########################################################################
     # FEATURES - list known features used by the rest service
@@ -379,9 +417,9 @@ def main():
     ###########################################################################
     # GENERATE_CLIENT - generate a python package implementing a client
 
-    parser_test = subparsers.add_parser('generate_client',
+    parser_generate_client = subparsers.add_parser('generate_client',
         help='generate a client package')
-    parser_test.set_defaults(func=generate_client_)
+    parser_generate_client.set_defaults(func=generate_client_)
 
     ###########################################################################
     # TEST - user defined functions

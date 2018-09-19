@@ -199,6 +199,14 @@ def db_drop_all(db, dbtables):
     # testing tables will not be dropped.
     db.tables.drop(db.engine)
 
+def db_drop_songs(db, dbtables):
+
+    self.SongPlaylistTable.drop(db.engine, checkfirst=True)
+    self.SongHistoryTable.drop(db.engine, checkfirst=True)
+    self.SongQueueTable.drop(db.engine, checkfirst=True)
+    self.SongUserDataTable.drop(db.engine, checkfirst=True)
+    self.SongDataTable.drop(db.engine, checkfirst=True)
+
 def _db_create_role(userDao, role_name, child):
     n_changes = 0
     role_id = userDao.createRole(role_name, commit=False)
