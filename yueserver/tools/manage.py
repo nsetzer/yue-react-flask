@@ -8,7 +8,7 @@ import os, sys, argparse, json, logging
 """
 
 python -u -m yue.core.api2 D:/Dropbox/ConsolePlayer/yue.db > yue.json
-python -u -m server.tools.manage import yue.json
+python -u -m yueserver.tools.manage import yue.json
 
 /c/Python36/python -u -m yue.core.api2 /d/Dropbox/ConsolePlayer/yue.db | \
     python -u util/manage.py import -
@@ -18,16 +18,16 @@ python -u -m server.tools.manage import yue.json
 if (sys.version_info[0] == 2):
     raise RuntimeError("python2 not supported")
 
-from server.dao.util import hash_password
-from server.dao.db import db_remove, db_connect, db_init, \
+from ..dao.util import hash_password
+from ..dao.db import db_remove, db_connect, db_init, \
     db_update, db_repopulate, db_drop_all
-from server.dao.user import UserDao
-from server.app import YueApp, generate_client
-from server.config import Config
-from server.resource.util import get_features
-from server.framework.client import cli_main
-from server.framework.application import FlaskAppClient
-from server.framework.crypto import CryptoManager
+from ..dao.user import UserDao
+from ..app import YueApp, generate_client
+from ..config import Config
+from ..resource.util import get_features
+from ..framework.client import cli_main
+from ..framework.application import FlaskAppClient
+from ..framework.crypto import CryptoManager
 
 from pprint import pformat
 
@@ -72,7 +72,7 @@ def cli(args):
     """List application endpoints
 
     Note this usage:
-      python -m server.tools.manage cli -- --username admin library.get_song_audio
+      python -m yueserver.tools.manage cli -- --username admin library.get_song_audio
 
     the -- after cli will cause all remaining arguments to be passed
     to the cli arg parser

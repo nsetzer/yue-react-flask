@@ -29,10 +29,9 @@ import io
 import logging
 import posixpath
 
-from server.app import connect
-from server.dao.transcode import FFmpeg
-
-from server.dao.filesys.s3fs import BotoFileSystemImpl
+from ..app import connect
+from ..dao.transcode import FFmpeg
+from ..dao.filesys.s3fs import BotoFileSystemImpl
 
 try:
     import boto3

@@ -41,20 +41,20 @@ class FilesResourceTestCase(unittest.TestCase):
             self.assertEqual(data['name'], "default")
             self.assertEqual(data['parent'], "")
             self.assertEqual(data['path'], "")
-            self.assertTrue("server" in data['directories'])
+            self.assertTrue("yueserver" in data['directories'])
 
-            data = app.get_json('/api/fs/default/path/server')
+            data = app.get_json('/api/fs/default/path/yueserver')
             self.assertEqual(data['name'], "default")
             self.assertEqual(data['parent'], "")
-            self.assertEqual(data['path'], "server")
+            self.assertEqual(data['path'], "yueserver")
             self.assertTrue("framework" in data['directories'])
             files = [f['name'] for f in data['files']]
             self.assertTrue("app.py" in files)
 
-            data = app.get_json('/api/fs/default/path/server/framework')
+            data = app.get_json('/api/fs/default/path/yueserver/framework')
             self.assertEqual(data['name'], "default")
-            self.assertEqual(data['parent'], "server")
-            self.assertEqual(data['path'], "server/framework")
+            self.assertEqual(data['parent'], "yueserver")
+            self.assertEqual(data['path'], "yueserver/framework")
             files = [f['name'] for f in data['files']]
             self.assertTrue("config.py" in files)
 
@@ -62,7 +62,7 @@ class FilesResourceTestCase(unittest.TestCase):
 
         username = "admin"
         with self.app.login(username, username) as app:
-            path = 'server/framework/config.py'
+            path = 'yueserver/framework/config.py'
             response = app.get('/api/fs/default/path/' + path)
             # should stream the contents of the file
             dat0 = response.data

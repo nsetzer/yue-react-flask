@@ -31,7 +31,7 @@ class StorageDao(object):
             'version': 0,
             'path': path,
             'mtime': mtime,
-            'size': mtime,
+            'size': size,
 
         }
         query = self.dbtables.FileSystemStorageTable.insert() \

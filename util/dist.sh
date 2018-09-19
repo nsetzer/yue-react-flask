@@ -16,7 +16,7 @@ EOF
 
 cat <<EOF > uninstall.sh
 #!/bin/bash
-rm -rf server client build wsgi.py requirements.txt
+rm -rf yueserver yueclient build wsgi.py requirements.txt
 EOF
 
 cat <<EOF > post_install.sh
@@ -39,7 +39,7 @@ python3 -m server.tools.manage generate_client
 tar -czvf dist/yueserver-$version.tar.gz \
     --exclude='*.pyc' \
     --exclude='__pycache__' \
-    config server client build wsgi.py requirements.txt \
+    config yueserver yueclient build wsgi.py requirements.txt setup.py \
     start.sh uninstall.sh post_install.sh
 
 rm start.sh

@@ -256,7 +256,7 @@ def connect(host, username, password):
     app = YueApp(Config.null())
     return app.client(host, username, password)
 
-def generate_client(app, name="client", outdir="."):
+def generate_client(app, name="yueclient", outdir="."):
     """generate a client python package
 
     the generated package will implement a rest client with endpoint
@@ -274,7 +274,7 @@ def generate_client(app, name="client", outdir="."):
     py_client_impl = os.path.join(client_dir, "sync.py")
     with open(py_client_impl, "w") as wf:
         wf.write(header)
-        with open("server/tools/sync.py", "r") as rf:
+        with open("yueserver/tools/sync.py", "r") as rf:
             for line in rf:
                 if 'import connect' in line:
                     wf.write("from .connect import connect\n")

@@ -5,7 +5,7 @@ if (sys.version_info[0] == 2):
     raise RuntimeError("python2 not supported")
 
 try:
-    from server.app import parseArgs, getApp
+    from yueserver.app import parseArgs, getApp
 except ImportError as e:
     if not hasattr(sys, 'real_prefix'):
         # guess that the user forgot to activate their venv
