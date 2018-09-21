@@ -23,7 +23,7 @@ def setUpClass(cls):
     cls.root = "mem"
     cls.remote_base = ""
     cls.local_base = "./test/sync"
-    cls.remote_path = cls.app.config.filesystem.other['mem']
+    cls.remote_path = cls.app.env_cfg['filesystems']['mem']
 
     cls.local_path_file0 = os.path.join(cls.local_base, "file0")
     cls.local_path_file1 = os.path.join(cls.local_base, "dir0", "file1")

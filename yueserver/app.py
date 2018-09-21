@@ -159,12 +159,6 @@ class TestApp(YueApp):
                     'max_size': '2MB',
                     'num_backups': 10,
                     'level': 'debug'},
-                'filesystem': {
-                    'media_root': os.getcwd(),
-                    'other': {
-                        "mem": "mem://test",
-                    },
-                },
                 'transcode': {
                     'audio': {
                         'bin_path': ffmpeg_path,

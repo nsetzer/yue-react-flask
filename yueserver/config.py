@@ -38,19 +38,6 @@ class DatabaseConfig(BaseConfig):
         else:
             raise Exception(self.kind + " unsupported database type")
 
-class FilesystemConfig(BaseConfig):
-    def __init__(self, base):
-
-        self.media_root = self.get_key(base, 'filesystem', 'media_root', default=os.getcwd())
-        self.media_root = os.path.abspath(self.media_root)
-
-        self.other = {}
-        other = self.get_key(base, 'filesystem', 'other', default={})
-        for k, v in other.items():
-            if "://" not in v:
-                v = os.path.abspath(v)
-            self.other[k] = v
-
 class TranscodeAudioConfig(BaseConfig):
     def __init__(self, base):
         self.bin_path = self.get_key(base, 'bin_path', default="")
@@ -88,7 +75,6 @@ class Config(ApplicationBaseConfig):
         base = self.get_key(data, "server")
 
         self.database = DatabaseConfig(base)
-        self.filesystem = FilesystemConfig(base)
         self.transcode = TranscodeConfig(base)
         self.aws = AwsConfig(base)
 

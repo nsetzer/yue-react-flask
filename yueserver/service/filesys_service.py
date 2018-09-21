@@ -13,6 +13,7 @@ import os, sys
 from .exception import FileSysServiceException
 from ..dao.filesys.filesys import FileSystem
 from ..dao.storage import StorageDao
+from ..dao.user import UserDao
 
 import logging
 
@@ -40,6 +41,7 @@ class FileSysService(object):
         self.db = db
         self.dbtables = dbtables
         self.storageDao = StorageDao(db, dbtables)
+        self.userDao = UserDao(db, dbtables)
 
         self.fs = FileSystem()
 
@@ -54,55 +56,20 @@ class FileSysService(object):
         return FileSysService._instance
 
     def getRoots(self, user):
-        roots = ["default"]
-        for k in self.config.filesystem.other.keys():
-            roots.append(k)
-        return sorted(roots)
+        return [f.name for f in self.userDao.listAllFileSystemsForRole(user['role_id'])]
 
     def getRootPath(self, user, fs_name):
-
-        if fs_name == "default":
-            path = self.config.filesystem.media_root
-        elif fs_name in self.config.filesystem.other:
-            path = self.config.filesystem.other[fs_name]
-        else:
-            raise FileSysServiceException("invalid root fs name: `%s`" % fs_name)
-
-        return path
+        return self.storageDao.rootPath(user['id'], user['role_id'], fs_name)
 
     def getPath(self, user, fs_name, path):
         """
-        returns a (possibly relative) file path given the name of a
+        returns an absolute file path given the name of a
         file system (which determines the base directory) and a path.
         the path is guaranteed to be a sub directory of the named fs.
         """
 
-        os_root = self.getRootPath(user, fs_name)
-
-        # normalizing loses information, making sync hard to implement
-        # path = normalize('NFKD', path)
-
-        if not path.strip():
-            return os_root
-
-        if self.fs.isabs(path):
-            raise FileSysServiceException("path must not be absolute")
-
-        scheme, parts = self.fs.parts(path)
-        if any([p in (".", "..") for p in parts]):
-            # path must be relative to os_root...
-            raise FileSysServiceException("relative paths not allowed")
-
-        if any([(not p.strip()) for p in parts]):
-            raise FileSysServiceException("empty path component")
-
-        # in case the client sends an invalid url. the client should
-        # use posixpath when joining path components
-        path = path.replace("\\", "/")
-
-        abs_path = self.fs.join(os_root, path)
-
-        return abs_path
+        return self.storageDao.absolutePath(user['id'], user['role_id'], \
+            fs_name, path)
 
     def listSingleFile(self, user, fs_name, path):
 

@@ -315,6 +315,22 @@ class UserDao(object):
         result = self.db.session.execute(query)
         return result.fetchall()
 
+    def listAllFileSystemsForRole(self, role_id):
+
+        FsTab = self.dbtables.FileSystemTable
+        FsPermissionTab = self.dbtables.FileSystemPermissionTable
+
+        query = select([column("name"), ]) \
+            .select_from(
+                FsTab.join(
+                    FsPermissionTab,
+                    FsTab.c.id == FsPermissionTab.c.file_id,
+                    isouter=True)) \
+            .where(FsPermissionTab.c.role_id == role_id)
+
+        result = self.db.session.execute(query)
+        return result.fetchall()
+
     def removeFileSystem(self, file_id, commit=True):
         # TODO ensure file system is not used for any role
 

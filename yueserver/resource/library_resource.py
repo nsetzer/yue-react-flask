@@ -100,8 +100,8 @@ class LibraryResource(WebResource):
     @requires_auth("library_write")
     def update_song(self):
 
-        for song in g.body:
-            self._correct_path(song)
+        # for song in g.body:
+        #     self._correct_path(song)
 
         try:
             self.audio_service.updateSongs(g.current_user, g.body)
@@ -116,7 +116,7 @@ class LibraryResource(WebResource):
     @requires_auth("library_write")
     def create_song(self):
 
-        self._correct_path(g.body)
+        # self._correct_path(g.body)
 
         song_id = self.audio_service.createSong(g.current_user, g.body)
 
@@ -271,27 +271,22 @@ class LibraryResource(WebResource):
 
         return jsonify({"result": count, "records": len(records)})
 
-    def _correct_path(self, song):
-
-        # TODO: revisit this: I may want to disable the feature entirely
-        # or use the filesystem service to handle the path correction.
-
-        if Song.path in song:
-            root = self.audio_service.config.filesystem.media_root
-            path = song[Song.path]
-            if not os.path.isabs(path):
-                path = os.path.join(root, path)
-
-            # fix any windows / linux path inconsistencies
-            # this ensures the path exists on the local filesystem
-            try:
-                path = pathCorrectCase(path)
-            except Exception as e:
-                return httpError(400, str(e))
-
-            # enforce path to exist under media root
-            # in the future, I may allow more than one media root
-            if not path.startswith(root):
-                return httpError(400, "Invalid Path: `%s`" % path)
-
-            song[Song.path] = path
+    # def _correct_path(self, song):
+    #     # TODO: revisit this: I may want to disable the feature entirely
+    #     # or use the filesystem service to handle the path correction.
+    #     if Song.path in song:
+    #         root = self.audio_service.config.filesystem.media_root
+    #         path = song[Song.path]
+    #         if not os.path.isabs(path):
+    #             path = os.path.join(root, path)
+    #         # fix any windows / linux path inconsistencies
+    #         # this ensures the path exists on the local filesystem
+    #         try:
+    #             path = pathCorrectCase(path)
+    #         except Exception as e:
+    #             return httpError(400, str(e))
+    #         # enforce path to exist under media root
+    #         # in the future, I may allow more than one media root
+    #         if not path.startswith(root):
+    #             return httpError(400, "Invalid Path: `%s`" % path)
+    #         song[Song.path] = path

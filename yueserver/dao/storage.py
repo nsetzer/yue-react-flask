@@ -249,7 +249,7 @@ class StorageDao(object):
             name = base_path.rstrip(delimiter).split(delimiter)[-1]
             return FileRecord(name, True, 0, 0, 0)
 
-    def _get_root_path(self, role_id, root_name):
+    def rootPath(self, user_id, role_id, root_name):
 
         FsTab = self.dbtables.FileSystemTable
         FsPermissionTab = self.dbtables.FileSystemPermissionTable
@@ -270,7 +270,12 @@ class StorageDao(object):
             raise StorageException(
                 "FileSystem %s not defined or permission denied" % root_name)
 
-        return item.path
+        # allow substitutions on only the user id, and only on the
+        # part of the path stored in the database. this allows
+        # for a configuration file to specify a user sandbox
+        root_path = item.path.format(user_id=user_id, pwd=os.getcwd())
+
+        return root_path
 
     def absolutePath(self, user_id, role_id, root_name, rel_path):
         """ compose an absolute file path given a role and named directory base
@@ -287,12 +292,8 @@ class StorageDao(object):
         if self.fs.isabs(rel_path):
             raise StorageException("path must not be absolute")
 
-        root_path = self._get_root_path(role_id, root_name)
+        root_path = self.rootPath(user_id, role_id, root_name)
 
-        # allow substitutions on only the user id, and only on the
-        # part of the path stored in the database. this allows
-        # for a configuration file to specify a user sandbox
-        root_path = root_path.format(user_id=user_id, pwd=os.getcwd())
         if not rel_path.strip():
             return root_path
 
