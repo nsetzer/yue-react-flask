@@ -12,14 +12,11 @@ import os, sys
 
 from .exception import FileSysServiceException
 from ..dao.filesys.filesys import FileSystem
+from ..dao.storage import StorageDao
 
 import logging
 
 from unicodedata import normalize
-
-# taken from werkzeug.util.secure_file
-_windows_device_files = ('CON', 'AUX', 'COM1', 'COM2', 'COM3', 'COM4', 'LPT1',
-                         'LPT2', 'LPT3', 'PRN', 'NUL')
 
 def trim_path(p, root):
     # todo, this seems problematic, and I think I have several
@@ -42,6 +39,7 @@ class FileSysService(object):
         self.config = config
         self.db = db
         self.dbtables = dbtables
+        self.storageDao = StorageDao(db, dbtables)
 
         self.fs = FileSystem()
 
@@ -103,10 +101,6 @@ class FileSysService(object):
         path = path.replace("\\", "/")
 
         abs_path = self.fs.join(os_root, path)
-
-        if self.fs.islocal(abs_path) and os.name == 'nt':
-            if any([p in _windows_device_files for p in parts]):
-                raise FileSysServiceException("invalid windows path name")
 
         return abs_path
 

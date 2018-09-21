@@ -187,19 +187,27 @@ class TestApp(YueApp):
                          "filesystem_read",
                          "filesystem_write",
                          "filesystem_delete"],
+            'filesystems': {
+                'default': '{pwd}',
+                'mem': "mem://test",
+            },
             'domains': ['test'],
             'roles': [
-                {'null': { 'features': []}},
+                {'null': {'features': []}},
                 # the test user has the minimum set of features to
                 # be able to listen to music and manage their profile
-                {'test': { 'features': [
-                            "user_read",
-                            "user_write",
-                            "library_read",
-                            "library_read_song"]
-                         }
+                {'test': {
+                    'features': [
+                        "user_read",
+                        "user_write",
+                        "library_read",
+                        "library_read_song"
+                    ],
+                    'filesystems': ['all']
+                }
                 },
-                {'admin': { 'features': ['all',]}},
+                {'admin': {'features': ['all'],
+                           'filesystems': ['all']}},
             ],
             'users': [
                 {'email': 'null',

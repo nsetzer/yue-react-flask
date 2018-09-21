@@ -20,7 +20,7 @@ class ShuffleTestCase(unittest.TestCase):
         # shuffle guarantees that no similar
         # element will be neighbors
         for i in range(1, len(out)):
-            self.assertNotEqual(out[i], out[i-1])
+            self.assertNotEqual(out[i], out[i - 1])
 
     def test_degenerate_1(self):
 

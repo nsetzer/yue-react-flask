@@ -21,6 +21,7 @@ import unittest
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm.session import sessionmaker
 from sqlalchemy.orm import scoped_session
+from sqlalchemy import update, insert, delete
 
 import yaml
 try:
@@ -67,6 +68,7 @@ def db_connect(connection_string=None, readonly=False):
     db.create_all = lambda: db.metadata.create_all(engine)
     db.delete_all = lambda: db.tables.drop(db.engine)
     db.disconnect = lambda: engine.dispose()
+    db.delete = lambda table: db.session.execute(delete(table))
     db.connection_string = connection_string
     db.kind = lambda: connection_string.split(":")[0]
 
@@ -168,9 +170,26 @@ def yaml_assert_list_of_string(data, key):
             raise ConfigException(
                 "%s must be a list of strings" % key)
 
+def yaml_assert_basic_mapping(data, key, key_type, val_type):
+
+    if not isinstance(data[key], dict):
+        raise ConfigException("%s must be a mapping" % key)
+
+    for subkey, subval in data[key].items():
+
+        if not isinstance(subkey, key_type):
+            raise ConfigException(
+                "%s must be a mapping of %s to %s" % (key, key_type, val_type))
+
+        if not isinstance(subval, val_type):
+            raise ConfigException(
+                "%s must be a mapping of %s to %s" % (key, key_type, val_type))
+
 def yaml_assert(data):
 
     yaml_assert_list_of_string(data, "features")
+
+    yaml_assert_basic_mapping(data, "filesystems", str, str)
 
     yaml_assert_list_of_string(data, "domains")
 
@@ -207,46 +226,66 @@ def db_drop_songs(db, dbtables):
     self.SongUserDataTable.drop(db.engine, checkfirst=True)
     self.SongDataTable.drop(db.engine, checkfirst=True)
 
+def _db_create_role_features(userDao, role_name, role_id, child):
+    n_changes = 0
+
+    items = {f.feature: f.id for f in userDao.listAllFeatures()}
+    names = child.get('features', [])
+    if len(names) == 1 and names[0] == "all":
+        names = list(items.keys())
+
+    for name in names:
+        if name not in items:
+            raise ConfigException("Unknown feature: %s" % name)
+        logging.info("adding feature %s to role %s" % (name, role_name))
+
+        if not userDao.roleHasFeature(role_id, items[name]):
+            userDao.addFeatureToRole(role_id, items[name], commit=False)
+            n_changes += 1
+
+    return n_changes
+
+def _db_create_role_filesystems(userDao, role_name, role_id, child):
+    n_changes = 0
+
+    items = {f.name: f.id for f in userDao.listAllFileSystems()}
+    names = child.get('filesystems', [])
+    if len(names) == 1 and names[0] == "all":
+        names = list(items.keys())
+
+    for name in names:
+        if name not in items:
+            raise ConfigException("Unknown filesystem: %s" % name)
+        logging.info("adding filesystem %s to role %s" % (name, role_name))
+        if not userDao.roleHasFileSystem(role_id, items[name]):
+            userDao.addFileSystemToRole(role_id, items[name], commit=False)
+            n_changes += 1
+
+    return n_changes
+
 def _db_create_role(userDao, role_name, child):
     n_changes = 0
+
     role_id = userDao.createRole(role_name, commit=False)
-    for feat_name in child['features']:
-        if feat_name == "all":
-            for feat in userDao.listAllFeatures():
-                logging.info("adding feature %s to role %s" % (feat['feature'], role_name))
-                feat_id = feat['id']
-                userDao.addFeatureToRole(
-                    role_id, feat_id, commit=False)
-                n_changes += 1
-        else:
-            logging.info("adding feature %s to role %s" % (feat_name, role_name))
-            feat = userDao.findFeatureByName(feat_name)
-            if feat is None:
-                raise ConfigException("Unknown feature: %s" % feat_name)
-            feat_id = feat['id']
-            userDao.addFeatureToRole(
-                role_id, feat_id, commit=False)
-            n_changes += 1
+
+    n_changes += _db_create_role_features(userDao,
+        role_name, role_id, child)
+
+    n_changes += _db_create_role_filesystems(userDao,
+        role_name, role_id, child)
+
     return n_changes
 
 def _db_update_role(userDao, role_name, child):
     n_changes = 0
     role = userDao.findRoleByName(role_name)
-    for feat_name in child['features']:
-        if feat_name == "all":
-            for feat in userDao.listAllFeatures():
-                logging.info("adding feature %s to role %s" % (feat['feature'], role_name))
-                if not userDao.roleHasFeature(role.id, feat['id']):
-                    userDao.addFeatureToRole(
-                        role.id, feat['id'], commit=False)
-                    n_changes += 1
-        else:
-            logging.info("adding feature %s to role %s" % (feat_name, role_name))
-            feat = userDao.findFeatureByName(feat_name)
-            if not userDao.roleHasFeature(role.id, feat['id']):
-                userDao.addFeatureToRole(
-                    role.id, feat['id'], commit=False)
-                n_changes += 1
+
+    n_changes += _db_create_role_features(userDao,
+        role_name, role.id, child)
+
+    n_changes += _db_create_role_filesystems(userDao,
+        role_name, role.id, child)
+
     return n_changes
 
 def db_init(db, dbtables, config_path):
@@ -268,6 +307,10 @@ def db_init_main(db, dbtables, data):
     for feat_name in data['features']:
         logging.info("creating feature: %s" % feat_name)
         userDao.createFeature(feat_name, commit=False)
+
+    for fs_name, fs_path in data['filesystems'].items():
+        logging.info("creating filesystem: %s" % fs_name)
+        userDao.createFileSystem(fs_name, fs_path, commit=False)
 
     for domain_name in data['domains']:
         logging.info("creating domain: %s" % domain_name)
@@ -324,6 +367,8 @@ def db_update_main(db, dbtables, data):
 
     userDao = UserDao(db, dbtables)
 
+    # -------------------------------------------------------------------------
+    # Features
     cfg_features = set(data['features'])
     all_features = set(feat['feature'] for feat in userDao.listAllFeatures())
     # the set of features to be removed from the database
@@ -342,6 +387,31 @@ def db_update_main(db, dbtables, data):
         userDao.createFeature(feat_name, commit=False)
         n_changes += 1
 
+    # -------------------------------------------------------------------------
+    # FileSystems
+
+    cfg_filesystems = set(data['filesystems'])
+    all_filesystems = set(fs['name'] for fs in userDao.listAllFileSystems())
+    # the set of features to be removed from the database
+    rem_filesystems = all_filesystems - cfg_filesystems
+    # the set of features to be added to the database
+    new_filesystems = cfg_filesystems - all_filesystems
+
+    for fs_name in rem_filesystems:
+        logging.info("removing filesystem: %s" % fs_name)
+        fs = userDao.findFileSystemByName(fs_name)
+        userDao.removeFileSystem(fs['id'], commit=False)
+        n_changes += 1
+
+    for fs_name in new_filesystems:
+        logging.info("creating filesystem: %s" % fs_name)
+        fs_path = data['filesystems'][fs_name]
+        userDao.createFileSystem(fs_name, fs_path, commit=False)
+        n_changes += 1
+
+    # -------------------------------------------------------------------------
+    # Domains
+
     cfg_domains = set(data['domains'])
     all_domains = set(d['name'] for d in userDao.listDomains())
     # the set of features to be added to the database
@@ -351,6 +421,9 @@ def db_update_main(db, dbtables, data):
         logging.info("creating domain: %s" % domain_name)
         userDao.createDomain(domain_name, commit=False)
         n_changes += 1
+
+    # -------------------------------------------------------------------------
+    # Roles
 
     cfg_roles = set()
     for item in data['roles']:
@@ -379,7 +452,7 @@ def db_update_main(db, dbtables, data):
 
     db.session.commit()
 
-    return n_changes;
+    return n_changes
 
 _db_test_connection_string = ":memory:"
 def db_connect_test(name):

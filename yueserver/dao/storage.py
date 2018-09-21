@@ -2,19 +2,26 @@
 
 from sqlalchemy.orm import relationship
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.sql import func
 from sqlalchemy import and_, or_, not_, select, column, update, insert, delete
 
 from sqlalchemy.sql.expression import bindparam
 from .search import SearchGrammar, ParseError, Rule
 from .filesys.filesys import FileSystem
 from .filesys.util import FileRecord
+from .exception import BackendException
 
+import os
 import sys
 import datetime, time
 import uuid
 import posixpath
 
-class StorageException(Exception):
+# taken from werkzeug.util.secure_file
+_windows_device_files = ('CON', 'AUX', 'COM1', 'COM2', 'COM3', 'COM4', 'LPT1',
+                         'LPT2', 'LPT3', 'PRN', 'NUL')
+
+class StorageException(BackendException):
     pass
 
 class StorageNotFoundException(StorageException):
@@ -37,7 +44,7 @@ class StorageDao(object):
     # FileSystem util
 
     def localPathToNormalPath(self, local_path):
-        """ convert a local path (on the local file system)
+        """ convert an absolute local path (on the local file system)
         into a normalized path which can be stored in the database
 
         this prefix the path with a scheme (file://)
@@ -73,44 +80,6 @@ class StorageDao(object):
         path = path[idx + 3:]
 
         return scheme, path
-
-    # FileSystem CRUD
-
-    def createFileSystem(self, name, path, commit=True):
-
-        query = insert(self.dbtables.FileSystemTable) \
-            .values({'name': name, 'path': path})
-        result = self.db.session.execute(query)
-        if commit:
-            self.db.session.commit()
-        return result.inserted_primary_key[0]
-
-    def findFileSystemById(self, file_id):
-        query = self.dbtables.FileSystemTable.select() \
-            .where(self.dbtables.FileSystemTable.c.id == file_id)
-        result = self.db.session.execute(query)
-        return result.fetchone()
-
-    def findFileSystemByName(self, name):
-        query = self.dbtables.FileSystemTable.select() \
-            .where(self.dbtables.FileSystemTable.c.name == name)
-        result = self.db.session.execute(query)
-        return result.fetchone()
-
-    def listFileSystems(self):
-        query = self.dbtables.FileSystemTable.select()
-        result = self.db.session.execute(query)
-        return result.fetchall()
-
-    def removeFileSystem(self, file_id, commit=True):
-        # TODO ensure file system is not used for any role
-
-        query = delete(self.dbtables.FileSystemTable) \
-            .where(self.dbtables.FileSystemTable.c.id == file_id)
-        self.db.session.execute(query)
-
-        if commit:
-            self.db.session.commit()
 
     # FileSystem Operations
 
@@ -279,3 +248,82 @@ class StorageDao(object):
         else:
             name = base_path.rstrip(delimiter).split(delimiter)[-1]
             return FileRecord(name, True, 0, 0, 0)
+
+    def _get_root_path(self, role_id, root_name):
+
+        FsTab = self.dbtables.FileSystemTable
+        FsPermissionTab = self.dbtables.FileSystemPermissionTable
+
+        query = select([column("path"), ]) \
+            .select_from(
+                FsTab.join(
+                    FsPermissionTab,
+                    FsTab.c.id == FsPermissionTab.c.file_id,
+                    isouter=True)) \
+            .where(and_(FsPermissionTab.c.role_id == role_id,
+                        FsTab.c.name == root_name))
+
+        result = self.db.session.execute(query)
+        item = result.fetchone()
+
+        if item is None:
+            raise StorageException(
+                "FileSystem %s not defined or permission denied" % root_name)
+
+        return item.path
+
+    def absolutePath(self, user_id, role_id, root_name, rel_path):
+        """ compose an absolute file path given a role and named directory base
+
+        For example, a service could be written allowing any user read
+        and write access to a directory. the user only knows the path of
+        their file, while the service translates that path into:
+             $root/$user_id/$filepath/$filename
+        this function would be given "$userid/$filepath/$filename" and
+        returns the complete path (with $root) if the user is authorized
+        to access that file
+        """
+
+        if self.fs.isabs(rel_path):
+            raise StorageException("path must not be absolute")
+
+        root_path = self._get_root_path(role_id, root_name)
+
+        # allow substitutions on only the user id, and only on the
+        # part of the path stored in the database. this allows
+        # for a configuration file to specify a user sandbox
+        root_path = root_path.format(user_id=user_id, pwd=os.getcwd())
+        if not rel_path.strip():
+            return root_path
+
+        # sanitize the input string to prevent a user from creating
+        # a path that can break out of the root directory taken
+        # from the database
+        rel_path = rel_path.replace("\\", "/")
+
+        scheme, parts = self.fs.parts(rel_path)
+        if any([p in (".", "..") for p in parts]):
+            # path must be relative to root_path...
+            raise StorageException("relative paths not allowed")
+
+        if any([(not p.strip()) for p in parts]):
+            raise StorageException("empty path component")
+
+        if self.fs.islocal(root_path) and os.name == 'nt':
+            if any([p in _windows_device_files for p in parts]):
+                raise StorageException("invalid windows path name")
+
+        return self.fs.join(root_path, rel_path)
+
+    def userDiskUsage(self, user_id):
+        """ returns the number of files and bytes consumed by a user
+        """
+        columns = [func.count(column("size")), func.sum(column("size"))]
+        query = select(columns) \
+            .select_from(self.dbtables.FileSystemStorageTable) \
+            .where(self.dbtables.FileSystemStorageTable.c.user_id == user_id)
+        result = self.db.session.execute(query)
+        _count, _sum = result.fetchone()
+        return _count, (_sum or 0)
+
+

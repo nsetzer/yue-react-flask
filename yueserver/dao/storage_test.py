@@ -25,9 +25,10 @@ class StorageTestCase(unittest.TestCase):
 
         env_cfg = {
             'features': ['test', ],
+            'filesystems': {},
             'domains': ['test'],
             'roles': [
-                {'test': {'features': ['all']}},
+                {'test': {'features': ['all'], 'filesystems': []}},
             ],
             'users': [
                 {'email': 'user000',
@@ -51,33 +52,32 @@ class StorageTestCase(unittest.TestCase):
     def setUp(self):
 
         # todo: delete all records before each test
-        #self.db.tables.FileSystemStorageTable.drop(self.db.engine, checkfirst=True)
-        #self.db.tables.FileSystemTable.drop(self.db.engine, checkfirst=True)
-        #self.db.tables.FileSystemPermissionTable.drop(self.db.engine, checkfirst=True)
-        pass
+        self.db.delete(self.db.tables.FileSystemStorageTable)
+        self.db.delete(self.db.tables.FileSystemTable)
+        self.db.delete(self.db.tables.FileSystemPermissionTable)
 
     def test_001a_filesystem(self):
 
         name = "test"
         path = "file:///opt/yueserver"
-        file_id = self.storageDao.createFileSystem(name, path)
+        file_id = self.userDao.createFileSystem(name, path)
 
         with self.assertRaises(IntegrityError):
-            self.storageDao.createFileSystem(name, path)
+            self.userDao.createFileSystem(name, path)
 
-        role = self.storageDao.findFileSystemByName(name)
+        role = self.userDao.findFileSystemByName(name)
         self.assertEqual(role['id'], file_id)
 
-        self.storageDao.removeFileSystem(file_id)
+        self.userDao.removeFileSystem(file_id)
 
-        role = self.storageDao.findFileSystemByName(name)
+        role = self.userDao.findFileSystemByName(name)
         self.assertIsNone(role)
 
     def test_001b_filesystem_permission(self):
 
         name = "test"
         path = "file:///opt/yueserver"
-        file_id = self.storageDao.createFileSystem(name, path)
+        file_id = self.userDao.createFileSystem(name, path)
 
         role = self.userDao.findRoleByName('test')
 
@@ -233,6 +233,8 @@ class StorageTestCase(unittest.TestCase):
     def test_004a_file_info(self):
 
         user_id = self.USER['id']
+        self.storageDao.insert(user_id, "file:///file1.txt", 1234, 0)
+        self.storageDao.insert(user_id, "file:///folder/file2.txt", 1234, 0)
 
         with self.assertRaises(StorageException):
             self.storageDao.file_info(user_id, "file://")
@@ -251,6 +253,69 @@ class StorageTestCase(unittest.TestCase):
 
         rec = self.storageDao.file_info(user_id, "file:///folder/file2.txt")
         self.assertEqual(rec.name, 'file2.txt')
+
+    def test_005a_abspath(self):
+        user_id = self.USER['id']
+        role_id = self.USER['role_id']
+
+        root = "abspath"
+        path = "mem:///opt/yueserver/data"
+        name = "file1.txt"
+
+        file_id = self.userDao.createFileSystem(root, path)
+        self.userDao.addFileSystemToRole(role_id, file_id)
+
+        # compose an absolute path given a user role
+        abspath = self.storageDao.absolutePath(user_id, role_id, root, name)
+        self.assertEqual(path + "/" + name, abspath)
+
+        # permission denied, invalid role
+        with self.assertRaises(StorageException):
+            abspath = self.storageDao.absolutePath(user_id, -1, root, name)
+
+        # root does not exist
+        with self.assertRaises(StorageException):
+            abspath = self.storageDao.absolutePath(user_id, role_id, "dne", name)
+
+    def test_005a_abspath_sub(self):
+        user_id = self.USER['id']
+        role_id = self.USER['role_id']
+
+        root = "abspath"
+        path = "mem:///opt/yueserver/user/{user_id}"
+        name = "file1.txt"
+
+        file_id = self.userDao.createFileSystem(root, path)
+        self.userDao.addFileSystemToRole(role_id, file_id)
+
+        abspath = self.storageDao.absolutePath(user_id, role_id, root, name)
+        expected = "mem:///opt/yueserver/user/%s/%s" % (user_id, name)
+        self.assertEqual(expected, abspath)
+
+    def test_006_quota(self):
+        """
+        show that adding files increases the disk usage of a user
+        """
+        user_id = self.USER['id']
+
+        count, usage = self.storageDao.userDiskUsage(self.USER['id'])
+        self.assertEqual(0, count)
+        self.assertEqual(0, usage)
+
+        self.storageDao.insert(user_id, "file:///file1.txt", 1024, 0)
+        count, usage = self.storageDao.userDiskUsage(user_id)
+        self.assertEqual(1, count)
+        self.assertEqual(1024, usage)
+
+        self.storageDao.insert(user_id, "file:///file2.txt", 512, 0)
+        count, usage = self.storageDao.userDiskUsage(user_id)
+        self.assertEqual(2, count)
+        self.assertEqual(1536, usage)
+
+        self.storageDao.remove(user_id, "file:///file1.txt")
+        count, usage = self.storageDao.userDiskUsage(user_id)
+        self.assertEqual(1, count)
+        self.assertEqual(512, usage)
 
     # todo:
     #   test that a user cannot CRUD other users files

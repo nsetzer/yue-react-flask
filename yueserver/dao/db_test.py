@@ -29,13 +29,20 @@ class ManageDBTestCase(unittest.TestCase):
                 'read_song_record', 'write_song_record',
                 'read_song', 'write_song', 'read_filesystem'
             ],
+            'filesystems': {
+                'default': '{pwd}',
+                'mem': "mem://test",
+            },
             'domains': ['production'],
             'roles': [
                 {'user': {'features': [
-                    'read_user']}},
+                    'read_user'],
+                    'filesystems': ['all']}},
                 {'editor': {'features': [
-                    'read_user', 'write_user']}},
-                {'admin': {'features': ['all']}}
+                    'read_user', 'write_user'],
+                    'filesystems': ['all']}},
+                {'admin': {'features': ['all'],
+                'filesystems': ['all']}}
             ],
             'users': [
                 {'email': 'admin',
@@ -73,12 +80,12 @@ class ManageDBTestCase(unittest.TestCase):
         cls.songs = []
         for i in range(10):
             song = {
-                Song.artist : "artist%d" % i,
-                Song.title : "album%d" % i,
-                Song.album : "title%d" % i,
-                Song.rating : i%10,
-                Song.path : "/dev/null",
-                Song.ref_id : "id%06d" % i
+                Song.artist: "artist%d" % i,
+                Song.title: "album%d" % i,
+                Song.album: "title%d" % i,
+                Song.rating: i%10,
+                Song.path: "/dev/null",
+                Song.ref_id: "id%06d" % i
             }
             cls.songs.append(song)
 
@@ -89,6 +96,7 @@ class ManageDBTestCase(unittest.TestCase):
 
     def setUp(self):
         pass
+
     def tearDown(self):
         pass
 

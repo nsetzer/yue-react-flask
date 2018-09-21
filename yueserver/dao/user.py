@@ -287,6 +287,44 @@ class UserDao(object):
         if commit:
             self.db.session.commit()
 
+    # filesystem
+
+    def createFileSystem(self, name, path, commit=True):
+
+        query = insert(self.dbtables.FileSystemTable) \
+            .values({'name': name, 'path': path})
+        result = self.db.session.execute(query)
+        if commit:
+            self.db.session.commit()
+        return result.inserted_primary_key[0]
+
+    def findFileSystemById(self, file_id):
+        query = self.dbtables.FileSystemTable.select() \
+            .where(self.dbtables.FileSystemTable.c.id == file_id)
+        result = self.db.session.execute(query)
+        return result.fetchone()
+
+    def findFileSystemByName(self, name):
+        query = self.dbtables.FileSystemTable.select() \
+            .where(self.dbtables.FileSystemTable.c.name == name)
+        result = self.db.session.execute(query)
+        return result.fetchone()
+
+    def listAllFileSystems(self):
+        query = self.dbtables.FileSystemTable.select()
+        result = self.db.session.execute(query)
+        return result.fetchall()
+
+    def removeFileSystem(self, file_id, commit=True):
+        # TODO ensure file system is not used for any role
+
+        query = delete(self.dbtables.FileSystemTable) \
+            .where(self.dbtables.FileSystemTable.c.id == file_id)
+        self.db.session.execute(query)
+
+        if commit:
+            self.db.session.commit()
+
     # permissions
 
     def grantDomain(self, user_id, domain_id, commit=True):

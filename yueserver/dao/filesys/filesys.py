@@ -32,6 +32,9 @@ class LocalFileSystemImpl(AbstractFileSystem):
     def __init__(self):
         super(LocalFileSystemImpl, self).__init__()
 
+    def islocal(self, path):
+        return True
+
     def open(self, path, mode):
         return open(path, mode)
 

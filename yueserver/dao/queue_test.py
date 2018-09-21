@@ -22,8 +22,9 @@ class SongQueueTestCase(unittest.TestCase):
         env_cfg = {
             'features': ['test', ],
             'domains': ['test'],
+            'filesystems': {},
             'roles': [
-                {'test': { 'features': ['all',]}},
+                {'test': {'features': ['all'], 'filesystems': []}},
             ],
             'users': [
                 {'email': 'user000',
