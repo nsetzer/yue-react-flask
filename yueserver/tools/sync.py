@@ -14,6 +14,7 @@ import argparse
 import logging
 import json
 import time
+import fnmatch
 
 from ..app import connect
 
@@ -194,7 +195,7 @@ class SyncManager(object):
         super(SyncManager, self).__init__()
 
         self.client = client
-        self.name = name
+        self.name = name  # the root fs name, e.g. 'default'
         self.dryrun = dryrun
 
         self.local_root = local_root
@@ -206,11 +207,18 @@ class SyncManager(object):
         self.dlf = []
         self.ulf = []
 
+        self.blacklist = [".yue"]
+
+    def _match(self, name):
+        for ptn in self.blacklist:
+            if fnmatch.fnmatch(ptn, name):
+                return True
+        return False
+
     def _check(self, remote_base, local_base):
 
         self.remote_base = remote_base
         self.local_base = local_base
-
 
         logging.info("scan: %s <=> %s/api/fs/%s/path/%s" % (self.local_base,
                 self.client.host(), self.name, self.remote_base))
@@ -222,11 +230,15 @@ class SyncManager(object):
 
         for name in dld:
             a = posixpath.join(remote_base, name)
+            if self._match(name):
+                continue
             b = os.path.join(local_base, name)
             self.dld.append((a, b))
 
         for name in uld:
             a = posixpath.join(remote_base, name)
+            if self._match(name):
+                continue
             b = os.path.join(local_base, name)
             self.uld.append((a, b))
 
@@ -280,7 +292,7 @@ class SyncManager(object):
 
         self._force = True
 
-    def next(self,pull=True, push=True, delete=False):
+    def next(self, pull=True, push=True, delete=False):
 
         if pull and push and delete:
             raise ValueError("cannot delete files when syncing.")

@@ -121,6 +121,7 @@ class ApplicationBaseConfig(BaseConfig):
 
     def init(self, data):
 
+        self.null = False
         self.build_dir = os.path.join(os.getcwd(), "build")
         self.static_dir = os.path.join(os.getcwd(), "build", "static")
 
@@ -128,7 +129,7 @@ class ApplicationBaseConfig(BaseConfig):
 
         mode = self.get_key(data, "encryption_mode", default="none")
 
-        logging.warning("encryption mode: %s" % mode)
+        logging.debug("encryption mode: %s" % mode)
         if mode == "rsa":
             self.decryptor = CipherConfigDecryptor()
             self._decrypt_inplace(data)
@@ -145,5 +146,6 @@ class ApplicationBaseConfig(BaseConfig):
         self.ssl = SSLConfig(base)
         self.cors = CORSConfig(base)
         self.logging = LoggingConfig(base)
+
 
 

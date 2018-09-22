@@ -85,7 +85,8 @@ class YueApp(FlaskApp):
     def __init__(self, config):
         super(YueApp, self).__init__(config)
 
-        logging.warning("db_connect: %s" % self.config.database.dbhost)
+        if not self.config.null:
+            logging.warning("db_connect: %s" % self.config.database.dbhost)
         self.db = db_connect(self.config.database.url)
 
         # check that the database is configured.
@@ -93,7 +94,7 @@ class YueApp(FlaskApp):
         # test tables, but in general should be the same
         nbTablesExpected = len(self.db.metadata.tables.keys())
         nbTablesActual = len(self.db.engine.table_names())
-        if nbTablesExpected != nbTablesActual:
+        if not self.config.null and nbTablesExpected != nbTablesActual:
             logging.warning("database contains %d tables. expected %d." % (
                 nbTablesActual, nbTablesExpected))
 

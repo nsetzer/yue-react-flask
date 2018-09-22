@@ -60,8 +60,6 @@ class S3Upload(object):
             for buf in iter(lambda: fo.read(4096), b""):
                 wf.write(buf)
 
-        sys.exit(1)
-
 class JsonUploader(object):
     """upload songs and art to a remote server
     update the datebase

@@ -83,5 +83,8 @@ class Config(ApplicationBaseConfig):
 
     @staticmethod
     def null():
-        return Config({'server': {'secret_key': '', 'database': {'kind': 'sqlite'}}})
+        cfg = Config({'server': {'secret_key': '',
+            'database': {'kind': 'sqlite'}}})
+        cfg.null = True
+        return cfg
 
