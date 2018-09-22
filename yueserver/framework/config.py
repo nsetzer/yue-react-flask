@@ -126,13 +126,13 @@ class ApplicationBaseConfig(BaseConfig):
 
         base = self.get_key(data, "server")
 
-        mode = self.get_key(data, "encryption_mode")
+        mode = self.get_key(data, "encryption_mode", default="none")
 
         logging.warning("encryption mode: %s" % mode)
         if mode == "rsa":
             self.decryptor = CipherConfigDecryptor()
             self._decrypt_inplace(data)
-        if mode == "ssm":
+        elif mode == "ssm":
             self.decryptor = ParameterStoreConfigDecryptor()
             self._decrypt_inplace(data)
 

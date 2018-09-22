@@ -235,7 +235,8 @@ def get_user(args):
     user = dict(user)
     user['role'] = role['name']
     user['domain'] = domain['name']
-    user['password'] = user['password'].decode("utf-8")
+    if not isinstance(user['password'], str):
+        user['password'] = user['password'].decode("utf-8")
 
     file_count, total_bytes = storageDao.userDiskUsage(user['id'])
     quota_bytes = storageDao.userDiskQuota(user['id'], user['role_id'])
@@ -484,11 +485,10 @@ def main():
         sys.stderr.write("cannot find env cfg: %s" % args.env_cfg_path)
         sys.exit(1)
 
-    logging.warning("executing task: %s" % args.func.__name__)
-
     if not hasattr(args, 'func'):
         parser.print_help()
     else:
+        logging.warning("executing task: %s" % args.func.__name__)
         args.func(args)
 
 if __name__ == '__main__':

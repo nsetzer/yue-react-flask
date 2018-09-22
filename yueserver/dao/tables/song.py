@@ -37,7 +37,7 @@ def SongDataTable(metadata):
     """
     return Table('song_data', metadata,
         Column('id', String, primary_key=True, default=generate_uuid),
-        Column('domain_id', Integer, ForeignKey("user_domain.id")),
+        Column('domain_id', ForeignKey("user_domain.id")),
         Column('ref_id', Integer, default=None),
         # text
         Column('file_path', String, default=""),
@@ -77,8 +77,8 @@ def SongUserDataTable(metadata):
     """
     return Table('song_user_data', metadata,
         # index
-        Column('song_id', String, ForeignKey("song_data.id")),
-        Column('user_id', Integer, ForeignKey("user.id")),
+        Column('song_id', ForeignKey("song_data.id")),
+        Column('user_id', ForeignKey("user.id")),
         # text
         Column('comment', String, default=""),
         # number
@@ -100,7 +100,7 @@ def SongHistoryTable(metadata):
     """
     return Table('song_history', metadata,
         Column('user_id', Integer),
-        Column('song_id', String, ForeignKey("song_data.id")),
+        Column('song_id', ForeignKey("song_data.id")),
         Column('timestamp', Integer),
     )
 
@@ -112,7 +112,7 @@ def SongQueueTable(metadata):
     empty it is automatically populated using a default query.
     """
     return Table('song_queue', metadata,
-        Column('user_id', Integer, ForeignKey('user.id'), unique=True),
+        Column('user_id', ForeignKey('user.id'), unique=True),
         Column('songs', StringArrayType),
         Column('query', String, default=""),
     )
@@ -122,7 +122,7 @@ def SongPlaylistTable(metadata):
     A table containing user defined playlists
     """
     return Table('song_playlist', metadata,
-        Column('user_id', Integer, ForeignKey('user.id')),
+        Column('user_id', ForeignKey('user.id')),
         Column('name', String),
         Column('songs', StringArrayType),
     )

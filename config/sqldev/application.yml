@@ -1,14 +1,8 @@
 encryption_mode: rsa
 server:
 
-  host: 0.0.0.0
-  port: 4200
-
   env: production
   secret_key: "RSA:xqJnz7S5xOEFQkUsOg2VuGvamJDlPqjhsqWCx4G6TORMgO+6orVzBG5v/9/tynCBy1fzfbbXwaQjv6wveLVJSJ3EmE4OJMduOHL2OdfhRLVEDK1RRF1BtgaFsk2RgIMOk8hubjJkyNgOA+4HjdTh3EbKFc3NrJqvn25Jw9VE2H+0eF45mrJD+YiFtyM7n5gj11l9a9oQM5SdgTT7Zpeildg87G13Sq7q/gjVY/7t0b2q9ixZxOVqcVWDr8ooZ0nv3jT0ntkxYBMFo3zLNwf96h3alCKQpzkmFi6hBRkfaEplqmFqDYxK+DRsmO156bmGaVlpnUxw1X+V1ps7vWb+9XWDdsRt3nKKQ2tdB3NUbT8hollLAjpXsWyKGJBGuVfJKPFp/gdOiF8WMoixBEu2Tfnl5gZXpg=="
-
-  cors:
-    origins: "*"
 
   database:
     kind: "postgresql"
@@ -16,10 +10,6 @@ server:
     username: "yueapp"
     password: "RSA:imyB5jlOh0PaQ6hKGULIeH4cWOmpjne+k1AWF0YOkHcTCX/2xGUT8eV4kZMF7LEglfncPBXqQ4f9KHsCjKgtZMwbnjhKYkmUacN2DlO2mq5KudbhOgfiFMreSz4k+nWg5SIRs9om8EqM52/IeKFWZwlWF1rRGn83JFt7At0LXVCFVxp+0/y8KJ/ki6ZIlFz2p+PRAVoCImUAaHspmJzH1A07xlPPmPCMVuXCk57PyWrqPnqzU78TQK28iFYp/xlD2gl/OhAAWXuha1JbuDUGM1i5fJ540/V76jxiy5vHRiNysiVbuUssiIKX1jU67T4KMw3TSHTMUfzBJnJ5EXur5ST4yd6idzpgybCMrqwBIRJwXlIZp6IyLqNMHPDZyKwyNGq8/mJ5sy8="
     database: "yueapp"
-
-  ssl:
-    private_key: ""
-    certificate: ""
 
   logging:
     directory: "./logs"

@@ -316,3 +316,18 @@ sudo certbot --nginx -d www.domain domain
 
 * enter an email
 * choose 2 to for redirect to https
+
+
+### PostgreSQL backup and restore
+
+
+Backup:
+```bash
+pg_dump yueapp | gzip | split -d -b 512M - backup.gz.
+```
+
+Restore:
+```bash
+python3 -m yueserver.tools.manage -pproduction drop
+cat backup.gz.* | gunzip | psql yueapp
+```

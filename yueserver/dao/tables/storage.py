@@ -19,7 +19,7 @@ def FileSystemStorageTable(metadata):
            (the creation date for the latest version)
     """
     return Table('filesystem_storage', metadata,
-        Column('user_id', ForeignKey("user_role.id"), nullable=False),
+        Column('user_id', ForeignKey("user.id"), nullable=False),
         # text
         Column('path', String, unique=True, nullable=False),
         # number

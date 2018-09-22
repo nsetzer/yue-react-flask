@@ -86,14 +86,14 @@ def UserTable(metadata):
     role_id: id for the users default role
     """
     return Table('user', metadata,
-        Column('id', Integer, primary_key=True),
+        Column('id', String, primary_key=True, default=generate_uuid),
         Column('email', String),
         Column('password', String),
         Column('apikey', String, default=generate_uuid,
                unique=True, nullable=True),
-        Column('domain_id', Integer, ForeignKey("user_domain.id"),
+        Column('domain_id', ForeignKey("user_domain.id"),
                nullable=False),
-        Column('role_id', Integer, ForeignKey("user_role.id"),
+        Column('role_id', ForeignKey("user_role.id"),
                nullable=False)
     )
 
