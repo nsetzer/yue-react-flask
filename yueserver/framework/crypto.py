@@ -129,7 +129,14 @@ class CryptoManager(object):
         """decrypt a base64 encoded string"""
         return self.decrypt(private_key, base64.b64decode(string))
 
-class CipherConfigDecryptor(object):
+class AbstractConfigDecryptor(object):
+
+    prefix = ""
+
+    def decrypt(self, data):
+        raise NotImplementedError()
+
+class CipherConfigDecryptor(AbstractConfigDecryptor):
     """
 
     Note: this decryptor is meant as a stepping stone towards
@@ -138,7 +145,7 @@ class CipherConfigDecryptor(object):
 
     """
 
-    prefix = "ENC:"
+    prefix = "RSA:"
 
     def __init__(self):
         super(CipherConfigDecryptor, self).__init__()
@@ -157,7 +164,7 @@ class CipherConfigDecryptor(object):
         data = data[len(ParameterStoreConfigDecryptor.prefix):]
         return self.cm.decrypt64(self.pem, data)
 
-class ParameterStoreConfigDecryptor(object):
+class ParameterStoreConfigDecryptor(AbstractConfigDecryptor):
     prefix = "SSM:"
 
     def __init__(self):
@@ -166,5 +173,9 @@ class ParameterStoreConfigDecryptor(object):
     def decrypt(self, data):
         """ retrieve a value from a parameter store given a key
         """
+
         data = data[len(ParameterStoreConfigDecryptor.prefix):]
+
+        # ssm = session.client('ssm')
+        # name = ssm.get_parameter(Name=NAME, WithDecryption=True)
         raise NotImplementedError("ssm decryption not implemented")

@@ -75,6 +75,10 @@ def db_connect(connection_string=None, readonly=False):
     db.conn = db.session.bind.connect()
     if connection_string.startswith("sqlite:"):
         db.conn.connection.create_function('REGEXP', 2, regexp)
+        path = connection_string[len("sqlite:///"):]
+        if path and not os.access(path, os.W_OK):
+            logging.warning("database at %s not writable" % connection_string)
+
 
     return db
 
