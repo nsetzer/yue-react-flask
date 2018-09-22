@@ -308,22 +308,37 @@ def db_init_main(db, dbtables, data):
 
     userDao = UserDao(db, dbtables)
 
+    # -------------------------------------------------------------------------
+    # Features
+
     for feat_name in data['features']:
         logging.info("creating feature: %s" % feat_name)
         userDao.createFeature(feat_name, commit=False)
+
+    # -------------------------------------------------------------------------
+    # File Systems
 
     for fs_name, fs_path in data['filesystems'].items():
         logging.info("creating filesystem: %s" % fs_name)
         userDao.createFileSystem(fs_name, fs_path, commit=False)
 
+    # -------------------------------------------------------------------------
+    # Domains
+
     for domain_name in data['domains']:
         logging.info("creating domain: %s" % domain_name)
         userDao.createDomain(domain_name, commit=False)
+
+    # -------------------------------------------------------------------------
+    # Roles
 
     for item in data['roles']:
         for role_name, child in item.items():
             logging.info("creating role: %s" % role_name)
             _db_create_role(userDao, role_name, child)
+
+    # -------------------------------------------------------------------------
+    # Users - create default users
 
     for user in data['users']:
 
@@ -333,19 +348,28 @@ def db_init_main(db, dbtables, data):
         default_domain = userDao.findDomainByName(domains.pop(0))
         default_role = userDao.findRoleByName(roles.pop(0))
 
+        logging.info("creating user: %s@%s/%s" % (
+            user['email'], default_domain['name'], default_role['name']))
+
+        hash = not user['password'].startswith("$2b$")
         user_id = userDao.createUser(user['email'],
                                      user['password'],
                                      default_domain['id'],
-                                     default_role['id'])
+                                     default_role['id'],
+                                     hash=hash)
 
         # grant additional domains
         for name in domains:
             domain = userDao.findDomainByName(name)
+            logging.info("granting additional domain %s to user %s" % (
+                domain['name'], user['email']))
             userDao.grantDomain(user_id, domain['id'])
 
         # grant additional roles
         for name in roles:
             role = userDao.findRoleByName(name)
+            logging.info("granting additional role %s to user %s" % (
+                role['name'], user['email']))
             userDao.grantRole(user_id, role['id'])
 
     db.session.commit()
@@ -453,6 +477,10 @@ def db_update_main(db, dbtables, data):
             if role_name in item:
                 child = item[role_name]
                 n_changes += _db_update_role(userDao, role_name, child)
+
+    # -------------------------------------------------------------------------
+    # Users
+    # manipulating users is out of the scope for this method
 
     db.session.commit()
 

@@ -143,9 +143,19 @@ class UserDao(object):
 
      # users
 
-    def createUser(self, email, password, domain_id, role_id, commit=True):
-
-        hashed = hash_password(password, self.workfactor)
+    def createUser(self, email, password, domain_id, role_id, hash=True, commit=True):
+        """
+        email:
+        password:
+        domain_id:
+        role_id:
+        hash: if true, use bcrypt to hash the password (true)
+              set to false if the password has already been hashed
+        """
+        if hash:
+            hashed = hash_password(password, self.workfactor)
+        else:
+            hashed = password.encode("utf-8")
 
         # bytes need to be encoded as strings when storing in postgres
         if self.db.kind() == "postgresql":

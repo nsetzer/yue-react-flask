@@ -46,10 +46,10 @@ class S3Upload(object):
         super(S3Upload, self).__init__()
         self.bucket = bucket
 
-        access_key = "MMC27NAZUZBZTU2AZNW5" # os.environ['AWS_ACCESS_KEY_ID']
-        secret_key = "lEKnzvq1GZifdjL4vi4rGtRMMWIXxAwAF4kyZgvY71g" # os.environ['AWS_SECRET_ACCESS_KEY']
-        endpoint = "https://nyc3.digitaloceanspaces.com" # os.environ['AWS_ENDPOINT_URL']
-        region = "nyc3" # os.environ['AWS_DEFAULT_REGION']
+        access_key = os.environ['AWS_ACCESS_KEY_ID']
+        secret_key = os.environ['AWS_SECRET_ACCESS_KEY']
+        endpoint = os.environ['AWS_ENDPOINT_URL']
+        region = os.environ['AWS_DEFAULT_REGION']
 
         self.fs = BotoFileSystemImpl(endpoint, region, access_key, secret_key)
 

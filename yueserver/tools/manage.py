@@ -467,6 +467,8 @@ def main():
 
     args = parser.parse_args()
 
+    logging.basicConfig(level=logging.INFO)
+
     logging.warning("profile: %s" % args.profile)
 
     args.env_cfg_path = os.path.join(args.config, args.profile, "env.yml")

@@ -14,6 +14,9 @@ class DatabaseConfig(BaseConfig):
     the 'url' is a sqlalchemy url for connecting to the database and is
     generated based off of the values given in the configuration
 
+    'dbhost' is a string guaranteed not to contain sensitive information
+    and therefore can be printed for debugging. 'url' may contain a password
+
     """
     def __init__(self, base):
 

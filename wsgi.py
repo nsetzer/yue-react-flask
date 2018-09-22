@@ -1,5 +1,6 @@
 
 import sys
+import logging
 
 if (sys.version_info[0] == 2):
     raise RuntimeError("python2 not supported")
@@ -12,9 +13,10 @@ except ImportError as e:
         sys.stderr.write("not inside a virtual environment")
     raise e
 
+debugLogging = __name__ == '__main__'
 args = parseArgs(sys.argv, "production")
 
-app = getApp(args.config, args.profile)
+app = getApp(args.config, args.profile, debugLogging)
 
 if __name__ == '__main__':
     app.run()

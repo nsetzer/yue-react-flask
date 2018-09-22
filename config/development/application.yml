@@ -1,20 +1,23 @@
+encryption_mode: none
 server:
 
   host: localhost
   port: 4200
 
   env: production
-  secret_key: "secret"
+  secret_key: secret
 
   cors:
     origins: "*"
 
   database:
-    kind: "postgresql"
-    path: "localhost:5432"
-    username: nsetzer
-    password: password
-    database: nsetzer
+    kind: "sqlite"
+    path: "database.sqlite"
+    #kind: "postgresql"
+    #hostname: "localhost:5432"
+    #username: nsetzer
+    #password: password
+    #database: nsetzer
 
   ssl:
     # ssl is disabled so that the frontend can communicate
@@ -29,15 +32,9 @@ server:
     num_backups: 10
     level: debug
 
-  filesystem:
-    media_root: "/Users/nsetzer/Music/Library"
-    other:
-      test: "./test"
-      mem: "mem://memtest"
-      bucket: "s3://cogito-singletenantdev-recompute"
-
   transcode:
     audio:
-      bin_path: /usr/local/bin/ffmpeg
+      bin_path: /usr/bin/ffmpeg
       tmp_path: "/tmp/yue-audio"
     image: {}
+

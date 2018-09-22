@@ -69,11 +69,38 @@ sudo chgrp yueapp .
 sudo chgrp -R yueapp *
 ```
 
+### Base Application Config
+
+Create the following config files, or copy existing ones from the repository. The
+directory that the yaml files lives in is used as the name of the profile.
+
+`./config/production/application.yml`
+`./config/production/env.yml`
+
+#### Encryption for Application Config values
+
+Two methods for encrypting values in the application config are provided.
+An RSA mode uses a public and private keypair for encryption and decryption.
+
+Note that any string value can be encrypted. Encrypting of the application secret,
+which is used for generating session tokens is demonstrated below.
+
+#### SSM Encryption
+Not Implemented at this time.
+Ensure IAM roles are configured correctly.
+An attempt to retrieve the given key from parameter store will be made.
+
+Make the following changes to the application config
+```json
+encryption_mode: ssm
+server:
+  secret_key: "SSM:/ssm/key/path"
+```
+
+#### RSA Encryption
 Generate a keypair used for encrypting and decrypting application secrets.
 Make sure that the public and private key files are only readable
 by the root user
-
-> You can skip this step if using parameter store to manage secrets
 
 ```bash
 mkdir /opt/yueserver/crypt
@@ -87,9 +114,92 @@ $ ls -la ./crypt
 -rw------- 1 root root  450 Sep 16 09:50 rsa.pub
 ```
 
-### Base Application Config
+Running the encrypt64 command will produce a base64 string containing the AES encrypted secret:
+```bash
+python -m server.tools.manage encrypt64  /opt/yueserver/crypt/rsa.pub "mysecret"
+```
 
-todo: how to create a basic application config using sqlite
+Add the encrypted value to the application configuration:
+
+```json
+encryption_mode: rsa
+server:
+  secret_key: "RSA:<hash>"
+```
+
+### Configure PostgreSQL
+
+PostgreSQL can be used in place of sqlite. A database and user must first be
+created in postgres, then the connection settings can be added to the
+application configuration.
+
+Method 1:
+
+```bash
+sudo -u postgres createuser yueapp
+sudo -u postgres createdb yueapp
+sudo -u postgres psql
+    psql=# alter user yueapp with encrypted password '<password>';
+    psql=# grant all privileges on database yueapp to yueapp;
+    psql=# \q
+```
+
+Method 2:
+
+Execute the following SQL:
+```bash
+    CREATE DATABASE yueapp;
+    CREATE USER yueapp WITH ENCRYPTED PASSWORD 'password';
+    GRANT ALL PRIVILEGES ON DATABASE yueapp TO yueapp;
+```
+
+Then make the following changes to the application config.
+
+`./config/production/application.yml`
+```json
+
+server:
+  database:
+    kind: "postgresql"
+    hostname: "localhost:5432"
+    username: "yueapp"
+    password: "<password>"
+    database: "yueapp"
+
+```
+
+#### Suggested Postgres Configuration
+
+These settings were chosen for a server with 1 core and 1GB of available memory.
+The values where generated using pgTune.
+
+```bash
+psql -U postgres
+postgres=# SHOW config_file;
+```
+
+`/etc/postgresql/9.5/main/postgresql.conf`
+
+```bash
+max_connections = 10
+shared_buffers = 150MB
+effective_cache_size = 450MB
+maintenance_work_mem = 38400kB
+checkpoint_completion_target = 0.7
+wal_buffers = 4608kB
+default_statistics_target = 100
+random_page_cost = 1.1
+effective_io_concurrency = 200
+work_mem = 15MB
+min_wal_size = 1GB
+max_wal_size = 2GB
+```
+
+### Initialize the database
+
+The connection settings defined in the application config will be used
+to connect to the database, and the environment config will be used
+to configure the database for first use.
 
 ```bash
 python -m server.tools.manage --profile production create
@@ -98,7 +208,7 @@ python -m server.tools.manage --profile production create
 Test that the application can start. As the root user run:
 
 ```bash
-cat ./crypt/rsa.pem | sudo -u yueapp python3 wsgi.py
+sudo -u yueapp python3 wsgi.py
 ```
 
 ### Application Service
@@ -150,6 +260,7 @@ sudo journalctl -u yueserver
 
 todo: notes on ufw, or use digital ocean firewall
 open 80 and 443
+
 ### NginX Configuration
 
 ```
@@ -194,7 +305,3 @@ sudo certbot --nginx -d www.domain domain
 
 * enter an email
 * choose 2 to for redirect to https
-
-### PostgreSQL
-
-todo

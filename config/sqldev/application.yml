@@ -11,16 +11,15 @@ server:
     origins: "*"
 
   database:
-    kind: "sqlite"
-    path: "database.sqlite"
+    kind: "postgresql"
+    hostname: "localhost:5432"
+    username: "yueapp"
+    password: "RSA:imyB5jlOh0PaQ6hKGULIeH4cWOmpjne+k1AWF0YOkHcTCX/2xGUT8eV4kZMF7LEglfncPBXqQ4f9KHsCjKgtZMwbnjhKYkmUacN2DlO2mq5KudbhOgfiFMreSz4k+nWg5SIRs9om8EqM52/IeKFWZwlWF1rRGn83JFt7At0LXVCFVxp+0/y8KJ/ki6ZIlFz2p+PRAVoCImUAaHspmJzH1A07xlPPmPCMVuXCk57PyWrqPnqzU78TQK28iFYp/xlD2gl/OhAAWXuha1JbuDUGM1i5fJ540/V76jxiy5vHRiNysiVbuUssiIKX1jU67T4KMw3TSHTMUfzBJnJ5EXur5ST4yd6idzpgybCMrqwBIRJwXlIZp6IyLqNMHPDZyKwyNGq8/mJ5sy8="
+    database: "yueapp"
 
   ssl:
-    #
-    # sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-    # -keyout selfsigned.key -out selfsigned.crt
-    #
-    private_key: "config/production/selfsigned.key"
-    certificate: "config/production/selfsigned.crt"
+    private_key: ""
+    certificate: ""
 
   logging:
     directory: "./logs"
