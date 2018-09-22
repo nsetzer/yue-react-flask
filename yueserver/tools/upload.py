@@ -1,4 +1,4 @@
-#! cd ../.. && python -m yueserver.tools.upload --host http://localhost:4200 --username admin --password admin mark.json default
+#! cd ../.. && python -m yueserver.tools.upload --host http://localhost:8000 --username admin --password admin beast.json default
 #! cd ../.. && python -m yueserver.tools.upload --host http://104.248.122.206:80 --username admin --password admin clutch.json temp
 
 """
@@ -100,6 +100,8 @@ class JsonUploader(object):
         static_path = song['static_path']
         ref_id = str(song['ref_id'])
 
+        dir_path, _ = posixpath.split(static_path)
+
         aud_path = "%s.ogg" % (static_path)
         _, aud_name = posixpath.split(aud_path)
 
@@ -129,7 +131,7 @@ class JsonUploader(object):
         else:
             print("creating song with reference: %s" % ref_id)
 
-            items = self._list_dir(static_path)
+            items = self._list_dir(dir_path)
 
             if aud_name not in items:
                 self._transcode_upload(file_path, aud_path, opts)
@@ -190,8 +192,8 @@ class JsonUploader(object):
     def _prepare_song_for_transport(self, song):
 
         remote_song = dict(song)
-        if 'static_path' in remote_song:
-            del remote_song['static_path']
+        #if 'static_path' in remote_song:
+        #    del remote_song['static_path']
         if 'file_path' in remote_song:
             del remote_song['file_path']
         if 'art_path' in remote_song:

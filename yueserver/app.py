@@ -324,13 +324,26 @@ def parseArgs(argv, default_profile=None):
 
     return args
 
-def getApp(config_dir, profile):
+def getApp(config_dir, profile, debugLogging=True):
     """ get the application for a specific profile
 
     Loads the configuration for the specified profile and returns a new
     App instance.
 
     """
+    FORMAT = '%(asctime)s - %(levelname)-8s - %(name)s - %(message)s'
+    formatter = logging.Formatter(FORMAT)
+
+    if not debugLogging:
+        # single source of truth for log configuration is the
+        # server config file. this will reconfigure the gunicorn
+        # logger until the config can be loaded
+        gunicorn_logger = logging.getLogger('gunicorn.error')
+        root_logger = logging.getLogger(None)
+        root_logger.handlers.extend(gunicorn_logger.handlers)
+        root_logger.setLevel(gunicorn_logger.level)
+        for h in root_logger.handlers:
+            h.setFormatter(formatter)
 
     app_cfg_path = os.path.join(config_dir, profile, "application.yml")
     cfg = Config(app_cfg_path)
@@ -338,24 +351,37 @@ def getApp(config_dir, profile):
     if not os.path.exists(cfg.logging.directory):
         os.makedirs(cfg.logging.directory)
 
-    FORMAT = '%(levelname)-8s: %(asctime)-15s %(message)s'
-    logging.basicConfig(format=FORMAT, level=cfg.logging.level)
+    if debugLogging:
+        logging.basicConfig(format=FORMAT, level=cfg.logging.level)
+
+        root_logger = logging.getLogger(None)
+
+        formatter = logging.Formatter(FORMAT)
+        for h in root_logger.handlers:
+            h.setFormatter(formatter)
+
+    # always add a rotating log handler
+    root_logger = logging.getLogger(None)
+    root_logger.setLevel(cfg.logging.level)
     log_path = os.path.join(cfg.logging.directory, cfg.logging.filename)
     handler = RotatingFileHandler(log_path,
         maxBytes=cfg.logging.max_size,
         backupCount=cfg.logging.num_backups)
-    handler.setLevel(cfg.logging.level)
-    logging.getLogger().addHandler(handler)
+    handler.setFormatter(formatter)
+    root_logger.addHandler(handler)
 
-    logging.info("using config: %s" % app_cfg_path)
-
-
-
-    #gunicorn_logger = logging.getLogger('gunicorn.error')
-    #print(list(sorted(logging.Logger.manager.loggerDict.keys())))
-    #print(gunicorn_logger.level)
+    logging.debug("root logger support: DEBUG")
+    logging.info("root logger support: INFO")
+    logging.warning("root logger support: WARNING")
+    logging.error("root logger support: ERROR")
 
     app = YueApp(cfg)
+
+    if not debugLogging:
+        routes = app.list_routes()
+        for endpoint, methods, url in routes:
+            logging.info("{:40s} {:20s} {}".format(
+                endpoint, methods, url))
 
     return app
 

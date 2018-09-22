@@ -19,6 +19,7 @@ def SongDataTable(metadata):
     ref_id: reference id used for migration from legacy databases.
     file_path: file path or url to song resource
     art_path: file path or url to album artwork
+    static_path: a relative path used for database migrations
     artist: the name of artist for this song
     artist_key: A naturally sortable artist name
     composer: the composer for this piece
@@ -41,6 +42,7 @@ def SongDataTable(metadata):
         # text
         Column('file_path', String, default=""),
         Column('art_path', String, default=""),
+        Column('static_path', String, default=""),
         Column('artist', String),
         Column('artist_key', String),
         Column('composer', String, default=""),

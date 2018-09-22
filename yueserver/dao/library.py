@@ -22,6 +22,7 @@ class Song(object):
     data_id     = 'data_id'     # data id for per person fields
     path        = 'file_path'   # filepath on disk
     art_path    = 'art_path'    # filepath to album art
+    static_path = 'static_path' # relative path for database migrations
     artist      = 'artist'      # the full artist name
     artist_key  = 'artist_key'  # naturally sortable artist name
     composer    = 'composer'    # composer of the piece
@@ -61,6 +62,7 @@ class Song(object):
         "file_path": path,
         "artpath": art_path,
         "art_path": art_path,
+        "static_path": static_path,
         "art": artist,
         "artist": artist,
         "composer": composer,
@@ -216,6 +218,7 @@ class SongQueryFormatter(object):
         if sanitize:
             self.cols_song.remove("file_path")
             self.cols_song.remove("art_path")
+            self.cols_song.remove("static_path")
 
         self.cols_user = self._SongUserDataColumnNames()
         self.cols_user.remove("song_id")

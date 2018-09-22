@@ -22,7 +22,7 @@ import logging
 
 from stat import S_ISDIR, S_ISREG, S_IRGRP
 
-from .util import sh_escape, AbstractFileSystem
+from .util import sh_escape, AbstractFileSystem, FileRecord
 
 class LocalFileSystemImpl(AbstractFileSystem):
     """docstring for LocalFileSystemImpl"""
@@ -72,7 +72,7 @@ class LocalFileSystemImpl(AbstractFileSystem):
         is_dir = bool(S_ISDIR(st.st_mode))
 
         if is_dir or S_ISREG(st.st_mode):
-            return (name, is_dir, st.st_size, int(st.st_mtime))
+            return FileRecord(name, is_dir, st.st_size, int(st.st_mtime))
 
         return FileNotFoundError(path)
 
@@ -137,9 +137,9 @@ class MemoryFileSystemImpl(AbstractFileSystem):
                 name = fpath.replace(path, "")
                 if '/' in name:
                     name = name.split('/')[0]
-                    yield (name, True, 0, 0)
+                    yield FileRecord(name, True, 0, 0)
                 else:
-                    yield (name, False, len(f.getvalue()), mtime)
+                    yield FileRecord(name, False, len(f.getvalue()), mtime)
 
     def listdir(self, path):
         return [name for name, _, _, _ in self._scandir_impl(path)]
@@ -160,7 +160,7 @@ class MemoryFileSystemImpl(AbstractFileSystem):
         f, mtime = MemoryFileSystemImpl._mem_store[path]
         _, name = self.split(path)
 
-        return (name, False, len(f.getvalue()), mtime)
+        return FileRecord(name, False, len(f.getvalue()), mtime)
 
     def remove(self, path):
         if path not in MemoryFileSystemImpl._mem_store:

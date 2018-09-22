@@ -20,6 +20,8 @@ from .util import requires_auth, datetime_validator, search_order_validator, \
 
 from ..service.transcode_service import ImageScale
 
+from ..service.exception import AudioServiceException
+
 def song_validator(song):
 
     for field in [Song.artist, Song.album, Song.title]:
@@ -132,8 +134,11 @@ class LibraryResource(WebResource):
     @get("ref/<ref_id>")
     @requires_auth("library_read")
     def get_song_by_reference(self, ref_id):
-        song = self.audio_service.findSongByReferenceId(g.current_user, int(ref_id))
-        return jsonify(result=song)
+        try:
+            song = self.audio_service.findSongByReferenceId(g.current_user, int(ref_id))
+            return jsonify(result=song)
+        except AudioServiceException as e:
+            return httpError(404, "No Song for reference id %s" % (ref_id))
 
     @get("<song_id>")
     @requires_auth("library_read")
@@ -174,9 +179,9 @@ class LibraryResource(WebResource):
             logging.error("Audio for %s not found at: `%s`" % (song_id, path))
             return httpError(404, "Audio File not found")
 
-        _, name = self.audio_service.fs.split(path)
+        record = self.audio_service.fs.file_info(path)
         go = files_generator(self.audio_service.fs, path)
-        return send_generator(go, name, file_size=None)
+        return send_generator(go, record.name, file_size=record.size)
 
     @post("<song_id>/audio")
     @body(song_audio_path_validator)
@@ -210,9 +215,9 @@ class LibraryResource(WebResource):
             logging.error("Art for %s not found at: `%s`" % (song_id, path))
             return httpError(404, "Album art not found")
 
-        _, name = self.audio_service.fs.split(path)
+        record = self.audio_service.fs.file_info(path)
         go = files_generator(self.audio_service.fs, path)
-        return send_generator(go, name, file_size=None)
+        return send_generator(go, record.name, file_size=record.size)
 
     @post("<song_id>/art")
     @body(song_audio_path_validator)

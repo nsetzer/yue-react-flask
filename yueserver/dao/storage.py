@@ -341,4 +341,7 @@ class StorageDao(object):
         _count, _sum = result.fetchone()
         return _count, (_sum or 0)
 
-
+    def userDiskQuota(self, user_id, role_id):
+        # todo: set default quota based on role_id, allow for individual
+        #       users to exceed that quota, a value of zero is no limit
+        return 0

@@ -16,6 +16,7 @@ from flask import url_for, request, g, jsonify
 import json
 import gzip
 import argparse
+import logging
 
 import ssl
 
@@ -152,9 +153,8 @@ class FlaskApp(object):
 
         routes = self.list_routes()
         for endpoint, methods, url in routes:
-            sys.stdout.write("{:40s} {:20s} {}\n".format(
+            logging.info("{:40s} {:20s} {}".format(
                 endpoint, methods, url))
-        sys.stdout.flush()
 
         self.app.run(host=self.config.host,
                      port=self.config.port,

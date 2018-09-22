@@ -183,14 +183,13 @@ class SyncTestCase(unittest.TestCase):
         # --------------------------------------------------
         # create a sub directory to upload
         #
-        # TODO: this was disabled under the new API
-        #os.makedirs(self.local_path_dir1)
-        #dld, uld, dlf, ulf = _check(self.client, self.root,
-        #    self.remote_base, self.local_base)
-        #self.assertTrue(len(dld) > 0)
-        #self.assertTrue(len(uld) > 0)
-        #self.assertTrue("dir0" in uld)
-        #self.assertTrue("dir1" in dld)
+        os.makedirs(self.local_path_dir1)
+        dld, uld, dlf, ulf = _check(self.client, self.root,
+            self.remote_base, self.local_base)
+        self.assertTrue(len(dld) == 0)
+        self.assertTrue(len(uld) > 0)
+        self.assertTrue("dir0" in uld)
+        self.assertTrue("dir1" in uld)
 
     def test_002a_push(self):
 

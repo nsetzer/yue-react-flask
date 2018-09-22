@@ -79,7 +79,6 @@ def db_connect(connection_string=None, readonly=False):
         if path and not os.access(path, os.W_OK):
             logging.warning("database at %s not writable" % connection_string)
 
-
     return db
 
 def db_populate(db, dbtables, user_name, domain_name, json_objects):
@@ -224,11 +223,12 @@ def db_drop_all(db, dbtables):
 
 def db_drop_songs(db, dbtables):
 
-    self.SongPlaylistTable.drop(db.engine, checkfirst=True)
-    self.SongHistoryTable.drop(db.engine, checkfirst=True)
-    self.SongQueueTable.drop(db.engine, checkfirst=True)
-    self.SongUserDataTable.drop(db.engine, checkfirst=True)
-    self.SongDataTable.drop(db.engine, checkfirst=True)
+    # don't actually drop the tables, delete the contents
+    db.delete(self.SongPlaylistTable)
+    db.delete(self.SongHistoryTable)
+    db.delete(self.SongQueueTable)
+    db.delete(self.SongUserDataTable)
+    db.delete(self.SongDataTable)
 
 def _db_create_role_features(userDao, role_name, role_id, child):
     n_changes = 0

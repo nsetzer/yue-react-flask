@@ -101,8 +101,12 @@ class FilesResource(WebResource):
                 go = files_generator(self.filesys_service.fs, abs_path)
                 return send_generator(go, name, file_size=None)
 
-        result = self.filesys_service.listDirectory(g.current_user, root, path)
-        return jsonify(result=result)
+        try:
+            result = self.filesys_service.listDirectory(g.current_user, root, path)
+            return jsonify(result=result)
+        except StorageNotFoundException as e:
+            return httpError(404, "not found: root: `%s` path: `%s`" % (
+                root, path))
 
 
 

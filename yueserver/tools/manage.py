@@ -22,6 +22,7 @@ from ..dao.util import hash_password
 from ..dao.db import db_remove, db_connect, db_init, \
     db_update, db_repopulate, db_drop_all, db_drop_songs
 from ..dao.user import UserDao
+from ..dao.storage import StorageDao
 from ..app import YueApp, generate_client
 from ..config import Config
 from ..resource.util import get_features
@@ -67,7 +68,6 @@ def drop_songs(args):
     db_drop_all(db, db.tables)
 
     sys.stderr.write("sucess\n")
-
 
 def create(args):
     """Creates the db tables."""
@@ -179,7 +179,7 @@ def _read_json(path):
         return json.load(open(path))
     return None
 
-def import_(args):
+def import_songs(args):
 
     do_init = False
     if args.database_url.startswith("sqlite:///"):
@@ -222,6 +222,31 @@ def test_(args):
 
     #print(response.text)
 
+def get_user(args):
+
+    db = db_connect(args.database_url)
+    storageDao = StorageDao(db, db.tables)
+    userDao = UserDao(db, db.tables)
+    user = userDao.findUserByEmail(args.username)
+
+    domain = userDao.findDomainById(user['domain_id'])
+    role = userDao.findRoleById(user['role_id'])
+
+    user = dict(user)
+    user['role'] = role['name']
+    user['domain'] = domain['name']
+    user['password'] = user['password'].decode("utf-8")
+
+    file_count, total_bytes = storageDao.userDiskUsage(user['id'])
+    quota_bytes = storageDao.userDiskQuota(user['id'], user['role_id'])
+
+    for key, value in sorted(user.items()):
+        print("%-10s : %s" % (key, value))
+
+    print("%-10s : %s" % ("#files", file_count))
+    print("%-10s : %.3f MB" % ("#bytes", total_bytes / 1024 / 1024))
+    print("%-10s : %.3f MB" % ("#quota", quota_bytes / 1024 / 1024))
+
 def main():
 
     parser = argparse.ArgumentParser(description='database utility')
@@ -238,7 +263,7 @@ def main():
                         help='default profile to use')
 
     parser.add_argument('--db', dest='database_url',
-                        default="sqlite:///database.sqlite",
+                        default=None,
                         help='the database connection string (sqlite:///database.sqlite)')
 
     subparsers = parser.add_subparsers()
@@ -258,7 +283,7 @@ def main():
 
     parser_import = subparsers.add_parser('import',
         help="import json files containing song records")
-    parser_import.set_defaults(func=import_)
+    parser_import.set_defaults(func=import_songs)
 
     parser_import.add_argument('--username', dest='username',
                                default="admin",
@@ -381,9 +406,21 @@ def main():
         help='text string to encrypt')
 
     ###########################################################################
+    # GET_USER - get information about a user
+
+    parser_get_user = subparsers.add_parser('get_user',
+        help='get information about a user')
+
+    parser_get_user.set_defaults(func=get_user)
+
+    parser_get_user.add_argument('username', type=str,
+        help='the user to list')
+
+    ###########################################################################
     # CREATE_USER - create a user
 
-    parser_create_user = subparsers.add_parser('create_user', help='create a user')
+    parser_create_user = subparsers.add_parser('create_user',
+        help='create a user')
     parser_create_user.set_defaults(func=create_user)
 
     parser_create_user.add_argument('username', type=str,
@@ -430,12 +467,22 @@ def main():
 
     args = parser.parse_args()
 
+    logging.warning("profile: %s" % args.profile)
+
     args.env_cfg_path = os.path.join(args.config, args.profile, "env.yml")
     args.app_cfg_path = os.path.join(args.config, args.profile, "application.yml")
+
+    if args.database_url is None:
+        cfg = Config(args.app_cfg_path)
+        args.database_url = cfg.database.url
+        logging.warning("database url not given. using profile default: %s" %
+            cfg.database.dbhost)
 
     if not os.path.exists(args.env_cfg_path):
         sys.stderr.write("cannot find env cfg: %s" % args.env_cfg_path)
         sys.exit(1)
+
+    logging.warning("executing task: %s" % args.func.__name__)
 
     if not hasattr(args, 'func'):
         parser.print_help()
