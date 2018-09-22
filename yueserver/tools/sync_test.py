@@ -170,13 +170,13 @@ class SyncTestCase(unittest.TestCase):
         # fs.set_mtime(self.remote_path_file0, 1234567890 + 20)
         self.storageDao.update(self.USER['id'], self.remote_path_file0, 3, 1234567890 + 20)
 
-        _, _, size_l, _ = fs.file_info(self.local_path_file0)
-        _, _, size_r, _ = fs.file_info(self.remote_path_file0)
+        recl = fs.file_info(self.local_path_file0)
+        recr = fs.file_info(self.remote_path_file0)
 
         dld, uld, dlf, ulf = _check(self.client, self.root,
             self.remote_base, self.local_base)
 
-        self.assertEqual(size_l, size_r)
+        self.assertEqual(recl.size, recr.size)
         self.assertTrue('file0' not in [n for n, _, _ in ulf])
         self.assertTrue('file0' not in [n for n, _, _ in dlf])
 

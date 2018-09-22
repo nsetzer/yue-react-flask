@@ -40,8 +40,8 @@ class FilesResourceTestCase(unittest.TestCase):
             with self.fs.open(pathB, "wb") as wb:
                 transcoder.transcode(rb, wb, **opts)
 
-        _, _, size, mtime = self.fs.file_info(pathB)
-        self.assertTrue(size > 0)
+        rec = self.fs.file_info(pathB)
+        self.assertTrue(rec.size > 0)
 
         # local to mem
         pathA = "test/r160.mp3"
@@ -50,8 +50,8 @@ class FilesResourceTestCase(unittest.TestCase):
             with self.fs.open(pathB, "wb") as wb:
                 transcoder.transcode(rb, wb, **opts)
 
-        _, _, size, mtime = self.fs.file_info(pathB)
-        self.assertTrue(size > 0)
+        rec = self.fs.file_info(pathB)
+        self.assertTrue(rec.size > 0)
 
         # mem to local
         pathA = "mem://test/r160_out.mp3"
@@ -60,8 +60,8 @@ class FilesResourceTestCase(unittest.TestCase):
             with self.fs.open(pathB, "wb") as wb:
                 transcoder.transcode(rb, wb, **opts)
 
-        _, _, size, mtime = self.fs.file_info(pathB)
-        self.assertTrue(size > 0)
+        rec = self.fs.file_info(pathB)
+        self.assertTrue(rec.size > 0)
 
 if __name__ == '__main__':
     main_test(sys.argv, globals())

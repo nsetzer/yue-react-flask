@@ -17,10 +17,10 @@ class ShuffleTestCase(unittest.TestCase):
         random.seed(4)
         out = binshuffle(seq)
 
-        # shuffle guarantees that no similar
-        # element will be neighbors
+        equal = True
         for i in range(1, len(out)):
-            self.assertNotEqual(out[i], out[i - 1])
+            equal = equal and out[i] == seq[i]
+        self.assertFalse(equal)
 
     def test_degenerate_1(self):
 

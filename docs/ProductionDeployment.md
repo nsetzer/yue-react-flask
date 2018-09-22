@@ -182,7 +182,7 @@ postgres=# SHOW config_file;
 
 ```bash
 max_connections = 10
-shared_buffers = 150MB
+shared_buffers = 128MB
 effective_cache_size = 450MB
 maintenance_work_mem = 38400kB
 checkpoint_completion_target = 0.7
@@ -194,6 +194,17 @@ work_mem = 15MB
 min_wal_size = 1GB
 max_wal_size = 2GB
 ```
+
+restart postgres for changes to take effect
+
+#### Browse PostgresSQL Schema
+
+* \c <dbname> : connect to database
+* \dt : list tables
+
+> Note: 'user' is a special word in PostgreSQL, and also a default table
+> in the application. the string must be double quoted in a command
+> `select * from "user";`
 
 ### Initialize the database
 
