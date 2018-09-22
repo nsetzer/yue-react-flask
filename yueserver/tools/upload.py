@@ -1,5 +1,5 @@
-#! cd ../.. && python -m server.tools.upload --host http://localhost:4200 --bucket "s3://yueapp/upload-test/" --username admin --password admin beast.json test
-#! cd ../.. && python -m server.tools.upload --host http://104.248.122.206:80 --username admin --password admin clutch.json temp
+#! cd ../.. && python -m yueserver.tools.upload --host http://localhost:4200 --username admin --password admin mark.json default
+#! cd ../.. && python -m yueserver.tools.upload --host http://104.248.122.206:80 --username admin --password admin clutch.json temp
 
 """
 Upload songs to a remote server and update the database
@@ -40,8 +40,6 @@ except ImportError:
     boto3 = None
     botocore = None
 
-
-
 class S3Upload(object):
     """docstring for S3Upload"""
     def __init__(self, bucket):
@@ -63,7 +61,6 @@ class S3Upload(object):
                 wf.write(buf)
 
         sys.exit(1)
-
 
 class JsonUploader(object):
     """upload songs and art to a remote server

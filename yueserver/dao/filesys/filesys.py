@@ -119,7 +119,7 @@ class MemoryFileSystemImpl(AbstractFileSystem):
             return f
         else:
             if path not in MemoryFileSystemImpl._mem_store:
-                raise FileNotFoundError(path)
+                raise FileNotFoundError("(%s) %s" % (mode, path))
             t = io.BytesIO if 'b' in mode else io.StringIO
             f, mtime = MemoryFileSystemImpl._mem_store[path]
             if not isinstance(f, t):

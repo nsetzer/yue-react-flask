@@ -242,7 +242,6 @@ def send_generator(go, attachment_name, file_size=None):
     mimetype = mimetypes.guess_type(attachment_name)[0] or \
         'application/octet-stream'
 
-    logging.error("response: %s %s %s" % (attachment_name, file_size, mimetype))
     response = Response(go, mimetype=mimetype)
 
     if file_size is not None:

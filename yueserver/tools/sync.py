@@ -89,6 +89,7 @@ def _check(client, root, remote_base, local_base, match_size=False):
                 else:
                     # print("no remote match: %s" % entry.name)
                     ulf.append((entry.name, local_mtime, local_size))
+
             elif entry.is_dir():
 
                 if entry.name in directories:
@@ -178,10 +179,10 @@ def _delete_remote(client, root, remote_base, files, dryrun):
         remote_path = posixpath.join(remote_base, name)
         response = client.files_delete(root, remote_path)
         if response.status_code == 404:
-            logging.error("not found: %s/api/fs/%s/%s/%s" % (
+            logging.error("[delete] not found: %s/api/fs/%s/%s/%s" % (
                 client.host(), root, remote_base, name))
         elif response.status_code != 200:
-            logging.error("unable to delete: %s/api/fs/%s/%s/%s" % (
+            logging.error("[delete] unable to delete: %s/api/fs/%s/%s/%s" % (
                 client.host(), root, remote_base, name))
 
 class SyncManager(object):
@@ -222,12 +223,12 @@ class SyncManager(object):
         for name in dld:
             a = posixpath.join(remote_base, name)
             b = os.path.join(local_base, name)
-            self.dld.append((a,b))
+            self.dld.append((a, b))
 
         for name in uld:
             a = posixpath.join(remote_base, name)
             b = os.path.join(local_base, name)
-            self.uld.append((a,b))
+            self.uld.append((a, b))
 
         # update
         self.dlf = dlf

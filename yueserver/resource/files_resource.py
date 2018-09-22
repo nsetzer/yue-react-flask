@@ -9,6 +9,8 @@ from flask import jsonify, render_template, g, request, send_file
 
 from ..dao.library import Song
 from ..dao.util import parse_iso_format, pathCorrectCase
+from ..dao.storage import StorageNotFoundException
+from ..dao.filesys.filesys import MemoryFileSystemImpl
 
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, body, compressed, param, httpError, \
@@ -82,7 +84,14 @@ class FilesResource(WebResource):
         #    logging.error("not found: %s" % path)
         #    return httpError(404, "path does not exist")
 
-        if self.filesys_service.fs.isfile(abs_path):
+        isFile = False
+        try:
+            info = self.filesys_service.storageDao.file_info(g.current_user['id'], abs_path)
+            isFile = not info.isDir
+        except StorageNotFoundException as e:
+            pass
+
+        if isFile:
 
             if list_:
                 result = self.filesys_service.listSingleFile(g.current_user, root, path)

@@ -25,7 +25,7 @@ class StorageException(BackendException):
     pass
 
 class StorageNotFoundException(StorageException):
-    pass
+    HTTP_STATUS = 404
 
 class StorageDao(object):
     """
@@ -74,11 +74,12 @@ class StorageDao(object):
         return path
 
     def splitScheme(self, path):
-
-        idx = path.index("://")
-        scheme = path[:idx]
-        path = path[idx + 3:]
-
+        scheme = "file://localhost/"
+        i = path.find("://")
+        if "://" in path:
+            i += len("://")
+            scheme = path[:i]
+            path = path[i:]
         return scheme, path
 
     # FileSystem Operations
@@ -97,7 +98,7 @@ class StorageDao(object):
 
         record = {
             'user_id': user_id,
-            'version': 0,
+            'version': 1,
             'path': path,
             'mtime': mtime,
             'size': size,
@@ -188,6 +189,12 @@ class StorageDao(object):
         else:
             return FileRecord(item_path, False, item['size'], item['mtime'])
 
+    def list(self):
+        FsTab = self.dbtables.FileSystemStorageTable
+        query = select(['*']).select_from(FsTab)
+
+        return self.db.session.execute(query).fetchall()
+
     def listdir(self, user_id, path_prefix, delimiter='/'):
         # search for persistent objects with prefix, that also do not contain
         # the delimiter
@@ -195,7 +202,7 @@ class StorageDao(object):
         FsTab = self.dbtables.FileSystemStorageTable
 
         if not path_prefix.endswith(delimiter):
-            raise StorageException("invalid directory path")
+            raise StorageException("invalid directory path. must end with `%s`" % delimiter)
 
         where = FsTab.c.path.startswith(bindparam('path', path_prefix))
         where = and_(FsTab.c.user_id == user_id, where)
@@ -205,16 +212,23 @@ class StorageDao(object):
             .where(where)
 
         dirs = set()
+        count = 0
         for item in self.db.session.execute(query).fetchall():
-
             rec = self._item2record(item, path_prefix, delimiter)
 
             if rec.isDir:
                 if rec.name not in dirs:
                     dirs.add(rec.name)
                     yield rec
+                    count += 1
             else:
                 yield rec
+                count += 1
+
+        # TODO: this disallows empty directories, which seems
+        # to be required in order to support s3, mem
+        if count == 0:
+            raise StorageNotFoundException("[listdir] not found: %s" % path_prefix)
 
     def file_info(self, user_id, path_prefix, delimiter='/'):
         FsTab = self.dbtables.FileSystemStorageTable
@@ -240,7 +254,7 @@ class StorageDao(object):
         item = result.fetchone()
 
         if item is None:
-            raise StorageNotFoundException(path_prefix)
+            raise StorageNotFoundException("[file_info] not found: %s" % path_prefix)
         elif exact:
             # an exact match for a file record
             name = path_prefix.split(delimiter)[-1]

@@ -10,6 +10,7 @@ from uuid import UUID
 
 from ..dao.util import parse_iso_format
 from ..dao.library import Song
+from ..dao.exception import BackendException
 
 from ..service.exception import ServiceException
 
@@ -37,9 +38,21 @@ def _handle_exceptions(f, args, kwargs):
 
         return httpError(404, reason + str(e))
 
+    except BackendException as e:
+
+        reason = "Unhandled Backend Exception: "
+        if hasattr(g, 'current_user') and g.current_user is not None:
+            reason = "Unhandled Exception (current user: %s): " % \
+                g.current_user['email']
+
+        if e.HTTP_STATUS == 500:
+            logging.exception(reason)
+
+        return httpError(e.HTTP_STATUS, reason + str(e))
+
     except ServiceException as e:
 
-        reason = "Unhandled Exception: "
+        reason = "Unhandled Service Exception: "
         if hasattr(g, 'current_user') and g.current_user is not None:
             reason = "Unhandled Exception (current user: %s): " % \
                 g.current_user['email']

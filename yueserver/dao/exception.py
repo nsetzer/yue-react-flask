@@ -1,3 +1,3 @@
 
 class BackendException(Exception):
-    pass
+    HTTP_STATUS = 500

@@ -12,12 +12,11 @@ import os, sys
 
 from .exception import FileSysServiceException
 from ..dao.filesys.filesys import FileSystem
-from ..dao.storage import StorageDao
+from ..dao.storage import StorageDao, StorageNotFoundException
 from ..dao.user import UserDao
 
 import logging
-
-from unicodedata import normalize
+import time
 
 def trim_path(p, root):
     # todo, this seems problematic, and I think I have several
@@ -81,15 +80,18 @@ class FileSysService(object):
         else:
             parent, _ = self.fs.split(abs_path)
 
-        name, is_dir, size, mtime = self.fs.file_info(abs_path)
+        record = self.storageDao.file_info(user['id'], abs_path)
 
         files = []
         dirs = []
 
-        if is_dir:
-            dirs.append(name)
+        if record.isDir:
+            dirs.append(record.name)
         else:
-            files.append({"name": name, "size": size, "mtime": mtime})
+            files.append({"name": record.name,
+                          "size": record.size,
+                          "mtime": record.mtime,
+                          "version": record.version})
 
         os_root_normalized = os_root.replace("\\", "/")
 
@@ -128,13 +130,16 @@ class FileSysService(object):
         files = []
         dirs = []
 
-        for name, is_dir, size, mtime in self.fs.scandir(abs_path):
-            pathname = self.fs.join(abs_path, name)
+        for record in self.storageDao.listdir(user['id'], abs_path + "/"):
+            #pathname = self.fs.join(abs_path, record.name)
 
-            if is_dir:
-                dirs.append(name)
+            if record.isDir:
+                dirs.append(record.name)
             else:
-                files.append({"name": name, "size": size, "mtime": mtime})
+                files.append({"name": record.name,
+                              "size": record.size,
+                              "mtime": record.mtime,
+                              "version": record.version})
 
         files.sort(key=lambda f: f['name'])
         dirs.sort()
@@ -163,25 +168,35 @@ class FileSysService(object):
 
         path = self.getPath(user, fs_name, path)
 
-        logging.info("saving: %s" % path)
         dirpath, _ = self.fs.split(path)
         self.fs.makedirs(dirpath)
 
+        size = 0
         with self.fs.open(path, "wb") as wb:
-            buf = stream.read(2048)
-            while buf:
+            for buf in iter(lambda: stream.read(2048), b""):
                 wb.write(buf)
-                buf = stream.read(2048)
+                size += len(buf)
 
-        if mtime is not None:
+        if mtime is None:
+            mtime = int(time.time())
+        else:
             self.fs.set_mtime(path, mtime)
+
+        try:
+            self.storageDao.file_info(user['id'], path)
+            self.storageDao.update(user['id'], path, size, mtime)
+        except StorageNotFoundException as e:
+            self.storageDao.insert(user['id'], path, size, mtime)
 
     def remove(self, user, fs_name, path):
 
         path = self.getPath(user, fs_name, path)
 
         try:
-            return self.fs.remove(path)
+            # TODO: either both succeed or neither...
+            self.storageDao.remove(user['id'], path)
+            result = self.fs.remove(path)
+            return result
         except FileNotFoundError as e:
             raise e
         except Exception as e:

@@ -14,12 +14,22 @@ class FilesResourceTestCase(unittest.TestCase):
     def setUpClass(cls):
         cls.app = TestApp(cls.__name__)
 
+        cls.storageDao = cls.app.filesys_service.storageDao
+        cls.userDao = cls.app.filesys_service.userDao
+
+        cls.USERNAME = "admin"
+        cls.USER = cls.userDao.findUserByEmail(cls.USERNAME)
+
+        cls.db = cls.app.db
+
     @classmethod
     def tearDownClass(cls):
         cls.app.tearDown()
 
     def setUp(self):
         super().setUp()
+
+        self.db.delete(self.db.tables.FileSystemStorageTable)
 
     def tearDown(self):
         super().tearDown()
@@ -32,6 +42,12 @@ class FilesResourceTestCase(unittest.TestCase):
             self.assertTrue("default" in data, data)
 
     def test_list_default(self):
+
+        path1 = os.path.join(os.getcwd(), "yueserver/app.py")
+        self.storageDao.insert(self.USER['id'], path1, 0, 0)
+
+        path2 = os.path.join(os.getcwd(), "yueserver/framework/config.py")
+        self.storageDao.insert(self.USER['id'], path2, 0, 0)
 
         username = "admin"
         with self.app.login(username, username) as app:
@@ -59,6 +75,9 @@ class FilesResourceTestCase(unittest.TestCase):
             self.assertTrue("config.py" in files)
 
     def test_download_file(self):
+
+        path1 = os.path.join(os.getcwd(), "yueserver/framework/config.py")
+        self.storageDao.insert(self.USER['id'], path1, 0, 0)
 
         username = "admin"
         with self.app.login(username, username) as app:

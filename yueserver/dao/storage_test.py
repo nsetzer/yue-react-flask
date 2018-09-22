@@ -51,7 +51,6 @@ class StorageTestCase(unittest.TestCase):
 
     def setUp(self):
 
-        # todo: delete all records before each test
         self.db.delete(self.db.tables.FileSystemStorageTable)
         self.db.delete(self.db.tables.FileSystemTable)
         self.db.delete(self.db.tables.FileSystemPermissionTable)

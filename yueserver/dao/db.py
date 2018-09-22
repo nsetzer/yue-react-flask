@@ -476,9 +476,13 @@ def main_test(argv, module_items):
 
     parser = argparse.ArgumentParser(description='simple test runner')
 
+    parser.add_argument('-v', '--verbose', action="store_true",
+        help="verbose")
+
     parser.add_argument('--db', default=":memory:",
         help="database connection string (:memory:)")
 
+    logging.basicConfig(level=logging.DEBUG)
     args = parser.parse_args(argv[1:])
 
     suite = unittest.TestSuite()
@@ -490,4 +494,5 @@ def main_test(argv, module_items):
         if name.endswith("TestCase"):
             suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(item))
 
-    unittest.TextTestRunner().run(suite)
+    v = 2 if args.verbose else 1
+    unittest.TextTestRunner(verbosity=v).run(suite)
