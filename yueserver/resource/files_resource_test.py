@@ -130,5 +130,55 @@ class FilesResourceTestCase(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertFalse(fs.exists("mem://test/test"))
 
+    def test_get_index(self):
+        username = "admin"
+        with self.app.login(username, username) as app:
+            dat0 = b"abc123"
+            paths = []
+            names = []
+            for i in range(5):
+                name = 'upload-%d.txt' % i
+                names.append(name)
+                path = 'test/%s' % name
+                paths.append(path)
+                url = '/api/fs/mem/path/' + path
+                response = app.post(url, data=dat0)
+                self.assertEqual(response.status_code, 200)
+
+            # show that all files can be listed from the root directory
+            url = '/api/fs/mem/index/'
+            params = {'limit': 50, 'page': 0}
+            response = app.get(url, query_string=params)
+            self.assertEqual(response.status_code, 200)
+            files = response.json()['result']
+            self.assertEqual(len(paths), len(files))
+            for obj in files:
+                self.assertTrue(obj['path'] in paths)
+
+            # show that listing a folder only lists the contents
+            # relative to the requested folder
+
+            url = '/api/fs/mem/index/test'
+            params = {'limit': 50, 'page': 0}
+            response = app.get(url, query_string=params)
+            self.assertEqual(response.status_code, 200)
+            files = response.json()['result']
+            self.assertEqual(len(names), len(files))
+            for obj in files:
+                self.assertTrue(obj['path'] in names)
+
+            # show that paging works
+            url = '/api/fs/mem/index/test'
+            for i in range(len(names)):
+                name = 'upload-%d.txt' % i
+                params = {'limit': 1, 'page': i}
+                response = app.get(url, query_string=params)
+                self.assertEqual(response.status_code, 200)
+                path = response.json()['result'][0]['path']
+
+                self.assertEqual(path, name, path)
+
+
+
 if __name__ == '__main__':
     main_test(sys.argv, globals())

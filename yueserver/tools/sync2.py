@@ -5,6 +5,7 @@ import argparse
 import posixpath
 import logging
 import json
+import datetime, time
 
 import yueserver
 from yueserver.tools.upload import S3Upload
@@ -19,17 +20,35 @@ from sqlalchemy.orm.session import sessionmaker
 from sqlalchemy.orm import scoped_session
 from sqlalchemy.schema import Table, Column
 from sqlalchemy.types import Integer, String
+from sqlalchemy import and_, or_, not_, select, column, \
+    update, insert, delete, asc, desc
+from sqlalchemy.sql.expression import bindparam
 
 def LocalStorageTable(metadata):
+    """
+    local_*: the value at the time of the last push pull
+             if this differs from reality, the file was changed locally
+    remote_*: the value on the remote server
+
+    by comparing the local, remote, and real values it can be determined
+    whether a file should be pushed or pulled. if the local version
+    is zero, the file has never been pushed
+    """
     return Table('filesystem_storage', metadata,
         # text
-        Column('relpath', String, unique=True, nullable=False),
+        Column('rel_path', String, primary_key=True, nullable=False),
+
         # number
         Column('local_version', Integer, default=0),
         Column('remote_version', Integer, default=0),
-        Column('size', Integer, default=0),
+        Column('local_size', Integer, default=0),
+        Column('remote_size', Integer, default=0),
+        Column('local_permission', Integer, default=0),
+        Column('remote_permission', Integer, default=0),
+
         # date
-        Column('mtime', Integer, default=lambda: int(time.time()))
+        Column('local_mtime', Integer, default=0),
+        Column('remote_mtime', Integer, default=0)
     )
 
 class DatabaseTables(object):
@@ -61,6 +80,88 @@ def db_connect(connection_string):
         logging.warning("database at %s not writable" % connection_string)
 
     return db
+
+class LocalStoragDao(object):
+    def __init__(self, db, dbtables):
+        super(LocalStoragDao, self).__init__()
+        self.db = db
+        self.dbtables = dbtables
+
+    def insert(self, rel_path, record, commit=True):
+
+        record['rel_path'] = rel_path
+
+        query = self.dbtables.LocalStorageTable.insert() \
+            .values(record)
+
+        self.db.session.execute(query)
+
+        if commit:
+            self.db.session.commit()
+
+    def update(self, rel_path, record, commit=True):
+
+        query = update(self.dbtables.LocalStorageTable) \
+            .values(record) \
+            .where(self.dbtables.LocalStorageTable.c.rel_path == rel_path)
+
+        self.db.session.execute(query)
+
+        if commit:
+            self.db.session.commit()
+
+    def upsert(self, rel_path, record, commit=True):
+
+        where = self.dbtables.LocalStorageTable.c.rel_path == rel_path
+        query = select(['*']) \
+            .select_from(self.dbtables.LocalStorageTable) \
+            .where(where)
+        result = self.db.session.execute(query)
+        item = result.fetchone()
+
+        if item is None:
+            self.insert(rel_path, record, commit)
+        else:
+            self.update(rel_path, record, commit)
+
+    def listdir(self, path_prefix="", limit=None, offset=None, delimiter='/'):
+
+        FsTab = self.dbtables.LocalStorageTable
+
+        if not path_prefix:
+
+            query = select(['*']).select_from(FsTab)
+        else:
+            if not path_prefix.endswith(delimiter):
+                path_prefix += delimiter
+
+            where = FsTab.c.rel_path.startswith(bindparam('path', path_prefix))
+
+            query = select(['*']) \
+                .select_from(FsTab) \
+                .where(where)
+
+        if limit is not None:
+            query = query.limit(limit)
+
+        if offset is not None:
+            query = query.offset(offset).order_by(asc(FsTab.c.rel_path))
+
+        dirs = set()
+        files = []
+
+        for item in self.db.session.execute(query).fetchall():
+            item = dict(item)
+            path = item['rel_path'][len(path_prefix):]
+
+            if delimiter in path:
+                name, _ = path.split(delimiter, 1)
+                dirs.add(name)
+            else:
+                item['rel_path'] = path
+                files.append(item)
+
+        return dirs, files
 
 def get_cfg(directory):
 
@@ -116,6 +217,7 @@ def get_mgr(directory, dryrun=False):
 
 def cli_init(args):
 
+    #TODO: pwd should be empty
     cfgdir = os.path.join(args.local_base, ".yue")
     dbpath = os.path.abspath(os.path.join(cfgdir, "database.sqlite"))
     userpath = os.path.abspath(os.path.join(cfgdir, "userdata.json"))
@@ -144,6 +246,7 @@ def cli_init(args):
         "hostname": args.hostname,
         "root": args.root,
         "remote_base": args.remote_base,
+        "dburl": dburl,
     }
 
     with open(userpath, "w") as wf:
@@ -152,12 +255,40 @@ def cli_init(args):
 def cli_fetch(args):
 
     userdata = get_cfg(os.getcwd())
-    print(userdata)
+
+    db = db_connect(userdata['dburl'])
 
     client = connect(userdata['hostname'],
         userdata['username'], userdata['password'])
 
-    pass
+    storageDao = LocalStoragDao(db, db.tables)
+
+    page = 0
+    limit = 500
+    while True:
+        params = {'limit': limit, 'page': page}
+        response = client.files_get_index(
+            userdata['root'], userdata['default_remote_base'], **params)
+        if response.status_code != 200:
+            sys.stderr.write("fetch error...")
+            return
+
+        files = response.json()['result']
+        for f in files:
+            record = {
+                "remote_size": f['size'],
+                "remote_mtime": f['mtime'],
+                "remote_permission": f['permission'],
+                "remote_version": f['version']
+            }
+            storageDao.upsert(f['path'], record, commit=False)
+            print(f['path'])
+
+        page += 1
+        if len(files) != limit:
+            break
+
+    db.session.commit()
 
 def cli_status(args):
 

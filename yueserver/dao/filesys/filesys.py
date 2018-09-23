@@ -64,6 +64,10 @@ class LocalFileSystemImpl(AbstractFileSystem):
     def file_info(self, path):
         st = os.stat(path)
 
+        size = st.st_size
+        permission = st.st_mode & 0o777
+        mtime = int(st.st_mtime)
+
         _, name = self.split(path)
 
         if not (st.st_mode & S_IRGRP):
@@ -72,7 +76,7 @@ class LocalFileSystemImpl(AbstractFileSystem):
         is_dir = bool(S_ISDIR(st.st_mode))
 
         if is_dir or S_ISREG(st.st_mode):
-            return FileRecord(name, is_dir, st.st_size, int(st.st_mtime))
+            return FileRecord(name, is_dir, size, mtime, 0, permission)
 
         return FileNotFoundError(path)
 

@@ -132,9 +132,9 @@ class AudioService(object):
             orderby, limit, offset)
 
         if shuffle:
-            result = binshuffle(result, lambda s : s['artist'])[:limit_save]
+            result = binshuffle(result, lambda s: s['artist'])[:limit_save]
 
-        return result;
+        return result
 
     def updateSongs(self, user, songs):
         """

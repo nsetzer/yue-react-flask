@@ -302,6 +302,9 @@ def _request_builder(endpoint, *args, **kwargs):
         if 'Content-Type' not in options['headers']:
             options['headers']['Content-Type'] = _mimetype
 
+    # TODO: this is a bug waiting to happen
+    #       keep this for now, but also accept
+    #       a kwarg 'params' which accepts a dictionary to do the same
     param_names = {p.name for p in endpoint.params}
     for key in kwargs.keys():
         if key not in param_names:

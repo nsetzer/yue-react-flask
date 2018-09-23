@@ -149,15 +149,16 @@ def _push(client, root, remote_base, local_base, ulf, dryrun):
     already exist.
     """
     for name, mtime, size in ulf:
-        logging.info("push: %s/%s => %s/api/fs/%s/%s/%s" % (local_base,name,
+        logging.info("push: %s/%s => %s/api/fs/%s/%s/%s" % (local_base, name,
             client.host(), root, remote_base, name))
         if dryrun:
             continue
         local_path = os.path.join(local_base, name)
         remote_path = posixpath.join(remote_base, name)
+        perm = os.stat(local_path).st_mode & 0o777
         with open(local_path, "rb") as rb:
             response = client.files_upload(root, remote_path, rb,
-                mtime=mtime)
+                mtime=mtime, permission=perm)
 
 def _delete_local(local_base, files, dryrun):
     for name, mtime, size in files:

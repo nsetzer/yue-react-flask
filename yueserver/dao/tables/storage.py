@@ -21,8 +21,9 @@ def FileSystemStorageTable(metadata):
     return Table('filesystem_storage', metadata,
         Column('user_id', ForeignKey("user.id"), nullable=False),
         # text
-        Column('path', String, unique=True, nullable=False),
+        Column('path', String, primary_key=True, nullable=False),
         # number
+        Column('permission', Integer, default=0),
         Column('version', Integer, default=0),
         Column('size', Integer, default=0),
         # date

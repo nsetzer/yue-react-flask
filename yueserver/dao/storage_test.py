@@ -120,6 +120,54 @@ class StorageTestCase(unittest.TestCase):
             count += 1
         self.assertEqual(len(names), count)
 
+    def test_000b_listall(self):
+        """
+        add two files to different directories and show
+        that listing a directory returns the correct names
+        """
+
+        user_id = self.USER['id']
+
+        self.storageDao.insert(user_id, "file:///file1.txt", 1234, 0)
+        self.storageDao.insert(user_id, "file:///file2.txt", 1234, 0)
+        self.storageDao.insert(user_id, "file:///folder/file3.txt", 1234, 0)
+
+        names = ["file1.txt", "file2.txt", "folder/file3.txt"]
+        count = 0
+        for rec in self.storageDao.listall(user_id, "file:///"):
+            self.assertTrue(rec['path'] in names, rec['path'])
+            count += 1
+        self.assertEqual(len(names), count)
+
+        names = ["file3.txt"]
+        count = 0
+        for rec in self.storageDao.listall(user_id, "file:///folder/"):
+            self.assertTrue(rec['path'] in names, rec['path'])
+            count += 1
+        self.assertEqual(len(names), count)
+
+    def test_000c_listall_limit(self):
+        """
+        add two files to different directories and show
+        that listing a directory returns the correct names
+        """
+
+        user_id = self.USER['id']
+
+        self.storageDao.insert(user_id, "file:///file1.txt", 1234, 0)
+        self.storageDao.insert(user_id, "file:///file2.txt", 1234, 0)
+        self.storageDao.insert(user_id, "file:///folder/file3.txt", 1234, 0)
+
+        # get the files in pages of size 1, sorted by primary key
+        names = ["file1.txt", "file2.txt", "folder/file3.txt"]
+        count = 0
+        for offset in range(len(names)):
+            for rec in self.storageDao.listall(user_id,
+              "file:///", limit=1, offset=offset):
+                self.assertEqual(rec['path'], names[offset], rec['path'])
+                count += 1
+        self.assertEqual(len(names), count)
+
     def test_002a_insert_remove(self):
         """
         check that a user can insert and remove records
@@ -160,6 +208,29 @@ class StorageTestCase(unittest.TestCase):
         record2 = self.storageDao.file_info(user_id, path)
 
         self.assertEqual(record1.version + 1, record2.version)
+
+    def test_002b_upsert(self):
+
+        user_id = self.USER['id']
+        name = 'file_update.txt'
+        path = "file:///" + name
+
+        with self.assertRaises(StorageNotFoundException):
+            self.storageDao.file_info(user_id, path)
+
+        self.storageDao.upsert(user_id, path, 1234, 1234567890)
+        record1 = self.storageDao.file_info(user_id, path)
+
+        self.storageDao.upsert(user_id, path, 2048, 1234567899)
+        record2 = self.storageDao.file_info(user_id, path)
+
+        self.assertEqual(record1.size, 1234)
+        self.assertEqual(record1.mtime, 1234567890)
+
+        self.assertEqual(record1.version + 1, record2.version)
+
+        self.assertEqual(record2.size, 2048)
+        self.assertEqual(record2.mtime, 1234567899)
 
     def test_002b_rename(self):
         """
@@ -227,7 +298,7 @@ class StorageTestCase(unittest.TestCase):
 
         with self.assertRaises(StorageException):
             for rec in self.storageDao.listdir(user_id, "file:///folder"):
-                print(rec)
+                print(rec)  # unreachable
 
     def test_004a_file_info(self):
 

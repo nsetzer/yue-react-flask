@@ -14,7 +14,7 @@ from ..dao.filesys.filesys import MemoryFileSystemImpl
 
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, body, compressed, param, httpError, \
-    send_generator, null_validator
+    int_range, int_min, send_generator, null_validator
 
 from .util import requires_auth, files_generator
 
@@ -43,8 +43,47 @@ class FilesResource(WebResource):
     def get_path(self, root, resPath):
         return self._list_path(root, resPath, g.args.list)
 
+    @get("<root>/index/")
+    @param("limit", type_=int_range(0, 500), default=50)
+    @param("page", type_=int_min(0), default=0)
+    @requires_auth("filesystem_read")
+    @compressed
+    def get_index_root(self, root):
+        """ return files owned by a user """
+
+        offset = g.args.limit * g.args.page
+
+        files = self.filesys_service.listIndex(g.current_user,
+            root, "", limit=g.args.limit, offset=offset)
+
+        return jsonify({
+            "result": files,
+            "page": g.args.page,
+            "page_size": g.args.limit,
+        })
+
+    @get("<root>/index/<path:resPath>")
+    @param("limit", type_=int_range(0, 500), default=50)
+    @param("page", type_=int_min(0), default=0)
+    @requires_auth("filesystem_read")
+    @compressed
+    def get_index(self, root, resPath):
+        """ return files owned by a user """
+
+        offset = g.args.limit * g.args.page
+
+        files = self.filesys_service.listIndex(g.current_user,
+            root, resPath, limit=g.args.limit, offset=offset)
+
+        return jsonify({
+            "result": files,
+            "page": g.args.page,
+            "page_size": g.args.limit,
+        })
+
     @post("<root>/path/<path:resPath>")
     @param("mtime", type_=int, doc="set file modified time")
+    @param("permission", type_=int, doc="unix file permissions")
     @body(null_validator, content_type="application/octet-stream")
     @requires_auth("filesystem_write")
     def upload(self, root, resPath):
@@ -54,7 +93,8 @@ class FilesResource(WebResource):
         """
 
         self.filesys_service.saveFile(
-            g.current_user, root, resPath, g.body, mtime=g.args.mtime)
+            g.current_user, root, resPath, g.body,
+            mtime=g.args.mtime, permission=g.args.permission)
 
         return jsonify(result="OK"), 200
 

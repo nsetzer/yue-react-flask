@@ -3,7 +3,8 @@
 from sqlalchemy.orm import relationship
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql import func
-from sqlalchemy import and_, or_, not_, select, column, update, insert, delete
+from sqlalchemy import and_, or_, not_, select, column, \
+    update, insert, delete, asc, desc
 
 from sqlalchemy.sql.expression import bindparam
 from .search import SearchGrammar, ParseError, Rule
@@ -90,7 +91,7 @@ class StorageDao(object):
 
         return self.insert(user_id, path, size, mtime)
 
-    def insert(self, user_id, path, size, mtime, commit=True):
+    def insert(self, user_id, path, size, mtime, permission=0, commit=True):
 
         # TODO: required?
         #if path.endswith(delimiter):
@@ -102,6 +103,7 @@ class StorageDao(object):
             'path': path,
             'mtime': mtime,
             'size': size,
+            'permission': permission,
         }
 
         query = self.dbtables.FileSystemStorageTable.insert() \
@@ -119,7 +121,7 @@ class StorageDao(object):
         if ex is not None:
             raise ex
 
-    def update(self, user_id, path, size=None, mtime=None, commit=True):
+    def update(self, user_id, path, size=None, mtime=None, permission=0, commit=True):
 
         record = {
             'version': self.dbtables.FileSystemStorageTable.c.version + 1,
@@ -142,6 +144,20 @@ class StorageDao(object):
 
         if commit:
             self.db.session.commit()
+
+    def upsert(self, user_id, path, size=None, mtime=None, permission=0, commit=True):
+
+        where = self.dbtables.FileSystemStorageTable.c.path == path
+        query = select(['*']) \
+            .select_from(self.dbtables.FileSystemStorageTable) \
+            .where(where)
+        result = self.db.session.execute(query)
+        item = result.fetchone()
+
+        if item is None:
+            self.insert(user_id, path, size, mtime, permission, commit)
+        else:
+            self.update(user_id, path, size, mtime, permission, commit)
 
     def rename(self, user_id, src_path, dst_path, commit=True):
 
@@ -195,7 +211,38 @@ class StorageDao(object):
 
         return self.db.session.execute(query).fetchall()
 
-    def listdir(self, user_id, path_prefix, delimiter='/'):
+    def listall(self, user_id, path_prefix, limit=None, offset=None, delimiter='/'):
+        FsTab = self.dbtables.FileSystemStorageTable
+
+        if not path_prefix.endswith(delimiter):
+            raise StorageException("invalid directory path. must end with `%s`" % delimiter)
+
+        where = FsTab.c.path.startswith(bindparam('path', path_prefix))
+        where = and_(FsTab.c.user_id == user_id, where)
+
+        query = select(['*']) \
+            .select_from(FsTab) \
+            .where(where)
+
+        if limit is not None:
+            query = query.limit(limit)
+
+        if offset is not None:
+            query = query.offset(offset).order_by(asc(FsTab.c.path))
+
+        result = self.db.session.execute(query).fetchall()
+
+        for item in result:
+            obj = {
+                "path": item.path[len(path_prefix):],
+                "version": item.version,
+                "size": item.size,
+                "mtime": item.mtime,
+                "permission": item.permission,
+            }
+            yield obj
+
+    def listdir(self, user_id, path_prefix, limit=None, offset=None, delimiter='/'):
         # search for persistent objects with prefix, that also do not contain
         # the delimiter
 
@@ -210,6 +257,12 @@ class StorageDao(object):
         query = select(['*']) \
             .select_from(FsTab) \
             .where(where)
+
+        if limit is not None:
+            query = query.limit(limit)
+
+        if offset is not None:
+            query = query.offset(offset).order_by(asc(FsTab.c.path))
 
         dirs = set()
         count = 0
@@ -226,7 +279,7 @@ class StorageDao(object):
                 count += 1
 
         # TODO: this disallows empty directories, which seems
-        # to be required in order to support s3, mem
+        # to be required in order to support s3,
         if count == 0:
             raise StorageNotFoundException("[listdir] not found: %s" % path_prefix)
 

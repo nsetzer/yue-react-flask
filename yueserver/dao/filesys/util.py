@@ -8,8 +8,9 @@ from collections import namedtuple
 from threading import Thread, Condition, Lock, current_thread
 
 # TODO: opportunity for a data class
-FileRecord = namedtuple('FileRecord', ['name', 'isDir', 'size', 'mtime', 'version'])
-FileRecord.__new__.__defaults__ = ("", False, 0, 0, 0)
+FileRecord = namedtuple('FileRecord',
+    ['name', 'isDir', 'size', 'mtime', 'version', 'permission'])
+FileRecord.__new__.__defaults__ = ("", False, 0, 0, 0, 0)
 
 def sh_escape(args):
     """

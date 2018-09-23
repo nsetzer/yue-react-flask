@@ -164,7 +164,17 @@ class FileSysService(object):
 
         return result
 
-    def saveFile(self, user, fs_name, path, stream, mtime=None):
+    def listIndex(self, user, fs_name, path, limit=None, offset=None):
+
+        os_root = self.getRootPath(user, fs_name)
+        abs_path = self.getPath(user, fs_name, path)
+
+        files = list(self.storageDao.listall(user['id'], abs_path + "/",
+            limit=limit, offset=offset))
+
+        return files
+
+    def saveFile(self, user, fs_name, path, stream, mtime=None, permission=0):
 
         path = self.getPath(user, fs_name, path)
 
@@ -179,14 +189,10 @@ class FileSysService(object):
 
         if mtime is None:
             mtime = int(time.time())
-        else:
-            self.fs.set_mtime(path, mtime)
 
-        try:
-            self.storageDao.file_info(user['id'], path)
-            self.storageDao.update(user['id'], path, size, mtime)
-        except StorageNotFoundException as e:
-            self.storageDao.insert(user['id'], path, size, mtime)
+        #self.fs.set_mtime(path, mtime)
+
+        self.storageDao.upsert(user['id'], path, size, mtime, permission)
 
     def remove(self, user, fs_name, path):
 
