@@ -20,9 +20,11 @@ class AppResource(WebResource):
     The AppResource defines a set of generic endpoints for the web application
     """
 
-    def __init__(self, config):
+    def __init__(self, config, db, dbtables):
         super(AppResource, self).__init__()
         self.config = config
+        self.db = db
+        self.dbtables = dbtables
 
     @get("/")
     def index_root(self):
@@ -52,7 +54,17 @@ class AppResource(WebResource):
     def health(self):
         """ return status information about the application
         """
-        return jsonify(result="OK")
+
+        # showing stats on an un-authenticated endpoint seems risky
+        health = self.db.health()
+        del health['stats']
+
+        result = {
+            "status": "OK",
+            "db": health
+        }
+
+        return jsonify(result=result)
 
     @get("/.well-known/<path:path>")
     def webroot(self, path):

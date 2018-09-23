@@ -20,7 +20,7 @@ if (sys.version_info[0] == 2):
 
 from ..dao.util import hash_password
 from ..dao.db import db_remove, db_connect, db_init, \
-    db_update, db_repopulate, db_drop_all, db_drop_songs
+    db_update, db_repopulate, db_drop_all, db_drop_songs, db_health
 from ..dao.user import UserDao
 from ..dao.storage import StorageDao
 from ..app import YueApp, generate_client
@@ -167,6 +167,14 @@ def remove_user(args):
     user = dao.findUserByEmail(args.username)
 
     dao.removeUser(user['id'])
+
+def health(args):
+
+    db = db_connect(args.database_url)
+    info = db_health(db)
+
+    for stat, value in sorted(info['stats'].items()):
+        print("%s: %s" % (stat, value))
 
 def _read_json(path):
 
@@ -458,6 +466,13 @@ def main():
     parser_generate_client = subparsers.add_parser('generate_client',
         help='generate a client package')
     parser_generate_client.set_defaults(func=generate_client_)
+
+    ###########################################################################
+    # HEALTH - print health check information about the (postgres) database
+
+    parser_health = subparsers.add_parser('health',
+        help='print health check information about the (postgres) database')
+    parser_health.set_defaults(func=health)
 
     ###########################################################################
     # TEST - user defined functions

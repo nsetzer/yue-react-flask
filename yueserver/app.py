@@ -109,7 +109,7 @@ class YueApp(FlaskApp):
         self.transcode_service = TranscodeService(config, self.db, self.db.tables)
         self.filesys_service = FileSysService(config, self.db, self.db.tables)
 
-        self.add_resource(AppResource(self.config))
+        self.add_resource(AppResource(self.config, self.db, self.db.tables))
         self.add_resource(UserResource(self.user_service))
         self.add_resource(LibraryResource(self.user_service,
                                           self.audio_service,

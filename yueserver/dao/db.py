@@ -22,6 +22,8 @@ from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm.session import sessionmaker
 from sqlalchemy.orm import scoped_session
 from sqlalchemy import update, insert, delete
+from sqlalchemy.sql import text
+from sqlalchemy.exc import ProgrammingError, IntegrityError
 
 import yaml
 try:
@@ -71,6 +73,7 @@ def db_connect(connection_string=None, readonly=False):
     db.delete = lambda table: db.session.execute(delete(table))
     db.connection_string = connection_string
     db.kind = lambda: connection_string.split(":")[0]
+    db.health = lambda: db_health(db)
 
     db.conn = db.session.bind.connect()
     if connection_string.startswith("sqlite:"):
@@ -154,6 +157,41 @@ def db_repopulate(db, dbtables, user_name, domain_name, json_objects):
     logging.info("updated %d songs in %.3f seconds" % (count, t))
 
     return True
+
+def db_health(db):
+    if db.connection_string.startswith("sqlite:"):
+        return {"status": "OK", "stats": {}}
+
+    try:
+        statement = text("""SELECT * FROM loadavg;""")
+        cpu_rows = db.session.execute(statement).fetchall()
+
+        statement = text("""SELECT * FROM meminfo;""")
+        mem_rows = db.session.execute(statement).fetchall()
+    except ProgrammingError as e:
+        return {"status": "ERROR", "stats": {}}
+    except IntegrityError as e:
+        return {"status": "ERROR", "stats": {}}
+
+    stats = {}
+    for stat, value in mem_rows:
+        v = value.split()
+        ivalue = int(v[0])
+        if len(v) == 2:
+            if v[1].lower() == 'kb':
+                ivalue *= 1024
+            else:
+                ivalue = None
+        stats[stat] = ivalue
+
+    used = 100 * (stats['Active'] + stats['Inactive']) / stats['MemTotal']
+    stats['Percent'] = used
+
+    stats['loadavg_1m'] = float(cpu_rows[0][0])
+    stats['loadavg_5m'] = float(cpu_rows[0][1])
+    stats['loadavg_10m'] = float(cpu_rows[0][2])
+
+    return {"status": "OK", "stats": stats}
 
 class ConfigException(Exception):
     """docstring for ConfigException"""

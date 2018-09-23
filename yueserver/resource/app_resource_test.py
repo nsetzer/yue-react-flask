@@ -23,7 +23,7 @@ class AppResourceTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
 
-        cls.app = TestApp(cls.__name__);
+        cls.app = TestApp(cls.__name__)
 
     @classmethod
     def tearDownClass(cls):
