@@ -7,7 +7,8 @@ certificates
 This guide is based on the following two articals:
 
 * [Digital Ocean Initial Setup](https://www.digitalocean.com/community/tutorials/initial-server-setup-with-ubuntu-18-04)
-* [Serve Flask Apps with Digital Ocean ](https://www.digitalocean.com/community/tutorials/how-to-serve-flask-applications-with-gunicorn-and-nginx-on-ubuntu-18-04)
+* [Serve Flask Apps with Digital Ocean](https://www.digitalocean.com/community/tutorials/how-to-serve-flask-applications-with-gunicorn-and-nginx-on-ubuntu-18-04)
+* [Install PostgreSQL on Ubuntu 18.04](https://www.digitalocean.com/community/tutorials/how-to-install-and-use-postgresql-on-ubuntu-18-04)
 
 ## Initial Configuration for a Digital Ocean Droplet
 
@@ -127,6 +128,13 @@ server:
   secret_key: "RSA:<hash>"
 ```
 
+### Install PostgreSQL
+
+```bash
+    sudo apt update
+    sudo apt install postgresql postgresql-contrib
+
+```
 ### Configure PostgreSQL
 
 PostgreSQL can be used in place of sqlite. A database and user must first be
@@ -139,7 +147,7 @@ Method 1:
 sudo -u postgres createuser yueapp
 sudo -u postgres createdb yueapp
 sudo -u postgres psql
-    psql=# alter user yueapp with encrypted password '<password>';
+    psql=# alter user yueapp with encrypted password 'CHANGEME';
     psql=# grant all privileges on database yueapp to yueapp;
     psql=# \q
 ```
@@ -148,8 +156,9 @@ Method 2:
 
 Execute the following SQL:
 ```bash
+sudo -u postgres psql
     CREATE DATABASE yueapp;
-    CREATE USER yueapp WITH ENCRYPTED PASSWORD 'password';
+    CREATE USER yueapp WITH ENCRYPTED PASSWORD 'CHANGEME';
     GRANT ALL PRIVILEGES ON DATABASE yueapp TO yueapp;
 ```
 
@@ -184,15 +193,15 @@ postgres=# SHOW config_file;
 max_connections = 10
 shared_buffers = 128MB
 effective_cache_size = 450MB
-maintenance_work_mem = 38400kB
+maintenance_work_mem = 48MB
 checkpoint_completion_target = 0.7
-wal_buffers = 4608kB
+wal_buffers = 5.0MB
 default_statistics_target = 100
 random_page_cost = 1.1
 effective_io_concurrency = 200
 work_mem = 15MB
-min_wal_size = 1GB
-max_wal_size = 2GB
+min_wal_size = 80MB
+max_wal_size = 1GB
 ```
 
 restart postgres for changes to take effect
@@ -330,6 +339,22 @@ Restore:
 ```bash
 python3 -m yueserver.tools.manage -pproduction drop
 cat backup.gz.* | gunzip | psql yueapp
+```
+
+### PostgreSQL Change Password
+
+Method1:
+
+```
+sudo -u yueapp psql
+\password
+```
+
+Method2:
+
+```
+sudo -u postgres psql
+ALTER USER yueapp WITH ENCRYPTED PASSWORD 'CHANGEME';
 ```
 
 ### PostgreSQL Health Checks

@@ -1,4 +1,4 @@
-#! cd ../.. && python -m yueserver.tools.upload --host http://localhost:8000 -n 4 --username admin --password admin mark.json default
+#! cd ../.. && python -m yueserver.tools.upload --host http://localhost:4200 -n 4 --username admin --password admin mark.json default
 #! cd ../.. && python -m yueserver.tools.upload --host http://104.248.122.206:80 --username admin --password admin clutch.json temp
 
 """

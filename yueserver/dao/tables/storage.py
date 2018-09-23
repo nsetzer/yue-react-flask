@@ -1,7 +1,7 @@
 
 
 from sqlalchemy.schema import Table, Column, ForeignKey
-from sqlalchemy.types import Integer, String
+from sqlalchemy.types import Integer, String, Boolean
 
 from .util import generate_uuid, StringArrayType
 import time
@@ -26,6 +26,10 @@ def FileSystemStorageTable(metadata):
         Column('permission', Integer, default=0o644),
         Column('version', Integer, default=0),
         Column('size', Integer, default=0),
+
+        # encryption is an integer to leave room for the posibility
+        # of client side or server side encryption/decryption
+        Column('encrypted', Integer, default=False),
         # date
         Column('mtime', Integer, default=lambda: int(time.time()))
     )
