@@ -8,7 +8,7 @@ import logging
 from flask import jsonify, render_template, g, request, send_file, send_from_directory
 
 from ..dao.library import Song
-from ..dao.util import parse_iso_format, pathCorrectCase
+from ..dao.util import parse_iso_format, pathCorrectCase, server_health
 
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, compressed, httpError
@@ -61,7 +61,8 @@ class AppResource(WebResource):
 
         result = {
             "status": "OK",
-            "db": health
+            "database": health,
+            "server": server_health()
         }
 
         return jsonify(result=result)

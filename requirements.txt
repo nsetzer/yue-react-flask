@@ -7,4 +7,4 @@ requests==2.*
 boto3==1.*
 PyYAML==3.*
 pycryptodome==3.*
-
+psutil==5.*

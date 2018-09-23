@@ -23,7 +23,7 @@ def FileSystemStorageTable(metadata):
         # text
         Column('path', String, primary_key=True, nullable=False),
         # number
-        Column('permission', Integer, default=0),
+        Column('permission', Integer, default=0o644),
         Column('version', Integer, default=0),
         Column('size', Integer, default=0),
         # date

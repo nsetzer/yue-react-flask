@@ -1,4 +1,4 @@
-#! cd ../.. && python -m yueserver.tools.upload --host http://localhost:4200 -n 4 --username admin --password admin mark.json default
+#! cd ../.. && python -m yueserver.tools.upload --host http://localhost:8000 -n 4 --username admin --password admin mark.json default
 #! cd ../.. && python -m yueserver.tools.upload --host http://104.248.122.206:80 --username admin --password admin clutch.json temp
 
 """
@@ -90,16 +90,14 @@ class JsonUploader(object):
         else:
             self.s3fs = None
 
-    def upload(self, songs):
-        self.dircache = {}
+    def upload(self, songs, remote_songs, remote_files):
         for song in songs:
-            self._upload_one(song)
+            self._upload_one(song, remote_songs, remote_files)
 
-    def _upload_one(self, song):
+    def _upload_one(self, song, remote_songs, remote_files):
 
         file_path = song['file_path']
         static_path = song['static_path']
-        ref_id = str(song['ref_id'])
 
         dir_path, _ = posixpath.split(static_path)
 
@@ -108,7 +106,6 @@ class JsonUploader(object):
 
         art_path = "%s.jpg" % (static_path)
         _, art_name = posixpath.split(art_path)
-
 
         # transcode options
         opts = {
@@ -123,18 +120,14 @@ class JsonUploader(object):
             }
         }
 
-        response = self.client.library_get_song_by_reference(ref_id)
-        if response.status_code == 200:
-            print(response.text)
-            print("found a song with reference: %s" % ref_id)
+        if static_path in remote_songs:
+            logging.info("update: %s" % static_path)
+            song['id'] = remote_songs[static_path]['id']
             self._update_song(song)
-
         else:
-            print("creating song with reference: %s" % ref_id)
+            logging.info("create: %s" % static_path)
 
-            items = self._list_dir(dir_path)
-
-            if aud_name not in items:
+            if aud_name not in remote_files:
                 self._transcode_upload(file_path, aud_path, opts)
 
             song_id = self._create_song(song)
@@ -148,15 +141,6 @@ class JsonUploader(object):
             if response.status_code != 200:
                 print(response)
                 print(response.status_code)
-
-    def _list_dir(self, dir_path):
-        if dir_path not in self.dircache:
-            response = self.client.files_get_path(self.root, dir_path)
-            if response.status_code != 404:
-                data = response.json()['result']
-                if data['files']:
-                    self.dircache[dir_path] = [o['name'] for o in data['files']]
-        return self.dircache.get(dir_path, [])
 
     def _transcode_upload(self, local_path, remote_path, opts):
         if not local_path.endswith("ogg"):
@@ -220,7 +204,7 @@ class JsonUploader(object):
 
         remote_song = self._prepare_song_for_transport(song)
 
-        response = self.client.library_update_song(json.dumps(remote_song))
+        response = self.client.library_update_song(json.dumps([remote_song]))
         if response.status_code != 200:
             print(response)
             print(response.status_code)
@@ -237,6 +221,56 @@ def _read_json(path):
             sys.exit(1)
         return json.load(open(path))
     return None
+
+def _fetch_files(client, root):
+
+    files = set()
+
+    page = 0
+    limit = 500
+    while True:
+        logging.info("fetch files page:%d" % page)
+        params = {'limit': limit, 'page': page}
+        response = client.files_get_index_root(root, **params)
+        if response.status_code != 200:
+            sys.stderr.write("fetch songs error...\n")
+            sys.exit(1)
+
+        result = response.json()['result']
+        for f in result:
+            files.add(f['path'])
+
+        page += 1
+        if len(result) != limit:
+            break
+
+    logging.info("fetched %d files" % len(files))
+    return files
+
+def _fetch_songs(client):
+
+    songs = dict()
+
+    page = 0
+    limit = 500
+    while True:
+        logging.info("fetch songs page:%d" % page)
+        params = {'limit': limit, 'page': page}
+        response = client.library_search_library(**params)
+        if response.status_code != 200:
+            sys.stderr.write("fetch songs error...\n")
+            sys.exit(1)
+
+        result = response.json()['result']
+        for s in result:
+            songs[s['static_path']] = s
+
+        page += 1
+        if len(result) != limit:
+            break
+
+    logging.info("fetched %d songs" % len(songs))
+    return songs
 
 def parseArgs(argv):
 
@@ -278,6 +312,7 @@ def parseArgs(argv):
 
 def main():
 
+    logging.basicConfig(level=logging.INFO)
     args = parseArgs(sys.argv)
 
     client = connect(args.host, args.username, args.password)
@@ -286,8 +321,12 @@ def main():
 
     transcoder = FFmpeg("C:\\ffmpeg\\bin\\ffmpeg.exe")
 
+    rsongs = _fetch_songs(client)
+    rfiles = _fetch_files(client, args.root)
+
     if args.nparallel == 1:
-        JsonUploader(client, transcoder, args.root, args.bucket).upload(data)
+        uploader = JsonUploader(client, transcoder, args.root, args.bucket)
+        uploader.upload(data, rsongs, rfiles)
 
     else:
         # partition the data into n groups,
@@ -306,7 +345,8 @@ def main():
         with ThreadPoolExecutor(max_workers=args.nparallel) as executor:
 
             for i in range(args.nparallel):
-                future = executor.submit(uploaders[i].upload, partition[i])
+                future = executor.submit(
+                    uploaders[i].upload, partition[i], rsongs, rfiles)
                 futures.append(future)
 
 if __name__ == '__main__':

@@ -29,8 +29,8 @@ for pkg in pkgs:
     print(pkg)
 
 entry_points = [
-    "yue-manage=yueserver.tools.manage:main",
-    "yue-sync=yueclient.sync2:main",
+    "ymgr=yueserver.tools.manage:main",
+    "ysync=yueserver.tools.sync2:main",
 ]
 
 setup(name="yueserver",

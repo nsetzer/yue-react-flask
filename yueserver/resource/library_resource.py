@@ -35,8 +35,11 @@ def song_list_validator(songs):
     for song in songs:
         # every record must have a song id (to update), and
         # at least one other field (that will be modified)
-        if Song.id not in song or len(song) < 2:
-            raise Exception("invalid song")
+        if Song.id not in song:
+            raise Exception("invalid song: missing id")
+
+        if len(song) < 2:
+            raise Exception("invalid song: missing field to update")
 
     return songs
 

@@ -91,11 +91,11 @@ class StorageDao(object):
 
         return self.insert(user_id, path, size, mtime)
 
-    def insert(self, user_id, path, size, mtime, permission=0, commit=True):
+    def insert(self, user_id, path, size, mtime, permission=None, commit=True):
 
         # TODO: required?
         #if path.endswith(delimiter):
-        #    raise StorageException("invalid directory path")
+        #    raise StorageException("invalid path")
 
         record = {
             'user_id': user_id,
@@ -103,8 +103,10 @@ class StorageDao(object):
             'path': path,
             'mtime': mtime,
             'size': size,
-            'permission': permission,
         }
+
+        if permission is not None:
+            record['permission'] = permission
 
         query = self.dbtables.FileSystemStorageTable.insert() \
             .values(record)
@@ -121,7 +123,7 @@ class StorageDao(object):
         if ex is not None:
             raise ex
 
-    def update(self, user_id, path, size=None, mtime=None, permission=0, commit=True):
+    def update(self, user_id, path, size=None, mtime=None, permission=None, commit=True):
 
         record = {
             'version': self.dbtables.FileSystemStorageTable.c.version + 1,
@@ -132,6 +134,9 @@ class StorageDao(object):
 
         if size is not None:
             record['size'] = size
+
+        if permission is not None:
+            record['permission'] = permission
 
         query = update(self.dbtables.FileSystemStorageTable) \
             .values(record) \

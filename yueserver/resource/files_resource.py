@@ -83,7 +83,7 @@ class FilesResource(WebResource):
 
     @post("<root>/path/<path:resPath>")
     @param("mtime", type_=int, doc="set file modified time")
-    @param("permission", type_=int, doc="unix file permissions")
+    @param("permission", type_=int, doc="unix file permissions", default=0o644)
     @body(null_validator, content_type="application/octet-stream")
     @requires_auth("filesystem_write")
     def upload(self, root, resPath):
