@@ -146,7 +146,7 @@ class MemoryFileSystemImpl(AbstractFileSystem):
                     yield FileRecord(name, False, len(f.getvalue()), mtime)
 
     def listdir(self, path):
-        return [name for name, _, _, _ in self._scandir_impl(path)]
+        return [rec.name for rec in self._scandir_impl(path)]
 
     def scandir(self, path):
         return [entry for entry in self._scandir_impl(path)]

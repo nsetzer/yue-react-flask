@@ -106,8 +106,8 @@ class FileSystemTestCase(unittest.TestCase):
         self.assertFalse(fs.isdir(path))
         self.assertTrue(fs.isdir(parent))
 
-        for name, is_dir, size, mtime in fs.scandir(parent):
-            self.assertEqual(size, len(msg))
+        for rec in fs.scandir(parent):
+            self.assertEqual(rec.size, len(msg))
 
     # the following s3 tests check that the parsing of the
     # aws cli tool is done correctly. no attempt is made

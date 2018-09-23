@@ -1,4 +1,4 @@
-#! cd ../.. && python -m yueserver.tools.upload --host http://localhost:8000 --username admin --password admin beast.json default
+#! cd ../.. && python -m yueserver.tools.upload --host http://localhost:4200 -n 4 --username admin --password admin mark.json default
 #! cd ../.. && python -m yueserver.tools.upload --host http://104.248.122.206:80 --username admin --password admin clutch.json temp
 
 """
@@ -32,6 +32,9 @@ import posixpath
 from ..app import connect
 from ..dao.transcode import FFmpeg
 from ..dao.filesys.s3fs import BotoFileSystemImpl
+
+from concurrent.futures import ThreadPoolExecutor
+from multiprocessing import cpu_count
 
 try:
     import boto3
@@ -253,6 +256,9 @@ def parseArgs(argv):
     parser.add_argument('--bucket', default=None,
                     help='an s3 bucket name and path, e.g. s3://bucket/path')
 
+    parser.add_argument('-n', '--nparallel', type=int, default=1,
+                    help='the database connection string')
+
     parser.add_argument('file',
                     help='json file containing songs to upload')
 
@@ -263,6 +269,10 @@ def parseArgs(argv):
 
     if args.password is None:
         args.password = input("password:")
+
+    if args.nparallel > cpu_count():
+        raise Exception("nparallel: %d cpu_count:%d" % (
+            args.nparallel, cpu_count()))
 
     return args
 
@@ -276,8 +286,28 @@ def main():
 
     transcoder = FFmpeg("C:\\ffmpeg\\bin\\ffmpeg.exe")
 
-    JsonUploader(client, transcoder, args.root, args.bucket).upload(data)
+    if args.nparallel == 1:
+        JsonUploader(client, transcoder, args.root, args.bucket).upload(data)
 
+    else:
+        # partition the data into n groups,
+        # use the futures library to upload files in parallel
+        uploaders = []
+        partition = [[] for i in range(args.nparallel)]
+        futures = []
+
+        for i in range(args.nparallel):
+            uploaders.append(JsonUploader(client, transcoder,
+                args.root, args.bucket))
+
+        for i, item in enumerate(data):
+            partition[i % len(partition)].append(item)
+
+        with ThreadPoolExecutor(max_workers=args.nparallel) as executor:
+
+            for i in range(args.nparallel):
+                future = executor.submit(uploaders[i].upload, partition[i])
+                futures.append(future)
 
 if __name__ == '__main__':
     main()

@@ -119,6 +119,22 @@ class YueApp(FlaskApp):
                                         self.audio_service))
         self.add_resource(FilesResource(self.user_service, self.filesys_service))
 
+        self.app.teardown_request(self.teardown_request)
+        self.app.before_request(self.before_request)
+
+    def before_request(self):
+        pass
+
+    def teardown_request(self, ex=None):
+        """
+        this fixes a SQLite error
+           sqlite3.ProgrammingError: SQLite objects created in a thread
+           can only be used in that same thread.
+
+        db_connect uses a scoped session for thread local sessions
+        """
+        self.db.session.remove()
+
 class TestApp(YueApp):
     """An app with helper functions for testing"""
     def __init__(self, test_name=""):

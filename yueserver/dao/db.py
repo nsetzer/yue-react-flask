@@ -55,15 +55,15 @@ def db_connect(connection_string=None, readonly=False):
         connection_string = 'sqlite://'
 
     engine = create_engine(connection_string)
-    Session = scoped_session(sessionmaker(bind=engine))
+    session = scoped_session(sessionmaker(bind=engine))
 
     db = lambda: None
     db.engine = engine
     db.metadata = MetaData()
-    # TODO: to better support sqlite and thread this may need to be changed to:
-    # db.session = lambda: Session()
-    # which would require a code change to every dao
-    db.session = Session
+
+    # note: db.session.remove() must be called at the end of a request
+    #       or when a thread context using a session exits
+    db.session = session
     if readonly:
         db.session.flush = _abort_flush
     db.tables = DatabaseTables(db.metadata)

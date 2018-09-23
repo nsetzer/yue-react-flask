@@ -331,3 +331,28 @@ Restore:
 python3 -m yueserver.tools.manage -pproduction drop
 cat backup.gz.* | gunzip | psql yueapp
 ```
+
+### PostgreSQL Health Checks
+
+Execute the following SQL to create two tables used for querying the
+status of the postgres server
+
+```bash
+
+    CREATE EXTENSION file_fdw;
+    CREATE SERVER fileserver FOREIGN DATA WRAPPER file_fdw;
+
+    CREATE FOREIGN TABLE loadavg
+    (one text, five text, fifteen text, scheduled text, pid text)
+    SERVER fileserver
+    OPTIONS (filename '/proc/loadavg', format 'text', delimiter ' ');
+
+    CREATE FOREIGN TABLE meminfo
+    (stat text, value text)
+    SERVER fileserver
+    OPTIONS (filename '/proc/meminfo', format 'csv', delimiter ':');
+
+    GRANT ALL PRIVILEGES ON TABLE meminfo TO yueapp;
+    GRANT ALL PRIVILEGES ON TABLE loadavg TO yueapp;
+
+```
