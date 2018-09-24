@@ -1,5 +1,5 @@
 #! cd ../.. && python -m yueserver.tools.upload --host http://localhost:4200 -n 4 --username admin --password admin mark.json default
-#! cd ../.. && python -m yueserver.tools.upload --host http://104.248.122.206:80 --username admin --password admin clutch.json temp
+#! cd ../.. && python -m yueserver.tools.upload --host https://yueapp.duckdns.org:443 --username admin -n 4 mark.json music
 
 """
 Upload songs to a remote server and update the database
@@ -58,7 +58,7 @@ class S3Upload(object):
 
     def upload(self, remote_path, fo):
         path = posixpath.join(self.bucket, remote_path)
-        print("uploading to %s" % path)
+        print("[s3] uploading to %s" % path)
         with self.fs.open(path, "wb") as wf:
             for buf in iter(lambda: fo.read(4096), b""):
                 wf.write(buf)
@@ -70,13 +70,17 @@ class JsonUploader(object):
     required song keys:
         static_path: the path on the remote server to upload to
         file_path: a path on the local file system pointing to a song file
-        ref_id: a unique reference id for the song
         artist, title, album: describe this song
 
     optional song keys:
         art_path : a path on the local file system pointing to album artwork
 
     all other song keys can be provided.
+
+    Note: the static_path is used to determine if a local song exists on
+    the remote server. It should be a relative path, with a filename but
+    without an extension. e.g. "artist/album/title". It should be
+    unique across all songs (across all domains)
 
     """
     def __init__(self, client, transcoder, root, bucket):
@@ -258,6 +262,7 @@ def _fetch_songs(client):
         params = {'limit': limit, 'page': page}
         response = client.library_search_library(**params)
         if response.status_code != 200:
+            sys.stderr.write(response.text)
             sys.stderr.write("fetch songs error...\n")
             sys.exit(1)
 
@@ -271,6 +276,38 @@ def _fetch_songs(client):
 
     logging.info("fetched %d songs" % len(songs))
     return songs
+
+def do_upload(client, data, root, nparallel=1, bucket=None, ffmpeg_path=None):
+
+    transcoder = FFmpeg(ffmpeg_path)
+
+    rsongs = _fetch_songs(client)
+    rfiles = _fetch_files(client, root)
+
+    if nparallel == 1:
+        uploader = JsonUploader(client, transcoder, root, bucket)
+        uploader.upload(data, rsongs, rfiles)
+
+    else:
+        # partition the data into n groups,
+        # use the futures library to upload files in parallel
+        uploaders = []
+        partition = [[] for i in range(nparallel)]
+        futures = []
+
+        for i in range(nparallel):
+            uploaders.append(JsonUploader(client, transcoder,
+                root, bucket))
+
+        for i, item in enumerate(data):
+            partition[i % len(partition)].append(item)
+
+        with ThreadPoolExecutor(max_workers=nparallel) as executor:
+
+            for i in range(nparallel):
+                future = executor.submit(
+                    uploaders[i].upload, partition[i], rsongs, rfiles)
+                futures.append(future)
 
 def parseArgs(argv):
 
@@ -286,6 +323,10 @@ def parseArgs(argv):
     parser.add_argument('--host',
                     default="http://localhost:4200",
                     help='the database connection string')
+
+    parser.add_argument('--ffmpeg',
+                    default="C:\\ffmpeg\\bin\\ffmpeg.exe",
+                    help='the path to the ffmpeg binary')
 
     parser.add_argument('--bucket', default=None,
                     help='an s3 bucket name and path, e.g. s3://bucket/path')
@@ -319,35 +360,8 @@ def main():
 
     data = _read_json(args.file)
 
-    transcoder = FFmpeg("C:\\ffmpeg\\bin\\ffmpeg.exe")
-
-    rsongs = _fetch_songs(client)
-    rfiles = _fetch_files(client, args.root)
-
-    if args.nparallel == 1:
-        uploader = JsonUploader(client, transcoder, args.root, args.bucket)
-        uploader.upload(data, rsongs, rfiles)
-
-    else:
-        # partition the data into n groups,
-        # use the futures library to upload files in parallel
-        uploaders = []
-        partition = [[] for i in range(args.nparallel)]
-        futures = []
-
-        for i in range(args.nparallel):
-            uploaders.append(JsonUploader(client, transcoder,
-                args.root, args.bucket))
-
-        for i, item in enumerate(data):
-            partition[i % len(partition)].append(item)
-
-        with ThreadPoolExecutor(max_workers=args.nparallel) as executor:
-
-            for i in range(args.nparallel):
-                future = executor.submit(
-                    uploaders[i].upload, partition[i], rsongs, rfiles)
-                futures.append(future)
+    do_upload(client, data, args.root,
+        args.nparallel, args.bucket, args.ffmpeg)
 
 if __name__ == '__main__':
     main()

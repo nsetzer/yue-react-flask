@@ -161,7 +161,7 @@ class CipherConfigDecryptor(AbstractConfigDecryptor):
         """
         if self.pem is None:
             raise Exception("CipherConfigDecryptor not initialized")
-        data = data[len(ParameterStoreConfigDecryptor.prefix):]
+        data = data[len(CipherConfigDecryptor.prefix):]
         return self.cm.decrypt64(self.pem, data)
 
 class ParameterStoreConfigDecryptor(AbstractConfigDecryptor):

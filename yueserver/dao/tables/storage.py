@@ -29,7 +29,7 @@ def FileSystemStorageTable(metadata):
 
         # encryption is an integer to leave room for the posibility
         # of client side or server side encryption/decryption
-        Column('encrypted', Integer, default=False),
+        Column('encrypted', Integer, default=0),
         # date
         Column('mtime', Integer, default=lambda: int(time.time()))
     )
