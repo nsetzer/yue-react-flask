@@ -19,30 +19,16 @@ cat <<EOF > uninstall.sh
 rm -rf yueserver yueclient build wsgi.py requirements.txt
 EOF
 
-cat <<EOF > post_install.sh
-#!/bin/bash
-
-chown yueapp .
-chown -R yueapp \$(echo * | sed s/crypt//)
-
-chgrp yueapp .
-chgrp -R yueapp \$(echo * | sed s/crypt//)
-
-EOF
-
 chmod +x start.sh
 chmod +x uninstall.sh
-chmod +x post_install.sh
 
-python3 -m server.tools.manage generate_client
+python3 -m yueserver.tools.manage generate_client
 
-tar -czvf dist/yueserver-$version.tar.gz \
-    --exclude='*.pyc' \
-    --exclude='__pycache__' \
+tar -czv --exclude='*.pyc' --exclude='__pycache__' \
     config yueserver yueclient build wsgi.py requirements.txt setup.py \
-    start.sh uninstall.sh post_install.sh
+    start.sh uninstall.sh | \
+    cat util/installer.sh - > dist/yueserver-$version.tar.gz
 
 rm start.sh
 rm uninstall.sh
-rm post_install.sh
 
