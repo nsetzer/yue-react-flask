@@ -107,6 +107,8 @@ class Song(object):
         "added": date_added,
         "freq": frequency,
         "frequency": frequency,
+        "file_size": file_size,
+        "size": file_size,
     }
 
     @staticmethod
@@ -125,7 +127,7 @@ class Song(object):
         return Song.id, Song.year, Song.album_index, Song.length, \
             Song.play_count, Song.skip_count, \
             Song.rating, Song.banished, Song.blocked, Song.equalizer, \
-            Song.frequency
+            Song.frequency, Song.file_size
 
     @staticmethod
     def dateFields():

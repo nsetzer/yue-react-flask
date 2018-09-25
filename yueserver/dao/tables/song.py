@@ -57,6 +57,7 @@ def SongDataTable(metadata):
         Column('equalizer', Integer, default=0),
         Column('year', Integer, default=0),
         Column('banished', Integer, default=0),
+        Column('file_size', Integer, default=0),
         # date
         Column('date_added', Integer, default=lambda: int(time.time()))
     )

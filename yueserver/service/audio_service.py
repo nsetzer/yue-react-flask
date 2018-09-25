@@ -4,7 +4,7 @@ The Audio service handles the interaction with the database for a particular
 user. The methods exposed allow a user to search the database for songs,
 as well as update metadata and statistics
 """
-import os
+import os, sys
 import logging
 
 from ..dao.user import UserDao
@@ -12,6 +12,7 @@ from ..dao.library import LibraryDao, Song
 from ..dao.queue import SongQueueDao
 from ..dao.history import HistoryDao
 from ..dao.shuffle import binshuffle
+from ..dao.storage import StorageDao, StorageNotFoundException
 from ..dao.filesys.filesys import FileSystem
 
 from .exception import AudioServiceException
@@ -31,6 +32,7 @@ class AudioService(object):
         self.libraryDao = LibraryDao(db, dbtables)
         self.queueDao = SongQueueDao(db, dbtables)
         self.historyDao = HistoryDao(db, dbtables)
+        self.storageDao = StorageDao(db, dbtables)
         self.fs = FileSystem()
 
     @staticmethod
@@ -73,24 +75,42 @@ class AudioService(object):
     def setSongFilePath(self, user, song_id, path):
         """ set the location of the audio file for the song by song id
         """
-        if not self.fs.exists(path):
-            logging.error("invalid path: %s" % path)
-            raise AudioServiceException("invalid path")
+        uid = user['id']
+        did = user['domain_id']
+
+        try:
+            info = self.storageDao.file_info(uid, path)
+        except StorageNotFoundException as e:
+            # if the file is not in the database, check the file system
+            # then add it to the database
+            # throws FileNotFoundError if dne
+            info = self.fs.file_info(path)
+
+            self.storageDao.insert(uid, path,
+                info.size, info.mtime, info.permission)
 
         uid = user['id']
         did = user['domain_id']
-        song = {Song.path: path}
+        song = {Song.path: path, Song.file_size: info.size}
         self.libraryDao.update(uid, did, song_id, song)
 
     def setSongAlbumArtPath(self, user, song_id, path):
         """ set the location of the album art for the song by song id
         """
-        if not self.fs.exists(path):
-            logging.error("invalid path: %s" % path)
-            raise AudioServiceException("invalid path")
 
         uid = user['id']
         did = user['domain_id']
+
+        try:
+            info = self.storageDao.file_info(uid, path)
+        except StorageNotFoundException as e:
+            # if the file is not in the database, check the file system
+            # then add it to the database
+            # throws FileNotFoundError if dne
+            info = self.fs.file_info(path)
+            self.storageDao.insert(uid, path,
+                info.size, info.mtime, info.permission)
+
         song = {Song.art_path: path}
         self.libraryDao.update(uid, did, song_id, song)
 

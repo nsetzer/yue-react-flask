@@ -164,8 +164,14 @@ class BytesFIFO(object):
     """
     A FIFO that can store a fixed number of bytes.
     """
-    def __init__(self, init_size=2048, incr_size=2048, lock=None):
-        """ Create a FIFO of ``init_size`` bytes. """
+    def __init__(self, init_size=2048, incr_size=2048, lock=None, max_size=None):
+        """ Create a FIFO of ``init_size`` bytes.
+
+        max_size: optional, if set will attempt to keep the size of the
+            internal buffer below this size. internal size still depends
+            on the size of individual writes and reads
+            TODO: disabled by default, still seems to cause deadlock
+        """
         self._buffer = io.BytesIO(b"\x00" * init_size)
         self._size = init_size
         self._filled = 0
@@ -173,6 +179,7 @@ class BytesFIFO(object):
         self._write_ptr = 0
         self._writer_closed = False
         self._reader_closed = False
+        self._max_size = max_size
 
         self._capacity_increase = incr_size
 
@@ -191,7 +198,11 @@ class BytesFIFO(object):
         #       filled size is empty
 
         with self._lock:
-            return self._read(request_size)
+            try:
+                data = self._read(request_size)
+            finally:
+                self._cond.notify()
+            return data
 
     def _read_size_impl(self, request_size):
 
@@ -254,36 +265,46 @@ class BytesFIFO(object):
         """
 
         with self._lock:
-            write_size = len(data)
 
             try:
-                if self._size < self._filled + write_size:
-                    new_size = self._filled + write_size + self._capacity_increase
-                    self._resize(new_size)
-
-                if write_size:
-                    contig = self._size - self._write_ptr
-                    contig_write = min(contig, write_size)
-                    # TODO: avoid 0 write
-                    # TODO: avoid copy
-                    # TODO: test performance of above
-                    self._buffer.seek(self._write_ptr)
-                    self._buffer.write(data[:contig_write])
-                    self._write_ptr += contig_write
-
-                    if contig < write_size:
-                        self._buffer.seek(0)
-                        self._buffer.write(data[contig_write:write_size])
-                        #self._buffer.write(buffer(data, contig_write, write_size - contig_write))
-                        self._write_ptr = write_size - contig_write
-
-                self._filled += write_size
-            except Exception as e:
-                logging.error("write: exception: %s\n" % e)
-
-            self._cond.notify()
+                write_size = self._write(data)
+            finally:
+                self._cond.notify()
 
             return write_size
+
+    def _write(self, data):
+
+        write_size = len(data)
+
+        while self._max_size and self._filled > self._max_size and \
+          (self._size - self._read_ptr) > 0:
+            self._cond.wait()
+            self._cond.notify()
+
+        if self._size < self._filled + write_size:
+            new_size = self._filled + write_size + self._capacity_increase
+            self._resize(new_size)
+
+        if write_size:
+            contig = self._size - self._write_ptr
+            contig_write = min(contig, write_size)
+            # TODO: avoid 0 write
+            # TODO: avoid copy
+            # TODO: test performance of above
+            self._buffer.seek(self._write_ptr)
+            self._buffer.write(data[:contig_write])
+            self._write_ptr += contig_write
+
+            if contig < write_size:
+                self._buffer.seek(0)
+                self._buffer.write(data[contig_write:write_size])
+                #self._buffer.write(buffer(data, contig_write, write_size - contig_write))
+                self._write_ptr = write_size - contig_write
+
+        self._filled += write_size
+
+        return write_size
 
     def close(self):
         pass

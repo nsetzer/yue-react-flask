@@ -1,4 +1,4 @@
-import os
+import os, sys
 import unittest
 import json
 import time
@@ -277,7 +277,7 @@ class LibraryResourceTestCase(unittest.TestCase):
                     "path": "++dne++",
                 }
                 result = app.post_json(url, info)
-                self.assertEqual(result.status_code, 400, result)
+                self.assertEqual(result.status_code, 404, result.text)
 
     def test_002f_update_song_art_path(self):
         """ test that the file art path can be updated.

@@ -178,11 +178,14 @@ class LibraryResource(WebResource):
         #if self.transcode_service.shouldTranscodeSong(song, g.args.mode):
         #    path = self.transcode_service.transcodeSong(song, g.args.mode)
 
+        # TODO: use storage service? or ask forgiveness instead of
+        # making an s3 call here...
         if not self.audio_service.fs.exists(path):
             logging.error("Audio for %s not found at: `%s`" % (song_id, path))
             return httpError(404, "Audio File not found")
 
-        record = self.audio_service.fs.file_info(path)
+        #record = self.audio_service.fs.file_info(path)
+        size = song[Song.file_size] or None
         go = files_generator(self.audio_service.fs, path)
         return send_generator(go, record.name, file_size=record.size)
 

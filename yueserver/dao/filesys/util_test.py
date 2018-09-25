@@ -90,6 +90,18 @@ class BytesFifoTestCase(unittest.TestCase):
 
         self.assertEqual(reader.count, writer.count)
 
+    def test_rw_d(self):
+        # read all data
+        fifo = BytesFIFO(max_size=1024)
+        reader = TestReaderThread(fifo, 1024)
+        writer = TestWriterThread(fifo, 2048, 10)
+        reader.start()
+        writer.start()
+        reader.join()
+        writer.join()
+
+        self.assertEqual(reader.count, writer.count)
+
 if __name__ == '__main__':
     main_test(sys.argv, globals())
 

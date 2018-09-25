@@ -165,14 +165,9 @@ class BotoWriterThread(Thread):
 
     def run(self):
         reader = BytesFIFOReader(self.fifo)
-        sys.stderr.write("boto write: reader opened\n")
         try:
             self.bucket.upload_fileobj(reader, self.key)
-        except Exception as e:
-            sys.stderr.write("boto write: reader error:\n")
-            sys.stderr.write("%s\n" % e)
         finally:
-            sys.stderr.write("boto write: reader closed\n")
             reader.close()
 
 class BotoWriterFile(object):
@@ -195,7 +190,6 @@ class BotoWriterFile(object):
         return self.writer.write(data)
 
     def close(self):
-        sys.stderr.write("boto write: writer closed\n")
         self.writer.close()  # order matters
         self.thread.join()
 
@@ -269,7 +263,6 @@ class BotoFileSystemImpl(AbstractFileSystem):
         bucket_name, key = self._parse_path(path)
         bucket = self.s3.Bucket(bucket_name)
         for obj in bucket.objects.filter(Prefix=key, Delimiter="/"):
-            sys.stderr.write(">%s>\n" % obj)
             if not obj.key.endswith("/"):
                 return True
         return False
@@ -344,7 +337,6 @@ class BotoFileSystemImpl(AbstractFileSystem):
         for obj in bucket.objects.filter(Prefix=key, Delimiter="/"):
             dt = obj.last_modified
             epoch = int(time.mktime(dt.timetuple()))
-            print(">>> `%s` `%s`" % (key, obj.key))
             return FileRecord(obj.key, False, obj.size, epoch)
         raise FileNotFoundError(path)
 
