@@ -314,7 +314,7 @@ class SyncCLITestCase(unittest.TestCase):
         if os.path.exists(self.local_base):
             shutil.rmtree(self.local_base)
 
-    def test_sync(self):
+    def test_000a_sync(self):
 
         fs = FileSystem()
         fs.open(self.local_path_file0, "wb").close()
@@ -376,7 +376,7 @@ class SyncCLITestCase(unittest.TestCase):
         self.assertTrue(fs.exists(self.local_path_file2))
         self.assertTrue(fs.exists(self.local_path_file3))
 
-    def test_sync_push(self):
+    def test_000b_sync_push(self):
         MemoryFileSystemImpl.clear()
         fs = FileSystem()
 
@@ -421,7 +421,7 @@ class SyncCLITestCase(unittest.TestCase):
         self.assertTrue(fs.exists(self.remote_path_file1))
         self.assertFalse(fs.exists(self.remote_path_file2))
 
-    def test_sync_pull(self):
+    def test_000c_sync_pull(self):
 
         fs = FileSystem()
         fs.open(self.local_path_file0, "wb").close()
@@ -465,7 +465,7 @@ class SyncCLITestCase(unittest.TestCase):
         self.assertFalse(fs.exists(self.remote_path_file1))
         self.assertTrue(fs.exists(self.remote_path_file2))
 
-    def test_copy_up(self):
+    def test_001a_copy_up(self):
 
         fs = FileSystem()
         fs.open(self.local_path_file0, "wb").close()
@@ -486,16 +486,18 @@ class SyncCLITestCase(unittest.TestCase):
         args = parseArgs([
             "sync",
             "--config", "./test",
-            "copy", self.local_path_file0, "server://mem/foo"
+            "copy", self.local_path_file0, "server://mem/copy_up"
         ])
 
         args.client = self.client
 
         _copy(args)
 
-        self.assertTrue(fs.exists("mem://test/foo"))
+        self.assertTrue(fs.exists("mem://test/copy_up"))
 
-    def test_copy_down(self):
+        fs.remove(self.local_path_file0)
+
+    def test_001b_copy_down(self):
 
         fs = FileSystem()
         fs.open(self.remote_path_file0, "wb").close()
@@ -517,7 +519,7 @@ class SyncCLITestCase(unittest.TestCase):
         args = parseArgs([
             "sync",
             "--config", "./test",
-            "copy", "server://mem/foo", self.local_path_file0
+            "copy", "server://mem/copy_down", self.local_path_file0
         ])
 
         args.client = self.client
@@ -525,6 +527,8 @@ class SyncCLITestCase(unittest.TestCase):
         _copy(args)
 
         self.assertTrue(fs.exists(self.local_path_file0))
+
+        fs.remove(self.local_path_file0)
 
 if __name__ == '__main__':
     main_test(sys.argv, globals())

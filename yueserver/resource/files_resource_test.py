@@ -74,6 +74,20 @@ class FilesResourceTestCase(unittest.TestCase):
             files = [f['name'] for f in data['files']]
             self.assertTrue("config.py" in files)
 
+    def test_list_default_empty_root(self):
+        # return information as if the directory was empty
+        # when listing the root directory and it does not exist
+        username = "admin"
+        with self.app.login(username, username) as app:
+            # demonstrate listing a directory and selecting various
+            # directories to explore the system
+            data = app.get_json('/api/fs/default/path/')
+            self.assertEqual(data['name'], "default")
+            self.assertEqual(data['parent'], "")
+            self.assertEqual(data['path'], "")
+            self.assertEqual(len(data['files']), 0)
+            self.assertEqual(len(data['directories']), 0)
+
     def test_download_file(self):
 
         path1 = os.path.join(os.getcwd(), "yueserver/framework/config.py")

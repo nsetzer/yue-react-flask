@@ -275,6 +275,10 @@ def main():
                         default=None,
                         help='the database connection string (sqlite:///database.sqlite)')
 
+    parser.add_argument('--key', dest='private_key',
+                        default=None,
+                        help='the path to the private key')
+
     subparsers = parser.add_subparsers()
 
     ###########################################################################
@@ -486,6 +490,10 @@ def main():
     logging.basicConfig(level=logging.INFO)
 
     logging.warning("profile: %s" % args.profile)
+
+    if args.private_key is not None:
+        with open(args.private_key, "r") as rf:
+            os.environ['YUE_PRIVATE_KEY'] = rf.read()
 
     args.env_cfg_path = os.path.join(args.config, args.profile, "env.yml")
     args.app_cfg_path = os.path.join(args.config, args.profile, "application.yml")

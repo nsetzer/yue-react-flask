@@ -60,6 +60,21 @@ def image_scale_type(name):
         raise Exception("invalid: %s" % name)
     return index
 
+def audio_format(s):
+    if s not in ("raw", "ogg", "mp3", "default"):
+        raise Exception("Invalid audio format: %s" % s)
+    return s
+
+def audio_channels(s):
+    if s not in ("stereo", "mono"):
+        raise Exception("Invalid audio channel layout: %s" % s)
+    return s
+
+def audio_quality(s):
+    if s not in ("low", "medium", "high"):
+        raise Exception("Invalid audio quality: %s" % s)
+    return s
+
 class LibraryResource(WebResource):
     """LibraryResource
 
@@ -150,10 +165,18 @@ class LibraryResource(WebResource):
         return jsonify(result=song)
 
     @get("<song_id>/audio")
-    @param("mode", default="non-ogg",
-        doc="one of original|non-ogg|non-mp3|mp3_320_2ch")
+    @param("mode", type_=audio_format, default="default",
+        doc="one of raw|ogg|mp3|default")
+    @param("quality", type_=audio_quality, default="medium",
+        doc="one of low|medium|high")
+    @param("layout", type_=audio_channels, default="stereo",
+        doc="one of stereo|mono")
     @requires_auth("library_read_song")
     def get_song_audio(self, song_id):
+
+        # TODO: this default should be in the application config
+        if g.args.mode == 'default':
+            g.args.mode == "ogg"
 
         song = self.audio_service.findSongById(g.current_user, song_id)
 
@@ -169,25 +192,26 @@ class LibraryResource(WebResource):
         #    logging.error("Audio for %s not found at: `%s`" % (song_id, path))
         #    return httpError(404, "Audio File not found")
 
-        # todo: a normal-type user (one who only listens to audio)
-        # should be allowed to transcode non-mp3 to exactly one format,
-        # and should be denied the ability to transcode to any other format
-        # i.e. the user role must have library_write_song in order to
-        # transcode anything other than "non-mp3"
-
-        #if self.transcode_service.shouldTranscodeSong(song, g.args.mode):
-        #    path = self.transcode_service.transcodeSong(song, g.args.mode)
-
         # TODO: use storage service? or ask forgiveness instead of
         # making an s3 call here...
         if not self.audio_service.fs.exists(path):
             logging.error("Audio for %s not found at: `%s`" % (song_id, path))
             return httpError(404, "Audio File not found")
 
-        #record = self.audio_service.fs.file_info(path)
+        if self.transcode_service.shouldTranscodeSong(song, g.args.mode):
+            # TODO: Warning: this has the potential fr=or launching 3 IO threads
+            #   2 for s3, read and writer side of a process file
+            #   1 for transcode, pipeing s3 into a process
+            channels = 2 if g.args.layout == "stereo" else 1
+            go = self.transcode_service.transcodeSongGen(song,
+                g.args.mode, g.args.quality, nchannels=channels)
+            if go is not None:
+                return send_generator(go, song[Song.id] + "." + g.args.mode)
+
         size = song[Song.file_size] or None
+        _, name = self.audio_service.fs.split(song[Song.path])
         go = files_generator(self.audio_service.fs, path)
-        return send_generator(go, record.name, file_size=record.size)
+        return send_generator(go, name, file_size=size)
 
     @post("<song_id>/audio")
     @body(song_audio_path_validator)

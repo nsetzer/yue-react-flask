@@ -114,21 +114,19 @@ class FilesResource(WebResource):
         return jsonify(result=roots)
 
     def _list_path(self, root, path, list_=False):
+        # TODO: move this into the service layer
 
         fs = self.filesys_service.fs
         # application config should define a number of valid roots
         # that can be listed.
         abs_path = self.filesys_service.getPath(g.current_user, root, path)
 
-        # if not fs.exists(abs_path):
-        #    logging.error("not found: %s" % path)
-        #    return httpError(404, "path does not exist")
-
         isFile = False
         try:
             info = self.filesys_service.storageDao.file_info(g.current_user['id'], abs_path)
             isFile = not info.isDir
         except StorageNotFoundException as e:
+
             pass
 
         if isFile:
@@ -145,6 +143,11 @@ class FilesResource(WebResource):
             result = self.filesys_service.listDirectory(g.current_user, root, path)
             return jsonify(result=result)
         except StorageNotFoundException as e:
+            if path == "":
+                return jsonify(result={"name": root,
+                    "path": "", "parent": "",
+                    "files": [], "directories": []})
+
             return httpError(404, "not found: root: `%s` path: `%s`" % (
                 root, path))
 

@@ -60,14 +60,17 @@ class FilesResourceTestCase(unittest.TestCase):
             Song.path: "./test/r160.mp3",
         }
 
-        expected_path = "./test/transcode-test.256.2ch.mp3"
+        expected_path = "./test/transcode-test.2.medium.ogg"
         if os.path.exists(expected_path):
             os.remove(expected_path)
+        expected_name = os.path.split(expected_path)[-1]
 
-        path = self.service.transcodeSong(song, "mp3_256_2ch")
+        path = self.service.transcodeSong(song, "ogg", "medium", 2)
 
         # the transcode process should produce a new file with non-zero size
         self.assertNotEqual(song[Song.path], path)
+        actual_name = os.path.split(path)[-1]
+        self.assertEqual(actual_name, expected_name)
         self.assertTrue(os.path.exists(path))
         st = os.stat(path)
         self.assertTrue(st.st_size > 0)

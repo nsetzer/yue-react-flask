@@ -130,7 +130,9 @@ class FileSysService(object):
         files = []
         dirs = []
 
-        for record in self.storageDao.listdir(user['id'], abs_path + "/"):
+        records = self.storageDao.listdir(user['id'], abs_path + "/")
+
+        for record in records:
             #pathname = self.fs.join(abs_path, record.name)
 
             if record.isDir:
