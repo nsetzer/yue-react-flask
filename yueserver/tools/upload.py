@@ -96,7 +96,11 @@ class JsonUploader(object):
 
     def upload(self, songs, remote_songs, remote_files):
         for song in songs:
-            self._upload_one(song, remote_songs, remote_files)
+            try:
+                self._upload_one(song, remote_songs, remote_files)
+            except Exception as e:
+                logging.error("%s" % e)
+
 
     def _upload_one(self, song, remote_songs, remote_files):
 
@@ -112,17 +116,23 @@ class JsonUploader(object):
         _, art_name = posixpath.split(art_path)
 
         # transcode options
+        volume = min(2.0, song['equalizer'] / 100.0)
+        if volume < 0.2:
+            volume = 1.0
+
         opts = {
-            "nchannels": 2,
-            "volume": 1.0,
+            "volume": volume,
             "samplerate": 44100,
-            "bitrate": 256,
+            "scale": 4,
             "metadata": {
-                "artist": song.get('artist', "Unknown Artist"),
-                "title": song.get('title', "Unknown Title"),
-                "album": song.get('album', "Unknown Album"),
+                "ARTIST": song.get('artist', "Unknown Artist"),
+                "ALBUM": song.get('title', "Unknown Title"),
+                "TITLE": song.get('album', "Unknown Album"),
             }
         }
+
+        # volume has been normalized, so set equalizer to default
+        song['equalizer'] = 100
 
         if static_path in remote_songs:
             logging.info("update: %s" % static_path)
@@ -148,12 +158,16 @@ class JsonUploader(object):
 
     def _transcode_upload(self, local_path, remote_path, opts):
         if not local_path.endswith("ogg"):
+            logging.info("transcoding file")
             # transcode the file into memory
             f = io.BytesIO()
 
             try:
                 with open(local_path, "rb") as rb:
-                    self.transcoder.transcode_ogg(rb, f, **opts)
+                    cmd = self.transcoder.get_ogg_args(**opts)
+                    self.transcoder.transcode(rb, f, cmd)
+
+                logging.info("uploading file")
 
                 f.seek(0)
                 if self.s3fs is not None:
@@ -164,6 +178,7 @@ class JsonUploader(object):
                 f.close()
 
         else:
+            logging.info("uploading file")
             with open(local_path, "rb") as rb:
                 if self.s3fs is not None:
                     self.s3fs.upload(remote_path, rb)

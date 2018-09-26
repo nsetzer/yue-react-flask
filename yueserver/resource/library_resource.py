@@ -66,7 +66,7 @@ def audio_format(s):
     return s
 
 def audio_channels(s):
-    if s not in ("stereo", "mono"):
+    if s not in ("stereo", "mono", "default"):
         raise Exception("Invalid audio channel layout: %s" % s)
     return s
 
@@ -170,13 +170,13 @@ class LibraryResource(WebResource):
     @param("quality", type_=audio_quality, default="medium",
         doc="one of low|medium|high")
     @param("layout", type_=audio_channels, default="stereo",
-        doc="one of stereo|mono")
+        doc="one of stereo|mono|default")
     @requires_auth("library_read_song")
     def get_song_audio(self, song_id):
 
         # TODO: this default should be in the application config
         if g.args.mode == 'default':
-            g.args.mode == "ogg"
+            g.args.mode = "ogg"
 
         song = self.audio_service.findSongById(g.current_user, song_id)
 
@@ -202,7 +202,11 @@ class LibraryResource(WebResource):
             # TODO: Warning: this has the potential fr=or launching 3 IO threads
             #   2 for s3, read and writer side of a process file
             #   1 for transcode, pipeing s3 into a process
-            channels = 2 if g.args.layout == "stereo" else 1
+            channels = {
+                "stereo": 2,
+                "mono": 1,
+                "default": 0,
+            }.get(g.args.layout)
             go = self.transcode_service.transcodeSongGen(song,
                 g.args.mode, g.args.quality, nchannels=channels)
             if go is not None:

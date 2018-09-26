@@ -114,9 +114,10 @@ class TranscodeService(object):
         srcpath = song[Song.path]
         ext = srcpath.lower()[-3:]
 
-        opts = {
-            "nchannels": nchannels,
-        }
+        opts = {}
+
+        if nchannels > 0:
+            opts["nchannels"] = nchannels
 
         if format == "raw" or ext == format:
             return None

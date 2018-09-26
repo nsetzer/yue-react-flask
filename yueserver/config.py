@@ -43,6 +43,7 @@ class DatabaseConfig(BaseConfig):
 
 class TranscodeAudioConfig(BaseConfig):
     def __init__(self, base):
+        self.default_mode = self.get_key(base, 'default', default="ogg")
         self.bin_path = self.get_key(base, 'bin_path', default="")
         self.tmp_path = self.get_key(base, 'tmp_path', default="./tmp")
 
