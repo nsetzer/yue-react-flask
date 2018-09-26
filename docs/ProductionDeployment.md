@@ -37,6 +37,7 @@ sudo usermod -aG yueapp adminuser
  apt install build-essential libssl-dev libffi-dev
  apt install python3-pip python3-dev python3-venv python3-setuptools
  apt install nginx
+ apt install ffmpeg
 
 ```
 
