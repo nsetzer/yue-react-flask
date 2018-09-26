@@ -111,6 +111,7 @@ chmod chmod 600 crypt/rsa{.pem,.pub}
 
 ```bash
 $ ls -la ./crypt
+drwxr-xr-x 2 root root 4096 Sep 16 09:49 .
 -rw------- 1 root root 1674 Sep 16 09:50 rsa.pem
 -rw------- 1 root root  450 Sep 16 09:50 rsa.pub
 ```

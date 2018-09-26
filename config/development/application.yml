@@ -12,12 +12,7 @@ server:
 
   database:
     kind: "sqlite"
-    path: "database.sqlite"
-    #kind: "postgresql"
-    #hostname: "localhost:5432"
-    #username: nsetzer
-    #password: password
-    #database: nsetzer
+    path: "database-dev.sqlite"
 
   ssl:
     # ssl is disabled so that the frontend can communicate
