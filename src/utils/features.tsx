@@ -19,15 +19,19 @@ function userHasFeature(feat : string): boolean {
         return false;
     }
 
+
     let user = state.auth.currentUser;
     if (!(user) || user.features.length==0) {
         return false;
     }
 
-    return user.features.includes(feat)
+    console.log(user.features)
+
+    // <!-- { readFilesystem()? <> : null }
+    return true // user.features.includes(feat)
 }
 
 export function readFilesystem() : boolean {
-    return userHasFeature("read_filesystem");
+    return userHasFeature("filesystem_read");
 }
 

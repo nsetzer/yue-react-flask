@@ -124,15 +124,13 @@ class AppSideNav extends React.Component<IAppSideNavProps,IAppSideNavState> {
           </ListItemIcon>
           <ListItemText primary="Settings" />
         </ListItem>
-        { readFilesystem()?
-          <ListItem button
-                    onClick={() => {this.openPage('/main/filesystem');}}>
-            <ListItemIcon>
-              <Settings />
-            </ListItemIcon>
-            <ListItemText primary="File System" />
-          </ListItem> : null
-        }
+        <ListItem button
+                  onClick={() => {this.openPage('/main/filesystem');}}>
+          <ListItemIcon>
+            <Settings />
+          </ListItemIcon>
+          <ListItemText primary="File System" />
+        </ListItem>
       <Divider />
         <ListItem button
                   onClick={this.props.onLogout}>
