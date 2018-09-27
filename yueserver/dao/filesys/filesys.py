@@ -158,11 +158,19 @@ class MemoryFileSystemImpl(AbstractFileSystem):
 
     def file_info(self, path):
 
+        _, name = self.split(path)
+
         if path not in MemoryFileSystemImpl._mem_store:
+            # guess tha
+            temp = path
+            if not temp.endswith("/"):
+                temp += "/"
+            for f in MemoryFileSystemImpl._mem_store.keys():
+                if f.startswith(temp):
+                    return FileRecord(name, True, 0, 0)
             raise FileNotFoundError(path)
 
         f, mtime = MemoryFileSystemImpl._mem_store[path]
-        _, name = self.split(path)
 
         return FileRecord(name, False, len(f.getvalue()), mtime)
 

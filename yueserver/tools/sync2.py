@@ -14,6 +14,7 @@ from yueserver.app import connect
 from yueserver.framework.client import split_auth
 from yueserver.framework.crypto import CryptoManager
 from yueserver.tools.sync import SyncManager
+from yueserver.dao.filesys.filesys import FileSystem
 
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm.session import sessionmaker
@@ -74,6 +75,7 @@ def db_connect(connection_string):
     db.conn = db.session.bind.connect()
     db.conn.connection.create_function('REGEXP', 2, regexp)
     db.create_all = lambda: db.metadata.create_all(engine)
+    db.delete = lambda table: db.session.execute(delete(table))
 
     path = connection_string[len("sqlite:///"):]
     if path and not os.access(path, os.W_OK):
@@ -129,7 +131,6 @@ class LocalStoragDao(object):
         FsTab = self.dbtables.LocalStorageTable
 
         if not path_prefix:
-
             query = select(['*']).select_from(FsTab)
         else:
             if not path_prefix.endswith(delimiter):
@@ -162,6 +163,20 @@ class LocalStoragDao(object):
                 files.append(item)
 
         return dirs, files
+
+    def clearRemote(self, commit=True):
+        """ prior to a fetch, all remote files must have the version set to 0
+        This will allow the _check method to determine if a remote file
+        was deleted. Fetch will update the version for all files that
+        exist remotely
+        """
+        query = update(self.dbtables.LocalStorageTable) \
+            .values({"remote_version": 0})
+
+        self.db.session.execute(query)
+
+        if commit:
+            self.db.session.commit()
 
 def get_cfg(directory):
 
@@ -215,6 +230,279 @@ def get_mgr(directory, dryrun=False):
 
     return mgr
 
+class RecordBuilder(object):
+    """docstring for RecordBuilder"""
+    def __init__(self, rel_path=None):
+        super(RecordBuilder, self).__init__()
+
+        self.rel_path = rel_path
+
+        self.lf = {
+            "local_version": 0,
+            "local_size": 0,
+            "local_mtime": 0,
+            "local_permission": 0,
+        }
+
+        self.rf = {
+            "remote_version": 0,
+            "remote_size": 0,
+            "remote_mtime": 0,
+            "remote_permission": 0,
+        }
+
+    def _update_int(self, obj, key, value):
+        if value is not None:
+            obj[key] = value
+
+    def localFromInfo(self, info):
+        return self.local(info.version, info.size, info.mtime, info.permission)
+
+    def local(self, version=None, size=None, mtime=None, permission=None):
+
+        self._update_int(self.lf, "local_version", version)
+        self._update_int(self.lf, "local_size", size)
+        self._update_int(self.lf, "local_mtime", mtime)
+        self._update_int(self.lf, "local_permission", permission)
+
+        return self
+
+    def remoteFromInfo(self, info):
+        return self.remote(info.version, info.size, info.mtime, info.permission)
+
+    def remote(self, version=None, size=None, mtime=None, permission=None):
+
+        self._update_int(self.rf, "remote_version", version)
+        self._update_int(self.rf, "remote_size", size)
+        self._update_int(self.rf, "remote_mtime", mtime)
+        self._update_int(self.rf, "remote_permission", permission)
+
+        return self
+
+    def build(self):
+        record = {}
+        if self.rel_path is not None:
+            record['rel_path'] = self.rel_path
+        record.update(self.lf)
+        record.update(self.rf)
+        return record
+
+class FileState(object):
+    SAME = "same"
+    PUSH = "push"
+    PULL = "pull"
+    ERROR = "error"
+    CONFLICT_MODIFIED = "conflict-modified"
+    CONFLICT_CREATED = "conflict-created"
+    CONFLICT_VERSION = "conflict-version"
+    DELETE_BOTH = "delete-both"
+    DELETE_REMOTE = "delete-remote"
+    DELETE_LOCAL = "delete-local"
+
+class FileEnt(object):
+    def __init__(self, remote_path, local_path, lf, rf, af):
+        super(FileEnt, self).__init__()
+        self.remote_path = remote_path
+        self.local_path = local_path
+        self.lf = lf
+        self.rf = rf
+        self.af = af
+
+    def __str__(self):
+        return "FileEnt<%s,%s>" % (self.remote_path, self.local_path)
+
+    def __repr__(self):
+        return "FileEnt<%s,%s>" % (self.remote_path, self.local_path)
+
+class DirEnt(object):
+    def __init__(self, remote_base, dirs, files):
+        self.remote_base = remote_base
+        super(DirEnt, self).__init__()
+        self.dirs = dirs
+        self.files = files
+
+    def __str__(self):
+        return "DirEnt<%s,%d,%d>" % (self.remote_base, len(self.dirs), len(self.files))
+
+    def __repr__(self):
+        return "DirEnt<%s, %d,%d>" % (self.remote_base, len(self.dirs), len(self.files))
+
+def _check_impl():
+    pass
+
+def _check(storageDao, fs, root, remote_base, local_base):
+
+    if remote_base and not remote_base.endswith("/"):
+        remote_base += "/"
+
+    dirs = set()
+    files = []
+    _dirs, _files = storageDao.listdir(remote_base)
+    _names = set(fs.listdir(local_base))
+
+    for d in _dirs:
+        remote_path = posixpath.join(remote_base, d)
+        if d in _names:
+            _names.remove(d)
+            local_path = fs.join(local_base, d)
+        else:
+            local_path = None
+        dirs.add((remote_path, local_path))
+
+    for f in _files:
+
+        if f['rel_path'] in _names:
+            _names.remove(f['rel_path'])
+
+        remote_path = posixpath.join(remote_base, f['rel_path'])
+        local_path = fs.join(local_base, f['rel_path'])
+
+        lf = {
+            "version": f['local_version'],
+            "size": f['local_size'],
+            "mtime": f['local_mtime'],
+            "permission": f['local_permission'],
+        }
+        if lf['version'] == 0:
+            lf = None
+
+        rf = {
+            "version": f['remote_version'],
+            "size":    f['remote_size'],
+            "mtime":   f['remote_mtime'],
+            "permission": f['remote_permission'],
+        }
+
+        if rf['version'] == 0:
+            rf = None
+
+        try:
+            record = fs.file_info(local_path)
+
+            af = {
+                "version": record.version,
+                "size": record.size,
+                "mtime": record.mtime,
+                "permission": record.permission,
+            }
+        except FileNotFoundError:
+            af = None
+        files.append(FileEnt(remote_path, local_path, lf, rf, af))
+
+    for n in _names:
+        remote_path = os.path.join(remote_base, n)
+        local_path = os.path.join(local_base, n)
+        record = fs.file_info(local_path)
+
+        if record.isDir:
+            dirs.add((None, local_path))
+        else:
+            af = {
+                "version": record.version,
+                "size": record.size,
+                "mtime": record.mtime,
+                "permission": record.permission,
+            }
+            files.append(FileEnt(remote_path, local_path, None, None, af))
+
+    return DirEnt(remote_base, dirs, files)
+
+def _check_threeway_compare(lf, rf, af):
+    # given three data-dicts representing a file
+    # for local, remote, and actual state
+    # determines whether the file should be pushed or pulled to sync
+
+    def samefile(a, b):
+        b = a['mtime'] == b['mtime'] and \
+            a['size'] == b['size'] and \
+            a['permission'] == b['permission']
+        return b
+
+    if lf['version'] < rf['version']:
+        if samefile(lf, af):
+            return FileState.PULL + ":3a"
+        else:
+            return FileState.CONFLICT_MODIFIED + ":3a"
+    elif lf['version'] > rf['version']:
+        return FileState.CONFLICT_VERSION + ":3a"
+    else:
+        if samefile(lf, af):
+            # file has not been changed locally
+            if samefile(lf, rf):
+                # file has not been changed on remote
+                return FileState.SAME + ":3a"
+            else:
+                # locally is the same but remote is different
+                # this is a weird state
+                return FileState.CONFLICT_VERSION + ":3b"
+        else:
+            # file has changed locally
+            if samefile(lf, rf):
+                # local is newer
+                return FileState.PUSH + ":3a"
+            else:
+                # both modified
+                return FileState.CONFLICT_MODIFIED + ":3b"
+
+        return FileState.ERROR + ":3b"
+
+def _check_get_state(f):
+
+    # this assumes that fetch properly updates the database
+    # fetch needs to clear the remote version for files that are
+    # found locally but not returned from the api call
+
+    # | N | _LF_ | _RF_ | _AF_
+    # | 0 | none | none | none | error
+    # | 1 | none | none | true | push
+    # | 2 | none | true | none | pull
+    # | 3 | none | true | true | conflict : created both
+    # | 4 | true | none | none | delete both remotely and locally (run gc)
+    # | 5 | true | none | true | deleted remote
+    # | 6 | true | true | none | deleted locally
+    # | 7 | true | true | true | compare metadata and decide
+
+    # TODO: _del|local and _del|remote how to handle?
+
+    lfnull = f.lf is None
+    rfnull = f.rf is None
+    afnull = f.af is None
+
+    lfe = f.lf is not None
+    rfe = f.rf is not None
+    afe = f.af is not None
+
+    if lfnull and rfnull and afnull:
+        return FileState.ERROR
+
+    # 1 : push
+    if lfnull and rfnull and afe:
+        return FileState.PUSH + ":1"
+
+    # 2 : pull
+    elif lfnull and rfe and afnull:
+        return FileState.PULL + ":1"
+
+    # 3 : conflict
+    elif lfnull and rfe and afe:
+        return FileState.CONFLICT_CREATED + ":1"
+
+    # 4 : collect garbage
+    elif lfe and rfnull and afnull:
+        return FileState.DELETE_BOTH + ":1"
+
+    # 5 : delete remote
+    elif lfe and rfnull and afe:
+        return FileState.DELETE_REMOTE + ":1"
+
+    # 6 : delete local
+    elif lfe and rfe and afnull:
+        return FileState.DELETE_LOCAL + ":1"
+
+    # 7 : delete local
+    elif lfe and rfe and afe:
+        return _check_threeway_compare(f.lf, f.rf, f.af)
+
 def cli_init(args):
 
     #TODO: pwd should be empty
@@ -262,6 +550,8 @@ def cli_fetch(args):
         userdata['username'], userdata['password'])
 
     storageDao = LocalStoragDao(db, db.tables)
+
+    storageDao.clearRemote(False)
 
     page = 0
     limit = 500
