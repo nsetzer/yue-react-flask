@@ -41,6 +41,9 @@ class LocalFileSystemImpl(AbstractFileSystem):
     def listdir(self, path):
         return os.listdir(path)
 
+    def relpath(self, path, root):
+        return os.path.relpath(path, root)
+
     def scandir(self, path):
 
         entries = []
@@ -107,6 +110,9 @@ class MemoryFileSystemImpl(AbstractFileSystem):
 
     def isdir(self, path):
         return path not in MemoryFileSystemImpl._mem_store
+
+    def relpath(self, path, root):
+        return posixpath.relpath(path, root)
 
     def exists(self, path):
         return path in MemoryFileSystemImpl._mem_store

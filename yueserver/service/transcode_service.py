@@ -99,7 +99,10 @@ class TranscodeService(object):
     def instance():
         return TranscodeService._instance
 
-    def shouldTranscodeSong(self, song, mode):
+    def shouldTranscodeSong(self, song, format):
+
+        if format == "default":
+            format = config.transcode.audio.default_format
 
         srcpath = song[Song.path]
         ext = srcpath.lower()[-3:]
@@ -110,6 +113,9 @@ class TranscodeService(object):
         return True
 
     def _getTranscodeCommand(self, song, format, quality, nchannels, volume):
+
+        if format == "default":
+            format = config.transcode.audio.default_format
 
         srcpath = song[Song.path]
         ext = srcpath.lower()[-3:]
@@ -158,6 +164,21 @@ class TranscodeService(object):
             with _TranscodeFile(cmd, rb) as tb:
                 for buf in iter(lambda: tb.read(2048), b""):
                     yield buf
+
+    def audioName(self, song, format, quality, nchannels=2):
+
+        if format == "default":
+            format = config.transcode.audio.default_format
+
+        name = song[Song.id]
+
+        if format == "raw":
+            ext = self.fs.splitext(self.fs.split(song[Song.path])[1])[1]
+            return "%s%s" % (name, ext)
+        elif nchannels > 0:
+            return "%s.%s.%s.%s" % (name, nchannels, quality, format)
+        else:
+            return "%s.%s.%s" % (name, quality, format)
 
     def transcodeSongGen(self, song, format, quality, nchannels=2, volume=1.0):
 

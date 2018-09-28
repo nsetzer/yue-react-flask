@@ -299,11 +299,57 @@ class FileState(object):
     DELETE_REMOTE = "delete-remote"
     DELETE_LOCAL = "delete-local"
 
+    @staticmethod
+    def symbol(state):
+        if FileState.SAME == state:
+            sym = "= "
+        if FileState.PUSH == state:
+            sym = "> "
+        if FileState.PULL == state:
+            sym = "< "
+        if FileState.ERROR == state:
+            sym = "x "
+        if FileState.CONFLICT_MODIFIED == state:
+            sym = "cm"
+        if FileState.CONFLICT_CREATED == state:
+            sym = "cc"
+        if FileState.CONFLICT_VERSION == state:
+            sym = "cv"
+        if FileState.DELETE_BOTH == state:
+            sym = "d="
+        if FileState.DELETE_REMOTE == state:
+            sym = "d<"
+        if FileState.DELETE_LOCAL == state:
+            sym = "d>"
+        return sym
+
+class DirEnt(object):
+    """docstring for DirEnt"""
+    def __init__(self, name, remote_base, local_base):
+        super(DirEnt, self).__init__()
+        self.remote_base = remote_base
+        self.local_base = local_base
+        self._name = name
+
+    def state(self):
+        if self.remote_base is None and self.local_base is None:
+            return FileState.ERROR
+        elif self.remote_base is None and self.local_base is not None:
+            return FileState.PUSH
+        elif self.remote_base is not None and self.local_base is None:
+            return FileState.PULL
+        elif self.remote_base is not None and self.local_base is not None:
+            return FileState.SAME
+
+    def name(self):
+        return self._name
+
 class FileEnt(object):
     def __init__(self, remote_path, local_path, lf, rf, af):
         super(FileEnt, self).__init__()
         self.remote_path = remote_path
         self.local_path = local_path
+
         self.lf = lf
         self.rf = rf
         self.af = af
@@ -314,31 +360,92 @@ class FileEnt(object):
     def __repr__(self):
         return "FileEnt<%s,%s>" % (self.remote_path, self.local_path)
 
-class DirEnt(object):
+    def name(self):
+        return posixpath.split(self.remote_path)[1]
+
+    def state(self):
+
+        # this assumes that fetch properly updates the database
+        # fetch needs to clear the remote version for files that are
+        # found locally but not returned from the api call
+
+        # | N | _LF_ | _RF_ | _AF_
+        # | 0 | none | none | none | error
+        # | 1 | none | none | true | push
+        # | 2 | none | true | none | pull
+        # | 3 | none | true | true | conflict : created both
+        # | 4 | true | none | none | delete both remotely and locally (run gc)
+        # | 5 | true | none | true | deleted remote
+        # | 6 | true | true | none | deleted locally
+        # | 7 | true | true | true | compare metadata and decide
+
+        # TODO: _del|local and _del|remote how to handle?
+
+        lfnull = self.lf is None
+        rfnull = self.rf is None
+        afnull = self.af is None
+
+        lfe = self.lf is not None
+        rfe = self.rf is not None
+        afe = self.af is not None
+
+        if lfnull and rfnull and afnull:
+            return FileState.ERROR
+
+        # 1 : push
+        if lfnull and rfnull and afe:
+            return FileState.PUSH + ":1"
+
+        # 2 : pull
+        elif lfnull and rfe and afnull:
+            return FileState.PULL + ":1"
+
+        # 3 : conflict
+        elif lfnull and rfe and afe:
+            return FileState.CONFLICT_CREATED + ":1"
+
+        # 4 : collect garbage
+        elif lfe and rfnull and afnull:
+            return FileState.DELETE_BOTH + ":1"
+
+        # 5 : delete remote
+        elif lfe and rfnull and afe:
+            return FileState.DELETE_REMOTE + ":1"
+
+        # 6 : delete local
+        elif lfe and rfe and afnull:
+            return FileState.DELETE_LOCAL + ":1"
+
+        # 7 : delete local
+        elif lfe and rfe and afe:
+            return _check_threeway_compare(self.lf, self.rf, self.af)
+
+class CheckResult(object):
     def __init__(self, remote_base, dirs, files):
         self.remote_base = remote_base
-        super(DirEnt, self).__init__()
+        super(CheckResult, self).__init__()
         self.dirs = dirs
         self.files = files
 
     def __str__(self):
-        return "DirEnt<%s,%d,%d>" % (self.remote_base, len(self.dirs), len(self.files))
+        return "CheckResult<%s,%d,%d>" % (self.remote_base, len(self.dirs), len(self.files))
 
     def __repr__(self):
-        return "DirEnt<%s, %d,%d>" % (self.remote_base, len(self.dirs), len(self.files))
-
-def _check_impl():
-    pass
+        return "CheckResult<%s, %d,%d>" % (self.remote_base, len(self.dirs), len(self.files))
 
 def _check(storageDao, fs, root, remote_base, local_base):
 
     if remote_base and not remote_base.endswith("/"):
         remote_base += "/"
 
-    dirs = set()
+    dirs = []
     files = []
     _dirs, _files = storageDao.listdir(remote_base)
-    _names = set(fs.listdir(local_base))
+    # TODO: looks like memfs impl for exists is broken for dirs
+    if not fs.islocal(local_base) or fs.exists(local_base):
+        _names = set(fs.listdir(local_base))
+    else:
+        _names = set()
 
     for d in _dirs:
         remote_path = posixpath.join(remote_base, d)
@@ -347,7 +454,7 @@ def _check(storageDao, fs, root, remote_base, local_base):
             local_path = fs.join(local_base, d)
         else:
             local_path = None
-        dirs.add((remote_path, local_path))
+        dirs.append(DirEnt(d, remote_path, local_path))
 
     for f in _files:
 
@@ -363,6 +470,7 @@ def _check(storageDao, fs, root, remote_base, local_base):
             "mtime": f['local_mtime'],
             "permission": f['local_permission'],
         }
+
         if lf['version'] == 0:
             lf = None
 
@@ -387,15 +495,16 @@ def _check(storageDao, fs, root, remote_base, local_base):
             }
         except FileNotFoundError:
             af = None
+        rel_path = remote_path
         files.append(FileEnt(remote_path, local_path, lf, rf, af))
 
     for n in _names:
-        remote_path = os.path.join(remote_base, n)
-        local_path = os.path.join(local_base, n)
+        remote_path = posixpath.join(remote_base, n)
+        local_path = fs.join(local_base, n)
         record = fs.file_info(local_path)
 
         if record.isDir:
-            dirs.add((None, local_path))
+            dirs.append(DirEnt(n, None, local_path))
         else:
             af = {
                 "version": record.version,
@@ -405,7 +514,7 @@ def _check(storageDao, fs, root, remote_base, local_base):
             }
             files.append(FileEnt(remote_path, local_path, None, None, af))
 
-    return DirEnt(remote_base, dirs, files)
+    return CheckResult(remote_base, dirs, files)
 
 def _check_threeway_compare(lf, rf, af):
     # given three data-dicts representing a file
@@ -445,63 +554,6 @@ def _check_threeway_compare(lf, rf, af):
                 return FileState.CONFLICT_MODIFIED + ":3b"
 
         return FileState.ERROR + ":3b"
-
-def _check_get_state(f):
-
-    # this assumes that fetch properly updates the database
-    # fetch needs to clear the remote version for files that are
-    # found locally but not returned from the api call
-
-    # | N | _LF_ | _RF_ | _AF_
-    # | 0 | none | none | none | error
-    # | 1 | none | none | true | push
-    # | 2 | none | true | none | pull
-    # | 3 | none | true | true | conflict : created both
-    # | 4 | true | none | none | delete both remotely and locally (run gc)
-    # | 5 | true | none | true | deleted remote
-    # | 6 | true | true | none | deleted locally
-    # | 7 | true | true | true | compare metadata and decide
-
-    # TODO: _del|local and _del|remote how to handle?
-
-    lfnull = f.lf is None
-    rfnull = f.rf is None
-    afnull = f.af is None
-
-    lfe = f.lf is not None
-    rfe = f.rf is not None
-    afe = f.af is not None
-
-    if lfnull and rfnull and afnull:
-        return FileState.ERROR
-
-    # 1 : push
-    if lfnull and rfnull and afe:
-        return FileState.PUSH + ":1"
-
-    # 2 : pull
-    elif lfnull and rfe and afnull:
-        return FileState.PULL + ":1"
-
-    # 3 : conflict
-    elif lfnull and rfe and afe:
-        return FileState.CONFLICT_CREATED + ":1"
-
-    # 4 : collect garbage
-    elif lfe and rfnull and afnull:
-        return FileState.DELETE_BOTH + ":1"
-
-    # 5 : delete remote
-    elif lfe and rfnull and afe:
-        return FileState.DELETE_REMOTE + ":1"
-
-    # 6 : delete local
-    elif lfe and rfe and afnull:
-        return FileState.DELETE_LOCAL + ":1"
-
-    # 7 : delete local
-    elif lfe and rfe and afe:
-        return _check_threeway_compare(f.lf, f.rf, f.af)
 
 def cli_init(args):
 
@@ -580,7 +632,7 @@ def cli_fetch(args):
 
     db.session.commit()
 
-def cli_status(args):
+def cli_status_old(args):
 
     mgr = get_mgr(os.getcwd(), True)
 
@@ -588,6 +640,54 @@ def cli_status(args):
     cont = True
     while cont:
         cont = mgr.next(**settings)
+
+def _status_dir_impl(storageDao, fs, root,
+  remote_base, remote_dir, local_base, local_dir, recursive):
+
+    result = _check(storageDao, fs, root, remote_dir, local_dir)
+
+    ents = list(result.dirs) + list(result.files)
+
+    for ent in sorted(ents, key=lambda x: x.name()):
+
+        if isinstance(ent, DirEnt):
+
+            state = ent.state()
+            sym = FileState.symbol(state)
+            if ent.local_base:
+                path = fs.relpath(ent.local_base, local_base)
+            else:
+                path = posixpath.relpath(ent.remote_base, remote_base)
+            print("d%s %s/" % (sym, path))
+
+            if recursive and state != FileState.PULL:
+                rbase = posixpath.join(remote_base, ent.name())
+                lbase = fs.join(local_base, ent.name())
+                _status_dir_impl(storageDao, fs, root,
+                    remote_base, rbase, local_base, lbase, recursive)
+        else:
+
+            state = ent.state().split(':')[0]
+            sym = FileState.symbol(state)
+            path = fs.relpath(ent.local_path, local_base)
+            print("f%s %s" % (sym, path))
+
+def cli_status(args):
+
+    userdata = get_cfg(os.getcwd())
+
+    client = connect(userdata['hostname'],
+        userdata['username'], userdata['password'])
+
+    db = db_connect(userdata['dburl'])
+
+    fs = FileSystem()
+
+    storageDao = LocalStoragDao(db, db.tables)
+
+    _status_dir_impl(storageDao, fs, userdata['root'],
+        userdata['remote_base'], userdata['remote_base'],
+        userdata['local_base'], userdata['local_base'], True)
 
 def cli_pull(args):
 
@@ -601,6 +701,13 @@ def cli_pull(args):
 def cli_push(args):
 
     mgr = get_mgr(os.getcwd())
+
+    # todo:
+    # implement push_dir and push_file
+    # allow a recursion flag for push_dir
+    # accept a list of files and or directories
+    #   validate all files exist, and exist in local base
+    # if no files or directories given, use pwd
 
     settings = {'pull': False, 'push': True, 'delete': False}
     cont = True

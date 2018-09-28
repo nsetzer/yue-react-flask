@@ -122,7 +122,7 @@ def pathCorrectCase(path):
             # change to the parent directory
             # TODO: there is a subtle drive bug on windows here
             # but also windows should never reach this line
-            if newpath == "/":
+            if newpath != "/":
                 newpath = os.path.split(newpath)[0]
             continue
 

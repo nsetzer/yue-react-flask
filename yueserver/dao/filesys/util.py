@@ -42,6 +42,9 @@ class AbstractFileSystem(object):
     def isabs(self, path):
         return self.impl.isabs(path)
 
+    def relpath(self, path, root):
+        self.impl.relpath(path, root)
+
     def join(self, path, *args):
         return self.impl.join(path, *args)
 

@@ -28,6 +28,7 @@ import hashlib
 import io
 import logging
 import posixpath
+import time
 
 from ..app import connect
 from ..dao.transcode import FFmpeg
@@ -95,11 +96,20 @@ class JsonUploader(object):
             self.s3fs = None
 
     def upload(self, songs, remote_songs, remote_files):
+
+        success = 0
+        count = 0
+        start = time.time()
         for song in songs:
+            count += 1
             try:
                 self._upload_one(song, remote_songs, remote_files)
+                success += 1
             except Exception as e:
                 logging.error("%s" % e)
+        end = time.time()
+        logging.warning("uploaded %d/%d in %s seconds" % (
+            success, count, end - start))
 
 
     def _upload_one(self, song, remote_songs, remote_files):

@@ -13,8 +13,7 @@ from ..framework.application import AppTestClientWrapper
 
 from .sync2 import db_connect, \
     DatabaseTables, LocalStoragDao, \
-    _check, RecordBuilder, FileState, FileEnt, DirEnt, \
-    _check_get_state
+    _check, RecordBuilder, FileState
 
 def createTestFile(storageDao, fs, state, variant, rel_path, remote_base, local_base, content=b""):
     """create a file which represents a requested state
@@ -192,12 +191,12 @@ class CheckSyncTestCase(unittest.TestCase):
         createTestFile(self.storageDao, self.fs, state, variant,
             "local/test.txt", "", "mem://", b"hello world")
 
-        dent = _check(self.storageDao, self.fs, "mem", "local", "mem://local")
+        result = _check(self.storageDao, self.fs, "mem", "local", "mem://local")
 
-        self.assertEqual(len(dent.files), 1)
-        actual = _check_get_state(dent.files[0])
+        self.assertEqual(len(result.files), 1)
+        actual = result.files[0].state()
         self.assertTrue(actual.startswith(state), actual)
-        fent = dent.files[0]
+        fent = result.files[0]
         sys.stderr.write("\r%s %s -> %s \t%s\n" % (state, variant, actual, fent))
 
     def test_000_state_same(self):
@@ -240,37 +239,37 @@ class CheckSyncTestCase(unittest.TestCase):
         createTestDirectory(self.storageDao, self.fs, DIR_E_BOTH,
             "subfolder", "", "mem://")
 
-        dent = _check(self.storageDao, self.fs, "mem", "", "mem://")
+        result = _check(self.storageDao, self.fs, "mem", "", "mem://")
 
-        self.assertEqual(len(dent.dirs), 1)
-        remote, local = list(dent.dirs)[0]
+        self.assertEqual(len(result.dirs), 1)
+        dent = result.dirs[0]
 
-        self.assertTrue(remote is not None)
-        self.assertTrue(local is not None)
+        self.assertTrue(dent.remote_base is not None, dent.remote_base)
+        self.assertTrue(dent.local_base is not None, dent.local_base)
 
     def test_001_dir_remote(self):
         createTestDirectory(self.storageDao, self.fs, DIR_E_REMOTE,
             "subfolder", "", "mem://")
 
-        dent = _check(self.storageDao, self.fs, "mem", "", "mem://")
+        result = _check(self.storageDao, self.fs, "mem", "", "mem://")
 
-        self.assertEqual(len(dent.dirs), 1)
-        remote, local = list(dent.dirs)[0]
+        self.assertEqual(len(result.dirs), 1)
+        dent = result.dirs[0]
 
-        self.assertTrue(remote is not None)
-        self.assertTrue(local is None)
+        self.assertTrue(dent.remote_base is not None, dent.remote_base)
+        self.assertTrue(dent.local_base is None, dent.local_base)
 
     def test_001_dir_local(self):
         createTestDirectory(self.storageDao, self.fs, DIR_E_LOCAL,
             "subfolder", "", "mem://")
 
-        dent = _check(self.storageDao, self.fs, "mem", "", "mem://")
+        result = _check(self.storageDao, self.fs, "mem", "", "mem://")
 
-        self.assertEqual(len(dent.dirs), 1)
-        remote, local = list(dent.dirs)[0]
+        self.assertEqual(len(result.dirs), 1)
+        dent = result.dirs[0]
 
-        self.assertTrue(remote is None)
-        self.assertTrue(local is not None)
+        self.assertTrue(dent.remote_base is None, dent.remote_base)
+        self.assertTrue(dent.local_base is not None, dent.local_base)
 
 if __name__ == '__main__':
     main_test(sys.argv, globals())

@@ -300,6 +300,21 @@ class AudioService(object):
         """
         return self.historyDao.retrieve(user['id'], start, end, offset, limit)
 
+    def getPathFromSong(self, user, song):
+        """ returns a file path, if it exits
+
+        """
+
+        if not song:
+            raise AudioServiceException("No song for id %s" % (song))
+
+        path = song[Song.path]
+
+        if not path or not self.fs.exists(path):
+            return FileNotFoundError("No audio for %s" % (song[Song.id]))
+
+        return path
+
 
 
 

@@ -32,6 +32,9 @@ def song_validator(song):
 
 def song_list_validator(songs):
 
+    if isinstance(songs, dict):
+        raise Exception("invalid song list: dictionary not expected")
+
     for song in songs:
         # every record must have a song id (to update), and
         # at least one other field (that will be modified)
@@ -174,46 +177,32 @@ class LibraryResource(WebResource):
     @requires_auth("library_read_song")
     def get_song_audio(self, song_id):
 
-        # TODO: this default should be in the application config
         if g.args.mode == 'default':
             g.args.mode = "ogg"
 
+        channels = {
+            "stereo": 2,
+            "mono": 1,
+            "default": 0,
+        }.get(g.args.layout)
+
         song = self.audio_service.findSongById(g.current_user, song_id)
-
-        if not song:
-            return httpError(404, "No Song for id %s" % (song_id))
-
-        path = song[Song.path]
-
-        if not path:
-            return httpError(404, "No audio for %s" % (song_id))
-
-        #if not os.path.exists(path):
-        #    logging.error("Audio for %s not found at: `%s`" % (song_id, path))
-        #    return httpError(404, "Audio File not found")
-
-        # TODO: use storage service? or ask forgiveness instead of
-        # making an s3 call here...
-        if not self.audio_service.fs.exists(path):
-            logging.error("Audio for %s not found at: `%s`" % (song_id, path))
-            return httpError(404, "Audio File not found")
+        path = self.audio_service.getPathFromSong(g.current_user, song)
 
         if self.transcode_service.shouldTranscodeSong(song, g.args.mode):
-            # TODO: Warning: this has the potential fr=or launching 3 IO threads
+            # TODO: Warning: this has the potential for launching 3 IO threads
             #   2 for s3, read and writer side of a process file
             #   1 for transcode, pipeing s3 into a process
-            channels = {
-                "stereo": 2,
-                "mono": 1,
-                "default": 0,
-            }.get(g.args.layout)
+
+            name = self.transcode_service.audioName(song,
+                g.args.mode, g.args.quality, nchannels=channels)
             go = self.transcode_service.transcodeSongGen(song,
                 g.args.mode, g.args.quality, nchannels=channels)
             if go is not None:
-                return send_generator(go, song[Song.id] + "." + g.args.mode)
+                return send_generator(go, name)
 
         size = song[Song.file_size] or None
-        _, name = self.audio_service.fs.split(song[Song.path])
+        _, name = self.audio_service.fs.split(path)
         go = files_generator(self.audio_service.fs, path)
         return send_generator(go, name, file_size=size)
 

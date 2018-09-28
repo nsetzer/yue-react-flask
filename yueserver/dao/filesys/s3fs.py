@@ -34,6 +34,9 @@ class S3FileSystemImpl(AbstractFileSystem):
         _, is_dir, _, _ = self.file_info(path)
         return is_dir
 
+    def relpath(self, path, root):
+        return posixpath.relpath(path, root)
+
     def exists(self, path):
         try:
             self.file_info(path)
