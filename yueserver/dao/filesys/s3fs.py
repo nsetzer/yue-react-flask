@@ -5,12 +5,16 @@ import sys
 import datetime
 import time
 from threading import Thread, Lock
-try:
-    import boto3
-    import botocore
-except ImportError:
-    boto3 = None
-    botocore = None
+
+boto3 = None
+botocore = None
+
+#try:
+#    import boto3
+#    import botocore
+#except ImportError:
+#    boto3 = None
+#    botocore = None
 
 from .util import sh_escape, AbstractFileSystem, _ProcFile, \
     BytesFIFO, BytesFIFOWriter, BytesFIFOReader, FileRecord
@@ -211,6 +215,12 @@ class BotoFileSystemImpl(AbstractFileSystem):
 
     def __init__(self, endpoint_url, region, access_key, secret_key):
         super(BotoFileSystemImpl, self).__init__()
+
+        global boto3
+        global botocore
+        if boto3 is None:
+            boto3 = __import__("boto3")
+            botocore = __import__("botocore")
 
         # -----------
         # TODO: there should be a global registry of

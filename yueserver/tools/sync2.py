@@ -1,5 +1,8 @@
 #! python $this init -u admin:admin localhost:4200
 
+"""
+todo: create a stat cache to avoid making os calls for the same file
+"""
 import os, sys
 import argparse
 import posixpath
@@ -151,6 +154,7 @@ class LocalStoragDao(object):
         dirs = set()
         files = []
 
+        # todo replace fetchall with paging
         for item in self.db.session.execute(query).fetchall():
             item = dict(item)
             path = item['rel_path'][len(path_prefix):]
@@ -163,6 +167,23 @@ class LocalStoragDao(object):
                 files.append(item)
 
         return dirs, files
+
+    def file_info(self, path):
+
+        FsTab = self.dbtables.LocalStorageTable
+
+        query = select(['*']) \
+            .select_from(FsTab) \
+            .where(FsTab.c.rel_path == path)
+
+        item = self.db.session.execute(query).fetchone()
+
+        if item is None:
+            return None
+
+        item = dict(item)
+        item['rel_path'] = posixpath.split(path)[1]
+        return item
 
     def clearRemote(self, commit=True):
         """ prior to a fetch, all remote files must have the version set to 0
@@ -420,6 +441,31 @@ class FileEnt(object):
         elif lfe and rfe and afe:
             return _check_threeway_compare(self.lf, self.rf, self.af)
 
+    def data(self):
+        lv = ("%2d" % self.lf.get('version', 0)) if self.lf else "--"
+        rv = ("%2d" % self.rf.get('version', 0)) if self.rf else "--"
+        av = ("%2d" % self.af.get('version', 0)) if self.af else "--"
+
+        lm = ("%10d" % self.lf.get('mtime', 0)) if self.lf else ("-"*10)
+        rm = ("%10d" % self.rf.get('mtime', 0)) if self.rf else ("-"*10)
+        am = ("%10d" % self.af.get('mtime', 0)) if self.af else ("-"*10)
+
+        _ls = ("%10d" % self.lf.get('size', 0)) if self.lf else ("-"*10)
+        _rs = ("%10d" % self.rf.get('size', 0)) if self.rf else ("-"*10)
+        _as = ("%10d" % self.af.get('size', 0)) if self.af else ("-"*10)
+
+        lp = ("%5s"%oct(self.lf.get('permission', 0))) if self.lf else ("-"*5)
+        rp = ("%5s"%oct(self.rf.get('permission', 0))) if self.rf else ("-"*5)
+        ap = ("%5s"%oct(self.af.get('permission', 0))) if self.af else ("-"*5)
+
+        triple = [
+            (lv, rv, av),
+            (lm, rm, am),
+            (_ls, _rs, _as),
+            (lp, rp, ap),
+        ]
+        return "/".join(["%s,%s,%s" % t for t in triple])
+
 class CheckResult(object):
     def __init__(self, remote_base, dirs, files):
         self.remote_base = remote_base
@@ -516,6 +562,50 @@ def _check(storageDao, fs, root, remote_base, local_base):
 
     return CheckResult(remote_base, dirs, files)
 
+def _check_file(storageDao, fs, root, remote_path, local_path):
+
+    item = storageDao.file_info(remote_path)
+
+    try:
+        record = fs.file_info(local_path)
+
+        af = {
+            "version": record.version,
+            "size": record.size,
+            "mtime": record.mtime,
+            "permission": record.permission,
+        }
+    except FileNotFoundError:
+        af = None
+
+    if item is not None:
+        lf = {
+            "version": item['local_version'],
+            "size": item['local_size'],
+            "mtime": item['local_mtime'],
+            "permission": item['local_permission'],
+        }
+
+        if lf['version'] == 0:
+            lf = None
+
+        rf = {
+            "version": item['remote_version'],
+            "size":    item['remote_size'],
+            "mtime":   item['remote_mtime'],
+            "permission": item['remote_permission'],
+        }
+
+        if rf['version'] == 0:
+            rf = None
+
+        ent = FileEnt(remote_path, local_path, lf, rf, af)
+    else:
+
+        ent = FileEnt(remote_path, local_path, None, None, af)
+
+    return ent
+
 def _check_threeway_compare(lf, rf, af):
     # given three data-dicts representing a file
     # for local, remote, and actual state
@@ -554,6 +644,136 @@ def _check_threeway_compare(lf, rf, af):
                 return FileState.CONFLICT_MODIFIED + ":3b"
 
         return FileState.ERROR + ":3b"
+
+def _status_dir_impl(storageDao, fs, root,
+  remote_base, remote_dir, local_base, local_dir, recursive):
+
+    result = _check(storageDao, fs, root, remote_dir, local_dir)
+
+    ents = list(result.dirs) + list(result.files)
+
+    for ent in sorted(ents, key=lambda x: x.name()):
+
+        if isinstance(ent, DirEnt):
+
+            state = ent.state()
+            sym = FileState.symbol(state)
+            if ent.local_base:
+                path = fs.relpath(ent.local_base, local_base)
+            else:
+                path = posixpath.relpath(ent.remote_base, remote_base)
+            print("d%s %s/" % (sym, path))
+
+            if recursive and state != FileState.PULL:
+                rbase = posixpath.join(remote_base, ent.name())
+                lbase = fs.join(local_base, ent.name())
+                _status_dir_impl(storageDao, fs, root,
+                    remote_base, rbase, local_base, lbase, recursive)
+        else:
+
+            state = ent.state().split(':')[0]
+            sym = FileState.symbol(state)
+            path = fs.relpath(ent.local_path, local_base)
+            data = ent.data()
+            print("f%s %s\n  %s" % (sym, path, data))
+
+def _status_file_impl(storageDao, fs, root, local_base, relpath, abspath):
+
+    ent = _check_file(storageDao, fs, root, relpath, abspath)
+    state = ent.state().split(':')[0]
+    sym = FileState.symbol(state)
+    path = fs.relpath(ent.local_path, local_base)
+    print("f%s %s" % (sym, path))
+
+def _sync_file_impl(client, storageDao, fs, root, local_base, relpath,
+    abspath, push=False, pull=False, force=False):
+
+    ent = _check_file(storageDao, fs, root, relpath, abspath)
+
+    state = ent.state().split(':')[0]
+    sym = FileState.symbol(state)
+    if FileState.SAME == state:
+        print("nothing to do")
+    if FileState.PUSH == state and push:
+        print("pull %s" % relpath)
+
+        # next version is 1 + current version
+
+        # todo:
+        #    server should reject if the version is less than expected
+        #    server response should include new version
+        #    force flag to disable server side version check
+        #    if only perm_ changed, send a metadata update instead
+        version = ent.af['version']
+        if ent.lf is not None:
+            version = max(ent.lf['version'], version)
+        af['version'] = version + 1
+
+        mtime = ent.af['mtime']
+        perm_ = ent.af['permission']
+        with fs.open(abspath, "rb") as rb:
+            response = client.files_upload(root, relpath, rb,
+                mtime=mtime, permission=perm_)
+
+        record = RecordBuilder().local(**ent.af).remote(**ent.af).build()
+        storageDao.upsert(relpath, record)
+    elif (FileState.PULL == state and pull) or \
+       (FileState.DELETE_LOCAL == state and pull and not push):
+        print("pull %s" % relpath)
+
+        # todo:
+        #   server should return error if requested version does not match
+        #   the current version on the server. (user must fetch first)
+        #   if only a perm_ change, request metadata instead of file
+
+        version = ent.rf['version']
+
+        response = client.files_get_path(root, relpath, stream=True)
+        with open(abspath, "wb") as wb:
+            for chunk in response.stream():
+                wb.write(chunk)
+
+        fs.set_mtime(abspath, ent.rf['mtime'])
+        record = RecordBuilder().local(**ent.rf).build()
+        storageDao.update(relpath, record)
+    elif FileState.ERROR == state:
+        print("error %s" % relpath)
+    elif FileState.CONFLICT_MODIFIED == state:
+        print("conflict %s" % relpath)
+    elif FileState.CONFLICT_CREATED == state:
+        print("conflict %s" % relpath)
+    elif FileState.CONFLICT_VERSION == state:
+        print("conflict %s" % relpath)
+    elif FileState.DELETE_BOTH == state:
+        print("delete %s" % relpath)
+    elif FileState.DELETE_REMOTE == state:
+        print("delete %s" % relpath)
+    elif FileState.DELETE_LOCAL == state:
+        print("delete %s" % relpath)
+
+def _parse_path_args(fs, local_base, args_paths):
+
+    paths = []
+
+    for path in args_paths:
+        #if not fs.exists(path):
+        #    raise FileNotFoundError(path)
+        if not os.path.isabs(path):
+            abspath = os.path.normpath(os.path.join(os.getcwd(), path))
+        else:
+            abspath = path
+
+        if not abspath.startswith(local_base):
+            raise FileNotFoundError("path spec does not match")
+
+        relpath = os.path.relpath(path, local_base)
+        if relpath == ".":
+            relpath = ""
+        paths.append((abspath, relpath))
+
+    paths.sort()
+
+    return paths
 
 def cli_init(args):
 
@@ -623,6 +843,7 @@ def cli_fetch(args):
                 "remote_permission": f['permission'],
                 "remote_version": f['version']
             }
+            print(record)
             storageDao.upsert(f['path'], record, commit=False)
             print(f['path'])
 
@@ -632,47 +853,11 @@ def cli_fetch(args):
 
     db.session.commit()
 
-def cli_status_old(args):
-
-    mgr = get_mgr(os.getcwd(), True)
-
-    settings = {'pull': True, 'push': True, 'delete': False}
-    cont = True
-    while cont:
-        cont = mgr.next(**settings)
-
-def _status_dir_impl(storageDao, fs, root,
-  remote_base, remote_dir, local_base, local_dir, recursive):
-
-    result = _check(storageDao, fs, root, remote_dir, local_dir)
-
-    ents = list(result.dirs) + list(result.files)
-
-    for ent in sorted(ents, key=lambda x: x.name()):
-
-        if isinstance(ent, DirEnt):
-
-            state = ent.state()
-            sym = FileState.symbol(state)
-            if ent.local_base:
-                path = fs.relpath(ent.local_base, local_base)
-            else:
-                path = posixpath.relpath(ent.remote_base, remote_base)
-            print("d%s %s/" % (sym, path))
-
-            if recursive and state != FileState.PULL:
-                rbase = posixpath.join(remote_base, ent.name())
-                lbase = fs.join(local_base, ent.name())
-                _status_dir_impl(storageDao, fs, root,
-                    remote_base, rbase, local_base, lbase, recursive)
-        else:
-
-            state = ent.state().split(':')[0]
-            sym = FileState.symbol(state)
-            path = fs.relpath(ent.local_path, local_base)
-            print("f%s %s" % (sym, path))
-
 def cli_status(args):
+
+    start = time.time()
+    if len(args.paths) == 0:
+        args.paths.append(os.getcwd())
 
     userdata = get_cfg(os.getcwd())
 
@@ -685,34 +870,119 @@ def cli_status(args):
 
     storageDao = LocalStoragDao(db, db.tables)
 
-    _status_dir_impl(storageDao, fs, userdata['root'],
-        userdata['remote_base'], userdata['remote_base'],
-        userdata['local_base'], userdata['local_base'], True)
+    # ---
+
+    paths = _parse_path_args(fs, userdata['local_base'], args.paths)
+
+    first = True
+    for abspath, relpath in paths:
+
+        if not first:
+            print("")
+
+        if os.path.isdir(abspath):
+            if "" != relpath or len(paths) > 1:
+                print("%s/" % abspath)
+
+            _status_dir_impl(storageDao, fs, userdata['root'],
+                relpath, relpath,
+                abspath, abspath, args.recursion)
+        else:
+
+            _status_file_impl(storageDao, fs, userdata['root'],
+                os.getcwd(), relpath, abspath)
+
+        first = False
+    end = time.time()
+    # print(end - start)
+    return
 
 def cli_pull(args):
 
-    mgr = get_mgr(os.getcwd())
+    start = time.time()
+    if len(args.paths) == 0:
+        args.paths.append(os.getcwd())
 
-    settings = {'pull': True, 'push': False, 'delete': False}
-    cont = True
-    while cont:
-        cont = mgr.next(**settings)
+    userdata = get_cfg(os.getcwd())
+
+    client = connect(userdata['hostname'],
+        userdata['username'], userdata['password'])
+
+    db = db_connect(userdata['dburl'])
+
+    fs = FileSystem()
+
+    storageDao = LocalStoragDao(db, db.tables)
+
+    # ---
+
+    paths = _parse_path_args(fs, userdata['local_base'], args.paths)
+
+    first = True
+    for abspath, relpath in paths:
+
+        if not first:
+            print("")
+
+        #if os.path.isdir(abspath):
+        #    if "" != relpath or len(paths) > 1:
+        #        print("%s/" % abspath)
+        #    #_status_dir_impl(storageDao, fs, userdata['root'],
+        #    #    relpath, relpath,
+        #    #    abspath, abspath, args.recursion)
+        #else:
+
+        _sync_file_impl(client, storageDao, fs, userdata['root'],
+            os.getcwd(), relpath, abspath, pull=True, force=args.force)
+
+        first = False
+    end = time.time()
+    # print(end - start)
+    return
 
 def cli_push(args):
 
-    mgr = get_mgr(os.getcwd())
+    start = time.time()
+    if len(args.paths) == 0:
+        args.paths.append(os.getcwd())
 
-    # todo:
-    # implement push_dir and push_file
-    # allow a recursion flag for push_dir
-    # accept a list of files and or directories
-    #   validate all files exist, and exist in local base
-    # if no files or directories given, use pwd
+    userdata = get_cfg(os.getcwd())
 
-    settings = {'pull': False, 'push': True, 'delete': False}
-    cont = True
-    while cont:
-        cont = mgr.next(**settings)
+    client = connect(userdata['hostname'],
+        userdata['username'], userdata['password'])
+
+    db = db_connect(userdata['dburl'])
+
+    fs = FileSystem()
+
+    storageDao = LocalStoragDao(db, db.tables)
+
+    # ---
+
+    paths = _parse_path_args(fs, userdata['local_base'], args.paths)
+
+    first = True
+    for abspath, relpath in paths:
+
+        if not first:
+            print("")
+
+        if os.path.isdir(abspath):
+            if "" != relpath or len(paths) > 1:
+                print("%s/" % abspath)
+
+            #_status_dir_impl(storageDao, fs, userdata['root'],
+            #    relpath, relpath,
+            #    abspath, abspath, args.recursion)
+        else:
+
+            _sync_file_impl(client, storageDao, fs, userdata['root'],
+                os.getcwd(), relpath, abspath, push=True, force=args.force)
+
+        first = False
+    end = time.time()
+    # print(end - start)
+    return
 
 def main():
 
@@ -754,12 +1024,30 @@ def main():
         help="check for changes")
     parser_status.set_defaults(func=cli_status)
 
+    parser_status.add_argument("-r", "--recursion",
+        action="store_true",
+        help="check the status for sub directories")
+
+    parser_status.add_argument("paths", nargs="*",
+        help="list of paths to check the status on")
+
     ###########################################################################
     # Pull
 
     parser_pull = subparsers.add_parser('pull',
         help="retrieve remote files")
     parser_pull.set_defaults(func=cli_pull)
+
+    parser_pull.add_argument("--force",
+        action="store_true",
+        help="overwrite conflicts")
+
+    parser_pull.add_argument("-r", "--recursion",
+        action="store_true",
+        help="check the status for sub directories")
+
+    parser_pull.add_argument("paths", nargs="*",
+        help="list of paths to check the status on")
 
     ###########################################################################
     # Push
@@ -768,6 +1056,16 @@ def main():
         help="push local files")
     parser_push.set_defaults(func=cli_push)
 
+    parser_push.add_argument("--force",
+        action="store_true",
+        help="overwrite conflicts")
+
+    parser_push.add_argument("-r", "--recursion",
+        action="store_true",
+        help="check the status for sub directories")
+
+    parser_push.add_argument("paths", nargs="*",
+        help="list of paths to check the status on")
 
     ###########################################################################
     args = parser.parse_args()
