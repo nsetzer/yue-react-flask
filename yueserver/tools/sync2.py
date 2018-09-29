@@ -770,14 +770,11 @@ def _sync_file_impl(client, storageDao, fs, root, ent,
     elif FileState.CONFLICT_VERSION == state:
         pass
     elif FileState.DELETE_BOTH == state:
-        pass
         storageDao.remove(ent.remote_path)
-    elif FileState.DELETE_REMOTE == state:
-        pass
+    elif FileState.DELETE_REMOTE == state and pull:
         fs.remove(ent.local_path)
         storageDao.remove(ent.remote_path)
-    elif FileState.DELETE_LOCAL == state and push and not pull:
-        pass
+    elif FileState.DELETE_LOCAL == state and push:
         client.files_delete(root, ent.remote_path)
         storageDao.remove(ent.remote_path)
 
