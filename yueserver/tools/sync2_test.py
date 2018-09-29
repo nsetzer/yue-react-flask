@@ -13,7 +13,7 @@ from ..framework.application import AppTestClientWrapper
 
 from .sync2 import db_connect, \
     DatabaseTables, LocalStoragDao, \
-    _check, RecordBuilder, FileState
+    _check, RecordBuilder, FileState, _sync_file, _sync_file_impl
 
 def createTestFile(storageDao, fs, state, variant, rel_path, remote_base, local_base, content=b""):
     """create a file which represents a requested state
@@ -55,7 +55,7 @@ def createTestFile(storageDao, fs, state, variant, rel_path, remote_base, local_
     if state == FileState.PULL:
         if variant == 0:
             # a file which does not exist locally
-            record = RecordBuilder().remote(1, 1, 1, 1).build()
+            record = RecordBuilder().remote(1, len(content), 1, 0).build()
             storageDao.insert(remote_path, record)
         if variant == 1:
             # the remote version is newer, locally has not changed
@@ -89,7 +89,7 @@ def createTestFile(storageDao, fs, state, variant, rel_path, remote_base, local_
             info = fs.file_info(local_path)
             record = RecordBuilder() \
                 .localFromInfo(info).local(2) \
-                .remoteFromInfo(info).remote(1).build()
+                .remoteFromInfo(info).remote(1, len(content)).build()
             storageDao.insert(remote_path, record)
         elif variant == 1:
             with fs.open(local_path, "wb") as wb:
@@ -97,7 +97,7 @@ def createTestFile(storageDao, fs, state, variant, rel_path, remote_base, local_
             info = fs.file_info(local_path)
             record = RecordBuilder() \
                 .localFromInfo(info).local(1) \
-                .remoteFromInfo(info).remote(1, 6).build()
+                .remoteFromInfo(info).remote(1, len(content), -1).build()
             storageDao.insert(remote_path, record)
     if state == FileState.DELETE_BOTH:
         with fs.open(local_path, "wb") as wb:
@@ -197,7 +197,6 @@ class CheckSyncTestCase(unittest.TestCase):
         actual = result.files[0].state()
         self.assertTrue(actual.startswith(state), actual)
         fent = result.files[0]
-        sys.stderr.write("\r%s %s -> %s \t%s\n" % (state, variant, actual, fent))
 
     def test_000_state_same(self):
         self.__check(FileState.SAME, 0)
@@ -270,6 +269,276 @@ class CheckSyncTestCase(unittest.TestCase):
 
         self.assertTrue(dent.remote_base is None, dent.remote_base)
         self.assertTrue(dent.local_base is not None, dent.local_base)
+
+class TestClient(object):
+    """docstring for TestClient"""
+    def __init__(self, fs):
+        super(TestClient, self).__init__()
+        self.fs = fs
+
+    def files_upload(self, root, relpath, rb, mtime=None, permission=None):
+
+        path = "mem://remote/%s" % (relpath)
+
+        with self.fs.open(path, "wb") as wb:
+            for buf in iter(lambda: rb.read(2048), b""):
+                wb.write(buf)
+        # todo set perm
+        # todo assert version
+        self.fs.set_mtime(path, mtime)
+
+    def files_get_path(self, root, relpath, stream=False):
+        path = "mem://remote/%s" % (relpath)
+        response = lambda: None
+        f = self.fs.open(path, "rb")
+        response.stream = lambda: iter(lambda: f.read(1024), b"")
+        return response
+
+    def files_delete(self, root, relpath):
+        path = "mem://remote/%s" % (relpath)
+        self.fs.remove(path)
+
+class SyncTestCase(unittest.TestCase):
+
+    # push / pull should ask how to resolve conflicts unless force is given
+    #   either overwrite or do nothing
+    # sync should not try to resolve conflicts
+
+    # the transition table for pushing a file given a state.
+    # a file should begin in a key state and end in a value state
+    transition_push = {
+      FileState.SAME: FileState.SAME,
+      FileState.PUSH: FileState.SAME,
+      FileState.PULL: FileState.PULL,
+      FileState.ERROR: FileState.ERROR,
+      FileState.CONFLICT_MODIFIED: FileState.SAME,
+      FileState.CONFLICT_CREATED: FileState.SAME,
+      FileState.CONFLICT_VERSION: FileState.SAME,
+      FileState.DELETE_BOTH: None,
+      FileState.DELETE_REMOTE: FileState.SAME,
+      FileState.DELETE_LOCAL: None,
+    }
+
+    # the transition table for pulling a file given a state.
+    transition_pull = {
+      FileState.SAME: FileState.SAME,
+      FileState.PUSH: FileState.PUSH,
+      FileState.PULL: FileState.SAME,
+      FileState.ERROR: FileState.ERROR,
+      FileState.CONFLICT_MODIFIED: FileState.SAME,
+      FileState.CONFLICT_CREATED: FileState.SAME,
+      FileState.CONFLICT_VERSION: FileState.SAME,
+      FileState.DELETE_BOTH: None,
+      FileState.DELETE_REMOTE: None,
+      FileState.DELETE_LOCAL: FileState.SAME,
+    }
+
+    # the transition table for syncing a file given a state.
+    # a sync is both a push and pull
+    transition_sync = {
+      FileState.SAME: FileState.ERROR,
+      FileState.PUSH: FileState.ERROR,
+      FileState.PULL: FileState.ERROR,
+      FileState.ERROR: FileState.ERROR,
+      FileState.CONFLICT_MODIFIED: FileState.CONFLICT_MODIFIED,
+      FileState.CONFLICT_CREATED: FileState.CONFLICT_CREATED,
+      FileState.CONFLICT_VERSION: FileState.CONFLICT_VERSION,
+      FileState.DELETE_BOTH: FileState.ERROR,
+      FileState.DELETE_REMOTE: FileState.ERROR,
+      FileState.DELETE_LOCAL: FileState.ERROR,
+    }
+
+    @classmethod
+    def setUpClass(cls):
+
+        db = db_connect("sqlite://")  # memory
+        db.create_all()
+
+        storageDao = LocalStoragDao(db, db.tables)
+
+        fs = FileSystem()
+
+        client = TestClient(fs)
+
+        cls.db = db
+        cls.storageDao = storageDao
+        cls.fs = fs
+        cls.client = client
+
+    def setUp(self):
+        self.db.delete(self.db.tables.LocalStorageTable)
+        MemoryFileSystemImpl.clear()
+
+    def __push(self, state, variant):
+
+        root = "mem"
+        remote_base = ""
+        local_base = "mem://local"
+        name = "test.txt"
+        local_path = "mem://local/test.txt"
+        remote_path = "test.txt"
+        remote_abs_path = "mem://remote/test.txt"
+        content = b"hello world"
+        final_state = self.transition_push[state]
+
+        createTestFile(self.storageDao, self.fs, state, variant,
+            name, remote_base, local_base, content)
+
+        result = _check(self.storageDao, self.fs, root, remote_base, local_base)
+        fent = result.files[0]
+        self.assertTrue(fent.state().startswith(state))
+
+        _sync_file_impl(self.client, self.storageDao, self.fs, root, fent,
+            True, False, False)
+
+        if final_state is None:
+            self.assertFalse(self.fs.exists(local_path))
+            self.assertTrue(self.storageDao.file_info(remote_path) is None)
+            self.assertFalse(self.fs.exists(remote_abs_path),
+                MemoryFileSystemImpl._mem_store.keys())
+        else:
+            result2 = _check(self.storageDao, self.fs, root, remote_base, local_base)
+            fent2 = result2.files[0]
+            self.assertTrue(fent2.state().startswith(final_state), fent2.state())
+            self.assertTrue(self.fs.exists(remote_abs_path),
+                MemoryFileSystemImpl._mem_store.keys())
+
+    def test_push_000_same_0(self):
+        self.fs.open("mem://remote/test.txt", "wb").close()
+        self.__push(FileState.SAME, 0)
+
+    def test_push_000_push_0(self):
+        # variant 0, remote does not yet exist
+        self.__push(FileState.PUSH, 0)
+
+    def test_push_000_push_1(self):
+        # variant 1, overwrite remote
+        self.fs.open("mem://remote/test.txt", "wb").close()
+        self.__push(FileState.PUSH, 1)
+
+    def test_push_000_pull_0(self):
+        self.fs.open("mem://remote/test.txt", "wb").close()
+        self.__push(FileState.PULL, 0)
+
+    def test_push_000_pull_1(self):
+        self.fs.open("mem://remote/test.txt", "wb").close()
+        self.__push(FileState.PULL, 1)
+
+    def test_push_000_conflict_0(self):
+        self.fs.open("mem://remote/test.txt", "wb").close()
+        self.__push(FileState.CONFLICT_MODIFIED, 0)
+
+    def test_push_000_conflict_1(self):
+        self.fs.open("mem://remote/test.txt", "wb").close()
+        self.__push(FileState.CONFLICT_CREATED, 0)
+
+    def test_push_000_conflict_2(self):
+        self.fs.open("mem://remote/test.txt", "wb").close()
+        self.__push(FileState.CONFLICT_VERSION, 0)
+
+    def test_push_000_conflict_3(self):
+        self.fs.open("mem://remote/test.txt", "wb").close()
+        self.__push(FileState.CONFLICT_VERSION, 1)
+
+    def test_push_000_delete_0(self):
+        self.__push(FileState.DELETE_BOTH, 0)
+
+    def test_push_000_delete_1(self):
+        self.__push(FileState.DELETE_REMOTE, 0)
+
+    def test_push_000_delete_2(self):
+        self.fs.open("mem://remote/test.txt", "wb").close()
+        self.__push(FileState.DELETE_LOCAL, 0)
+
+    def __pull(self, state, variant):
+
+        root = "mem"
+        remote_base = ""
+        local_base = "mem://local"
+        name = "test.txt"
+        local_path = "mem://local/test.txt"
+        remote_path = "test.txt"
+        remote_abs_path = "mem://remote/test.txt"
+        content = b"hello world"
+        final_state = self.transition_pull[state]
+
+        createTestFile(self.storageDao, self.fs, state, variant,
+            name, remote_base, local_base, content)
+
+        result = _check(self.storageDao, self.fs, root, remote_base, local_base)
+        fent = result.files[0]
+        self.assertTrue(fent.state().startswith(state))
+
+        _sync_file_impl(self.client, self.storageDao, self.fs, root, fent,
+            False, True, False)
+
+        if final_state is None:
+            self.assertFalse(self.fs.exists(local_path))
+            self.assertTrue(self.storageDao.file_info(remote_path) is None)
+            self.assertFalse(self.fs.exists(remote_abs_path),
+                MemoryFileSystemImpl._mem_store.keys())
+        else:
+            result2 = _check(self.storageDao, self.fs, root, remote_base, local_base)
+            fent2 = result2.files[0]
+            self.assertTrue(fent2.state().startswith(final_state), fent2.state())
+            self.assertTrue(self.fs.exists(local_path),
+                MemoryFileSystemImpl._mem_store.keys())
+
+    def test_pull_000_same_0(self):
+        self.fs.open("mem://remote/test.txt", "wb").close()
+        self.__pull(FileState.SAME, 0)
+
+    def test_pull_000_push_0(self):
+        # variant 0, remote does not yet exist
+        self.__pull(FileState.PUSH, 0)
+
+    def test_pull_000_push_1(self):
+        # variant 1, overwrite remote
+        self.fs.open("mem://remote/test.txt", "wb").close()
+        self.__pull(FileState.PUSH, 1)
+
+    def test_pull_000_pull_0(self):
+        with self.fs.open("mem://remote/test.txt", "wb") as wb:
+            wb.write(b"hello world")
+
+        self.__pull(FileState.PULL, 0)
+
+    def test_pull_000_pull_1(self):
+        with self.fs.open("mem://remote/test.txt", "wb") as wb:
+            wb.write(b"hello world")
+        self.__pull(FileState.PULL, 1)
+
+    def test_pull_000_conflict_0(self):
+        with self.fs.open("mem://remote/test.txt", "wb") as wb:
+            wb.write(b"hello world")
+        self.__pull(FileState.CONFLICT_MODIFIED, 0)
+
+    def test_pull_000_conflict_1(self):
+        with self.fs.open("mem://remote/test.txt", "wb") as wb:
+            wb.write(b"hello world")
+        self.__pull(FileState.CONFLICT_CREATED, 0)
+
+    def test_pull_000_conflict_2(self):
+        with self.fs.open("mem://remote/test.txt", "wb") as wb:
+            wb.write(b"hello world")
+        self.__pull(FileState.CONFLICT_VERSION, 0)
+
+    def test_pull_000_conflict_3(self):
+        with self.fs.open("mem://remote/test.txt", "wb") as wb:
+            wb.write(b"hello world")
+        self.__pull(FileState.CONFLICT_VERSION, 1)
+
+    def test_pull_000_delete_0(self):
+        self.__pull(FileState.DELETE_BOTH, 0)
+
+    def test_pull_000_delete_1(self):
+        self.__pull(FileState.DELETE_REMOTE, 0)
+
+    def test_pull_000_delete_2(self):
+        with self.fs.open("mem://remote/test.txt", "wb") as wb:
+            wb.write(b"hello world")
+        self.__pull(FileState.DELETE_LOCAL, 0)
+
 
 if __name__ == '__main__':
     main_test(sys.argv, globals())

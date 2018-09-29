@@ -129,6 +129,16 @@ class LocalStoragDao(object):
         else:
             self.update(rel_path, record, commit)
 
+    def remove(self, rel_path, commit=True):
+
+        query = delete(self.dbtables.LocalStorageTable) \
+            .where(self.dbtables.LocalStorageTable.c.rel_path == rel_path)
+
+        self.db.session.execute(query)
+
+        if commit:
+            self.db.session.commit()
+
     def listdir(self, path_prefix="", limit=None, offset=None, delimiter='/'):
 
         FsTab = self.dbtables.LocalStorageTable
@@ -410,6 +420,7 @@ class FileEnt(object):
         rfe = self.rf is not None
         afe = self.af is not None
 
+        # 0: error
         if lfnull and rfnull and afnull:
             return FileState.ERROR
 
@@ -440,6 +451,8 @@ class FileEnt(object):
         # 7 : delete local
         elif lfe and rfe and afe:
             return _check_threeway_compare(self.lf, self.rf, self.af)
+
+        return FileState.ERROR
 
     def data(self):
         lv = ("%2d" % self.lf.get('version', 0)) if self.lf else "--"
@@ -503,32 +516,31 @@ def _check(storageDao, fs, root, remote_base, local_base):
         dirs.append(DirEnt(d, remote_path, local_path))
 
     for f in _files:
-
         if f['rel_path'] in _names:
             _names.remove(f['rel_path'])
 
+        if f['local_version'] == 0:
+            lf = None
+        else:
+            lf = {
+                "version": f['local_version'],
+                "size": f['local_size'],
+                "mtime": f['local_mtime'],
+                "permission": f['local_permission'],
+            }
+
+        if f['remote_version'] == 0:
+            rf = None
+        else:
+            rf = {
+                "version": f['remote_version'],
+                "size": f['remote_size'],
+                "mtime": f['remote_mtime'],
+                "permission": f['remote_permission'],
+            }
+
         remote_path = posixpath.join(remote_base, f['rel_path'])
         local_path = fs.join(local_base, f['rel_path'])
-
-        lf = {
-            "version": f['local_version'],
-            "size": f['local_size'],
-            "mtime": f['local_mtime'],
-            "permission": f['local_permission'],
-        }
-
-        if lf['version'] == 0:
-            lf = None
-
-        rf = {
-            "version": f['remote_version'],
-            "size":    f['remote_size'],
-            "mtime":   f['remote_mtime'],
-            "permission": f['remote_permission'],
-        }
-
-        if rf['version'] == 0:
-            rf = None
 
         try:
             record = fs.file_info(local_path)
@@ -541,7 +553,7 @@ def _check(storageDao, fs, root, remote_base, local_base):
             }
         except FileNotFoundError:
             af = None
-        rel_path = remote_path
+
         files.append(FileEnt(remote_path, local_path, lf, rf, af))
 
     for n in _names:
@@ -685,18 +697,25 @@ def _status_file_impl(storageDao, fs, root, local_base, relpath, abspath):
     path = fs.relpath(ent.local_path, local_base)
     print("f%s %s" % (sym, path))
 
-def _sync_file_impl(client, storageDao, fs, root, local_base, relpath,
-    abspath, push=False, pull=False, force=False):
+def _sync_file(client, storageDao, fs, root, local_base, relpath,
+  abspath, push=False, pull=False, force=False):
 
     ent = _check_file(storageDao, fs, root, relpath, abspath)
 
+    _sync_file_impl(client, storageDao, fs, root, ent,
+        push, pull, force)
+
+def _sync_file_impl(client, storageDao, fs, root, ent,
+  push=False, pull=False, force=False):
     state = ent.state().split(':')[0]
     sym = FileState.symbol(state)
     if FileState.SAME == state:
-        print("nothing to do")
-    if FileState.PUSH == state and push:
-        print("pull %s" % relpath)
-
+        pass
+    elif (FileState.PUSH == state and push) or \
+       (FileState.DELETE_REMOTE == state and not pull and push) or \
+       (FileState.CONFLICT_MODIFIED == state and not pull and push) or \
+       (FileState.CONFLICT_CREATED == state and not pull and push) or \
+       (FileState.CONFLICT_VERSION == state and not pull and push):
         # next version is 1 + current version
 
         # todo:
@@ -707,49 +726,60 @@ def _sync_file_impl(client, storageDao, fs, root, local_base, relpath,
         version = ent.af['version']
         if ent.lf is not None:
             version = max(ent.lf['version'], version)
-        af['version'] = version + 1
+        ent.af['version'] = version + 1
 
         mtime = ent.af['mtime']
         perm_ = ent.af['permission']
-        with fs.open(abspath, "rb") as rb:
-            response = client.files_upload(root, relpath, rb,
+        with fs.open(ent.local_path, "rb") as rb:
+            response = client.files_upload(root, ent.remote_path, rb,
                 mtime=mtime, permission=perm_)
 
         record = RecordBuilder().local(**ent.af).remote(**ent.af).build()
-        storageDao.upsert(relpath, record)
+        storageDao.upsert(ent.remote_path, record)
     elif (FileState.PULL == state and pull) or \
-       (FileState.DELETE_LOCAL == state and pull and not push):
-        print("pull %s" % relpath)
+       (FileState.DELETE_LOCAL == state and pull and not push) or \
+       (FileState.CONFLICT_MODIFIED == state and pull and not push) or \
+       (FileState.CONFLICT_CREATED == state and pull and not push) or \
+       (FileState.CONFLICT_VERSION == state and pull and not push):
 
         # todo:
         #   server should return error if requested version does not match
         #   the current version on the server. (user must fetch first)
         #   if only a perm_ change, request metadata instead of file
+        #   response headers should contain meta data about the file
+        #     - size, mtime, perm
 
         version = ent.rf['version']
 
-        response = client.files_get_path(root, relpath, stream=True)
-        with open(abspath, "wb") as wb:
+        response = client.files_get_path(root, ent.remote_path, stream=True)
+        bytes_written = 0
+        with fs.open(ent.local_path, "wb") as wb:
             for chunk in response.stream():
+                bytes_written += len(chunk)
                 wb.write(chunk)
 
-        fs.set_mtime(abspath, ent.rf['mtime'])
-        record = RecordBuilder().local(**ent.rf).build()
-        storageDao.update(relpath, record)
+        fs.set_mtime(ent.local_path, ent.rf['mtime'])
+        record = RecordBuilder().local(**ent.rf).remote(**ent.rf).build()
+        storageDao.update(ent.remote_path, record)
     elif FileState.ERROR == state:
-        print("error %s" % relpath)
+        print("error %s" % ent.remote_path)
     elif FileState.CONFLICT_MODIFIED == state:
-        print("conflict %s" % relpath)
+        pass
     elif FileState.CONFLICT_CREATED == state:
-        print("conflict %s" % relpath)
+        pass
     elif FileState.CONFLICT_VERSION == state:
-        print("conflict %s" % relpath)
+        pass
     elif FileState.DELETE_BOTH == state:
-        print("delete %s" % relpath)
+        pass
+        storageDao.remove(ent.remote_path)
     elif FileState.DELETE_REMOTE == state:
-        print("delete %s" % relpath)
-    elif FileState.DELETE_LOCAL == state:
-        print("delete %s" % relpath)
+        pass
+        fs.remove(ent.local_path)
+        storageDao.remove(ent.remote_path)
+    elif FileState.DELETE_LOCAL == state and push and not pull:
+        pass
+        client.files_delete(root, ent.remote_path)
+        storageDao.remove(ent.remote_path)
 
 def _parse_path_args(fs, local_base, args_paths):
 
