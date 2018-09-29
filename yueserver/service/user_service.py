@@ -109,6 +109,9 @@ class UserService(object):
 
         user = self.userDao.findUserByEmailAndPassword(email, password)
 
+        if not user:
+            raise Exception("user %s does not exist or password incorrect" % email)
+
         user_data = {
             "id": user.id,
             "email": user.email,
@@ -125,6 +128,9 @@ class UserService(object):
         apikey = parse_apikey_token(token)
 
         user = self.userDao.findUserByApiKey(apikey)
+
+        if not user:
+            raise Exception("user %s does not exist or password incorrect" % email)
 
         user_data = {
             "id": user.id,

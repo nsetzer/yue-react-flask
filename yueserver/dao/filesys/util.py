@@ -82,7 +82,7 @@ class AbstractFileSystem(object):
         return self.impl.isfile(path)
 
     def isdir(self, path):
-        return self.imple.isdir(path)
+        return self.impl.isdir(path)
 
     def exists(self, path):
         return self.impl.exists(path)

@@ -243,8 +243,7 @@ class CheckSyncTestCase(unittest.TestCase):
         self.assertEqual(len(result.dirs), 1)
         dent = result.dirs[0]
 
-        self.assertTrue(dent.remote_base is not None, dent.remote_base)
-        self.assertTrue(dent.local_base is not None, dent.local_base)
+        self.assertEqual(dent.state(), FileState.SAME, dent.state())
 
     def test_001_dir_remote(self):
         createTestDirectory(self.storageDao, self.fs, DIR_E_REMOTE,
@@ -255,8 +254,7 @@ class CheckSyncTestCase(unittest.TestCase):
         self.assertEqual(len(result.dirs), 1)
         dent = result.dirs[0]
 
-        self.assertTrue(dent.remote_base is not None, dent.remote_base)
-        self.assertTrue(dent.local_base is None, dent.local_base)
+        self.assertEqual(dent.state(), FileState.PULL, dent.state())
 
     def test_001_dir_local(self):
         createTestDirectory(self.storageDao, self.fs, DIR_E_LOCAL,
@@ -267,8 +265,7 @@ class CheckSyncTestCase(unittest.TestCase):
         self.assertEqual(len(result.dirs), 1)
         dent = result.dirs[0]
 
-        self.assertTrue(dent.remote_base is None, dent.remote_base)
-        self.assertTrue(dent.local_base is not None, dent.local_base)
+        self.assertEqual(dent.state(), FileState.PUSH, dent.state())
 
 class TestClient(object):
     """docstring for TestClient"""
@@ -281,7 +278,9 @@ class TestClient(object):
         path = "mem://remote/%s" % (relpath)
 
         with self.fs.open(path, "wb") as wb:
-            for buf in iter(lambda: rb.read(2048), b""):
+            #for buf in iter(lambda: rb.read(2048), b""):
+            #    wb.write(buf)
+            for buf in rb:
                 wb.write(buf)
         # todo set perm
         # todo assert version

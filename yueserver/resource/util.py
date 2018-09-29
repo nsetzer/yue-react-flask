@@ -115,7 +115,6 @@ def _requires_token_auth_impl(service, f, args, kwargs, features, token):
     except Exception as e:
 
         logging.error("%s" % e)
-        pass
 
     return httpError(401, "failed to authenticate user")
 
@@ -138,7 +137,6 @@ def _requires_basic_auth_impl(service, f, args, kwargs, features, token):
     except Exception as e:
 
         logging.error("%s" % e)
-        pass
 
     return httpError(401, "failed to authenticate user")
 
@@ -160,7 +158,6 @@ def _requires_apikey_auth_impl(service, f, args, kwargs, features, token):
     except Exception as e:
 
         logging.error("%s" % e)
-        pass
 
     return httpError(401, "failed to authenticate user")
 

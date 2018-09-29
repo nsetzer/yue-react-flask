@@ -60,37 +60,20 @@ class DatabaseTables(object):
         super(DatabaseTables, self).__init__()
         self.LocalStorageTable = LocalStorageTable(metadata)
 
-def db_connect(connection_string):
-
-    if connection_string is None or connection_string == ":memory:":
-        connection_string = 'sqlite://'
-
-    engine = create_engine(connection_string)
-    Session = scoped_session(sessionmaker(bind=engine))
-
-    db = lambda: None
-    db.engine = engine
-    db.metadata = MetaData()
-    db.session = Session
-    db.tables = DatabaseTables(db.metadata)
-    db.connection_string = connection_string
-    db.kind = lambda: connection_string.split(":")[0]
-    db.conn = db.session.bind.connect()
-    db.conn.connection.create_function('REGEXP', 2, regexp)
-    db.create_all = lambda: db.metadata.create_all(engine)
-    db.delete = lambda table: db.session.execute(delete(table))
-
-    path = connection_string[len("sqlite:///"):]
-    if path and not os.access(path, os.W_OK):
-        logging.warning("database at %s not writable" % connection_string)
-
-    return db
-
 class LocalStoragDao(object):
     def __init__(self, db, dbtables):
         super(LocalStoragDao, self).__init__()
         self.db = db
         self.dbtables = dbtables
+
+    def splitScheme(self, path):
+        scheme = "file://localhost/"
+        i = path.find("://")
+        if "://" in path:
+            i += len("://")
+            scheme = path[:i]
+            path = path[i:]
+        return scheme, path
 
     def insert(self, rel_path, record, commit=True):
 
@@ -178,6 +161,26 @@ class LocalStoragDao(object):
 
         return dirs, files
 
+    def isDir(self, path):
+        FsTab = self.dbtables.LocalStorageTable
+
+        if not path:
+            return True
+
+        if not path.endswith("/"):
+            path += "/"
+
+        where = FsTab.c.rel_path.startswith(bindparam('path', path))
+
+        query = select(['*']) \
+            .select_from(FsTab) \
+            .where(where).limit(1)
+
+        result = self.db.session.execute(query)
+        item = result.fetchone()
+
+        return item is not None
+
     def file_info(self, path):
 
         FsTab = self.dbtables.LocalStorageTable
@@ -209,57 +212,16 @@ class LocalStoragDao(object):
         if commit:
             self.db.session.commit()
 
-def get_cfg(directory):
-
-    local_base = directory
-
-    relpath = ""
-    names = os.listdir(directory)
-    while '.yue' not in names:
-        temp, t = os.path.split(directory)
-        if relpath:
-            relpath = t + "/" + relpath
-        else:
-            relpath = t
-        if temp == directory:
-            break
-        directory = temp
-        names = os.listdir(directory)
-
-    cfgdir = os.path.join(directory, '.yue')
-    if not os.path.exists(cfgdir):
-        raise Exception("not found: %s" % cfgdir)
-
-    pemkey_path = os.path.join(cfgdir, 'rsa.pem')
-    with open(pemkey_path, "rb") as rb:
-        pemkey = rb.read()
-
-    userdata_path = os.path.join(cfgdir, 'userdata.json')
-    with open(userdata_path, "r") as rf:
-        userdata = json.load(rf)
-
-    cm = CryptoManager()
-    userdata['password'] = cm.decrypt64(pemkey,
-        userdata['password']).decode("utf-8")
-
-    userdata['cfgdir'] = directory
-    userdata['local_base'] = local_base
-    userdata['default_remote_base'] = userdata['remote_base']
-    userdata['remote_base'] = posixpath.join(userdata['remote_base'], relpath)
-
-    return userdata
-
-def get_mgr(directory, dryrun=False):
-
-    userdata = get_cfg(directory)
-
-    client = connect(userdata['hostname'],
-        userdata['username'], userdata['password'])
-
-    mgr = SyncManager(client, userdata['root'], userdata['cfgdir'], dryrun)
-    mgr.setDirectory(userdata['local_base'])
-
-    return mgr
+class SyncContext(object):
+    """docstring for SyncContext"""
+    def __init__(self, client, storageDao, fs, root, remote_base, local_base):
+        super(SyncContext, self).__init__()
+        self.client = client
+        self.storageDao = storageDao
+        self.fs = fs
+        self.root = root
+        self.remote_base = remote_base
+        self.local_base = local_base
 
 class RecordBuilder(object):
     """docstring for RecordBuilder"""
@@ -356,24 +318,32 @@ class FileState(object):
 
 class DirEnt(object):
     """docstring for DirEnt"""
-    def __init__(self, name, remote_base, local_base):
+    def __init__(self, name, remote_base, local_base, state=None):
         super(DirEnt, self).__init__()
         self.remote_base = remote_base
         self.local_base = local_base
         self._name = name
+        self._state = state or FileState.ERROR
 
     def state(self):
-        if self.remote_base is None and self.local_base is None:
-            return FileState.ERROR
-        elif self.remote_base is None and self.local_base is not None:
-            return FileState.PUSH
-        elif self.remote_base is not None and self.local_base is None:
-            return FileState.PULL
-        elif self.remote_base is not None and self.local_base is not None:
-            return FileState.SAME
+        #if self.remote_base is None and self.local_base is None:
+        #    return FileState.ERROR
+        #elif self.remote_base is None and self.local_base is not None:
+        #    return FileState.PUSH
+        #elif self.remote_base is not None and self.local_base is None:
+        #    return FileState.PULL
+        #elif self.remote_base is not None and self.local_base is not None:
+        #    return FileState.SAME
+        return self._state
 
     def name(self):
         return self._name
+
+    def __str__(self):
+        return "DirEnt<%s,%s>" % (self.remote_base, self._state)
+
+    def __repr__(self):
+        return "DirEnt<%s,%s>" % (self.remote_base, self._state)
 
 class FileEnt(object):
     def __init__(self, remote_path, local_path, lf, rf, af):
@@ -492,6 +462,97 @@ class CheckResult(object):
     def __repr__(self):
         return "CheckResult<%s, %d,%d>" % (self.remote_base, len(self.dirs), len(self.files))
 
+class ProgressFileReaderWrapper(object):
+    def __init__(self, fs, path, remote_path):
+        super(ProgressFileReaderWrapper, self).__init__()
+        self.fs = fs
+        self.path = path
+        self.remote_path = remote_path
+        self.info = self.fs.file_info(path)
+        self.bytes_read = 0
+
+    def __iter__(self):
+        with self.fs.open(self.path, 'rb') as rb:
+            for i, chunk in enumerate(iter(lambda: rb.read(2048), b"")):
+                yield chunk
+                self.bytes_read += len(chunk)
+                #percent = 100 * self.bytes_read / self.info.size
+                # send an update approximately every quarter MB
+                if i % 256 == 0:
+                    sys.stderr.write("\r%s - %d/%d     " % (
+                        self.remote_path, self.bytes_read, self.info.size))
+            sys.stderr.write("\r%s - %d/%d\n" % (
+                self.remote_path, self.bytes_read, self.info.size))
+
+    def __len__(self):
+        return self.info.size
+
+def db_connect(connection_string):
+
+    if connection_string is None or connection_string == ":memory:":
+        connection_string = 'sqlite://'
+
+    engine = create_engine(connection_string)
+    Session = scoped_session(sessionmaker(bind=engine))
+
+    db = lambda: None
+    db.engine = engine
+    db.metadata = MetaData()
+    db.session = Session
+    db.tables = DatabaseTables(db.metadata)
+    db.connection_string = connection_string
+    db.kind = lambda: connection_string.split(":")[0]
+    db.conn = db.session.bind.connect()
+    db.conn.connection.create_function('REGEXP', 2, regexp)
+    db.create_all = lambda: db.metadata.create_all(engine)
+    db.delete = lambda table: db.session.execute(delete(table))
+
+    path = connection_string[len("sqlite:///"):]
+    if path and not os.access(path, os.W_OK):
+        logging.warning("database at %s not writable" % connection_string)
+
+    return db
+
+def get_cfg(directory):
+
+    local_base = directory
+
+    relpath = ""
+    names = os.listdir(directory)
+    while '.yue' not in names:
+        temp, t = os.path.split(directory)
+        if relpath:
+            relpath = t + "/" + relpath
+        else:
+            relpath = t
+        if temp == directory:
+            break
+        directory = temp
+        names = os.listdir(directory)
+
+    cfgdir = os.path.join(directory, '.yue')
+    if not os.path.exists(cfgdir):
+        raise Exception("not found: %s" % cfgdir)
+
+    pemkey_path = os.path.join(cfgdir, 'rsa.pem')
+    with open(pemkey_path, "rb") as rb:
+        pemkey = rb.read()
+
+    userdata_path = os.path.join(cfgdir, 'userdata.json')
+    with open(userdata_path, "r") as rf:
+        userdata = json.load(rf)
+
+    cm = CryptoManager()
+    userdata['password'] = cm.decrypt64(pemkey,
+        userdata['password']).decode("utf-8")
+
+    userdata['cfgdir'] = directory
+    userdata['local_base'] = local_base
+    userdata['default_remote_base'] = userdata['remote_base']
+    userdata['remote_base'] = posixpath.join(userdata['remote_base'], relpath)
+
+    return userdata
+
 def _check(storageDao, fs, root, remote_base, local_base):
 
     if remote_base and not remote_base.endswith("/"):
@@ -508,12 +569,14 @@ def _check(storageDao, fs, root, remote_base, local_base):
 
     for d in _dirs:
         remote_path = posixpath.join(remote_base, d)
+        local_path = fs.join(local_base, d)
         if d in _names:
             _names.remove(d)
-            local_path = fs.join(local_base, d)
+            state = FileState.SAME
         else:
             local_path = None
-        dirs.append(DirEnt(d, remote_path, local_path))
+            state = FileState.PULL
+        dirs.append(DirEnt(d, remote_path, local_path, state))
 
     for f in _files:
         if f['rel_path'] in _names:
@@ -562,7 +625,7 @@ def _check(storageDao, fs, root, remote_base, local_base):
         record = fs.file_info(local_path)
 
         if record.isDir:
-            dirs.append(DirEnt(n, None, local_path))
+            dirs.append(DirEnt(n, remote_path, local_path, FileState.PUSH))
         else:
             af = {
                 "version": record.version,
@@ -682,12 +745,10 @@ def _status_dir_impl(storageDao, fs, root,
                 _status_dir_impl(storageDao, fs, root,
                     remote_base, rbase, local_base, lbase, recursive)
         else:
-
             state = ent.state().split(':')[0]
             sym = FileState.symbol(state)
             path = fs.relpath(ent.local_path, local_base)
-            data = ent.data()
-            print("f%s %s\n  %s" % (sym, path, data))
+            print("f%s %s" % (sym, path))
 
 def _status_file_impl(storageDao, fs, root, local_base, relpath, abspath):
 
@@ -697,18 +758,24 @@ def _status_file_impl(storageDao, fs, root, local_base, relpath, abspath):
     path = fs.relpath(ent.local_path, local_base)
     print("f%s %s" % (sym, path))
 
-def _sync_file(client, storageDao, fs, root, local_base, relpath,
+def _sync_file(client, storageDao, fs, root, remote_base, local_base, relpath,
   abspath, push=False, pull=False, force=False):
 
     ent = _check_file(storageDao, fs, root, relpath, abspath)
+
+    if ent.af is None and ent.rf is None and ent.lf is None:
+        sys.stderr.write("not found: %s\n" % ent.remote_path)
+        return
 
     _sync_file_impl(client, storageDao, fs, root, ent,
         push, pull, force)
 
 def _sync_file_impl(client, storageDao, fs, root, ent,
   push=False, pull=False, force=False):
+
     state = ent.state().split(':')[0]
     sym = FileState.symbol(state)
+
     if FileState.SAME == state:
         pass
     elif (FileState.PUSH == state and push) or \
@@ -730,9 +797,9 @@ def _sync_file_impl(client, storageDao, fs, root, ent,
 
         mtime = ent.af['mtime']
         perm_ = ent.af['permission']
-        with fs.open(ent.local_path, "rb") as rb:
-            response = client.files_upload(root, ent.remote_path, rb,
-                mtime=mtime, permission=perm_)
+        f = ProgressFileReaderWrapper(fs, ent.local_path, ent.remote_path)
+        response = client.files_upload(root, ent.remote_path, f,
+            mtime=mtime, permission=perm_)
 
         record = RecordBuilder().local(**ent.af).remote(**ent.af).build()
         storageDao.upsert(ent.remote_path, record)
@@ -777,6 +844,34 @@ def _sync_file_impl(client, storageDao, fs, root, ent,
     elif FileState.DELETE_LOCAL == state and push:
         client.files_delete(root, ent.remote_path)
         storageDao.remove(ent.remote_path)
+    else:
+        print("unknown %s" % ent.remote_path)
+
+def _sync_impl(client, storageDao, fs, root, remote_base, local_base, paths,
+  push=False, pull=False, force=False, recursive=False):
+
+    for dent in paths:
+
+        if (storageDao.isDir(dent.remote_base)) or (
+           fs.exists(dent.local_base) and fs.isdir(dent.local_base)):
+
+            result = _check(storageDao, fs, root,
+                dent.remote_base, dent.local_base)
+
+            for fent in result.files:
+                print(">>>f %s" % fent)
+                #_sync_file(client, storageDao, fs, root, remote_base, local_base,
+                #    dent.remote_base, dent.local_base, push, pull, force)
+
+            if recursive:
+                _sync_impl(client, storageDao, fs, root,
+                    remote_base, local_base, result.dirs,
+                    push, pull, force, recursive)
+
+        else:
+            print(">>>f %s" % dent)
+            #_sync_file(client, storageDao, fs, root, remote_base, local_base,
+            #    dent.remote_base, dent.local_base, push, pull, force)
 
 def _parse_path_args(fs, local_base, args_paths):
 
@@ -796,9 +891,10 @@ def _parse_path_args(fs, local_base, args_paths):
         relpath = os.path.relpath(path, local_base)
         if relpath == ".":
             relpath = ""
-        paths.append((abspath, relpath))
+        name = fs.split(abspath)[1]
+        paths.append(DirEnt(name, relpath, abspath))
 
-    paths.sort()
+    paths.sort(key=lambda x: x.local_base)
 
     return paths
 
@@ -924,7 +1020,7 @@ def cli_status(args):
     # print(end - start)
     return
 
-def cli_pull(args):
+def cli_sync(args):
 
     start = time.time()
     if len(args.paths) == 0:
@@ -934,79 +1030,18 @@ def cli_pull(args):
 
     client = connect(userdata['hostname'],
         userdata['username'], userdata['password'])
-
     db = db_connect(userdata['dburl'])
-
     fs = FileSystem()
-
     storageDao = LocalStoragDao(db, db.tables)
 
     # ---
 
     paths = _parse_path_args(fs, userdata['local_base'], args.paths)
 
-    first = True
-    for abspath, relpath in paths:
-
-        if not first:
-            print("")
-
-        #if os.path.isdir(abspath):
-        #    if "" != relpath or len(paths) > 1:
-        #        print("%s/" % abspath)
-        #    #_status_dir_impl(storageDao, fs, userdata['root'],
-        #    #    relpath, relpath,
-        #    #    abspath, abspath, args.recursion)
-        #else:
-
-        _sync_file_impl(client, storageDao, fs, userdata['root'],
-            os.getcwd(), relpath, abspath, pull=True, force=args.force)
-
-        first = False
-    end = time.time()
-    # print(end - start)
-    return
-
-def cli_push(args):
-
-    start = time.time()
-    if len(args.paths) == 0:
-        args.paths.append(os.getcwd())
-
-    userdata = get_cfg(os.getcwd())
-
-    client = connect(userdata['hostname'],
-        userdata['username'], userdata['password'])
-
-    db = db_connect(userdata['dburl'])
-
-    fs = FileSystem()
-
-    storageDao = LocalStoragDao(db, db.tables)
-
-    # ---
-
-    paths = _parse_path_args(fs, userdata['local_base'], args.paths)
-
-    first = True
-    for abspath, relpath in paths:
-
-        if not first:
-            print("")
-
-        if os.path.isdir(abspath):
-            if "" != relpath or len(paths) > 1:
-                print("%s/" % abspath)
-
-            #_status_dir_impl(storageDao, fs, userdata['root'],
-            #    relpath, relpath,
-            #    abspath, abspath, args.recursion)
-        else:
-
-            _sync_file_impl(client, storageDao, fs, userdata['root'],
-                os.getcwd(), relpath, abspath, push=True, force=args.force)
-
-        first = False
+    _sync_impl(client, storageDao, fs,
+        userdata['root'], userdata['remote_base'], userdata['local_base'],
+        paths, push=args.push, pull=args.pull, force=args.force,
+        recursive=args.recursion)
     end = time.time()
     # print(end - start)
     return
@@ -1045,7 +1080,7 @@ def main():
     parser_fetch.set_defaults(func=cli_fetch)
 
     ###########################################################################
-    # status
+    # Status
 
     parser_status = subparsers.add_parser('status',
         help="check for changes")
@@ -1059,11 +1094,33 @@ def main():
         help="list of paths to check the status on")
 
     ###########################################################################
+    # Sync
+
+    parser_sync = subparsers.add_parser('sync',
+        help="sync local and remote files")
+    parser_sync.set_defaults(func=cli_sync)
+    parser_sync.set_defaults(push=True)
+    parser_sync.set_defaults(pull=True)
+
+    parser_sync.add_argument("--force",
+        action="store_true",
+        help="overwrite conflicts")
+
+    parser_sync.add_argument("-r", "--recursion",
+        action="store_true",
+        help="check the status for sub directories")
+
+    parser_sync.add_argument("paths", nargs="*",
+        help="list of paths to check the status on")
+
+    ###########################################################################
     # Pull
 
     parser_pull = subparsers.add_parser('pull',
         help="retrieve remote files")
-    parser_pull.set_defaults(func=cli_pull)
+    parser_pull.set_defaults(func=cli_sync)
+    parser_pull.set_defaults(push=False)
+    parser_pull.set_defaults(pull=True)
 
     parser_pull.add_argument("--force",
         action="store_true",
@@ -1081,7 +1138,9 @@ def main():
 
     parser_push = subparsers.add_parser('push',
         help="push local files")
-    parser_push.set_defaults(func=cli_push)
+    parser_push.set_defaults(func=cli_sync)
+    parser_push.set_defaults(push=True)
+    parser_push.set_defaults(pull=False)
 
     parser_push.add_argument("--force",
         action="store_true",
