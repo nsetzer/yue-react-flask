@@ -111,7 +111,6 @@ class JsonUploader(object):
         logging.warning("uploaded %d/%d in %s seconds" % (
             success, count, end - start))
 
-
     def _upload_one(self, song, remote_songs, remote_files):
 
         file_path = song['file_path']
@@ -147,7 +146,7 @@ class JsonUploader(object):
         if static_path in remote_songs:
             logging.info("update: %s" % static_path)
             song['id'] = remote_songs[static_path]['id']
-            self._update_song(song)
+            #self._update_song(song)
         else:
             logging.info("create: %s" % static_path)
 

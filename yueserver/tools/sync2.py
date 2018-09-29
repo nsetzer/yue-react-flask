@@ -222,6 +222,7 @@ class SyncContext(object):
         self.root = root
         self.remote_base = remote_base
         self.local_base = local_base
+        self.verbose = 0
 
 class RecordBuilder(object):
     """docstring for RecordBuilder"""
@@ -295,25 +296,25 @@ class FileState(object):
     @staticmethod
     def symbol(state):
         if FileState.SAME == state:
-            sym = "= "
+            sym = " "
         if FileState.PUSH == state:
-            sym = "> "
+            sym = ">"
         if FileState.PULL == state:
-            sym = "< "
+            sym = "<"
         if FileState.ERROR == state:
-            sym = "x "
+            sym = "E"
         if FileState.CONFLICT_MODIFIED == state:
-            sym = "cm"
+            sym = "c"
         if FileState.CONFLICT_CREATED == state:
-            sym = "cc"
+            sym = "c"
         if FileState.CONFLICT_VERSION == state:
-            sym = "cv"
+            sym = "c"
         if FileState.DELETE_BOTH == state:
-            sym = "d="
+            sym = "-"
         if FileState.DELETE_REMOTE == state:
-            sym = "d<"
+            sym = "x"
         if FileState.DELETE_LOCAL == state:
-            sym = "d>"
+            sym = "d"
         return sym
 
 class DirEnt(object):
@@ -449,6 +450,20 @@ class FileEnt(object):
         ]
         return "/".join(["%s,%s,%s" % t for t in triple])
 
+    def stat(self):
+
+        st_lv = ("%2d" % self.lf.get('version', 0)) if self.lf else "--"
+        #st_am = ("%11d" % self.af.get('mtime', 0)) if self.af else ("-"*11)
+        mtime = self.af.get('mtime', 0) if self.af else 0
+        if mtime > 0:
+            st_am = time.strftime('%y-%m-%d %H:%M:%S', time.localtime(mtime))
+        else:
+            st_am = "-" * 17
+        st_ap = ("%5s"%oct(self.af.get('permission', 0))) if self.af else ("-"*5)
+        st_as = ("%12d" % self.af.get('size', 0)) if self.af else ("-"*12)
+
+        return "%s %s %s %s" % (st_lv, st_as, st_ap, st_am)
+
 class CheckResult(object):
     def __init__(self, remote_base, dirs, files):
         self.remote_base = remote_base
@@ -547,9 +562,8 @@ def get_cfg(directory):
         userdata['password']).decode("utf-8")
 
     userdata['cfgdir'] = directory
-    userdata['local_base'] = local_base
-    userdata['default_remote_base'] = userdata['remote_base']
-    userdata['remote_base'] = posixpath.join(userdata['remote_base'], relpath)
+    userdata['local_base'] = directory
+    userdata['current_remote_base'] = posixpath.join(userdata['remote_base'], relpath)
 
     return userdata
 
@@ -557,6 +571,8 @@ def _check(storageDao, fs, root, remote_base, local_base):
 
     if remote_base and not remote_base.endswith("/"):
         remote_base += "/"
+
+    blacklist = {".yue"}
 
     dirs = []
     files = []
@@ -623,6 +639,9 @@ def _check(storageDao, fs, root, remote_base, local_base):
         remote_path = posixpath.join(remote_base, n)
         local_path = fs.join(local_base, n)
         record = fs.file_info(local_path)
+
+        if n in blacklist:
+            continue
 
         if record.isDir:
             dirs.append(DirEnt(n, remote_path, local_path, FileState.PUSH))
@@ -721,7 +740,7 @@ def _check_threeway_compare(lf, rf, af):
         return FileState.ERROR + ":3b"
 
 def _status_dir_impl(storageDao, fs, root,
-  remote_base, remote_dir, local_base, local_dir, recursive):
+  remote_base, remote_dir, local_base, local_dir, recursive, verbose=0):
 
     result = _check(storageDao, fs, root, remote_dir, local_dir)
 
@@ -737,26 +756,36 @@ def _status_dir_impl(storageDao, fs, root,
                 path = fs.relpath(ent.local_base, local_base)
             else:
                 path = posixpath.relpath(ent.remote_base, remote_base)
-            print("d%s %s/" % (sym, path))
+
+            if verbose:
+                print("d%s %s %s/" % (sym, " " * 39, path))
+            else:
+                print("d%s %s/" % (sym, path))
 
             if recursive and state != FileState.PULL:
                 rbase = posixpath.join(remote_base, ent.name())
                 lbase = fs.join(local_base, ent.name())
                 _status_dir_impl(storageDao, fs, root,
-                    remote_base, rbase, local_base, lbase, recursive)
+                    remote_base, rbase, local_base, lbase, recursive, verbose)
         else:
             state = ent.state().split(':')[0]
             sym = FileState.symbol(state)
             path = fs.relpath(ent.local_path, local_base)
-            print("f%s %s" % (sym, path))
+            if verbose:
+                print("f%s %s %s" % (sym, ent.stat(), path))
+            else:
+                print("f%s %s" % (sym, path))
 
-def _status_file_impl(storageDao, fs, root, local_base, relpath, abspath):
+def _status_file_impl(storageDao, fs, root, local_base, relpath, abspath, verbose=0):
 
     ent = _check_file(storageDao, fs, root, relpath, abspath)
     state = ent.state().split(':')[0]
     sym = FileState.symbol(state)
     path = fs.relpath(ent.local_path, local_base)
-    print("f%s %s" % (sym, path))
+    if verbose:
+        print("f%s %s %s" % (sym, ent.stat(), path))
+    else:
+        print("f%s %s" % (sym, path))
 
 def _sync_file(client, storageDao, fs, root, remote_base, local_base, relpath,
   abspath, push=False, pull=False, force=False):
@@ -859,9 +888,8 @@ def _sync_impl(client, storageDao, fs, root, remote_base, local_base, paths,
                 dent.remote_base, dent.local_base)
 
             for fent in result.files:
-                print(">>>f %s" % fent)
-                #_sync_file(client, storageDao, fs, root, remote_base, local_base,
-                #    dent.remote_base, dent.local_base, push, pull, force)
+                _sync_file(client, storageDao, fs, root, remote_base, local_base,
+                    fent.remote_path, fent.local_path, push, pull, force)
 
             if recursive:
                 _sync_impl(client, storageDao, fs, root,
@@ -869,9 +897,10 @@ def _sync_impl(client, storageDao, fs, root, remote_base, local_base, paths,
                     push, pull, force, recursive)
 
         else:
-            print(">>>f %s" % dent)
-            #_sync_file(client, storageDao, fs, root, remote_base, local_base,
-            #    dent.remote_base, dent.local_base, push, pull, force)
+            # todo: load blacklist from directory containing this file
+            #   only push if force is given
+            _sync_file(client, storageDao, fs, root, remote_base, local_base,
+                dent.remote_base, dent.local_base, push, pull, force)
 
 def _parse_path_args(fs, local_base, args_paths):
 
@@ -953,7 +982,7 @@ def cli_fetch(args):
     while True:
         params = {'limit': limit, 'page': page}
         response = client.files_get_index(
-            userdata['root'], userdata['default_remote_base'], **params)
+            userdata['root'], userdata['remote_base'], **params)
         if response.status_code != 200:
             sys.stderr.write("fetch error...")
             return
@@ -966,10 +995,7 @@ def cli_fetch(args):
                 "remote_permission": f['permission'],
                 "remote_version": f['version']
             }
-            print(record)
             storageDao.upsert(f['path'], record, commit=False)
-            print(f['path'])
-
         page += 1
         if len(files) != limit:
             break
@@ -998,22 +1024,23 @@ def cli_status(args):
     paths = _parse_path_args(fs, userdata['local_base'], args.paths)
 
     first = True
-    for abspath, relpath in paths:
+    for dent in paths:
 
         if not first:
             print("")
 
-        if os.path.isdir(abspath):
-            if "" != relpath or len(paths) > 1:
-                print("%s/" % abspath)
+        if os.path.isdir(dent.local_base):
+            if "" != dent.remote_base or len(paths) > 1:
+                print("%s/" % dent.local_base)
 
             _status_dir_impl(storageDao, fs, userdata['root'],
-                relpath, relpath,
-                abspath, abspath, args.recursion)
+                userdata['remote_base'], dent.remote_base,
+                userdata['local_base'], dent.local_base,
+                args.recursion, args.verbose)
         else:
 
             _status_file_impl(storageDao, fs, userdata['root'],
-                os.getcwd(), relpath, abspath)
+                os.getcwd(), dent.remote_base, dent.local_base, args.verbose)
 
         first = False
     end = time.time()
@@ -1085,6 +1112,10 @@ def main():
     parser_status = subparsers.add_parser('status',
         help="check for changes")
     parser_status.set_defaults(func=cli_status)
+
+    parser_status.add_argument("-v", "--verbose",
+        action="count",
+        help="show detailed information")
 
     parser_status.add_argument("-r", "--recursion",
         action="store_true",
