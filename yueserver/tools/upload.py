@@ -97,19 +97,22 @@ class JsonUploader(object):
 
     def upload(self, songs, remote_songs, remote_files):
 
-        success = 0
+        self.updated = 0
+        self.uploaded = 0
         count = 0
         start = time.time()
         for song in songs:
             count += 1
             try:
                 self._upload_one(song, remote_songs, remote_files)
-                success += 1
             except Exception as e:
                 logging.error("%s" % e)
         end = time.time()
-        logging.warning("uploaded %d/%d in %s seconds" % (
-            success, count, end - start))
+        success = self.updated + self.uploaded
+        logging.warning("%d/%d (uploaded: %d updated: %d) in %s seconds" % (
+            success, count, self.uploaded, self.updated, end - start))
+        logging.warning("remote_songs: %d" % len(remote_songs))
+        logging.warning("remote_files: %d" % len(remote_files))
 
     def _upload_one(self, song, remote_songs, remote_files):
 
@@ -144,13 +147,22 @@ class JsonUploader(object):
         song['equalizer'] = 100
 
         if static_path in remote_songs:
-            logging.info("update: %s" % static_path)
+            #logging.info("update: %s" % static_path)
+            self.updated += 1 if (aud_path in remote_files) else 0
+            return
             song['id'] = remote_songs[static_path]['id']
-            #self._update_song(song)
+            self._update_song(song)
         else:
-            logging.info("create: %s" % static_path)
 
-            if aud_name not in remote_files:
+            if aud_path in remote_files:
+                logging.info("create: %s" % aud_path)
+                print(song)
+            else:
+                logging.info("upload: %s" % aud_path)
+            self.uploaded += 1
+            return
+
+            if aud_path not in remote_files:
                 self._transcode_upload(file_path, aud_path, opts)
 
             song_id = self._create_song(song)
@@ -273,6 +285,7 @@ def _fetch_files(client, root):
             break
 
     logging.info("fetched %d files" % len(files))
+
     return files
 
 def _fetch_songs(client):
@@ -282,8 +295,13 @@ def _fetch_songs(client):
     page = 0
     limit = 500
     while True:
-        logging.info("fetch songs page:%d" % page)
-        params = {'limit': limit, 'page': page}
+
+        params = {
+            'limit': limit,
+            'page': page,
+            'orderby': 'id',
+            'showBanished': True
+        }
         response = client.library_search_library(**params)
         if response.status_code != 200:
             sys.stderr.write(response.text)
@@ -292,7 +310,13 @@ def _fetch_songs(client):
 
         result = response.json()['result']
         for s in result:
+            if s['static_path'] in songs:
+                print(songs[s['static_path']])
+                print(s)
+                raise Exception(s['static_path'])
             songs[s['static_path']] = s
+
+        logging.info("fetch songs page:%d ...  %d" % (page, len(result)))
 
         page += 1
         if len(result) != limit:
@@ -307,6 +331,8 @@ def do_upload(client, data, root, nparallel=1, bucket=None, ffmpeg_path=None):
 
     rsongs = _fetch_songs(client)
     rfiles = _fetch_files(client, root)
+
+    # TODO: a keyboard interrupt should wait for the current task to complete
 
     if nparallel == 1:
         uploader = JsonUploader(client, transcoder, root, bucket)

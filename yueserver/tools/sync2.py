@@ -999,6 +999,74 @@ def _sync_impl(ctxt, paths, push=False, pull=False, force=False, recursive=False
             _sync_file(ctxt, dent.remote_base, dent.local_base,
                 push, pull, force)
 
+def _copy_impl(client, fs, src, dst):
+    """
+    copy from the remote server to a local path, or from a local path
+    to a remote server.
+
+    src: either "server://${root}/${remote_path}" or a local file
+    dst: either "server://${root}/${remote_path}" or a local file
+
+    both src and dst cannot be both remote or local paths
+    """
+
+    tag = "server://"
+    if src.startswith(tag):
+        root, remote_path = src[len(tag):].split("/", 1)
+
+        if dst.startswith(tag):
+            raise Exception("invalid path: %s" % dst)
+
+        response = client.files_get_path(root, remote_path, stream=True)
+        with fs.open(dst, "wb") as wb:
+            for chunk in response.stream():
+                wb.write(chunk)
+
+    elif dst.startswith(tag):
+        root, remote_path = dst[len(tag):].split("/", 1)
+
+        if src.startswith(tag) or not os.access(src, os.R_OK):
+            raise Exception("invalid path: %s" % src)
+
+        info = fs.file_info(src)
+
+        f = ProgressFileReaderWrapper(fs, src, remote_path)
+        response = client.files_upload(root, remote_path, f,
+            mtime=info.mtime, permission=info.permission)
+
+    else:
+        raise Exception("invalid source and destiniation path")
+
+def _list_impl(client, root, path):
+    """
+    list contents of a remote directory
+    """
+
+    response = client.files_get_path(root, path, list=True)
+
+    if response.status_code == 404:
+        sys.stderr.write("not found: %s\n" % path)
+        sys.exit(1)
+
+    elif response.headers['content-type'] != "application/json":
+        raise Exception("Server responded with unexpected type: %s" %
+            response.headers['content-type'])
+    else:
+        data = response.json()['result']
+
+        for dirname in sorted(data['directories']):
+            sys.stdout.write("%s%s/\n" % (" " * (41), dirname))
+
+        for item in sorted(data['files'], key=lambda item: item['name']):
+
+            fvers = "%3d" % item['version']
+            fperm = oct(item.get('permission', 0))[2:].zfill(3)
+            ftime = time.localtime(item['mtime'])
+            fdate = time.strftime('%Y-%m-%d %H:%M:%S', ftime)
+
+            sys.stdout.write("%s %s %12d %s %s\n" % (
+                fvers, fdate, int(item['size']), fperm, item['name']))
+
 def _parse_path_args(fs, local_base, args_paths):
 
     paths = []
@@ -1139,6 +1207,18 @@ def cli_info(args):
     print("usage: %d MB" % (obj['nbytes'] / 1024 / 1024))
     print("capacity: %d MB" % (obj['quota'] / 1024 / 1024))
 
+def cli_copy(args):
+
+    ctxt = get_ctxt(os.getcwd())
+
+    _copy_impl(ctxt.client, ctxt.fs, args.src, args.dst)
+
+def cli_list(args):
+
+    ctxt = get_ctxt(os.getcwd())
+
+    _list_impl(ctxt.client, ctxt.root, args.path)
+
 def main():
 
     parser = argparse.ArgumentParser(description='sync utility')
@@ -1272,6 +1352,24 @@ def main():
     parser_push.add_argument("paths", nargs="*",
         help="list of paths to check the status on")
 
+    ###########################################################################
+    # Copy
+
+    parser_copy = subparsers.add_parser('copy', aliases=['cp'],
+        help="copy a file up or down")
+    parser_copy.set_defaults(func=cli_copy)
+
+    parser_copy.add_argument('src', help="source file to copy")
+    parser_copy.add_argument('dst', help="destination path")
+
+    ###########################################################################
+    # Copy
+
+    parser_copy = subparsers.add_parser('list', aliases=['ls'],
+        help="list contents of a remote directory")
+    parser_copy.set_defaults(func=cli_list)
+
+    parser_copy.add_argument('path', nargs="?", default="", help="relative remote path")
     ###########################################################################
     args = parser.parse_args()
 

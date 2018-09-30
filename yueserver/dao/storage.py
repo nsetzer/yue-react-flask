@@ -211,7 +211,8 @@ class StorageDao(object):
             name, _ = item_path.split(delimiter, 1)
             return FileRecord(name, True, 0, 0)
         else:
-            return FileRecord(item_path, False, item['size'], item['mtime'])
+            return FileRecord(item_path, False, item['size'], item['mtime'],
+                item['version'], item['permission'])
 
     def list(self):
         FsTab = self.dbtables.FileSystemStorageTable
