@@ -57,9 +57,10 @@ def _handle_exceptions(f, args, kwargs):
             reason = "Unhandled Exception (current user: %s): " % \
                 g.current_user['email']
 
+        #if e.HTTP_STATUS >= 500:
         logging.exception(reason)
 
-        return httpError(400, reason + str(e))
+        return httpError(e.HTTP_STATUS, reason + str(e))
 
     except Exception as e:
         # traceback.print_exc()

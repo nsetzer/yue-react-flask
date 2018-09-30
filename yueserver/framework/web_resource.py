@@ -233,7 +233,7 @@ def send_file(filepath):
 
     return response
 
-def send_generator(go, attachment_name, file_size=None):
+def send_generator(go, attachment_name, file_size=None, headers=None):
     """
     this may not work on chrome, although that may also be a webkit
     issue with mp3 files...
@@ -246,6 +246,10 @@ def send_generator(go, attachment_name, file_size=None):
 
     if file_size is not None:
         response.headers.set('Content-Length', file_size)
+
+    if headers is not None:
+        for key, val in headers.items():
+            response.headers.set(key, str(val))
 
     # TODO: do i need this?
 

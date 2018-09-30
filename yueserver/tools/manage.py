@@ -65,7 +65,7 @@ def drop_songs(args):
     sys.stderr.write("dropping songs database\n")
 
     db = db_connect(args.database_url)
-    db_drop_all(db, db.tables)
+    db_drop_songs(db, db.tables)
 
     sys.stderr.write("sucess\n")
 

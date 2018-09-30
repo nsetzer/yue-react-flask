@@ -4,16 +4,25 @@ Definitions for exceptions thrown by the service layer
 """
 
 class ServiceException(Exception):
-    pass
+    HTTP_STATUS = 400
+
+    def __init__(self, message, status=None):
+        super().__init__(message)
+        if status is not None:
+            self.HTTP_STATUS = status
 
 class AudioServiceException(ServiceException):
-    pass
+    def __init__(self, message, status=None):
+        super().__init__(message, status)
 
 class UserServiceException(ServiceException):
-    pass
+    def __init__(self, message, status=None):
+        super().__init__(message, status)
 
 class TranscodeServiceException(ServiceException):
-    pass
+    def __init__(self, message, status=None):
+        super().__init__(message, status)
 
 class FileSysServiceException(ServiceException):
-    pass
+    def __init__(self, message, status=None):
+        super().__init__(message, status)

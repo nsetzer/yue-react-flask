@@ -84,17 +84,22 @@ class FilesResource(WebResource):
     @post("<root>/path/<path:resPath>")
     @param("mtime", type_=int, doc="set file modified time")
     @param("permission", type_=int, doc="unix file permissions", default=0o644)
+    @param("version", type_=int, doc="file version", default=0)
     @body(null_validator, content_type="application/octet-stream")
     @requires_auth("filesystem_write")
     def upload(self, root, resPath):
         """
         mtime: on a successful upload, set the modified time to mtime,
                unix epoch time in seconds
+        versiom: if greater than 1, validate version
+
+        error codes:
+            409: file already exists and is a newer version
         """
 
         self.filesys_service.saveFile(
             g.current_user, root, resPath, g.body,
-            mtime=g.args.mtime, permission=g.args.permission)
+            mtime=g.args.mtime, version=g.args.version, permission=g.args.permission)
 
         return jsonify(result="OK"), 200
 
@@ -137,7 +142,12 @@ class FilesResource(WebResource):
             else:
                 _, name = self.filesys_service.fs.split(abs_path)
                 go = files_generator(self.filesys_service.fs, abs_path)
-                return send_generator(go, name, file_size=None)
+                headers = {
+                    "X-YUE-VERSION": info.version,
+                    "X-YUE-PERMISSION": info.permission,
+                    "X-YUE-MTIME": info.mtime,
+                }
+                return send_generator(go, name, file_size=None, headers=headers)
 
         try:
             result = self.filesys_service.listDirectory(g.current_user, root, path)

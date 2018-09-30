@@ -91,7 +91,7 @@ class StorageDao(object):
 
         return self.insert(user_id, path, size, mtime)
 
-    def insert(self, user_id, path, size, mtime, permission=None, commit=True):
+    def insert(self, user_id, path, size, mtime, permission=None, version=None, commit=True):
 
         # TODO: required?
         #if path.endswith(delimiter):
@@ -99,7 +99,7 @@ class StorageDao(object):
 
         record = {
             'user_id': user_id,
-            'version': 1,
+            'version': version if version is not None else 1,
             'path': path,
             'mtime': mtime,
             'size': size,
@@ -123,11 +123,14 @@ class StorageDao(object):
         if ex is not None:
             raise ex
 
-    def update(self, user_id, path, size=None, mtime=None, permission=None, commit=True):
+    def update(self, user_id, path, size=None, mtime=None, permission=None, version=None, commit=True):
 
-        record = {
-            'version': self.dbtables.FileSystemStorageTable.c.version + 1,
-        }
+        record = {}
+
+        if version is None:
+            record['version'] = self.dbtables.FileSystemStorageTable.c.version + 1
+        else:
+            record['version'] = version
 
         if mtime is not None:
             record['mtime'] = mtime
@@ -150,7 +153,7 @@ class StorageDao(object):
         if commit:
             self.db.session.commit()
 
-    def upsert(self, user_id, path, size=None, mtime=None, permission=0, commit=True):
+    def upsert(self, user_id, path, size=None, mtime=None, permission=0, version=None, commit=True):
 
         where = self.dbtables.FileSystemStorageTable.c.path == path
         query = select(['*']) \
@@ -160,9 +163,9 @@ class StorageDao(object):
         item = result.fetchone()
 
         if item is None:
-            self.insert(user_id, path, size, mtime, permission, commit)
+            self.insert(user_id, path, size, mtime, permission, version, commit)
         else:
-            self.update(user_id, path, size, mtime, permission, commit)
+            self.update(user_id, path, size, mtime, permission, version, commit)
 
     def rename(self, user_id, src_path, dst_path, commit=True):
 
@@ -316,7 +319,8 @@ class StorageDao(object):
         elif exact:
             # an exact match for a file record
             name = path_prefix.split(delimiter)[-1]
-            return FileRecord(name, False, item['size'], item['mtime'], item['version'])
+            return FileRecord(name, False, item['size'],
+                item['mtime'], item['version'], item['permission'])
         else:
             name = base_path.rstrip(delimiter).split(delimiter)[-1]
             return FileRecord(name, True, 0, 0, 0)

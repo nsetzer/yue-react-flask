@@ -122,7 +122,7 @@ class FilesResourceTestCase(unittest.TestCase):
             path = 'test/upload.txt'
             url = '/api/fs/default/path/' + path
             response = app.post(url, data=dat0)
-            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.status_code, 200, response.status_code)
             self.assertTrue(os.path.exists(path))
             dat1 = open(path, "rb").read()
             self.assertEqual(dat0, dat1)
@@ -141,7 +141,7 @@ class FilesResourceTestCase(unittest.TestCase):
             url = '/api/fs/mem/path/test'
             self.assertTrue(fs.exists("mem://test/test"))
             response = app.delete(url)
-            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.status_code, 200, response.status_code)
             self.assertFalse(fs.exists("mem://test/test"))
 
     def test_get_index(self):
@@ -157,13 +157,13 @@ class FilesResourceTestCase(unittest.TestCase):
                 paths.append(path)
                 url = '/api/fs/mem/path/' + path
                 response = app.post(url, data=dat0)
-                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.status_code, 200, response.status_code)
 
             # show that all files can be listed from the root directory
             url = '/api/fs/mem/index/'
             params = {'limit': 50, 'page': 0}
             response = app.get(url, query_string=params)
-            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.status_code, 200, response.status_code)
             files = response.json()['result']
             self.assertEqual(len(paths), len(files))
             for obj in files:
@@ -175,7 +175,7 @@ class FilesResourceTestCase(unittest.TestCase):
             url = '/api/fs/mem/index/test'
             params = {'limit': 50, 'page': 0}
             response = app.get(url, query_string=params)
-            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.status_code, 200, response.status_code)
             files = response.json()['result']
             self.assertEqual(len(names), len(files))
             for obj in files:
@@ -187,7 +187,7 @@ class FilesResourceTestCase(unittest.TestCase):
                 name = 'upload-%d.txt' % i
                 params = {'limit': 1, 'page': i}
                 response = app.get(url, query_string=params)
-                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.status_code, 200, response.status_code)
                 path = response.json()['result'][0]['path']
 
                 self.assertEqual(path, name, path)

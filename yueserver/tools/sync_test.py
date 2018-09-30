@@ -47,7 +47,7 @@ def setUpClass(cls):
     cls.USERNAME = "admin"
     cls.USER = cls.userDao.findUserByEmail(cls.USERNAME)
 
-class SyncTestCase(unittest.TestCase):
+class SyncTestCaseX(object):
 
     @classmethod
     def setUpClass(cls):
@@ -272,7 +272,7 @@ class SyncTestCase(unittest.TestCase):
 ##    def tearDown(self):
 ##        super().tearDown()
 
-class SyncCLITestCase(unittest.TestCase):
+class SyncCLITestCaseX(object):
 
     @classmethod
     def setUpClass(cls):
@@ -530,7 +530,5 @@ class SyncCLITestCase(unittest.TestCase):
 
         fs.remove(self.local_path_file0)
 
-if __name__ == '__main__':
-    main_test(sys.argv, globals())
 
 

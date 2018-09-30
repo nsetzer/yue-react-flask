@@ -12,7 +12,7 @@ from ..framework.client import FlaskAppClient
 from ..framework.application import AppTestClientWrapper
 
 from .sync2 import db_connect, \
-    DatabaseTables, LocalStoragDao, \
+    DatabaseTables, LocalStoragDao, SyncContext, \
     _check, RecordBuilder, FileState, _sync_file, _sync_file_impl
 
 def createTestFile(storageDao, fs, state, variant, rel_path, remote_base, local_base, content=b""):
@@ -179,9 +179,13 @@ class CheckSyncTestCase(unittest.TestCase):
 
         fs = FileSystem()
 
+        ctxt = SyncContext(None, storageDao, fs, "mem", "local", "mem://local")
+
         cls.db = db
         cls.storageDao = storageDao
         cls.fs = fs
+
+        cls.ctxt = ctxt
 
     def setUp(self):
         self.db.delete(self.db.tables.LocalStorageTable)
@@ -189,9 +193,9 @@ class CheckSyncTestCase(unittest.TestCase):
 
     def __check(self, state, variant):
         createTestFile(self.storageDao, self.fs, state, variant,
-            "local/test.txt", "", "mem://", b"hello world")
+            "test.txt", "local", "mem://local", b"hello world")
 
-        result = _check(self.storageDao, self.fs, "mem", "local", "mem://local")
+        result = _check(self.ctxt, "local", "mem://local")
 
         self.assertEqual(len(result.files), 1)
         actual = result.files[0].state()
@@ -238,7 +242,7 @@ class CheckSyncTestCase(unittest.TestCase):
         createTestDirectory(self.storageDao, self.fs, DIR_E_BOTH,
             "subfolder", "", "mem://")
 
-        result = _check(self.storageDao, self.fs, "mem", "", "mem://")
+        result = _check(self.ctxt, "", "mem://")
 
         self.assertEqual(len(result.dirs), 1)
         dent = result.dirs[0]
@@ -249,7 +253,7 @@ class CheckSyncTestCase(unittest.TestCase):
         createTestDirectory(self.storageDao, self.fs, DIR_E_REMOTE,
             "subfolder", "", "mem://")
 
-        result = _check(self.storageDao, self.fs, "mem", "", "mem://")
+        result = _check(self.ctxt, "", "mem://")
 
         self.assertEqual(len(result.dirs), 1)
         dent = result.dirs[0]
@@ -260,7 +264,7 @@ class CheckSyncTestCase(unittest.TestCase):
         createTestDirectory(self.storageDao, self.fs, DIR_E_LOCAL,
             "subfolder", "", "mem://")
 
-        result = _check(self.storageDao, self.fs, "mem", "", "mem://")
+        result = _check(self.ctxt, "", "mem://")
 
         self.assertEqual(len(result.dirs), 1)
         dent = result.dirs[0]
@@ -269,9 +273,10 @@ class CheckSyncTestCase(unittest.TestCase):
 
 class TestClient(object):
     """docstring for TestClient"""
-    def __init__(self, fs):
+    def __init__(self, fs, storageDao):
         super(TestClient, self).__init__()
         self.fs = fs
+        self.storageDao = storageDao
 
     def files_upload(self, root, relpath, rb, mtime=None, permission=None):
 
@@ -286,11 +291,19 @@ class TestClient(object):
         # todo assert version
         self.fs.set_mtime(path, mtime)
 
-    def files_get_path(self, root, relpath, stream=False):
-        path = "mem://remote/%s" % (relpath)
+    def files_get_path(self, root, rel_path, stream=False):
+        path = "mem://remote/%s" % (rel_path)
         response = lambda: None
         f = self.fs.open(path, "rb")
+        info = self.storageDao.file_info(rel_path)
         response.stream = lambda: iter(lambda: f.read(1024), b"")
+        # TODO: this is cheating, will need to make a better test
+        # client in the future
+        response.headers = {
+            'X-YUE-PERMISSION': info['remote_permission'],
+            'X-YUE-VERSION': info['remote_version'],
+            'X-YUE-MTIME': info['remote_mtime'],
+        }
         return response
 
     def files_delete(self, root, relpath):
@@ -357,12 +370,15 @@ class SyncTestCase(unittest.TestCase):
 
         fs = FileSystem()
 
-        client = TestClient(fs)
+        client = TestClient(fs, storageDao)
 
+        ctxt = SyncContext(client, storageDao, fs, "mem", "", "mem://local")
         cls.db = db
         cls.storageDao = storageDao
         cls.fs = fs
         cls.client = client
+
+        cls.ctxt = ctxt
 
     def setUp(self):
         self.db.delete(self.db.tables.LocalStorageTable)
@@ -383,12 +399,11 @@ class SyncTestCase(unittest.TestCase):
         createTestFile(self.storageDao, self.fs, state, variant,
             name, remote_base, local_base, content)
 
-        result = _check(self.storageDao, self.fs, root, remote_base, local_base)
+        result = _check(self.ctxt, remote_base, local_base)
         fent = result.files[0]
         self.assertTrue(fent.state().startswith(state))
 
-        _sync_file_impl(self.client, self.storageDao, self.fs, root, fent,
-            True, False, False)
+        _sync_file_impl(self.ctxt, fent, True, False, True)
 
         if final_state is None:
             self.assertFalse(self.fs.exists(local_path))
@@ -396,7 +411,7 @@ class SyncTestCase(unittest.TestCase):
             self.assertFalse(self.fs.exists(remote_abs_path),
                 MemoryFileSystemImpl._mem_store.keys())
         else:
-            result2 = _check(self.storageDao, self.fs, root, remote_base, local_base)
+            result2 = _check(self.ctxt, remote_base, local_base)
             fent2 = result2.files[0]
             self.assertTrue(fent2.state().startswith(final_state), fent2.state())
             self.assertTrue(self.fs.exists(remote_abs_path),
@@ -473,12 +488,11 @@ class SyncTestCase(unittest.TestCase):
         createTestFile(self.storageDao, self.fs, state, variant,
             name, remote_base, local_base, content)
 
-        result = _check(self.storageDao, self.fs, root, remote_base, local_base)
+        result = _check(self.ctxt, remote_base, local_base)
         fent = result.files[0]
         self.assertTrue(fent.state().startswith(state))
 
-        _sync_file_impl(self.client, self.storageDao, self.fs, root, fent,
-            False, True, False)
+        _sync_file_impl(self.ctxt, fent, False, True, True)
 
         if final_state is None:
             self.assertFalse(self.fs.exists(local_path))
@@ -486,7 +500,7 @@ class SyncTestCase(unittest.TestCase):
             self.assertFalse(self.fs.exists(remote_abs_path),
                 MemoryFileSystemImpl._mem_store.keys())
         else:
-            result2 = _check(self.storageDao, self.fs, root, remote_base, local_base)
+            result2 = _check(self.ctxt, remote_base, local_base)
             fent2 = result2.files[0]
             self.assertTrue(fent2.state().startswith(final_state), fent2.state())
             self.assertTrue(self.fs.exists(local_path),
@@ -563,12 +577,11 @@ class SyncTestCase(unittest.TestCase):
         createTestFile(self.storageDao, self.fs, state, variant,
             name, remote_base, local_base, content)
 
-        result = _check(self.storageDao, self.fs, root, remote_base, local_base)
+        result = _check(self.ctxt, remote_base, local_base)
         fent = result.files[0]
         self.assertTrue(fent.state().startswith(state))
 
-        _sync_file_impl(self.client, self.storageDao, self.fs, root, fent,
-            True, True, False)
+        _sync_file_impl(self.ctxt, fent, True, True, True)
 
         if final_state is None:
             self.assertFalse(self.fs.exists(local_path))
@@ -576,7 +589,7 @@ class SyncTestCase(unittest.TestCase):
             self.assertFalse(self.fs.exists(remote_abs_path),
                 MemoryFileSystemImpl._mem_store.keys())
         else:
-            result2 = _check(self.storageDao, self.fs, root, remote_base, local_base)
+            result2 = _check(self.ctxt, remote_base, local_base)
             fent2 = result2.files[0]
             self.assertTrue(fent2.state().startswith(final_state), fent2.state())
             self.assertTrue(self.fs.exists(local_path),

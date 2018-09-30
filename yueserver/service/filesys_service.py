@@ -176,12 +176,28 @@ class FileSysService(object):
 
         return files
 
-    def saveFile(self, user, fs_name, path, stream, mtime=None, permission=0):
+    def saveFile(self, user, fs_name, path, stream, mtime=None, version=0, permission=0):
 
         path = self.getPath(user, fs_name, path)
 
         dirpath, _ = self.fs.split(path)
         self.fs.makedirs(dirpath)
+
+        # the sync tool depends on an up-to-date local database
+        # when uploading, the client knows what the next version of a file
+        # will be. If the expected version is lower than reality (because
+        # fetch needs to be run) reject the file. running a fetch
+        # will likely reveal this file is in a conflict state
+        if version > 0:
+            try:
+                info = self.storageDao.file_info(user['id'], path)
+                if info.version >= version:
+                    raise FileSysServiceException("invalid version", 409)
+            except StorageNotFoundException as e:
+                pass
+        else:
+            # dao layer expects None, or a valid version
+            version = None
 
         size = 0
         with self.fs.open(path, "wb") as wb:
@@ -192,9 +208,7 @@ class FileSysService(object):
         if mtime is None:
             mtime = int(time.time())
 
-        #self.fs.set_mtime(path, mtime)
-
-        self.storageDao.upsert(user['id'], path, size, mtime, permission)
+        self.storageDao.upsert(user['id'], path, size, mtime, permission, version)
 
     def remove(self, user, fs_name, path):
 
