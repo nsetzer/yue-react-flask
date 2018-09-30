@@ -100,7 +100,7 @@ def SongHistoryTable(metadata):
     is added recording the song, user, and date of completion
     """
     return Table('song_history', metadata,
-        Column('user_id', Integer),
+        Column('user_id', ForeignKey('user.id')),
         Column('song_id', ForeignKey("song_data.id")),
         Column('timestamp', Integer),
     )

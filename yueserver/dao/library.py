@@ -655,7 +655,7 @@ class LibraryDao(object):
             # remove entries that have either the blocked or banished bit set
             stmt1 = SongTable.banished == 0
             # if the left outer join produces a null, default to 0 and compare.
-            stmt2 = case([(UserTable.blocked == None, 0),],
+            stmt2 = case([(UserTable.blocked == None, 0)],
                          else_=UserTable.blocked) == 0
             stmt3 = and_(stmt1, stmt2)
             sql_rule = stmt3 if sql_rule is None else and_(sql_rule, stmt3)

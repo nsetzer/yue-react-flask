@@ -211,3 +211,15 @@ class FileSysService(object):
             logging.exception("unable to delete: %s" % path)
 
         raise FileSysServiceException(path)
+
+    def getUserQuota(self, user):
+
+        nfiles, nbytes = self.storageDao.userDiskUsage(user['id'])
+        quota = self.storageDao.userDiskQuota(user['id'], user['role_id'])
+
+        obj = {
+            "nfiles": nfiles,
+            "nbytes": nbytes,
+            "quota": quota,
+        }
+        return obj

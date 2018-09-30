@@ -403,3 +403,4 @@ class StorageDao(object):
         # todo: set default quota based on role_id, allow for individual
         #       users to exceed that quota, a value of zero is no limit
         return 0
+

@@ -226,10 +226,13 @@ class AuthenticatedRestClient(object):
         if self.role:
             kwargs['headers']["X-Role"]   = self.role
 
-        auth = "Basic %s" % (base64.b64encode(b"%s:%s" % (
-            self.username.encode("utf-8"),
-            self.password.encode("utf-8")))).decode("utf-8")
-        kwargs['headers']["Authorization"] = auth
+        if self.password.startswith("APIKEY"):
+            kwargs['headers']["Authorization"] = self.password
+        else:
+            auth = "Basic %s" % (base64.b64encode(b"%s:%s" % (
+                self.username.encode("utf-8"),
+                self.password.encode("utf-8")))).decode("utf-8")
+            kwargs['headers']["Authorization"] = auth
 
         url = "%s%s" % (self._host, url)
 

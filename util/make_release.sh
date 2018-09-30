@@ -16,6 +16,7 @@ EOF
 
 cat <<EOF > uninstall.sh
 #!/bin/bash
+echo "uninstalling yueserver"
 rm -rf yueserver yueclient build wsgi.py requirements.txt
 EOF
 

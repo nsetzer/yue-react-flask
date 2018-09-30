@@ -133,7 +133,8 @@ class AudioService(object):
         case_insensitive=True,
         orderby=None,
         limit=None,
-        offset=None):
+        offset=None,
+        showBanished=False):
         """ query the library and return a list of songs
 
         query results are restricted by the users domain and role
@@ -149,7 +150,7 @@ class AudioService(object):
         result = self.libraryDao.search(
             user['id'], user['domain_id'],
             searchTerm, case_insensitive,
-            orderby, limit, offset)
+            orderby, limit, offset, showBanished)
 
         if shuffle:
             result = binshuffle(result, lambda s: s['artist'])[:limit_save]

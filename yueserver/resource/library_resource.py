@@ -78,6 +78,17 @@ def audio_quality(s):
         raise Exception("Invalid audio quality: %s" % s)
     return s
 
+def parameter_bool(s):
+    s = s.lower()
+    if s == "true":
+        return True
+    if s == "false":
+        return False
+    v = int(s)  # may throw
+    if v == 0:
+        return False
+    return True
+
 class LibraryResource(WebResource):
     """LibraryResource
 
@@ -101,6 +112,7 @@ class LibraryResource(WebResource):
     @param("limit", type_=int_range(0, 500), default=50)
     @param("page", type_=int_min(0), default=0)
     @param("orderby", type_=search_order_validator, default=Song.artist)
+    @param("showBanished", type_=parameter_bool, default=False)
     @requires_auth("library_read")
     @compressed
     def search_library(self):
@@ -110,7 +122,8 @@ class LibraryResource(WebResource):
 
         songs = self.audio_service.search(g.current_user,
             g.args.query, limit=g.args.limit,
-            orderby=g.args.orderby, offset=offset)
+            orderby=g.args.orderby, offset=offset,
+            showBanished=g.args.showBanished)
 
         return jsonify({
             "result": songs,

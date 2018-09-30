@@ -262,11 +262,11 @@ def db_drop_all(db, dbtables):
 def db_drop_songs(db, dbtables):
 
     # don't actually drop the tables, delete the contents
-    db.delete(self.SongPlaylistTable)
-    db.delete(self.SongHistoryTable)
-    db.delete(self.SongQueueTable)
-    db.delete(self.SongUserDataTable)
-    db.delete(self.SongDataTable)
+    db.delete(dbtables.SongPlaylistTable)
+    db.delete(dbtables.SongHistoryTable)
+    db.delete(dbtables.SongQueueTable)
+    db.delete(dbtables.SongUserDataTable)
+    db.delete(dbtables.SongDataTable)
 
 def _db_create_role_features(userDao, role_name, role_id, child):
     n_changes = 0

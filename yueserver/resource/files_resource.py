@@ -151,6 +151,10 @@ class FilesResource(WebResource):
             return httpError(404, "not found: root: `%s` path: `%s`" % (
                 root, path))
 
-
+    @get("quota")
+    @requires_auth("filesystem_read")
+    def quota(self):
+        obj = self.filesys_service.getUserQuota(g.current_user)
+        return jsonify(result=obj)
 
 
