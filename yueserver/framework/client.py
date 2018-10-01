@@ -127,6 +127,7 @@ class Response(object):
     def __init__(self, response):
         super(Response, self).__init__()
         self._response = response
+        self.status_code = self._response.status_code
 
     def __getattr__(self, attr):
 

@@ -912,9 +912,9 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
         response = ctxt.client.files_upload(ctxt.root, ent.remote_path, f,
             mtime=mtime, permission=perm_)
 
-        print("sync >> response", response)
-        #if response.status_code == 409:
-        #    raise Exception("local database out of date. fetch first")
+        print("sync >> response", dir(response))
+        if response.status_code == 409:
+            raise Exception("local database out of date. fetch first")
 
         record = RecordBuilder().local(**ent.af).remote(**ent.af).build()
         ctxt.storageDao.upsert(ent.remote_path, record)
@@ -1144,6 +1144,9 @@ def cli_init(args):
     with open(userpath, "w") as wf:
         json.dump(userdata, wf, indent=4, sort_keys=True)
 
+    storageDao = LocalStoragDao(db, db.tables)
+
+    fs = FileSystem()
 
     ctxt = SyncContext(client, storageDao, fs,
         args.root, args.remote_base, args.local_base)
@@ -1217,7 +1220,8 @@ def cli_list(args):
 
     ctxt = get_ctxt(os.getcwd())
 
-    _list_impl(ctxt.client, ctxt.root, args.path)
+    root = args.root or ctxt.root
+    _list_impl(ctxt.client, root, args.path)
 
 def main():
 
@@ -1363,13 +1367,16 @@ def main():
     parser_copy.add_argument('dst', help="destination path")
 
     ###########################################################################
-    # Copy
+    # List
 
-    parser_copy = subparsers.add_parser('list', aliases=['ls'],
+    parser_list = subparsers.add_parser('list', aliases=['ls'],
         help="list contents of a remote directory")
-    parser_copy.set_defaults(func=cli_list)
+    parser_list.set_defaults(func=cli_list)
 
-    parser_copy.add_argument('path', nargs="?", default="", help="relative remote path")
+    parser_list.add_argument("--root", default=None,
+        help="file system root to list")
+
+    parser_list.add_argument('path', nargs="?", default="", help="relative remote path")
     ###########################################################################
     args = parser.parse_args()
 
