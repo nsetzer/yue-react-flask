@@ -912,7 +912,6 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
         response = ctxt.client.files_upload(ctxt.root, ent.remote_path, f,
             mtime=mtime, permission=perm_)
 
-        print("sync >> response", dir(response))
         if response.status_code == 409:
             raise Exception("local database out of date. fetch first")
 
@@ -1067,7 +1066,7 @@ def _list_impl(client, root, path):
             sys.stdout.write("%s %s %12d %s %s\n" % (
                 fvers, fdate, int(item['size']), fperm, item['name']))
 
-def _parse_path_args(fs, local_base, args_paths):
+def _parse_path_args(fs, remote_base, local_base, args_paths):
 
     paths = []
 
@@ -1085,6 +1084,8 @@ def _parse_path_args(fs, local_base, args_paths):
         relpath = os.path.relpath(path, local_base)
         if relpath == ".":
             relpath = ""
+        relpath = posixpath.join(remote_base, relpath)
+
         name = fs.split(abspath)[1]
         paths.append(DirEnt(name, relpath, abspath))
 
@@ -1166,7 +1167,7 @@ def cli_status(args):
 
     # ---
 
-    paths = _parse_path_args(ctxt.fs, ctxt.local_base, args.paths)
+    paths = _parse_path_args(ctxt.fs, ctxt.remote_base, ctxt.local_base, args.paths)
 
     first = True
     for dent in paths:
@@ -1193,7 +1194,7 @@ def cli_sync(args):
 
     ctxt = get_ctxt(os.getcwd())
 
-    paths = _parse_path_args(ctxt.fs, ctxt.local_base, args.paths)
+    paths = _parse_path_args(ctxt.fs, ctxt.remote_base, ctxt.local_base, args.paths)
 
     _sync_impl(ctxt, paths, push=args.push, pull=args.pull,
         force=args.force, recursive=args.recursion)
