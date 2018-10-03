@@ -18,6 +18,7 @@ import gzip
 import argparse
 import logging
 
+from socketio import Server as SocketServer, Middleware as SocketMiddleware
 import ssl
 
 from .client import RegisteredEndpoint, Parameter, AuthenticatedRestClient, \
@@ -42,6 +43,8 @@ class FlaskApp(object):
         super(FlaskApp, self).__init__()
         self.config = config
 
+        self.sio = None # SocketServer(async_mode="threading")
+
         self.app = flask.Flask(self.__class__.__name__,
             static_folder=None)
             #static_folder=self.config.static_dir,
@@ -61,12 +64,24 @@ class FlaskApp(object):
         self.app.after_request(self._add_cors_headers)
 
         self._registered_endpoints = []
+        self._registered_websockets = []
 
     def add_resource(self, res):
 
         for path, methods, name, func, params, body in res.endpoints():
             self.register(path, name, func,
                 params=params, body=body, methods=methods)
+
+        websockets = res.websockets()
+        if len(websockets) > 0:
+            if self.sio is None:
+                self.sio = SocketServer(async_mode="threading")
+            res.sio = self.sio
+
+            for name, event, namespace, func in websockets:
+                self.sio.on(event, func, namespace=namespace)
+
+                self._registered_websockets.append((name, event, namespace, func))
 
     def register(self, path, name, callback, params=None, body=None, **options):
         msg = ""
@@ -125,11 +140,13 @@ class FlaskApp(object):
                 methods = ','.join(rule.methods)
                 url = url_for(rule.endpoint, **options)
                 url = url.replace("%5B", ":").replace("%5D", "")
-                output.append([rule.endpoint, methods, url])
+                output.append((rule.endpoint, methods, url))
 
-        output.sort(key=lambda x:(x[0],x[2]))
-        #for endpoint, methods, url in sorted(output, key=lambda x: x[2]):
-        #    print("{:30s} {:20s} {}".format(endpoint, methods, url))
+            for (name, event, namespace, meth) in self._registered_websockets:
+                url = "%s <%s>" % (namespace, event)
+                output.append((name, "WEBSOCKET", url))
+
+        output.sort(key=lambda x: (x[0], x[2]))
 
         return output
 
@@ -156,9 +173,17 @@ class FlaskApp(object):
             logging.info("{:40s} {:20s} {}".format(
                 endpoint, methods, url))
 
+        s = "s" if ssl_context else ""
+        logging.info("running on: http%s://%s:%s" % (s,
+            self.config.host, self.config.port))
+
+        if self.sio is not None:
+            self.app.wsgi_app = SocketMiddleware(self.sio, self.app.wsgi_app)
+
         self.app.run(host=self.config.host,
                      port=self.config.port,
-                     ssl_context=ssl_context)
+                     ssl_context=ssl_context,
+                     threaded=True)
 
     def _add_cors_headers(self, response):
 

@@ -8,3 +8,4 @@ boto3==1.*
 PyYAML==3.*
 pycryptodome==3.*
 psutil==5.*
+python-socketio==2.*

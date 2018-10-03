@@ -140,8 +140,10 @@ class ApplicationBaseConfig(BaseConfig):
         # TODO implement true sub classes
         self.host = self.get_key(base, 'host', default="localhost")
         self.port = self.get_key(base, 'port', default=4200)
+        # TODO: move this into the appl config
         self.domain = self.get_key(base, 'env', default="production")
-        self.secret_key = self.get_key(base, 'secret_key', required=True)
+        # TODO: move this into the appl config
+        self.secret_key = self.get_key(base, 'secret_key', required=False)
 
         self.ssl = SSLConfig(base)
         self.cors = CORSConfig(base)

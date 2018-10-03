@@ -86,11 +86,29 @@ def _endpoint_mapper(f):
 
     return wrapper
 
+def websocket(event, namespace):
+    """decorator which registers a class method as a websocket handler
+        event: one of: connect, message, disconnect
+        namespace: the request path
+
+        events:
+            connect: can return false to reject the connection
+
+        decorated function should accept (sid, msg)
+            sid: the session id
+            msg: payload
+    """
+    def decorator(f):
+        f._namespace = namespace
+        f._event = event
+        return f
+    return decorator
+
 def get(path):
     """decorator which registers a class method as a GET handler"""
     def decorator(f):
         f._endpoint = path
-        f._methods = ['GET',]
+        f._methods = ['GET']
         return _endpoint_mapper(f)
     return decorator
 
@@ -98,7 +116,7 @@ def put(path):
     """decorator which registers a class method as a PUT handler"""
     def decorator(f):
         f._endpoint = path
-        f._methods = ['PUT',]
+        f._methods = ['PUT']
         return _endpoint_mapper(f)
     return decorator
 
@@ -114,7 +132,7 @@ def delete(path):
     """decorator which registers a class method as a DELETE handler"""
     def decorator(f):
         f._endpoint = path
-        f._methods = ['DELETE',]
+        f._methods = ['DELETE']
         return _endpoint_mapper(f)
     return decorator
 
@@ -264,8 +282,13 @@ class MetaWebResource(type):
     """
     def __init__(cls, name, bases, namespace):
         cls._class_endpoints = []
+        cls._class_websockets = []
         for key, value in namespace.items():
-            if hasattr(value, "_endpoint"):
+            if hasattr(value, "_event"):
+                func = value
+                socket_handler = (value._event, value._namespace, func)
+                cls._class_websockets.append(socket_handler)
+            elif hasattr(value, "_endpoint"):
                 func = value
                 fname = name + "." + func.__name__
                 path = func._endpoint
@@ -295,6 +318,7 @@ class WebResource(object, metaclass=MetaWebResource):
         super(WebResource, self).__init__()
         self.root = root
         self.__endpoints = []
+        self.__websockets = []
 
     def endpoints(self):
         """
@@ -308,16 +332,27 @@ class WebResource(object, metaclass=MetaWebResource):
 
         for path, methods, name, func, _params, _body in self._class_endpoints:
             # get the instance of the method which is bound to self
-            bound_func = getattr(self, func.__name__)
+            bound_method = getattr(self, func.__name__)
             if path == "":
                 path = self.root
             elif not path.startswith("/"):
                 path = (self.root + '/' + path).replace("//", "/")
 
             endpoints.append(WebEndpoint(path, methods, name,
-                bound_func, _params, _body))
+                bound_method, _params, _body))
 
         return endpoints
+
+    def websockets(self):
+
+        websockets = self.__websockets[:]
+
+        for event, namespace, func in self._class_websockets:
+            bound_method = getattr(self, func.__name__)
+            name = self.__class__.__name__ + "." + func.__name__
+            websockets.append((name, event, namespace, bound_method))
+
+        return websockets
 
     def register(self, path, func, methods):
         name = self.__class__.__name__ + "." + func.__name__
@@ -328,3 +363,5 @@ class WebResource(object, metaclass=MetaWebResource):
         _params = []
         self.__endpoints.append(WebEndpoint(path, methods, name,
             func, _params, _body))
+
+
