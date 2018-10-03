@@ -18,6 +18,9 @@ import gzip
 import argparse
 import logging
 
+import eventlet
+import eventlet.wsgi
+
 from socketio import Server as SocketServer, Middleware as SocketMiddleware
 import ssl
 
@@ -43,7 +46,8 @@ class FlaskApp(object):
         super(FlaskApp, self).__init__()
         self.config = config
 
-        self.sio = None # SocketServer(async_mode="threading")
+        # sio is only configured if a websocket listener is defined
+        self.sio = None
 
         self.app = flask.Flask(self.__class__.__name__,
             static_folder=None)
@@ -66,6 +70,14 @@ class FlaskApp(object):
         self._registered_endpoints = []
         self._registered_websockets = []
 
+        self.async_mode = "eventlet"
+
+    def _enable_sio(self):
+        if self.sio is None:
+            # todo: support gunicorn, eventlet
+            self.sio = SocketServer()
+            self.app.wsgi_app = SocketMiddleware(self.sio, self.app.wsgi_app)
+
     def add_resource(self, res):
 
         for path, methods, name, func, params, body in res.endpoints():
@@ -74,8 +86,8 @@ class FlaskApp(object):
 
         websockets = res.websockets()
         if len(websockets) > 0:
-            if self.sio is None:
-                self.sio = SocketServer(async_mode="threading")
+            self._enable_sio()
+
             res.sio = self.sio
 
             for name, event, namespace, func in websockets:
@@ -177,13 +189,14 @@ class FlaskApp(object):
         logging.info("running on: http%s://%s:%s" % (s,
             self.config.host, self.config.port))
 
-        if self.sio is not None:
-            self.app.wsgi_app = SocketMiddleware(self.sio, self.app.wsgi_app)
-
-        self.app.run(host=self.config.host,
-                     port=self.config.port,
-                     ssl_context=ssl_context,
-                     threaded=True)
+        if self.async_mode == 'eventlet':
+            socket = eventlet.listen((self.config.host, self.config.port))
+            eventlet.wsgi.server(socket, self.app)
+        else:
+            self.app.run(host=self.config.host,
+                         port=self.config.port,
+                         ssl_context=ssl_context,
+                         threaded=True)
 
     def _add_cors_headers(self, response):
 
