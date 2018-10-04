@@ -9,3 +9,4 @@ PyYAML==3.*
 pycryptodome==3.*
 psutil==5.*
 python-socketio==2.*
+eventlet==0.24.*

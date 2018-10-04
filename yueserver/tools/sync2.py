@@ -698,7 +698,6 @@ def _check(ctxt, remote_base, local_base):
             _names.remove(d)
             state = FileState.SAME
         else:
-            local_path = None
             state = FileState.PULL
         dirs.append(DirEnt(d, remote_path, local_path, state))
 
