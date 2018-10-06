@@ -948,6 +948,10 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
            ent.rf['mtime'] != rm:
             raise Exception("local database out of date. fetch first")
 
+        dpath = ctxt.fs.split(ent.local_path)[0]
+        if not ctxt.fs.exists(dpath):
+            ctxt.fs.makedirs(dpath)
+
         bytes_written = 0
         with ctxt.fs.open(ent.local_path, "wb") as wb:
             for chunk in response.stream():
