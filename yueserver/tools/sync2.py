@@ -369,9 +369,9 @@ class FileEnt(object):
         return posixpath.split(self.remote_path)[1]
 
     def _samefile(self, af, bf):
-        b = af['mtime'] == bf['mtime'] and \
-            af['size'] == bf['size'] and \
-            af['permission'] == bf['permission']
+        b = af['mtime'] == bf['mtime'] and af['size'] == bf['size']
+        # todo: not all file systems implement permissions...
+        #  af['permission'] == bf['permission']
         return b
 
     def _check_threeway_compare(self):
@@ -570,10 +570,13 @@ def db_connect(connection_string):
 
     return db
 
-def get_blacklist(directory):
+def get_blacklist(directory, default=None):
 
     blacklist_file = os.path.join(directory, ".yueignore")
-    blacklist = set([".yue"])
+    if default is None:
+        blacklist = set([".yue"])
+    else:
+        blacklist = set(default)
     if os.path.exists(blacklist_file):
         with open(blacklist_file, "r") as rf:
             for line in rf:
@@ -660,7 +663,11 @@ def _fetch(ctxt):
             sys.stderr.write("fetch error...")
             return
 
-        files = response.json()['result']
+        try:
+            files = response.json()['result']
+        except Exception as e:
+            print(response.text)
+            raise e
         for f in files:
             record = {
                 "remote_size": f['size'],
@@ -675,12 +682,13 @@ def _fetch(ctxt):
 
     ctxt.storageDao.db.session.commit()
 
-def _check(ctxt, remote_base, local_base):
+def _check(ctxt, remote_base, local_base, blacklist=None):
 
     if remote_base and not remote_base.endswith("/"):
         remote_base += "/"
 
-    blacklist = {".yue"}
+    if blacklist is None:
+        blacklist = {".yue"}
 
     dirs = []
     files = []
@@ -691,14 +699,24 @@ def _check(ctxt, remote_base, local_base):
     else:
         _names = set()
 
+    # neither or these cases are handled:
+    #   TODO: remote directory, local file with same name
+    #   TODO: local directory, remote file with same name
+
     for d in _dirs:
+
+        if d in blacklist:
+            continue
+
         remote_path = posixpath.join(remote_base, d)
         local_path = ctxt.fs.join(local_base, d)
+        # check that the directory exists locally
         if d in _names:
             _names.remove(d)
             state = FileState.SAME
         else:
             state = FileState.PULL
+
         dirs.append(DirEnt(d, remote_path, local_path, state))
 
     for f in _files:
@@ -818,9 +836,11 @@ def _check_file(ctxt, remote_path, local_path):
 
     return ent
 
-def _status_dir_impl(ctxt, remote_dir, local_dir, recursive):
+def _status_dir_impl(ctxt, remote_dir, local_dir, recursive, blacklist):
+    # TODO: move recursive to the ctxt
+    blacklist = get_blacklist(local_dir, blacklist)
 
-    result = _check(ctxt, remote_dir, local_dir)
+    result = _check(ctxt, remote_dir, local_dir, blacklist)
 
     ents = list(result.dirs) + list(result.files)
 
@@ -837,10 +857,10 @@ def _status_dir_impl(ctxt, remote_dir, local_dir, recursive):
             else:
                 print("d%s %s/" % (sym, path))
 
-            if recursive and state != FileState.PULL:
-                rbase = posixpath.join(ctxt.remote_base, ent.name())
-                lbase = ctxt.fs.join(ctxt.local_base, ent.name())
-                _status_dir_impl(ctxt, rbase, lbase, recursive)
+            if recursive:
+                rbase = posixpath.join(remote_dir, ent.name())
+                lbase = ctxt.fs.join(local_dir, ent.name())
+                _status_dir_impl(ctxt, rbase, lbase, recursive, blacklist)
         else:
             state = ent.state().split(':')[0]
             sym = FileState.symbol(state)
@@ -1183,7 +1203,7 @@ def cli_status(args):
                 print("%s/" % dent.local_base)
 
             _status_dir_impl(ctxt, dent.remote_base, dent.local_base,
-                args.recursion)
+                args.recursion, ctxt.blacklist)
         else:
 
             _status_file_impl(ctxt, dent.remote_base, dent.local_base)
@@ -1211,8 +1231,8 @@ def cli_info(args):
     obj = response.json()['result']
 
     print("file_count: %d" % obj['nfiles'])
-    print("usage: %d MB" % (obj['nbytes'] / 1024 / 1024))
-    print("capacity: %d MB" % (obj['quota'] / 1024 / 1024))
+    print("usage: %.1f MB" % (obj['nbytes'] / 1024 / 1024))
+    print("capacity: %.1f MB" % (obj['quota'] / 1024 / 1024))
 
 def cli_copy(args):
 

@@ -31,6 +31,7 @@ for pkg in pkgs:
 entry_points = [
     "ymgr=yueserver.tools.manage:main",
     "ysync=yueserver.tools.sync2:main",
+    "syn=yueserver.tools.sync2:main",
 ]
 
 setup(name="yueserver",
