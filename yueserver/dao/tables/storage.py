@@ -27,7 +27,7 @@ def FileSystemStorageTable(metadata):
         Column('version', Integer, default=0),
         Column('size', Integer, default=0),
 
-        # encryption is an integer to leave room for the posibility
+        # encryption is an integer to leave room for the possibility
         # of client side or server side encryption/decryption
         Column('encrypted', Integer, default=0),
         # date

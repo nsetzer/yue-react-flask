@@ -54,6 +54,9 @@ def db_connect(connection_string=None, readonly=False):
     if connection_string is None or connection_string == ":memory:":
         connection_string = 'sqlite://'
 
+    return db_connect_impl(DatabaseTables, connection_string, readonly)
+
+def db_connect_impl(tables_class, connection_string, readonly):
     engine = create_engine(connection_string)
     session = scoped_session(sessionmaker(bind=engine))
 
@@ -66,7 +69,7 @@ def db_connect(connection_string=None, readonly=False):
     db.session = session
     if readonly:
         db.session.flush = _abort_flush
-    db.tables = DatabaseTables(db.metadata)
+    db.tables = tables_class(db.metadata)
     db.create_all = lambda: db.metadata.create_all(engine)
     db.delete_all = lambda: db.tables.drop(db.engine)
     db.disconnect = lambda: engine.dispose()

@@ -291,6 +291,10 @@ class TestClient(object):
         # todo assert version
         self.fs.set_mtime(path, mtime)
 
+        response = lambda: None
+        response.status_code = 201
+        return response
+
     def files_get_path(self, root, rel_path, stream=False):
         path = "mem://remote/%s" % (rel_path)
         response = lambda: None
