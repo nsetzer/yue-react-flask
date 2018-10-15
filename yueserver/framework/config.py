@@ -122,10 +122,14 @@ class ApplicationBaseConfig(BaseConfig):
     def init(self, data):
 
         self.null = False
-        self.build_dir = os.path.join(os.getcwd(), "build")
-        self.static_dir = os.path.join(os.getcwd(), "build", "static")
 
         base = self.get_key(data, "server")
+
+        build_dir = os.path.join(os.getcwd(), "build")
+        self.build_dir = self.get_key(base, "build", default=build_dir)
+
+        static_dir = os.path.join(os.getcwd(), "build", "static")
+        self.static_dir = self.get_key(base, "static", default=static_dir)
 
         mode = self.get_key(data, "encryption_mode", default="none")
 

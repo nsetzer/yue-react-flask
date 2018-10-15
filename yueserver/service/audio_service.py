@@ -23,6 +23,8 @@ class AudioService(object):
     _instance = None
 
     def __init__(self, config, db, dbtables):
+        # TODO: all services should not accept a config,
+        #       instead have getters, setters, defaults
         super(AudioService, self).__init__()
         self.config = config
         self.db = db

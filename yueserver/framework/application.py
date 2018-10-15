@@ -60,10 +60,10 @@ class FlaskApp(object):
         self.log = self.app.logger
 
         if not self.config.null and not os.path.exists(self.config.build_dir):
-            self.log.warn("not found: %s\n" % self.config.build_dir)
+            self.log.warn("not found: %s" % self.config.build_dir)
 
-        if not self.config.null and  not os.path.exists(self.config.static_dir):
-            self.log.warn("not found: %s\n" % self.config.static_dir)
+        if not self.config.null and not os.path.exists(self.config.static_dir):
+            self.log.warn("not found: %s" % self.config.static_dir)
 
         self.app.after_request(self._add_cors_headers)
 

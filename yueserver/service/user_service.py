@@ -81,7 +81,6 @@ class UserService(object):
     def instance():
         return UserService._instance
 
-
     def createUser(self, email, domain, role, password):
 
         domain = self.userDao.findDomainByName(domain)
@@ -100,7 +99,7 @@ class UserService(object):
 
         return self.userDao.findUserByEmailAndPassword(email, password)
 
-    def getUserFromBasicToken(self, token, features = None):
+    def getUserFromBasicToken(self, token, features=None):
 
         # TODO: decompose email from user@domain/role
         # and set the domain and role correctly
@@ -123,7 +122,7 @@ class UserService(object):
 
         return user_data
 
-    def getUserFromApikey(self, token, features = None):
+    def getUserFromApikey(self, token, features=None):
 
         apikey = parse_apikey_token(token)
 
@@ -143,7 +142,7 @@ class UserService(object):
 
         return user_data
 
-    def getUserFromToken(self, token, features = None):
+    def getUserFromToken(self, token, features=None):
 
         try:
             user_data = verify_token(self.secret, token)
@@ -205,13 +204,13 @@ class UserService(object):
             "default_role": user['role_id'],
             "roles": [
                 {
-                "id": user['role_id'],
-                "features": features,
+                    "id": user['role_id'],
+                    "features": features,
                 },
             ],
             "domains": [
                 {
-                "id": user['domain_id'],
+                    "id": user['domain_id'],
                 }
             ],
             # todo: features here should be the list of features for the
@@ -229,8 +228,8 @@ class UserService(object):
 
         did = self.userDao.findDomainByName(domainName).id
 
-        domains = { d['id']: d['name'] for d in self.userDao.listDomains() }
-        roles = { r['id']: r['name'] for r in self.userDao.listRoles() }
+        domains = {d['id']: d['name'] for d in self.userDao.listDomains()}
+        roles = {r['id']: r['name'] for r in self.userDao.listRoles()}
         users = self.userDao.listUsers(did)
 
         info = {
@@ -250,9 +249,9 @@ class UserService(object):
         role_id = user_data['role_id']
         # has_role = _userDao.userHasRole(user_id, role_id)
         has_feat = self.userDao.roleHasNamedFeature(role_id, feature_name)
-        return has_feat;
+        return has_feat
 
-    def _validate_features(self, user_data, features = None):
+    def _validate_features(self, user_data, features=None):
 
         if features is not None:
             if not self._validate_user_feature(user_data, features[0]):

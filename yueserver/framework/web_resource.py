@@ -86,6 +86,18 @@ def _endpoint_mapper(f):
 
     return wrapper
 
+def _websocket_wrapper(f):
+    """
+    decorator for websocket handlers which logs unhandled exceptions
+    """
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except Exception as e:
+            logging.exception("Unhandled websocket exception")
+    return wrapper
+
 def websocket(event, namespace):
     """decorator which registers a class method as a websocket handler
         event: one of: connect, message, disconnect
@@ -101,7 +113,7 @@ def websocket(event, namespace):
     def decorator(f):
         f._namespace = namespace
         f._event = event
-        return f
+        return _websocket_wrapper(f)
     return decorator
 
 def get(path):
@@ -281,8 +293,13 @@ class MetaWebResource(type):
     A metaclass which registers decorated methods as REST endpoints
     """
     def __init__(cls, name, bases, namespace):
-        cls._class_endpoints = []
-        cls._class_websockets = []
+        # only create these variables if they have not yet been created
+        # this allows for resource inheritance
+        if not hasattr(cls, '_class_endpoints'):
+            cls._class_endpoints = []
+        if not hasattr(cls, '_class_websockets'):
+            cls._class_websockets = []
+
         for key, value in namespace.items():
             if hasattr(value, "_event"):
                 func = value

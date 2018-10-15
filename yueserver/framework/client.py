@@ -45,6 +45,9 @@ def split_auth(authas):
     domain = ""
     role = ""
 
+    # TODO: support email address
+    # example@google.com@Production/user"
+
     if "@" in authas:
         user, extra = authas.split("@")
         if "/" in extra:
