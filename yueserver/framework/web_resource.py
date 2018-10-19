@@ -293,12 +293,17 @@ class MetaWebResource(type):
     A metaclass which registers decorated methods as REST endpoints
     """
     def __init__(cls, name, bases, namespace):
-        # only create these variables if they have not yet been created
-        # this allows for resource inheritance
+        # create the variable if it has not yet been created.
+        # otherwise inherit the defaults from the parent class
         if not hasattr(cls, '_class_endpoints'):
             cls._class_endpoints = []
+        else:
+            cls._class_endpoints = cls._class_endpoints[:]
+
         if not hasattr(cls, '_class_websockets'):
             cls._class_websockets = []
+        else:
+            cls._class_websockets = cls._class_endpoints[:]
 
         for key, value in namespace.items():
             if hasattr(value, "_event"):

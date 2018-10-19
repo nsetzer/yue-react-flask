@@ -127,12 +127,12 @@ class ClientTestCase(unittest.TestCase):
         self.assertEqual(d, "")
         self.assertEqual(r, "")
 
-        u, d, r = split_auth("username@domain")
+        u, d, r = split_auth("username#domain")
         self.assertEqual(u, "username")
         self.assertEqual(d, "domain")
         self.assertEqual(r, "")
 
-        u, d, r = split_auth("username@domain/role")
+        u, d, r = split_auth("username#domain/role")
         self.assertEqual(u, "username")
         self.assertEqual(d, "domain")
         self.assertEqual(r, "role")

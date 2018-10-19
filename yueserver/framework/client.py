@@ -34,10 +34,11 @@ Parameter = namedtuple('Parameter',
 def split_auth(authas):
     """ parse a string into authorization parts
 
-    e.g. user@domain/role into (user, domain, role)
+    e.g. username@domain/role into (username, domain, role)
 
+    username can be a name, or an email address.
 
-    returns a 3-tuple: user, domain, role
+    returns a 3-tuple: username, domain, role
     domain and role are optional, if not provided an empty
     string will be returned
 
@@ -45,11 +46,8 @@ def split_auth(authas):
     domain = ""
     role = ""
 
-    # TODO: support email address
-    # example@google.com@Production/user"
-
-    if "@" in authas:
-        user, extra = authas.split("@")
+    if "#" in authas:
+        user, extra = authas.split("#")
         if "/" in extra:
             domain, role = extra.split("/")
         else:
