@@ -299,25 +299,25 @@ class FileState(object):
     @staticmethod
     def symbol(state):
         if FileState.SAME == state:
-            sym = " "
+            sym = "--"
         if FileState.PUSH == state:
-            sym = ">"
+            sym = ">-"
         if FileState.PULL == state:
-            sym = "<"
+            sym = "-<"
         if FileState.ERROR == state:
-            sym = "E"
+            sym = "ee"
         if FileState.CONFLICT_MODIFIED == state:
-            sym = "c"
+            sym = "mm"
         if FileState.CONFLICT_CREATED == state:
-            sym = "c"
+            sym = "cc"
         if FileState.CONFLICT_VERSION == state:
-            sym = "c"
+            sym = "vv"
         if FileState.DELETE_BOTH == state:
-            sym = "-"
+            sym = "xx"
         if FileState.DELETE_REMOTE == state:
-            sym = "x"
+            sym = "-x"
         if FileState.DELETE_LOCAL == state:
-            sym = "d"
+            sym = "x-"
         return sym
 
 class DirEnt(object):
@@ -1021,6 +1021,38 @@ def _sync_impl(ctxt, paths, push=False, pull=False, force=False, recursive=False
             _sync_file(ctxt, dent.remote_base, dent.local_base,
                 push, pull, force)
 
+def _sync_get_file(ctxt, rpath, lpath):
+
+    response = ctxt.client.files_get_path(ctxt.root, rpath, stream=True)
+    rv = int(response.headers['X-YUE-VERSION'])
+    rp = int(response.headers['X-YUE-PERMISSION'])
+    rm = int(response.headers['X-YUE-MTIME'])
+
+    dpath = ctxt.fs.split(lpath)[0]
+    if not ctxt.fs.exists(dpath):
+        ctxt.fs.makedirs(dpath)
+
+    bytes_written = 0
+    with ctxt.fs.open(lpath, "wb") as wb:
+        for chunk in response.stream():
+            bytes_written += len(chunk)
+            wb.write(chunk)
+
+def _sync_put_file(ctxt, lpath, rpath):
+
+    record = ctxt.fs.file_info(local_path)
+
+    f = ProgressFileReaderWrapper(ctxt.fs, lpath, rpath)
+    response = ctxt.client.files_upload(ctxt.root, rpath, f,
+        mtime=record.mtime, permission=record.permission)
+
+    if response.status_code == 409:
+        raise Exception("local database out of date. fetch first")
+
+    if response.status_code > 201:
+        raise Exception(response.text)
+
+
 def _copy_impl(client, fs, src, dst):
     """
     copy from the remote server to a local path, or from a local path
@@ -1222,6 +1254,20 @@ def cli_sync(args):
     _sync_impl(ctxt, paths, push=args.push, pull=args.pull,
         force=args.force, recursive=args.recursion)
 
+def cli_get(args):
+
+    ctxt = get_ctxt(os.getcwd())
+
+    args.local_path = os.path.abspath(args.local_path)
+
+    _sync_get_file(ctxt, args.remote_path, args.local_path)
+
+def cli_put(args):
+
+    ctxt = get_ctxt(os.getcwd())
+
+    _sync_put_file(ctxt, args.local_path, args.remote_path)
+
 def cli_info(args):
 
     ctxt = get_ctxt(os.getcwd())
@@ -1339,6 +1385,32 @@ def main():
 
     parser_sync.add_argument("paths", nargs="*",
         help="list of paths to check the status on")
+
+    ###########################################################################
+    # Get
+
+    parser_get = subparsers.add_parser('get',
+        help="copy a remote file locally")
+    parser_get.set_defaults(func=cli_get)
+
+    parser_get.add_argument("remote_path",
+        help="path to a remote file")
+
+    parser_get.add_argument("local_path", default=None, nargs="?",
+        help="path to a local file")
+
+    ###########################################################################
+    # Put
+
+    parser_put = subparsers.add_parser('put',
+        help="copy a local file to remote")
+    parser_put.set_defaults(func=cli_put)
+
+    parser_put.add_argument("local_path",
+        help="path to a local file")
+
+    parser_put.add_argument("remote_path",
+        help="path to a remote file")
 
     ###########################################################################
     # Pull
