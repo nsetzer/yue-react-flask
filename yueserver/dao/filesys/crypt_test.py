@@ -5,13 +5,34 @@ import io
 from .crypt import \
     FileEncryptorWriter, FileEncryptorReader, \
     FileDecryptorWriter, FileDecryptorReader, \
-    cryptkey, decryptkey,  recryptkey
+    cryptkey, decryptkey,  recryptkey, new_stream_cipher, get_stream_cipher
 
 class CryptTestCase(unittest.TestCase):
 
+    def test_new_cipher_get_cipher(self):
+
+        sampletext = b"hello world"
+        key1 = b"0"*32
+        key2 = b"1"*32
+        cipher, header = new_stream_cipher(b"0"*32)
+
+        ciphertext = cipher.encrypt(sampletext)
+        # when the correct password is used, a new cipher is used
+        cipher = get_stream_cipher(key1, header)
+
+        # show that new_cipher / get_cipher can be used to round-trip data
+        plaintext = cipher.decrypt(ciphertext)
+        self.assertEqual(plaintext, sampletext)
+
+        # when an incorrect password is used, a value error is raised
+        with self.assertRaises(ValueError):
+            get_stream_cipher(key2, header)
+
     def test_crypt_1(self):
 
-        key = b'0'*32
+        key1 = b'0'*32
+        nonce = b"1"*8
+        key2 = b'0'*32
         text = b'The secret message to encrypt client side.'
 
         # ---------------------------------------------------------------------
@@ -19,13 +40,13 @@ class CryptTestCase(unittest.TestCase):
         # show that encrypting while writing works regardless of the write size
 
         bf = io.BytesIO()
-        enc = FileEncryptorWriter(bf, key, b"1"*8)
+        enc = FileEncryptorWriter(bf, key1, nonce, key2)
         enc.write(text)
         ciphertext = bf.getvalue()
 
         for i in range(1, len(text)):
             bw = io.BytesIO()
-            enc = FileEncryptorWriter(bw, key, b"1"*8)
+            enc = FileEncryptorWriter(bw, key2, nonce, key2)
             for j in range(0, len(text), i):
                 enc.write(text[j:j+i])
             ciphertext_out = bw.getvalue()
@@ -56,7 +77,9 @@ class CryptTestCase(unittest.TestCase):
 
     def test_crypt_3(self):
 
-        key = b'0'*32
+        key1 = b'0'*32
+        key2 = b'0'*32
+        nonce = b'1'*8
         text = b'The secret message to encrypt client side.'
 
         # ---------------------------------------------------------------------
@@ -64,12 +87,12 @@ class CryptTestCase(unittest.TestCase):
         # show that encrypting while reading works regardless of the write size
 
         bf = io.BytesIO(text)
-        dec = FileEncryptorReader(bf, key, b"1"*8)
+        dec = FileEncryptorReader(bf, key1, nonce, key2)
         ciphertext = dec.read()
 
         for i in range(1, len(text)):
             bf = io.BytesIO(text)
-            dec = FileEncryptorReader(bf, key, b"1"*8)
+            dec = FileEncryptorReader(bf, key1, nonce, key2)
             ciphertext_out = b"".join(iter(lambda: dec.read(i), b""))
             self.assertEqual(ciphertext, ciphertext_out)
 
