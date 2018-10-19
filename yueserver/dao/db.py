@@ -196,6 +196,32 @@ def db_health(db):
 
     return {"status": "OK", "stats": stats}
 
+def db_add_column(db, table, column):
+    # https://www.sqlite.org/lang_altertable.html
+    # column def can be more complicated...
+    column_type = column.type.compile(db.engine.dialect)
+    query = 'ALTER TABLE %s ADD COLUMN %s %s;' % (table.name, column.name, column_type)
+    db.engine.execute(query)
+
+def db_get_columns(db, table):
+    result = db.engine.execute("select * from %s LIMIT 1;" % table.name)
+    return result.keys()
+
+def db_iter_rows(db, table, batch=100, sess=None):
+    """
+    this is intended to be an efficient way to iterate a large table
+    TODO: it is unclear if this implementation is efficient in any way
+    """
+
+    if sess is None:
+        sess = db.session
+    result = sess.execute(table.select())
+    result_set = result.fetchmany(batch)
+    while result_set:
+        for row in result_set:
+            yield row
+        result_set = result.fetchmany(batch)
+
 class ConfigException(Exception):
     """docstring for ConfigException"""
     def __init__(self, message):

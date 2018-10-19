@@ -50,6 +50,7 @@ class FilesResourceTestCase(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
 
+    @unittest.skipIf(sys.platform == 'darwin', "no OGG support on OSX")
     def test_001a_transcode_song(self):
 
         song = {
