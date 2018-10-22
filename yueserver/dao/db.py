@@ -5,6 +5,7 @@ using a YAML configuration file and utility functions
 for creating a database connection.
 """
 from .user import UserDao
+from .settings import SettingsDao
 from .library import Song, LibraryDao
 from .tables.tables import DatabaseTables
 from .search import regexp
@@ -374,6 +375,12 @@ def db_init_main(db, dbtables, data):
     db.create_all()
 
     userDao = UserDao(db, dbtables)
+
+    try:
+        settingsDao = SettingsDao(db, dbtables)
+        settingsDao.set("db_version", str(dbtables.version))
+    except AttributeError as e:
+        logging.error("%s" % e)
 
     # -------------------------------------------------------------------------
     # Features

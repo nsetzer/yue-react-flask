@@ -28,6 +28,26 @@ from sqlalchemy import and_, or_, not_, select, column, \
     update, insert, delete, asc, desc
 from sqlalchemy.sql.expression import bindparam
 
+def osname():
+    """
+    returns an equivalent to 'os.name'
+
+    os.name returns 'nt', 'posix', or 'darwin'.
+    under Windows Subsystem for Linux (WSL) it returns 'posix'
+    this method will detect WSL and return 'nt' instead
+
+    on nt, file permissions are not fully supported and should default to 644
+    """
+    name = os.name
+    if name == "posix":
+        try:
+            release = os.uname().release.lower()
+        except:
+            pass
+        if 'microsoft' in release:
+            name = "nt"
+    return name
+
 def LocalStorageTable(metadata):
     """
     local_*: the value at the time of the last push pull

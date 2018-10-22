@@ -303,7 +303,7 @@ class MetaWebResource(type):
         if not hasattr(cls, '_class_websockets'):
             cls._class_websockets = []
         else:
-            cls._class_websockets = cls._class_endpoints[:]
+            cls._class_websockets = cls._class_websockets[:]
 
         for key, value in namespace.items():
             if hasattr(value, "_event"):

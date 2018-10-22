@@ -226,6 +226,10 @@ class AudioService(object):
         """
         return self.queueDao.rest(user['id'], user['domain_id'])
 
+    def queueNext(self, user):
+        """pop the head element and return the next song"""
+        pass
+
     def defaultQuery(self, user):
         """ retrieve the current default query used by the user
         """

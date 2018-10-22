@@ -84,11 +84,12 @@ class JsonUploader(object):
     unique across all songs (across all domains)
 
     """
-    def __init__(self, client, transcoder, root, bucket):
+    def __init__(self, client, transcoder, root, bucket, noexec):
         super(JsonUploader, self).__init__()
         self.client = client
         self.transcoder = transcoder
         self.root = root
+        self.noexec = noexec
 
         if bucket is not None:
             self.s3fs = S3Upload(bucket)
@@ -149,18 +150,23 @@ class JsonUploader(object):
         if static_path in remote_songs:
             #logging.info("update: %s" % static_path)
             self.updated += 1 if (aud_path in remote_files) else 0
-            return
-            song['id'] = remote_songs[static_path]['id']
-            self._update_song(song)
+
+            if self.noexec:
+                return
+
+            # song['id'] = remote_songs[static_path]['id']
+            # self._update_song(song)
         else:
 
             if aud_path in remote_files:
                 logging.info("create: %s" % aud_path)
-                print(song)
             else:
                 logging.info("upload: %s" % aud_path)
+
             self.uploaded += 1
-            return
+
+            if self.noexec:
+                return
 
             if aud_path not in remote_files:
                 self._transcode_upload(file_path, aud_path, opts)
@@ -325,7 +331,7 @@ def _fetch_songs(client):
     logging.info("fetched %d songs" % len(songs))
     return songs
 
-def do_upload(client, data, root, nparallel=1, bucket=None, ffmpeg_path=None):
+def do_upload(client, data, root, nparallel=1, bucket=None, ffmpeg_path=None, noexec=False):
 
     transcoder = FFmpeg(ffmpeg_path)
 
@@ -335,7 +341,7 @@ def do_upload(client, data, root, nparallel=1, bucket=None, ffmpeg_path=None):
     # TODO: a keyboard interrupt should wait for the current task to complete
 
     if nparallel == 1:
-        uploader = JsonUploader(client, transcoder, root, bucket)
+        uploader = JsonUploader(client, transcoder, root, bucket, noexec)
         uploader.upload(data, rsongs, rfiles)
 
     else:
@@ -347,7 +353,7 @@ def do_upload(client, data, root, nparallel=1, bucket=None, ffmpeg_path=None):
 
         for i in range(nparallel):
             uploaders.append(JsonUploader(client, transcoder,
-                root, bucket))
+                root, bucket, noexec))
 
         for i, item in enumerate(data):
             partition[i % len(partition)].append(item)

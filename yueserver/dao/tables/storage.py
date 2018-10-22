@@ -6,7 +6,7 @@ from sqlalchemy.types import Integer, String, Boolean
 from .util import generate_uuid, StringArrayType
 import time
 
-def FileSystemStorageTable(metadata):
+def FileSystemStorageTableV1(metadata):
     """ returns a table describing items in persistent storage
 
     user_id: the owner of the file
@@ -31,7 +31,48 @@ def FileSystemStorageTable(metadata):
         # of client side or server side encryption/decryption
         Column('encrypted', Integer, default=0),
         # date
-        Column('mtime', Integer, default=lambda: int(time.time()))
+        Column('mtime', Integer, default=lambda: int(time.time())),
+    )
+
+def FileSystemStorageTableV2(metadata):
+    """ returns a table describing items in persistent storage
+
+    user_id: the owner of the file
+    file_path: the user specified relative path for the file
+    storage_path: a fully qualified path (starting with file://, s3://, etc)
+          the location of a resource
+    preview_large:
+    preview_small:
+    permission: an integer (octal) representing unix permissions, e.g. 0o644
+    version: an incrementing integer counting how many times the file has
+             been rewritten
+    size: the size in bytes of the current version of the file
+    expired: expired is None for the latest version of a file
+             otherwise it is the date the version was retired
+    encrypted: non-zero if file is encrypted by the user
+    public: Null, or a uuid which is used for a public link
+    mtime: the last time the file file was modified
+           (the creation date for the latest version)
+    """
+    return Table('filesystem_storage_v2', metadata,
+        Column('id', String, primary_key=True, default=generate_uuid),
+        Column('user_id', ForeignKey("user.id"), nullable=False),
+        # text
+        Column('file_path', String, nullable=False),
+        Column('storage_path', String, nullable=False),
+        Column('preview_large', String, nullable=False),
+        Column('preview_small', String, nullable=False),
+        # number
+        Column('permission', Integer, default=0o644),
+        Column('version', Integer, default=0),
+        Column('size', Integer, default=0),
+        Column('expired', Integer),
+        # bool
+        Column('encrypted', Integer, default=0),
+        Column('public', String, unique=True),
+        # date
+        Column('mtime', Integer, default=lambda: int(time.time())),
+        #
     )
 
 def FileSystemTable(metadata):
@@ -44,6 +85,17 @@ def FileSystemTable(metadata):
         Column('path', String, nullable=False),
     )
 
+def FileSystemUserDataTable(metadata):
+    return Table('filesystem_userdata', metadata,
+        Column('user_id', ForeignKey("user.id"), nullable=False),
+        # text
+        # the encryption key is a string, itself encrypted using a password
+        # known only to the user.
+        Column('encryption_key', String, nullable=False),
+        # expired is None for the latest version of a file
+        # otherwise it is the date the version was retired
+        Column('expired', Integer)
+    )
 
 def FileSystemPermissionTable(metadata):
     """ returns a table which lists the file system locations roles have access to

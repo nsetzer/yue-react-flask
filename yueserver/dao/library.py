@@ -625,8 +625,17 @@ class LibraryDao(object):
         genres = sorted(genres.values(), key=lambda x: x['name'])
 
         data = {
+            # artists is a sorted list of items containing fields:
+            # count, name, albums, genres
+            # albums: map str -> item :: item: map str -> count
+            # genres: seq str
             "artists": artists,
+
+            # genres is a sorted list of items containing fields:
+            # name, count, artist_count
             "genres": genres,
+
+            # the total number of songs counted
             "num_songs": total
         }
 
