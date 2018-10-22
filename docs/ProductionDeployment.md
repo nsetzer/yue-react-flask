@@ -331,16 +331,27 @@ sudo certbot --nginx -d www.domain domain
 
 ### PostgreSQL backup and restore
 
-
 Backup:
+
+A backup can be made by dumping the database contents. use pg_dump as
+the database user to create a dump. This may be a large file so the contents
+are compressed and split across multiple archives. The following command
+assumes that a directory names 'backup' exists and is writable by the
+current user (not the database user, yueapp)
+
 ```bash
-pg_dump yueapp | gzip | split -d -b 512M - backup.gz.
+
+sudo -u yueapp pg_dump yueapp | gzip | split -d -b 512M - backup/backup-$(date "+%y-%m-%d-%H-%M-%S").gz.
 ```
 
 Restore:
+
+Reverse the operation to restore the database. If the tables exist the operation
+will fail, so the tables may need to  be dropped first.
+
 ```bash
 python3 -m yueserver.tools.manage -pproduction drop
-cat backup.gz.* | gunzip | psql yueapp
+cat backup/backup-${version}.gz.* | gunzip | sudo -u yueapp psql yueapp
 ```
 
 ### PostgreSQL Change Password
