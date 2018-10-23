@@ -55,6 +55,9 @@ import codecs
 import logging
 from logging.handlers import RotatingFileHandler
 
+logging.getLogger("engineio").setLevel(logging.WARNING)
+logging.getLogger("socketio").setLevel(logging.WARNING)
+
 from flask import jsonify, render_template
 
 from .config import Config
@@ -79,6 +82,7 @@ from .resource.user_resource import UserResource
 from .resource.library_resource import LibraryResource
 from .resource.queue_resource import QueueResource
 from .resource.files_resource import FilesResource
+from .resource.gui_resource import GraphicsResource
 
 class YueApp(FlaskApp):
     """docstring for YueApp"""
@@ -109,7 +113,7 @@ class YueApp(FlaskApp):
         self.transcode_service = TranscodeService(config, self.db, self.db.tables)
         self.filesys_service = FileSysService(config, self.db, self.db.tables)
 
-        self.add_resource(AppResource(self.config, self.db, self.db.tables))
+        # self.add_resource(AppResource(self.config, self.db, self.db.tables))
         self.add_resource(UserResource(self.user_service))
         self.add_resource(LibraryResource(self.user_service,
                                           self.audio_service,
@@ -118,6 +122,8 @@ class YueApp(FlaskApp):
         self.add_resource(QueueResource(self.user_service,
                                         self.audio_service))
         self.add_resource(FilesResource(self.user_service, self.filesys_service))
+        self.add_resource(GraphicsResource(self.config, self.user_service,
+            self.audio_service, self.filesys_service, self.transcode_service))
 
         self.app.teardown_request(self.teardown_request)
         self.app.before_request(self.before_request)

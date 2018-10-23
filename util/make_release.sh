@@ -26,7 +26,7 @@ chmod +x uninstall.sh
 python3 -m yueserver.tools.manage generate_client
 
 tar -czv --exclude='*.pyc' --exclude='__pycache__' \
-    config yueserver yueclient build wsgi.py requirements.txt setup.py \
+    config yueserver yueclient res wsgi.py requirements.txt setup.py \
     start.sh uninstall.sh | \
     cat util/installer.sh - > dist/yueserver-$version.tar.gz
 

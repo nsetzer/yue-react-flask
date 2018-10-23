@@ -1,6 +1,9 @@
 encryption_mode: none
 server:
 
+  build: ./res
+  static: ./res
+
   host: localhost
   port: 4200
 
