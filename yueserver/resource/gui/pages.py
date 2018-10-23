@@ -9,6 +9,9 @@ from ...dao.util import string_quote
 
 from .exception import AuthenticationError, LibraryException
 
+NAV_HEIGHT = "5em"
+NAVBAR_HEIGHT = "2em"
+
 class SongWidget(gui.Widget):
     """docstring for SongWidget"""
     def __init__(self, song, index=None, *args, **kwargs):
@@ -172,14 +175,24 @@ class FileInfoWidget(gui.Widget):
         self.lbl_path = gui.Label(file_info['name'], width="100%", height="100%")
 
         self.openDirectory = gui.Signal(object)
+        self.openPreview = gui.Signal(object)
 
         self.hbox.append(self.img_icon, "img_icon")
         self.hbox.append(self.lbl_path, "lbl_title")
 
         if self.file_info['isDir']:
-            btn = gui.Button("open")
+            btn = gui.Button("open", parent=self.hbox)
             btn.onclick.connect(self._onOpenClicked)
-            self.hbox.append(btn, "btn_open")
+            btn.style.update({
+                "width": "40px",
+                "margin-left": "3%",
+                "margin-right": "3%",
+            })
+            del btn.style['margin']
+
+        else:
+            btn = gui.Button("pre", parent=self.hbox)
+            btn.onclick.connect(self._onOpenPreviewClicked)
             btn.style.update({
                 "width": "40px",
                 "margin-left": "3%",
@@ -188,9 +201,12 @@ class FileInfoWidget(gui.Widget):
             del btn.style['margin']
 
     def _onOpenClicked(self, widget):
-
         if self.file_info['isDir']:
             self.openDirectory.emit(self.file_info)
+
+    def _onOpenPreviewClicked(self, widget):
+        if not self.file_info['isDir']:
+            self.openPreview.emit(self.file_info)
 
 class AppViewWrapper(gui.Widget):
     """docstring for AppView"""
@@ -279,12 +295,12 @@ class NavBar2(gui.Widget):
         self.hbox_nav = gui.HBox()
         self.hbox_nav.style.update({
             "width": "100%",
-            "height": "32px",
+            "height": NAVBAR_HEIGHT,
             "border-bottom": "3px solid",
         })
 
-        self.container = gui.Widget(height="calc(100% - 32px)", width="100%")
-        #self.container.style.update({"margin-bottom": "32px"})
+        self.container = gui.Widget(height=("calc(100%% - %s)" % NAVBAR_HEIGHT), width="100%")
+        #self.container.style.update({"margin-bottom": NAVBAR_HEIGHT})
         self.append(self.hbox_nav)
         self.append(self.container)
         self.scrollbox = ScrollBox(None)
@@ -357,14 +373,22 @@ class AudioDisplay(gui.Widget):
         super(AudioDisplay, self).__init__(*args, **kwargs)
 
         self.wire_audio = True
-        self.state = state
+        self.state = state  # application context
+
+        self.current_state = "unkown"  # state of the audio playback
 
         self.style.update({
             "position": "absolute",
             "top": "0",
-            "height": "80px",
+            "height": NAV_HEIGHT,
             "overflow": "hidden"})
         # ---------------------------------------------------------------------
+
+        # <audio id="audio_player"></audio>
+        self.audio_player = gui.Widget(_type="audio",
+            _id="audio_player", parent=self)
+        del self.audio_player.style['margin']
+
         self.hbox_main = gui.Widget(parent=self)
         self.hbox_main.attributes.update({"class": "flex-grid-thirds"})
         self.hbox_main.style.update({"height": "100%", "width": "100%"})
@@ -446,7 +470,6 @@ class AudioDisplay(gui.Widget):
         self._onCurrentSongChanged = gui.Slot(self.onCurrentSongChanged)
         self.state.currentSongChanged.connect(self._onCurrentSongChanged)
 
-
         # this Event Connector allows for the audio player to directly
         # call the onended handler from javascript
         self.onended = gui.ClassEventConnector(self, 'onended',
@@ -507,6 +530,7 @@ class AudioDisplay(gui.Widget):
             self.lbl_title.set_text("No Playlist Created")
 
     def onPlaylistChanged(self):
+        # TODO: if playing, and the current song has not changed do nothing
         self.updateCurrentSong()
 
     def onCurrentSongChanged(self):
@@ -518,7 +542,7 @@ class AudioDisplay(gui.Widget):
         self.updateCurrentSong()
 
     def onAudioState(self, widget, state):
-        print("audio state", state)
+        self.current_state = state
 
 class PopMenu(gui.Widget):
     """docstring for PopMenu"""
@@ -529,7 +553,6 @@ class PopMenu(gui.Widget):
             "display": "none",
             "position": "fixed",
             "width": "30%",
-            "height": "120px",
             "top": "50%",
             "left": "50%",
             "transform": "translate(-50%, -50%)",
@@ -548,11 +571,13 @@ class PopMenu(gui.Widget):
         self.opened = gui.Signal()
 
         self.vbox = gui.VBox(parent=self)
+        self.vbox.style['background'] = "transparent"
 
-        self.btn0 = gui.Button("exit", width="20px", height="20px", parent=self.vbox)
+        self.btn0 = gui.Button("exit", width="2em", height="2em", parent=self.vbox)
         self.btn0.onclick.connect(lambda w: self.reject())
-        del self.btn0.style['margin']
-        self.btn0.style['margin-right'] = "0"
+        #del self.btn0.style['margin']
+        self.btn0.style['margin'] = "1em"
+        self.btn0.style['align-self'] = 'flex-end'
 
         self.buttons = []
         self.callbacks = []
@@ -562,6 +587,8 @@ class PopMenu(gui.Widget):
         btn = gui.Button(text, width="100%", parent=self.vbox)
         index = len(self.buttons)
         btn.onclick.connect(lambda w: self.accept(index))
+        del btn.style['margin']
+        btn.style['margin-bottom'] = ".5em"
 
         self.buttons.append(btn)
         self.callbacks.append(callback)
@@ -586,6 +613,50 @@ class PopMenu(gui.Widget):
 
     def show(self):
         self.style['display'] = 'block'
+
+class PopPreview(gui.Widget):
+    """docstring for PopPreview"""
+    def __init__(self, *args, **kwargs):
+        super(PopPreview, self).__init__(*args, **kwargs)
+
+        self.style.update({
+            "display": "none",
+            "position": "fixed",
+            "width": "50%",
+            "top": "50%",
+            "left": "50%",
+            "height": "80%",
+            "transform": "translate(-50%, -50%)",
+            "background": "blue",
+            "z-index": "500",
+            "border": "solid"
+        })
+
+        self.vbox = gui.VBox(parent=self)
+        self.vbox.style['height'] = "80%"
+
+        self.btn0 = gui.Button("exit", width="2em", height="2em", parent=self.vbox)
+        self.btn0.onclick.connect(lambda w: self.reject())
+        #del self.btn0.style['margin']
+        self.btn0.style['margin'] = "1em"
+        self.btn0.style['align-self'] = 'flex-end'
+
+        self.scrollbox = ScrollBox(None, parent=self.vbox)
+        self.wpre = gui.Widget(_type="pre", parent=self.scrollbox)
+        self.code = gui.Widget(_type="code", parent=self.wpre)
+
+    def setTextContent(self, text, content_ext):
+        self.code.add_child("content", text)
+
+    def reject(self):
+        self.style['display'] = 'none'
+
+    def accept(self, index):
+        self.style['display'] = 'none'
+
+    def show(self):
+        self.style['display'] = 'block'
+
 # ---------------------
 
 class NowPlayingPage(gui.Page):
@@ -834,10 +905,13 @@ class FileSystemPage(gui.Page):
         self.append(self.lst)
 
         self._onOpenDirectory = gui.Slot(self.onOpenDirectory)
+        self._onOpenPreview = gui.Slot(self.onOpenPreview)
         self._onOpenParent = gui.Slot(self.onOpenParent)
         self._onOpenRoot = gui.Slot(self.onOpenRoot)
 
-        self.listdir() # TODO: this is a bug, on show: listdir
+        self.menu = PopPreview(parent=self)
+
+        self.listdir()  # TODO: this is a bug, on show: listdir
 
     def get_state(self):
 
@@ -886,12 +960,19 @@ class FileSystemPage(gui.Page):
             for file_info in self.state.listdir(self.root, self.path):
                 item = FileInfoWidget(file_info)
                 item.openDirectory.connect(self._onOpenDirectory)
+                item.openPreview.connect(self._onOpenPreview)
                 self.lst.append(item)
 
     def onOpenDirectory(self, file_info):
         self.path = os.path.join(self.path, file_info['name'])
         self.listdir()
         self.location.emit(self.root, self.path)
+
+    def onOpenPreview(self, file_info):
+        path = os.path.join(self.path, file_info['name'])
+        self.menu.setTextContent(
+            self.state.renderContent(self.root, path), ".txt")
+        self.menu.show()
 
     def onOpenParent(self, file_info):
 
@@ -1051,7 +1132,7 @@ class MainPage(gui.Page):
         self.display = AudioDisplay(state, width="100%", parent=self.vbox)
 
         self.navbar = NavBar2(height="100%", width="100%", parent=self.vbox)
-        self.navbar.style.update({"margin-top": "80px", "z-index": "5"})
+        self.navbar.style.update({"margin-top": NAV_HEIGHT, "z-index": "5"})
         del self.navbar.style['margin']
 
         self.tabNowPlaying = NowPlayingPage(self.state,

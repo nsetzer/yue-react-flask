@@ -5,6 +5,7 @@ import logging
 from .exception import AuthenticationError, LibraryException
 
 from ...framework import gui
+from ...dao.storage import StorageNotFoundException
 
 class YueAppState(object):
     """docstring for YueAppState"""
@@ -31,19 +32,32 @@ class YueAppState(object):
         return self.fileService.getRoots(self.auth_user)
 
     def listdir(self, root, path):
-
-        result = self.fileService.listDirectory(self.auth_user, root, path)
-
         records = []
 
-        for name in result['directories']:
-            records.append({'name': name, 'isDir': True})
+        try:
+            result = self.fileService.listDirectory(self.auth_user, root, path)
 
-        for item in result['files']:
-            item['isDir'] = False
-            records.append(item)
+            for name in result['directories']:
+                records.append({'name': name, 'isDir': True})
+
+            for item in result['files']:
+                item['isDir'] = False
+                records.append(item)
+
+        except StorageNotFoundException as e:
+            pass
 
         return records
+
+    def renderContent(self, root, path):
+
+        path = self.fileService.storageDao.absolutePath(
+            self.auth_user['id'],
+            self.auth_user['role_id'],
+            root, path)
+
+        with self.fileService.fs.open(path, "rb") as rb:
+            return rb.read().decode("utf-8")
 
     def authenticate(self, username, password):
 

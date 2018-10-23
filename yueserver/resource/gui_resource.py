@@ -2,6 +2,38 @@
 import os, sys
 import logging
 
+"""
+    base:
+
+    silver -> black
+    #c0c0c0 #aeaeae #9d9d9d #8b8b8b #7a7a7a #686868
+    #575757 #454545 #343434 #222222 #111111 #000000
+
+    silver -> white
+    #c0c0c0 #c5c5c5 #cbcbcb #d1d1d1 #d6d6d6 #dcdcdc
+    #e2e2e2 #e8e8e8 #ededed #f3f3f3 #f9f9f9 #ffffff
+
+    primary:
+
+    blue -> black
+    #4682b4 #3f76a3 #396a93 #325e82 #2c5272 #264662
+    #1f3b51 #192f41 #132331 #0c1720 #060b10 #000000
+
+    blue -> white
+    #4682b4 #568dba #6798c1 #78a4c8 #89afcf #9abad6
+    #aac6dc #bbd1e3 #ccdcea #dde8f1 #eef3f8 #ffffff
+
+    secondary:
+
+    violet -> black
+    #9400d3 #8600bf #7900ac #6b0099 #5e0086 #500073
+    #43005f #35004c #280039 #1a0026 #0d0013 #000000
+
+    violet -> white
+    #9400d3 #9d17d7 #a72edb #b145df #ba5ce3 #c473e7
+    #ce8beb #d8a2ef #e1b9f3 #ebd0f7 #f5e7fb #ffffff
+"""
+
 from ..framework import gui
 from ..framework.backend import AppResource, AppClient
 from ..framework.web_resource import WebResource, \
@@ -15,6 +47,11 @@ from .gui.context import YueAppState
 
 import datetime
 
+from flask import jsonify, g, request
+
+from yueserver.resource.util import files_generator
+from yueserver.dao.library import Song, LibraryException
+from yueserver.dao.util import string_quote
 
 class DemoAppClient(AppClient):
     def __init__(self, userService, audioService, fileService):
@@ -146,40 +183,6 @@ class DemoAppClient(AppClient):
                 border: solid;
             }
 
-            /*
-
-             base:
-
-             silver -> black
-             #c0c0c0 #aeaeae #9d9d9d #8b8b8b #7a7a7a #686868
-             #575757 #454545 #343434 #222222 #111111 #000000
-
-             silver -> white
-             #c0c0c0 #c5c5c5 #cbcbcb #d1d1d1 #d6d6d6 #dcdcdc
-             #e2e2e2 #e8e8e8 #ededed #f3f3f3 #f9f9f9 #ffffff
-
-             primary:
-
-             blue -> black
-             #4682b4 #3f76a3 #396a93 #325e82 #2c5272 #264662
-             #1f3b51 #192f41 #132331 #0c1720 #060b10 #000000
-
-             blue -> white
-             #4682b4 #568dba #6798c1 #78a4c8 #89afcf #9abad6
-             #aac6dc #bbd1e3 #ccdcea #dde8f1 #eef3f8 #ffffff
-
-             secondary:
-
-             violet -> black
-             #9400d3 #8600bf #7900ac #6b0099 #5e0086 #500073
-             #43005f #35004c #280039 #1a0026 #0d0013 #000000
-
-             violet -> white
-             #9400d3 #9d17d7 #a72edb #b145df #ba5ce3 #c473e7
-             #ce8beb #d8a2ef #e1b9f3 #ebd0f7 #f5e7fb #ffffff
-
-            */
-
             .nav-button {
                 background-image: linear-gradient(#78a4c8, #dde8f1 10%, #78a4c8);
             }
@@ -206,7 +209,7 @@ class DemoAppClient(AppClient):
         """
 
         html_body_start = """
-            <audio id="audio_player"></audio>
+
         """
 
         js_body_end = """

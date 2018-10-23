@@ -241,7 +241,10 @@ class Tag(object):
 
         self._context = ctxt
 
-        if 'id' not in attributes:
+        if '_id' in kwargs:
+            self.attributes['id'] = kwargs['_id']
+
+        elif 'id' not in attributes:
             self.attributes['id'] = url_uuid()
 
         #attribute['id'] can be overwritten to get a static Tag identifier
