@@ -369,11 +369,11 @@ class NavBar2(gui.Widget):
 
 class AudioDisplay(gui.Widget):
 
-    def __init__(self, state, *args, **kwargs):
-        super(AudioDisplay, self).__init__(*args, **kwargs)
+    def __init__(self, context, *args, **kwargs):
+        super(AudioDisplay, self).__init__(_id="audio_display",
+            *args, **kwargs)
 
-        self.wire_audio = True
-        self.state = state  # application context
+        self.context = context  # application context
 
         self.current_state = "unkown"  # state of the audio playback
 
@@ -466,9 +466,9 @@ class AudioDisplay(gui.Widget):
         #self.audio_player.onended.connect(self.onNextSongClicked)
 
         self._onPlaylistChanged = gui.Slot(self.onPlaylistChanged)
-        self.state.playlistChanged.connect(self._onPlaylistChanged)
+        self.context.playlistChanged.connect(self._onPlaylistChanged)
         self._onCurrentSongChanged = gui.Slot(self.onCurrentSongChanged)
-        self.state.currentSongChanged.connect(self._onCurrentSongChanged)
+        self.context.currentSongChanged.connect(self._onCurrentSongChanged)
 
         # this Event Connector allows for the audio player to directly
         # call the onended handler from javascript
@@ -486,46 +486,54 @@ class AudioDisplay(gui.Widget):
         text = """
             setPositionEnd()
         """
-        self.state.execute.emit(text)
+        self.context.execute.emit(text)
 
     def onPlayPauseClicked(self, widget):
 
         text = """
+            wireAudioPlayer('audio_display');
             var audio = document.getElementById("audio_player");
             if (audio.paused) {
+                if (audio.src) {
+                    audio.play();
+                } else {
+                    socket.emit('gui_refresh_song', {})
+                }
                 audio.autoplay = true;
-                audio.play();
-
             } else {
                 audio.autoplay = false;
                 audio.pause();
             }
         """
-        self.state.execute.emit(text)
+        self.context.execute.emit(text)
 
     def onNextSongClicked(self, widget):
 
-        self.state.nextSong()
+        self.context.nextSong()
         self.updateCurrentSong()
 
     def updateCurrentSong(self):
 
         try:
-            song = self.state.getCurrentSong()
+            song = self.context.getCurrentSong()
             path = "/api/gui/audio/%s" % song['id']
             self.lbl_title.set_text(song['title'] + " - " + song['artist'])
 
             text = """
 
-                wireAudioPlayer('%s');
+                wireAudioPlayer('audio_display');
 
                 var audio = document.getElementById("audio_player");
 
-                audio.src = '%s';
-                audio.load();
+                if (audio != null) {
+                    audio.src = '%s';
+                    audio.load();
+                } else {
+                    console.error("unable to find audio element");
+                }
 
-            """ % (self.identifier, path)
-            self.state.execute.emit(text)
+            """ % (path)
+            self.context.execute.emit(text)
         except LibraryException as e:
             self.lbl_title.set_text("No Playlist Created")
 
@@ -538,7 +546,7 @@ class AudioDisplay(gui.Widget):
 
     def onAudioEnded(self, widget):
 
-        self.state.nextSong()
+        self.context.nextSong()
         self.updateCurrentSong()
 
     def onAudioState(self, widget, state):
@@ -661,10 +669,10 @@ class PopPreview(gui.Widget):
 
 class NowPlayingPage(gui.Page):
     """docstring for NowPlayingPage"""
-    def __init__(self, state, *args, **kwargs):
+    def __init__(self, context, *args, **kwargs):
         super(NowPlayingPage, self).__init__(*args, **kwargs)
 
-        self.state = state
+        self.context = context
         self._onOpenMenu = gui.Slot(self.onOpenMenu)
         self.lst = gui.WidgetList()
 
@@ -677,8 +685,8 @@ class NowPlayingPage(gui.Page):
 
         self.append(self.lst)
 
-        self.state.currentSongChanged.connect(gui.Slot(self.onPlaylistChanged))
-        self.state.playlistChanged.connect(gui.Slot(self.onPlaylistChanged))
+        self.context.currentSongChanged.connect(gui.Slot(self.onPlaylistChanged))
+        self.context.playlistChanged.connect(gui.Slot(self.onPlaylistChanged))
 
     def onOpenMenu(self, index, song):
         self.menu.show()
@@ -686,12 +694,12 @@ class NowPlayingPage(gui.Page):
 
     def onMenuPlayNext(self):
         index, _ = self.menu_active_row
-        self.state.playlistPlayNext(index)
+        self.context.playlistPlayNext(index)
         self.menu_active_row = None
 
     def onMenuRemove(self):
         index, _ = self.menu_active_row
-        self.state.playlistDeleteSong(index)
+        self.context.playlistDeleteSong(index)
         self.menu_active_row = None
 
     def onPlaylistChanged(self):
@@ -699,7 +707,7 @@ class NowPlayingPage(gui.Page):
         self.lst.empty()
 
         try:
-            playlist = self.state.getPlaylist()
+            playlist = self.context.getPlaylist()
         except LibraryException as e:
             playlist = []
 
@@ -710,11 +718,11 @@ class NowPlayingPage(gui.Page):
 
 class LibraryPage(gui.Page):
     """docstring for NowPlayingPage"""
-    def __init__(self, state, *args, **kwargs):
+    def __init__(self, context, *args, **kwargs):
         super(LibraryPage, self).__init__(*args, **kwargs)
 
-        self.state = state
-        self.domain_info = self.state.getDomainInfo()
+        self.context = context
+        self.domain_info = self.context.getDomainInfo()
         self.page_state = 0
         self.page_artist_index = -1
         self.page_albums = []
@@ -808,7 +816,7 @@ class LibraryPage(gui.Page):
             item.open.connect(gui.Slot(lambda: self.onRandomPlay(self.page_query)))
             self.lst.append(item)
 
-            for song in self.state.search(self.page_query):
+            for song in self.context.search(self.page_query):
                 item = SongWidget(song, index=index)
                 item.openMenu.connect(self._onOpenSongMenu)
                 self.lst.append(item)
@@ -822,14 +830,13 @@ class LibraryPage(gui.Page):
             item.open.connect(gui.Slot(lambda: self.onRandomPlay(self.page_query)))
             self.lst.append(item)
 
-            for song in self.state.search(self.page_query):
+            for song in self.context.search(self.page_query):
                 item = SongWidget(song, index=index)
                 item.openMenu.connect(self._onOpenSongMenu)
                 self.lst.append(item)
 
     def onRandomPlay(self, query):
-        print("random play: %s" % query)
-        self.state.createPlaylist(query)
+        self.context.createPlaylist(query)
 
     def onOpenElement(self, index):
         self.showPage(index)
@@ -858,30 +865,30 @@ class LibraryPage(gui.Page):
 
     def onSongMenuPlayNext(self):
         _, song = self.menu_song_active_row
-        self.state.playlistInsertSong(1, song)
+        self.context.playlistInsertSong(1, song)
 
     def onOpenQuery(self, text):
         pass
 
-    def get_state(self):
+    def get_route(self):
 
         return [], {}, {}
 
-    def set_state(self, location, params, cookies):
+    def set_route(self, location, params, cookies):
 
         pass
 
 class SearchLibraryPage(gui.Page):
     """docstring for SearchLibrary"""
-    def __init__(self, state, *args, **kwargs):
+    def __init__(self, context, *args, **kwargs):
         super(SearchLibraryPage, self).__init__(*args, **kwargs)
-        self.state = state
+        self.context = context
 
-    def get_state(self):
+    def get_route(self):
 
         return [], {}, {}
 
-    def set_state(self, location, params, cookies):
+    def set_route(self, location, params, cookies):
 
         pass
 
@@ -892,14 +899,14 @@ class SearchLibraryPage(gui.Page):
 class FileSystemPage(gui.Page):
     """docstring for FileSystemPage"""
 
-    def __init__(self, state, *args, **kwargs):
+    def __init__(self, context, *args, **kwargs):
         super(FileSystemPage, self).__init__(*args, **kwargs)
 
         self.location = gui.Signal(str, str)
 
         self.root = ""
         self.path = ""
-        self.state = state
+        self.context = context
 
         self.lst = gui.WidgetList()
         self.append(self.lst)
@@ -913,7 +920,7 @@ class FileSystemPage(gui.Page):
 
         self.listdir()  # TODO: this is a bug, on show: listdir
 
-    def get_state(self):
+    def get_route(self):
 
         if self.root:
             path = ["path", self.root]
@@ -924,7 +931,7 @@ class FileSystemPage(gui.Page):
 
         return path, {}, {}
 
-    def set_state(self, location, params, cookies):
+    def set_route(self, location, params, cookies):
 
         if len(location) == 0:
             self.root = ""
@@ -945,7 +952,7 @@ class FileSystemPage(gui.Page):
 
         if self.root == "":
 
-            for name in self.state.listroots():
+            for name in self.context.listroots():
                 file_info = {'name': name, 'isDir': True, "size": 0}
                 item = FileInfoWidget(file_info)
                 item.openDirectory.connect(self._onOpenRoot)
@@ -957,7 +964,7 @@ class FileSystemPage(gui.Page):
             item.openDirectory.connect(self._onOpenParent)
             self.lst.append(item)
 
-            for file_info in self.state.listdir(self.root, self.path):
+            for file_info in self.context.listdir(self.root, self.path):
                 item = FileInfoWidget(file_info)
                 item.openDirectory.connect(self._onOpenDirectory)
                 item.openPreview.connect(self._onOpenPreview)
@@ -971,7 +978,7 @@ class FileSystemPage(gui.Page):
     def onOpenPreview(self, file_info):
         path = os.path.join(self.path, file_info['name'])
         self.menu.setTextContent(
-            self.state.renderContent(self.root, path), ".txt")
+            self.context.renderContent(self.root, path), ".txt")
         self.menu.show()
 
     def onOpenParent(self, file_info):
@@ -991,17 +998,17 @@ class FileSystemPage(gui.Page):
         self.location.emit(self.root, self.path)
 
 class SettingsPage(gui.Page):
-    def __init__(self, state, *args, **kwargs):
+    def __init__(self, context, *args, **kwargs):
         super(SettingsPage, self).__init__(*args, **kwargs)
 
-        self.state = state
+        self.context = context
 
         self.vbox = gui.VBox(height="100%", width="100%", parent=self)
         self.btn_logout = gui.Button("logout", parent=self.vbox)
         self.btn_logout.onclick.connect(self.onLogout)
 
     def onLogout(self, widget):
-        self.state.clear_authentication()
+        self.context.clear_authentication()
 
 class HomePage(gui.Page):
     def __init__(self, *args, **kwargs):
@@ -1034,10 +1041,10 @@ class HomePage(gui.Page):
         self.btn_submit.onclick.connect(self.onSubmitClicked)
         self.login = gui.Signal()
 
-    def set_state(self, location, params, cookies):
+    def set_route(self, location, params, cookies):
         pass
 
-    def get_state(self):
+    def get_route(self):
         return [], {}, {}
 
     def onSubmitClicked(self, widget):
@@ -1096,11 +1103,11 @@ class LoginPage(gui.Page):
         self.btn_submit.onclick.connect(self.onSubmitClicked)
         self.login = gui.Signal(str, str)
 
-    def set_state(self, location, params, cookies):
+    def set_route(self, location, params, cookies):
 
         self.label_error.style.update({"display": 'none'})
 
-    def get_state(self):
+    def get_route(self):
         return [], {}, {}
 
     def onKeyUp(self, widget, key, ctrl, shift, alt):
@@ -1122,34 +1129,34 @@ class LoginPage(gui.Page):
 
 class MainPage(gui.Page):
 
-    def __init__(self, state, *args, **kwargs):
+    def __init__(self, context, *args, **kwargs):
         super(MainPage, self).__init__(*args, **kwargs)
 
-        self.state = state
+        self.context = context
 
         self.vbox = gui.VBox(height="100%", width="100%", parent=self)
 
-        self.display = AudioDisplay(state, width="100%", parent=self.vbox)
+        self.display = AudioDisplay(self.context, width="100%", parent=self.vbox)
 
         self.navbar = NavBar2(height="100%", width="100%", parent=self.vbox)
         self.navbar.style.update({"margin-top": NAV_HEIGHT, "z-index": "5"})
         del self.navbar.style['margin']
 
-        self.tabNowPlaying = NowPlayingPage(self.state,
+        self.tabNowPlaying = NowPlayingPage(self.context,
             height="100%", width="100%")
 
-        self.tabLibrary = LibraryPage(self.state,
+        self.tabLibrary = LibraryPage(self.context,
             height="100%", width="100%")
 
-        print("creating tab", self.state.auth_info)
+        print("creating tab", self.context.auth_info)
         # 'filesystem_read' in auth_info['roles'][0]['features']
-        self.tabFileSystem = FileSystemPage(self.state,
+        self.tabFileSystem = FileSystemPage(self.context,
             height="100%", width="100%")
 
-        self.tabSettings = SettingsPage(self.state,
+        self.tabSettings = SettingsPage(self.context,
             height="100%", width="100%")
 
-        self.tabSearchLibrary = SearchLibraryPage(self.state,
+        self.tabSearchLibrary = SearchLibraryPage(self.context,
             height="100%", width="100%")
 
         self.navbar.addTabIcon("/res/app/playlist.svg", self.tabNowPlaying)
@@ -1158,26 +1165,26 @@ class MainPage(gui.Page):
         self.navbar.addTabIcon("/res/app/documents.svg", self.tabFileSystem)
         self.navbar.addTabIcon("/res/app/settings.svg", self.tabSettings)
 
-    def set_state(self, location, params, cookies):
+    def set_route(self, location, params, cookies):
         if len(location) == 0:
             self.navbar.setIndex(0)
-            self.tabNowPlaying.set_state([], params, cookies)
+            self.tabNowPlaying.set_route([], params, cookies)
         elif location[0] == "queue":
             self.navbar.setIndex(0)
-            self.tabNowPlaying.set_state(location[1:], params, cookies)
+            self.tabNowPlaying.set_route(location[1:], params, cookies)
         elif location[0] == "library":
             self.navbar.setIndex(1)
-            self.tabLibrary.set_state(location[1:], params, cookies)
+            self.tabLibrary.set_route(location[1:], params, cookies)
         elif location[0] == "files":
             self.navbar.setIndex(2)
-            self.tabFileSystem.set_state(location[1:], params, cookies)
+            self.tabFileSystem.set_route(location[1:], params, cookies)
         elif location[0] == "settings":
             self.navbar.setIndex(3)
-            self.tabSettings.set_state(location[1:], params, cookies)
+            self.tabSettings.set_route(location[1:], params, cookies)
         else:
             raise InvalidRoute()
 
-    def get_state(self):
+    def get_route(self):
 
         path = []
         params = {}
@@ -1185,28 +1192,28 @@ class MainPage(gui.Page):
         index = self.navbar.index()
         if index == 0:
             path.append("queue")
-            _path, _params, _cookies = self.tabNowPlaying.get_state()
+            _path, _params, _cookies = self.tabNowPlaying.get_route()
             path += _path
             params.update(_params)
             cookies.update(_cookies)
 
         elif index == 1:
             path.append("library")
-            _path, _params, _cookies = self.tabLibrary.get_state()
+            _path, _params, _cookies = self.tabLibrary.get_route()
             path += _path
             params.update(_params)
             cookies.update(_cookies)
 
         elif index == 2:
             path.append("files")
-            _path, _params, _cookies = self.tabFileSystem.get_state()
+            _path, _params, _cookies = self.tabFileSystem.get_route()
             path += _path
             params.update(_params)
             cookies.update(_cookies)
 
         elif index == 3:
             path.append("settings")
-            _path, _params, _cookies = self.tabSettings.get_state()
+            _path, _params, _cookies = self.tabSettings.get_route()
             path += _path
             params.update(_params)
             cookies.update(_cookies)
@@ -1215,12 +1222,12 @@ class MainPage(gui.Page):
 
 class AppPage(gui.Page):
 
-    def __init__(self, state, *args, **kwargs):
+    def __init__(self, context, *args, **kwargs):
         super(AppPage, self).__init__(*args, **kwargs)
 
         self.style.update({"height": "100%", "width": "100%"})
 
-        self.state = state
+        self.context = context
 
         # custom css, flex box grid layouts
         # https://www.w3schools.com/css/css_attribute_selectors.asp
@@ -1250,9 +1257,9 @@ class AppPage(gui.Page):
 
         self.pages = [self.page_home]
 
-    def set_state(self, location, params, cookies):
+    def set_route(self, location, params, cookies):
 
-        if self.page_main is not None and not self.state.is_authenticated():
+        if self.page_main is not None and not self.context.is_authenticated():
             # on any route change, if the user is no longer logged in
             # remove the main page, if it exists
             # the user has logged out and it may contain user secrets
@@ -1276,44 +1283,37 @@ class AppPage(gui.Page):
             # path -> ['m']
             # path -> ['login']
 
-            self.state.set_authentication(cookies.get("yue_token", None))
+            self.context.set_authentication(cookies.get("yue_token", None))
 
             if len(location) == 0:
                 self.page_home.set_visible(True)
-                self.page_home.set_state([], params, cookies)
-                print("done")
+                self.page_home.set_route([], params, cookies)
             elif location[0] == 'm':
-                if self.state.is_authenticated():
+                if self.context.is_authenticated():
                     page = self.getMainPage()
                 else:
                     page = self.getLoginPage()
                 page.set_visible(True)
-                page.set_state(location[1:], params, cookies)
+                page.set_route(location[1:], params, cookies)
             elif location[0] == "login" and len(location) == 1:
                 page = self.getLoginPage()
                 page.set_visible(True)
-                page.set_state(location[1:], params, cookies)
+                page.set_route(location[1:], params, cookies)
             else:
                 # TODO: 404 page -> home page
                 self.page_home.set_visible(True)
-                self.page_home.set_state(location, params, cookies)
+                self.page_home.set_route(location, params, cookies)
 
         except InvalidRoute as e:
             # TODO: 404 page -> home
             for page in self.pages:
                 page.set_visible(False)
             self.page_home.set_visible(True)
-            self.page_home.set_state([], {}, {})
-        except AuthenticationError as e:
-            # TODO: 404 page -> home
-            for page in self.pages:
-                page.set_visible(False)
-            self.page_home.set_visible(True)
-            self.page_home.set_state([], {}, {})
+            self.page_home.set_route([], {}, {})
 
         return
 
-    def get_state(self):
+    def get_route(self):
 
         path = []
         params = {}
@@ -1324,14 +1324,14 @@ class AppPage(gui.Page):
 
         elif self.page_main is not None and self.page_main.is_visible():
             path.append("m")
-            _path, _params, _cookies = self.page_main.get_state()
+            _path, _params, _cookies = self.page_main.get_route()
             path += _path
             params.update(_params)
             cookies.update(_cookies)
 
         elif self.page_login is not None and self.page_login.is_visible():
             path.append("login")
-            _path, _params, _cookies = self.page_login.get_state()
+            _path, _params, _cookies = self.page_login.get_route()
             path += _path
             params.update(_params)
             cookies.update(_cookies)
@@ -1354,8 +1354,8 @@ class AppPage(gui.Page):
     def getMainPage(self):
 
         if self.page_main is None:
-            self.page_main = MainPage(self.state)
-            self.page_main.attributes.update({"class":"col-main"})
+            self.page_main = MainPage(self.context)
+            self.page_main.attributes.update({"class": "col-main"})
             self.page_main.style.update({"height": "100%", "display": "flex"})
             self.hbox_main.insert(1, self.page_main)
             self.pages.append(self.page_main)
@@ -1364,12 +1364,18 @@ class AppPage(gui.Page):
     def onLogin(self, username, password):
 
         try:
-            self.state.authenticate(username, password)
+            self.context.authenticate(username, password)
 
             self.getLoginPage().set_error(False)
             for page in self.pages:
                 page.set_visible(False)
             self.getMainPage().set_visible(True)
+
+            # remove the login page to prevent continuous
+            # pop ups in firefox prompting to store the password
+            self.hbox_main.remove_child(self.page_login)
+            self.page_login = None
+
         except Exception as e:
             logging.exception(e)
             self.getLoginPage().set_error(True)

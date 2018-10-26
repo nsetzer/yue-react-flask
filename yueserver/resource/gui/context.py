@@ -49,12 +49,18 @@ class YueAppState(object):
 
         return records
 
-    def renderContent(self, root, path):
+    def getFilePath(self, root, path):
 
         path = self.fileService.storageDao.absolutePath(
             self.auth_user['id'],
             self.auth_user['role_id'],
             root, path)
+
+        return path
+
+    def renderContent(self, root, path):
+
+        path = self.getFilePath(root, path)
 
         with self.fileService.fs.open(path, "rb") as rb:
             return rb.read().decode("utf-8")
@@ -83,15 +89,25 @@ class YueAppState(object):
         return self.auth_token is not None
 
     def set_authentication(self, token):
-        if token:
-            # TODO: fix this, in testing, the database is recreated every run
-            # the user token may be valid, but for an user with a different id
-            user = self.userService.getUserFromToken(token)
-            user = self.userService.userDao.findUserByEmail(user['email'])
+        """
+        set the authentication token for this session.
+        validate that the token is valid
 
-            self.auth_token = token
-            self.auth_user = user
-            self.auth_info = self.userService.listUser(self.auth_user['id'])
+        returns true if the token is valid and the user exists.
+        """
+        if token:
+            try:
+                user = self.userService.getUserFromToken(token)
+                user = self.userService.userDao.findUserByEmail(user['email'])
+                self.auth_info = self.userService.listUser(self.auth_user['id'])
+                self.auth_token = token
+                self.auth_user = user
+                return True
+            except Exception as e:
+                self.auth_info = None
+                self.auth_token = None
+                self.auth_user = None
+        return False
 
     def get_user(self):
         if self.auth_user is None:

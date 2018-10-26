@@ -15,6 +15,8 @@ then
     mkdir -p "$EXTRACT_DIR"
 fi
 
+tarpath=$(readlink -f $0)
+echo "$tarpath"
 cd "$EXTRACT_DIR"
 
 if [ -e "./uninstall.sh" ]; then
@@ -22,8 +24,8 @@ if [ -e "./uninstall.sh" ]; then
 fi
 
 echo "install yueserver to $EXTRACT_DIR"
-ARCHIVE=`awk '/^__ARCHIVE_BELOW__/ {print NR + 1; exit 0; }' $0`
-tail -n+$ARCHIVE $0 | tar -xz
+ARCHIVE=$(awk '/^__ARCHIVE_BELOW__/ {print NR + 1; exit 0; }' "$tarpath")
+tail -n+$ARCHIVE "$tarpath" | tar -xz
 
 if id yueapp &> /dev/null;
 then

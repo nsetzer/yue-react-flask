@@ -15,6 +15,7 @@ import logging
 import uuid
 import json
 import time
+import posixpath
 from threading import Thread
 
 from urllib.parse import urlparse
@@ -151,9 +152,8 @@ js_body_end = """
             var elem = document.getElementById(idElem);
             if (elem == null) {
                 console.warn("unable to get " + idElem)
-            } else {
-                console.log("found: " + idElem)
             }
+
             try{
                 elem.insertAdjacentHTML('afterend', content);
                 elem.parentElement.removeChild(elem);
@@ -257,14 +257,14 @@ class AppServiceException(Exception):
         super(AppServiceException, self).__init__(message)
         self.status = status
 
-class AppState(object):
+class AppRoute(object):
     def __init__(self, url, params=None, cookies=None):
         """
         url: the document url, e.g. "/r/worldnews"
         params: optional parameter dict built from the request query parameters
         cookies: optional dictionary containing HTTP cookies
         """
-        super(AppState, self).__init__()
+        super(AppRoute, self).__init__()
 
         if not isinstance(url, str):
             url = "/".join(url)
@@ -275,6 +275,16 @@ class AppState(object):
         self.url = url
         self.params = params or {}
         self.cookies = cookies or {}
+
+    def update(self, url, params=None, cookies=None):
+
+        self.url = posixpath.join(self.url, url)
+
+        if params is not None:
+            self.params.update(params)
+
+        if cookies is not None:
+            self.cookies.update(cookies)
 
     def getUrlParts(self):
         return [s for s in self.url.split("/") if s]
@@ -304,7 +314,7 @@ class AppState(object):
         return "%s" % self.url
 
     def __str__(self):
-        return "<AppState(%s)>" % (self.getLocation())
+        return "<AppRoute(%s)>" % (self.getLocation())
 
     def __repr__(self):
         return self.__str__()
@@ -428,7 +438,7 @@ class AppClient(object):
         """
         with self.update_lock:
 
-            state = AppState(*self.root.get_state())
+            state = AppRoute(*self.root.get_route())
             location = state.getLocation()
             if location != self.location:
                 self.setLocation(location)
@@ -525,13 +535,15 @@ class AppClient(object):
         return 0
 
     def socket_send(self, event, payload):
+        if len(self.websockets) == 0:
+            logging.warning("no sockets connected to send message")
         for socketId in self.websockets:
             self._socket_send(event, socketId, payload)
 
-    def get_state(self):
-        return AppState()
+    def get_route(self):
+        return AppRoute()
 
-    def set_state(self, state):
+    def set_route(self, state):
         pass
 
 class AppService(object):
@@ -663,7 +675,7 @@ class AppService(object):
                 name, value = cookie.split("=", 1)
                 cookies[name.strip()] = value.strip()
 
-        client.set_state(AppState(path, params, cookies))
+        client.set_route(AppRoute(path, params, cookies))
 
         with client.update_lock:
             # render the HTML
@@ -767,12 +779,12 @@ class AppService(object):
             raise Exception("client not found for %s" % sessionId)
 
         self.clients[sessionId].root._force_repaint = True
-        self.clients[sessionId].set_state(state)
+        self.clients[sessionId].set_route(state)
         self.clients[sessionId].do_gui_update()
 
     def set_client_state(self, sessionId, state):
         client = self._get_instance(sessionId)
-        client.set_state(state)
+        client.set_route(state)
         client.do_gui_update()
 
     def _diag(self, msg):
@@ -795,13 +807,13 @@ class AppService(object):
             }
         return obj
 
-class AppResource(WebResource):
+class GuiAppResource(WebResource):
     """
-    The AppResource defines a set of generic endpoints for the web application
+    The GuiAppResource defines a set of generic endpoints for the web application
     """
 
     def __init__(self, client_class, title="Application", static_dir="./res"):
-        super(AppResource, self).__init__()
+        super(GuiAppResource, self).__init__()
         self.service = AppService(client_class, title=title)
         self.service.setSocketHandler(self.emit)
 
@@ -819,6 +831,9 @@ class AppResource(WebResource):
         response = make_response(html)
         response.headers["Set-Cookie"] = "yue_session=%s; Path=/" % (sessionId)
         response.headers['Content-Type'] = "text/html"
+        response.headers['Cache-Control'] = "no-cache, no-store, must-revalidate"
+        response.headers['Pragma'] = "no-cache"
+        response.headers['Expires'] = "0"
         logging.info("html Content-Length: %.3f" % (len(html) / 1024.0))
         return response
 
@@ -865,7 +880,7 @@ class AppResource(WebResource):
         # query    : ?foo=bar
         # params   : ;foo=bar
         # fragment : #foo=bar
-        state = AppState(info.path, info.query, cookies)
+        state = AppRoute(info.path, info.query, cookies)
 
         # TODO: this can maybe be done a better way
         self.service.repaint(sid, state)
@@ -884,7 +899,7 @@ class AppResource(WebResource):
         # query    : ?foo=bar
         # params   : ;foo=bar
         # fragment : #foo=bar
-        state = AppState(info.path, info.query, cookies)
+        state = AppRoute(info.path, info.query, cookies)
 
         sessionId = self.service.websocket_session[sid]
         self.service.set_client_state(sessionId, state)

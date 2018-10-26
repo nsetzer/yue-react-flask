@@ -35,7 +35,7 @@ import logging
 """
 
 from ..framework import gui
-from ..framework.backend import AppResource, AppClient
+from ..framework.backend import GuiAppResource, AppClient
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, websocket, param, body, compressed, httpError, \
     int_range, int_min, send_generator, null_validator
@@ -214,11 +214,17 @@ class DemoAppClient(AppClient):
 
         js_body_end = """
         <script>
-        var audio = document.getElementById("audio_player");
+
         var widget_text = null;
         var widget_audio = null;
+        var is_wired = 0;
 
         function wireAudioPlayer(wid1) {
+
+            if (is_wired==1) {
+                return;
+            }
+            var audio = document.getElementById("audio_player");
             widget_audio = wid1
 
             audio.volume = .3;
@@ -262,9 +268,12 @@ class DemoAppClient(AppClient):
 
             var x = document.getElementsByClassName("progressbar");
             x[0].onclick = onSetPosition;
+
+            is_wired = 1;
         }
 
         function onPositionChanged() {
+            var audio = document.getElementById("audio_player");
             var i = audio.buffered.length - 1;
             var s = (i>=0)?audio.buffered.start(i).toFixed(0):0;
             var e = (i>=0)?audio.buffered.end(i).toFixed(0):0;
@@ -283,6 +292,7 @@ class DemoAppClient(AppClient):
         }
 
         function onSetPosition(event) {
+            var audio = document.getElementById("audio_player");
             var x = document.getElementsByClassName("progressbar");
             var rect = x[0].getBoundingClientRect();
             var p = event.clientX - rect.left;
@@ -291,6 +301,7 @@ class DemoAppClient(AppClient):
         }
 
         function setPositionEnd() {
+            var audio = document.getElementById("audio_player");
             console.log(audio.currentTime, audio.duration);
             audio.currentTime = audio.duration - 5.0;
             console.log(audio.currentTime, audio.duration);
@@ -319,15 +330,15 @@ class DemoAppClient(AppClient):
 
         self.root = AppPage(self.state)
 
-    def get_state(self):
+    def get_route(self):
         return AppState(*self.root.get_state())
 
-    def set_state(self, state):
+    def set_route(self, state):
 
         location = state.getUrlParts()
         params = state.getParams()
         cookies = state.getCookies()
-        self.root.set_state(location, params, cookies)
+        self.root.set_route(location, params, cookies)
 
     def onLogin(self, token):
         dt = datetime.datetime.utcnow() + datetime.timedelta(days=14)
@@ -342,12 +353,15 @@ class DemoAppClient(AppClient):
         self.execute_javascript("document.cookie = '%s';" % cookie)
 
         # this is a shortcut for routing to the home page
-        self.root.set_state([], {}, {})
+        self.root.set_route([], {}, {})
 
     def onExecute(self, text):
         self.execute_javascript(text)
 
-class GraphicsResource(AppResource):
+def boolean(s):
+    return s.lower() == "true"
+
+class AudioGuiResource(GuiAppResource):
     def __init__(self, cfg, userService, audioService, fileService, transcodeService):
         self.userService = userService
         self.audioService = audioService
@@ -357,7 +371,7 @@ class GraphicsResource(AppResource):
         self.cfg = cfg
         factory = lambda: DemoAppClient(userService,
             audioService, fileService)
-        super(GraphicsResource, self).__init__(factory, "Yue", self.cfg.static_dir)
+        super(AudioGuiResource, self).__init__(factory, "Yue", self.cfg.static_dir)
 
     @get("/api/gui/audio/<song_id>")
     def get_audio(self, song_id):
@@ -378,12 +392,47 @@ class GraphicsResource(AppResource):
         go = files_generator(self.audioService.fs, path)
         return send_generator(go, name, file_size=size)
 
+    @get("/api/gui/files/<root>/path/<path:path>")
+    def get_file(self, root, path):
+        """
+
+        """
+
+        sessionId = self.service.sessionIdFromHeaders(request.headers)
+        client = self.service._get_instance(sessionId)
+
+        abs_path = client.state.getFilePath(root, path)
+        _, name = self.fileService.fs.split(path)
+        go = files_generator(self.fileService.fs, path)
+        return send_generator(go, name, file_size=size)
+
+    @get("/public/<fileid>")
+    @param("dl", type_=boolean, default=False)
+    def get_public_file(self, fileid):
+        """
+        this is a stub endpoint for an eventual public file sharing page
+
+        if 'dl' is false:
+            use getHtml to return a page and route to
+            a public html preview of the content
+            or a 404 page if the file does not exist
+
+        if 'dl' is true
+            return the file with headers sent to download the file
+        """
+
+        return httpError(404, "not implemented")
+
     @websocket("gui_song_ended", "/api/ws")
     def gui_song_ended(self, sid, msg):
         sessionId = self.service.websocket_session[sid]
         client = self.service._get_instance(sessionId)
 
-        print("gui song ended", msg)
+    @websocket("gui_refresh_song", "/api/ws")
+    def gui_refresh_song(self, sid, msg):
+        sessionId = self.service.websocket_session[sid]
+        client = self.service._get_instance(sessionId)
+        client.state.currentSongChanged.emit()
 
     @get("/health")
     def health(self):

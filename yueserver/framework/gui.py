@@ -889,7 +889,7 @@ class Page(Widget):
         self._close = Slot(self.onClose)
         self.close.connect(self._close)
 
-    def get_state(self):
+    def get_route(self):
         """
         return the location, params, cookies to reproduce the current state
 
@@ -903,7 +903,7 @@ class Page(Widget):
         """
         return [], {}, {}
 
-    def set_state(self, location, params, cookies):
+    def set_route(self, location, params, cookies):
         pass
 
     def set_visible(self, visible):
