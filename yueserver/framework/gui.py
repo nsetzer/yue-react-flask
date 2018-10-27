@@ -342,8 +342,15 @@ class Tag(object):
         if emitter:
             tmp = dict(self.attributes)
             tmp['style'] = ';'.join("%s:%s" % kv for kv in self.style.items())
-            self._repr_attributes = ' '.join('%s="%s"' % (k, v) if v is not None else k for k, v in
-                                                tmp.items())
+            attrs = []
+            for attr, value in tmp.items():
+                if value is None:
+                    attrs.append(attr)
+                else:
+                    attrs.append('%s="%s"' % (attr, value))
+            #self._repr_attributes = ' '.join('%s="%s"' % (k, v) if v is not None else k for k, v in
+            #                                    tmp.items())
+            self._repr_attributes = ' '.join(attrs)
         if not self.ignore_update:
             if self.get_parent():
                 self.get_parent()._need_update()
@@ -1244,6 +1251,51 @@ class Button(Widget, _MixinTextualWidget):
         super(Button, self).__init__(*args, **kwargs)
         self.type = 'button'
         self.set_text(text)
+
+class UploadFileButton(Widget, _MixinTextualWidget):
+    """
+    A button which can have text or an icon. When clicked the user
+    is shown a file selection dialog and upon selection, a file is
+    automatically uploaded.
+
+    Signals:
+        onsuccess (widget, filepath)
+            fired after the POST request completes, if the upload succeeded
+        onfailure (widget, filepath)
+            fired after the POST request completes, if the upload failed
+    """
+    def __init__(self, urlbase, text=None, image=None, *args, **kwargs):
+        """
+        Args:
+            text (str): The text that will be displayed on the button.
+            kwargs: See Widget.__init__()
+        """
+        super(UploadFileButton, self).__init__(*args, **kwargs)
+        self.type = 'button'
+
+        if text:
+            self.set_text(text)
+
+        elif image:
+            img = Image(image, parent=self)
+            img.style.update({"width": "100%", "height": "100%"})
+
+        self.input = Widget(_type="input", parent=self)
+        self.input.attributes.update({"type": "file", "hidden": None})
+
+        js = "var elem = document.getElementById('%s'); " + \
+            "uploadFileV2(elem, '%s', '%s');"
+        self.input.attributes.update({"onchange":
+             js % (self.input.identifier, self.identifier, urlbase)})
+
+        self.attributes.update({"onclick":
+            "document.getElementById('%s').click();" % self.input.identifier})
+
+        self.onsuccess = ClassEventConnector(self, 'onsuccess',
+            lambda *args, **kwargs: tuple([kwargs.get("filepath", None)]))
+
+        self.onfailure = ClassEventConnector(self, 'onfailure',
+            lambda *args, **kwargs: tuple())
 
 class TextInput(Widget, _MixinTextualWidget):
     """Editable multiline/single_line text area widget. You can set the content by means of the function set_text or

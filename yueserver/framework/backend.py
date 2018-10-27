@@ -30,16 +30,8 @@ from urllib.parse import unquote
 from fnmatch import fnmatch
 
 """
-    - allow client to reconnect socket automatically
-    - sessions Ids should be valid across server restarts
-      - if a user requests a session id and it does not exist create it
-    - allow page routing
-        client should have set state / get state which returns
-            - a path
-            - query parameters
-    - update events which re-render do not work as expected
+    - auto detect need to page refresh: window.location.reload()
 """
-
 
 #  <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.4/socket.io.slim.js"></script>
 js_body_end = """
@@ -196,6 +188,46 @@ js_body_end = """
             // call method with no parameters
             sendCallbackParam(widgetID,functionName,null);
         };
+
+        function uploadFileV2(elem, widgetID, urlbase) {
+            console.log(urlbase);
+            console.log(elem.files.length)
+
+            var myStringArray = ["Hello","World"];
+            var arrayLength = elem.files.length;
+            for (var i = 0; i < elem.files.length; i++) {
+                var file = elem.files[i];
+
+                console.log(file);
+
+                var filepath = urlbase + file.name;
+                var url = '/gui/upload';
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', url, true);
+                xhr.setRequestHeader('filename', file.name);
+                xhr.setRequestHeader('filepath', filepath);
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState == 4 && xhr.status == 200) {
+                        var params={};
+                        params['filename'] = file.name;
+                        params['filepath'] = filepath;
+                        sendCallbackParam(widgetID, 'onsuccess', params);
+                        console.log('upload success: ' + file.name);
+                    }else if(xhr.status == 400){
+                        var params={};
+                        params['filename'] = file.name;
+                        params['filepath'] = filepath;
+                        sendCallbackParam(widgetID, 'onfailure', params);
+                        console.log('upload failed: ' + file.name);
+                    }
+                };
+
+                var fd = new FormData();
+                fd.append('upload_file', file);
+                xhr.send(fd);
+            }
+        }
 
         function uploadFile(widgetID, eventSuccess, eventFail, eventData, file){
             var url = '/';
@@ -845,7 +877,14 @@ class GuiAppResource(WebResource):
 
     @get("/<path:path>")
     def index_path(self, path):
+        """ """
         return self._index_path(path)
+
+    @post("/gui/upload")
+    def upload_file(self):
+        print(request.headers)
+
+        return "OK", 200
 
     @get("/res/<path:path>")
     def static(self, path):
@@ -864,6 +903,7 @@ class GuiAppResource(WebResource):
 
     @websocket("disconnect", "/api/ws")
     def disconnect(self, sid):
+        """ """
         self.service.disconnect_socket(sid)
 
     @websocket("gui_repaint", "/api/ws")

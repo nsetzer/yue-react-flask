@@ -13,7 +13,6 @@ NAV_HEIGHT = "5em"
 NAVBAR_HEIGHT = "2em"
 
 class SongWidget(gui.Widget):
-    """docstring for SongWidget"""
     def __init__(self, song, index=None, *args, **kwargs):
         super(SongWidget, self).__init__(*args, **kwargs)
         self.type = 'li'
@@ -94,7 +93,6 @@ class SongWidget(gui.Widget):
         return self.song
 
 class TitleTextWidget(gui.Widget):
-    """docstring for FileInfoWidget"""
     def __init__(self, icon_url, text, *args, **kwargs):
         super(TitleTextWidget, self).__init__()
 
@@ -137,6 +135,35 @@ class TitleTextWidget(gui.Widget):
     def _onOpenClicked(self, widget):
 
         self.open.emit()
+
+class IconBarWidget(gui.Widget):
+    def __init__(self, *args, **kwargs):
+        super(IconBarWidget, self).__init__()
+
+        self.hbox = gui.Widget(height="100%", width="calc(100% - 20px)", parent=self)
+
+        self.actions = []
+
+    def addAction(self, icon_url, callback):
+
+        btn = gui.Button()
+        btn.onclick.connect(lambda w: callback())
+        self.hbox.append(btn)
+        btn.style.update({
+            "width": "2em",
+            "height": "2em",
+            "margin-left": "3%",
+            "margin-right": "3%",
+        })
+        del btn.style['margin']
+        img = gui.Image(icon_url, parent=btn)
+        img.style.update({"width": "100%", "height": "100%"})
+        self.actions.append(btn)
+
+    def addWidget(self, widget):
+
+        self.hbox.append(widget)
+        self.actions.append(widget)
 
 class FileInfoWidget(gui.Widget):
     """docstring for FileInfoWidget"""
@@ -959,10 +986,20 @@ class FileSystemPage(gui.Page):
                 self.lst.append(item)
         else:
 
-            file_info = {'name': "..", 'isDir': True, "size": 0}
-            item = FileInfoWidget(file_info)
-            item.openDirectory.connect(self._onOpenParent)
-            self.lst.append(item)
+            wdt = IconBarWidget()
+            wdt.addAction("/res/app/return.svg", self.onOpenParent)
+
+            if self.path:
+                urlbase = "%s/%s/" % (self.root, self.path)
+            else:
+                urlbase = "%s/" % (self.root)
+
+            btn = gui.UploadFileButton(urlbase, image="/res/app/file.svg")
+            btn.style.update({"width": "2em", "height": "2em"})
+            btn.onsuccess.connect(self.onFileUploadSuccess)
+            btn.onfailure.connect(self.onFileUploadFailure)
+            wdt.addWidget(btn)
+            self.lst.append(wdt)
 
             for file_info in self.context.listdir(self.root, self.path):
                 item = FileInfoWidget(file_info)
@@ -981,7 +1018,7 @@ class FileSystemPage(gui.Page):
             self.context.renderContent(self.root, path), ".txt")
         self.menu.show()
 
-    def onOpenParent(self, file_info):
+    def onOpenParent(self):
 
         if self.path:
             self.path = os.path.split(self.path)[0]
@@ -996,6 +1033,13 @@ class FileSystemPage(gui.Page):
         self.path = ""
         self.listdir()
         self.location.emit(self.root, self.path)
+
+    def onFileUploadSuccess(self, widget, filepath):
+        print("success", filepath)
+
+    def onFileUploadFailure(self, widget, filepath):
+
+        print("failed", filepath)
 
 class SettingsPage(gui.Page):
     def __init__(self, context, *args, **kwargs):
