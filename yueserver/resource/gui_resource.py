@@ -2,45 +2,13 @@
 import os, sys
 import logging
 
-"""
-    base:
-
-    silver -> black
-    #c0c0c0 #aeaeae #9d9d9d #8b8b8b #7a7a7a #686868
-    #575757 #454545 #343434 #222222 #111111 #000000
-
-    silver -> white
-    #c0c0c0 #c5c5c5 #cbcbcb #d1d1d1 #d6d6d6 #dcdcdc
-    #e2e2e2 #e8e8e8 #ededed #f3f3f3 #f9f9f9 #ffffff
-
-    primary:
-
-    blue -> black
-    #4682b4 #3f76a3 #396a93 #325e82 #2c5272 #264662
-    #1f3b51 #192f41 #132331 #0c1720 #060b10 #000000
-
-    blue -> white
-    #4682b4 #568dba #6798c1 #78a4c8 #89afcf #9abad6
-    #aac6dc #bbd1e3 #ccdcea #dde8f1 #eef3f8 #ffffff
-
-    secondary:
-
-    violet -> black
-    #9400d3 #8600bf #7900ac #6b0099 #5e0086 #500073
-    #43005f #35004c #280039 #1a0026 #0d0013 #000000
-
-    violet -> white
-    #9400d3 #9d17d7 #a72edb #b145df #ba5ce3 #c473e7
-    #ce8beb #d8a2ef #e1b9f3 #ebd0f7 #f5e7fb #ffffff
-"""
-
 from ..framework import gui
 from ..framework.backend import GuiAppResource, AppClient
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, websocket, param, body, compressed, httpError, \
     int_range, int_min, send_generator, null_validator
 
-from .gui.pages import AppPage
+from .gui.pages import AppPage, Palette
 from .gui.exception import AuthenticationError, LibraryException
 
 from .gui.context import YueAppState
@@ -184,21 +152,21 @@ class DemoAppClient(AppClient):
             }
 
             .nav-button {
-                background-image: linear-gradient(#78a4c8, #dde8f1 10%, #78a4c8);
+                background: P_MID;
             }
 
             .nav-button-primary {
-                background-image: linear-gradient(#78a4c8, #9400d3 10%, #78a4c8);
+                background: P_LIGHT;
             }
 
             /* select order matters here */
 
             .nav-button:hover {
-                background-image: linear-gradient(#78a4c8, #c473e7 10%, #78a4c8);
+                background: P_MID_LIGHT;
             }
 
             .nav-button:active {
-                background-image: linear-gradient(#78a4c8, #500073 10%, #78a4c8);
+                background: P_MID_DARK;
             }
 
             .nav-button-icon {
@@ -207,114 +175,130 @@ class DemoAppClient(AppClient):
 
             </style>
         """
+        for name, color in Palette.__dict__.items():
+            if name == "WHITE" or name == "BLACK" or \
+               name.startswith("P_") or \
+               name.startswith("S_"):
+                css_head = css_head.replace(name, color)
 
         html_body_start = """
 
         """
 
         js_body_end = """
-        <script>
+            <script>
 
-        var widget_text = null;
-        var widget_audio = null;
-        var is_wired = 0;
+            var widget_text = null;
+            var widget_audio = null;
+            var is_wired = 0;
 
-        function wireAudioPlayer(wid1) {
+            function wireAudioPlayer(wid1) {
 
-            if (is_wired==1) {
-                return;
+                if (is_wired==1) {
+                    return;
+                }
+                var audio = document.getElementById("audio_player");
+                widget_audio = wid1
+
+                audio.volume = .3;
+
+                audio.ontimeupdate = onPositionChanged
+                audio.ondurationchange = onPositionChanged
+                audio.onprogress = onPositionChanged
+
+
+                audio.onabort = function() {
+                    console.log("audio player abort");
+                    var btn = document.getElementById("playbutton_image");
+                    btn.src = '/res/app/media_error.svg';
+                    sendCallbackParam(widget_audio, 'onaudiostate', {state: 'abort'});
+                }
+                audio.onstalled = function() {
+                    console.log("audio player stalled");
+                    var btn = document.getElementById("playbutton_image");
+                    btn.src = '/res/app/media_error.svg';
+                    sendCallbackParam(widget_audio, 'onaudiostate', {state: 'stalled'});
+                }
+                audio.onsuspend = function() {
+                    console.log("audio player suspend");
+                    sendCallbackParam(widget_audio, 'onaudiostate', {state: 'suspend'});
+                }
+                audio.onwaiting = function() {
+                    console.log("audio player waiting");
+                    sendCallbackParam(widget_audio, 'onaudiostate', {state: 'waiting'});
+                }
+                audio.onerror = function() {
+                    console.log("audio player error");
+                    console.log(audio.error);
+                    var btn = document.getElementById("playbutton_image");
+                    btn.src = '/res/app/media_error.svg';
+                    sendCallbackParam(widget_audio, 'onaudiostate', {state: 'error'});
+                }
+                audio.onplay = function() {
+                    var btn = document.getElementById("playbutton_image");
+                    btn.src = '/res/app/media_pause.svg';
+                    sendCallbackParam(widget_audio, 'onaudiostate', {state: 'play'});
+                }
+                audio.onpause = function() {
+                    var btn = document.getElementById("playbutton_image");
+                    btn.src = '/res/app/media_play.svg';
+                    sendCallbackParam(widget_audio, 'onaudiostate', {state: 'pause'});
+                }
+                audio.onended = function(event) {
+                    sendCallback(widget_audio, 'onended');
+                    event.stopPropagation();
+                    event.preventDefault();
+                }
+
+                var x = document.getElementsByClassName("progressbar");
+                x[0].onclick = onSetPosition;
+
+                is_wired = 1;
             }
-            var audio = document.getElementById("audio_player");
-            widget_audio = wid1
 
-            audio.volume = .3;
+            function onPositionChanged() {
+                var audio = document.getElementById("audio_player");
+                var i = audio.buffered.length - 1;
+                var s = (i>=0)?audio.buffered.start(i).toFixed(0):0;
+                var e = (i>=0)?audio.buffered.end(i).toFixed(0):0;
+                var t = audio.currentTime.toFixed(0);
+                var d = audio.duration.toFixed(0);
 
-            audio.ontimeupdate = onPositionChanged
-            audio.ondurationchange = onPositionChanged
-            audio.onprogress = onPositionChanged
+                var x = document.getElementsByClassName("progressbar-buffer");
+                x[0].style.left = '' + ((s / d) * 100).toFixed(0) + '%'
+                x[0].style.width = '' + (((e - s) / d) * 100).toFixed(0) + "%"
 
+                //var x = document.getElementsByClassName("progressbar-indicator");
+                //x[0].style.left = '' + ((t / d) * 100).toFixed(0) + '%'
 
-            audio.onabort = function() {
-                console.log("audio player abort");
-                sendCallbackParam(widget_audio, 'onaudiostate', {state: 'abort'});
-            }
-            audio.onstalled = function() {
-                console.log("audio player stalled");
-                sendCallbackParam(widget_audio, 'onaudiostate', {state: 'stalled'});
-            }
-            audio.onsuspend = function() {
-                console.log("audio player suspend");
-                sendCallbackParam(widget_audio, 'onaudiostate', {state: 'suspend'});
-            }
-            audio.onwaiting = function() {
-                console.log("audio player waiting");
-                sendCallbackParam(widget_audio, 'onaudiostate', {state: 'waiting'});
-            }
-            audio.onerror = function() {
-                console.log("audio player error"); console.log(audio.error);
-                sendCallbackParam(widget_audio, 'onaudiostate', {state: 'error'});
-            }
-            audio.onplay = function() {
-                sendCallbackParam(widget_audio, 'onaudiostate', {state: 'play'});
-            }
-            audio.onpause = function() {
-                sendCallbackParam(widget_audio, 'onaudiostate', {state: 'pause'});
-            }
-            audio.onended = function(event) {
-                sendCallback(widget_audio, 'onended');
-                event.stopPropagation();
-                event.preventDefault();
+                var x = document.getElementsByClassName("progressbar-progress");
+                x[0].style.width = '' + ((t / d) * 100).toFixed(0) + '%'
             }
 
-            var x = document.getElementsByClassName("progressbar");
-            x[0].onclick = onSetPosition;
-
-            is_wired = 1;
-        }
-
-        function onPositionChanged() {
-            var audio = document.getElementById("audio_player");
-            var i = audio.buffered.length - 1;
-            var s = (i>=0)?audio.buffered.start(i).toFixed(0):0;
-            var e = (i>=0)?audio.buffered.end(i).toFixed(0):0;
-            var t = audio.currentTime.toFixed(0);
-            var d = audio.duration.toFixed(0);
-
-            var x = document.getElementsByClassName("progressbar-buffer");
-            x[0].style.left = '' + ((s / d) * 100).toFixed(0) + '%'
-            x[0].style.width = '' + (((e - s) / d) * 100).toFixed(0) + "%"
-
-            //var x = document.getElementsByClassName("progressbar-indicator");
-            //x[0].style.left = '' + ((t / d) * 100).toFixed(0) + '%'
-
-            var x = document.getElementsByClassName("progressbar-progress");
-            x[0].style.width = '' + ((t / d) * 100).toFixed(0) + '%'
-        }
-
-        function onSetPosition(event) {
-            var audio = document.getElementById("audio_player");
-            var x = document.getElementsByClassName("progressbar");
-            var rect = x[0].getBoundingClientRect();
-            var p = event.clientX - rect.left;
-            var w = rect.right - rect.left;
-            audio.currentTime = audio.duration * p / w;
-        }
-
-        function setPositionEnd() {
-            var audio = document.getElementById("audio_player");
-            console.log(audio.currentTime, audio.duration);
-            audio.currentTime = audio.duration - 5.0;
-            console.log(audio.currentTime, audio.duration);
-        }
-
-        function elementScrolled(elem) {
-            if(elem.offsetHeight + elem.scrollTop == elem.scrollHeight)
-            {
-                console.log("End of Scroll Region");
+            function onSetPosition(event) {
+                var audio = document.getElementById("audio_player");
+                var x = document.getElementsByClassName("progressbar");
+                var rect = x[0].getBoundingClientRect();
+                var p = event.clientX - rect.left;
+                var w = rect.right - rect.left;
+                audio.currentTime = audio.duration * p / w;
             }
-        }
 
-        </script>
+            function setPositionEnd() {
+                var audio = document.getElementById("audio_player");
+                console.log(audio.currentTime, audio.duration);
+                audio.currentTime = audio.duration - 5.0;
+                console.log(audio.currentTime, audio.duration);
+            }
+
+            function elementScrolled(elem) {
+                if(elem.offsetHeight + elem.scrollTop == elem.scrollHeight)
+                {
+                    console.log("End of Scroll Region");
+                }
+            }
+
+            </script>
         """
         super(DemoAppClient, self).__init__(
             css_head=css_head,
@@ -357,6 +341,19 @@ class DemoAppClient(AppClient):
 
     def onExecute(self, text):
         self.execute_javascript(text)
+
+    def upload_file(self, filepath, stream):
+        """
+        filepath: the contract for gui file uploads is that the filepath
+            is "${root}/${path}"
+        """
+        root, path = filepath.split('/', 1)
+
+        # TODO: how to handle duplicates?
+        #    + append index
+        #    + overwrite (default)
+        self.state.fileService.saveFile(self.state.auth_user,
+            root, path, stream)
 
 def boolean(s):
     return s.lower() == "true"

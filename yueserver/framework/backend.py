@@ -50,9 +50,6 @@ js_body_end = """
         var namespace = '/api/ws'
         var url = document.location.protocol + '//' + document.domain + ':' + location.port + namespace
 
-
-        var do_repaint = 0;
-
         function byteLength(str) {
             // returns the byte length of an utf8 string
             var s = str.length;
@@ -74,6 +71,7 @@ js_body_end = """
                 socket.on('connect', websocketOnOpen);
                 socket.on('reconnect', websocketOnReconnect);
                 socket.on('disconnect', websocketOnClose);
+                socket.on('gui_reload', websocketOnReload);
                 socket.on('gui_show', websocketOnShow);
                 socket.on('gui_update', websocketOnUpdate);
                 socket.on('gui_exec', websocketOnExec);
@@ -96,19 +94,9 @@ js_body_end = """
             } catch(err) {
                 console.log('Error hiding loading overlay ' + err.message);
             }
-
-            if (do_repaint == 1) {
-                var state = {
-                    location: '' + document.location,
-                    cookie: document.cookie
-                }
-                socket.emit('gui_repaint', JSON.stringify(state));
-                do_repaint = 0;
-            }
         };
 
         function websocketOnReconnect(attemptNumber) {
-            do_repaint = 1;
             console.log("successfully reconnected. attempt: " + attemptNumber);
         };
 
@@ -175,6 +163,12 @@ js_body_end = """
             };
         }
 
+        function websocketOnReload (msg) {
+            // web socket connected, but the session does not exist anymore
+            window.location.reload()
+        }
+
+
         var sendCallbackParam = function (widgetID,functionName,params /*a dictionary of name:value*/){
             var state = {
                 id: widgetID,
@@ -224,7 +218,7 @@ js_body_end = """
                 };
 
                 var fd = new FormData();
-                fd.append('upload_file', file);
+                fd.append('upload', file);
                 xhr.send(fd);
             }
         }
@@ -476,7 +470,6 @@ class AppClient(object):
                 self.setLocation(location)
 
             changed_widget_dict = {}
-            _s = self.root._force_repaint
             self.root.repr(changed_widget_dict)
 
             for widget in changed_widget_dict.keys():
@@ -578,6 +571,9 @@ class AppClient(object):
     def set_route(self, state):
         pass
 
+    def upload_file(self, filepath, stream):
+        raise NotImplementedError("cannot save: %s" % filepath)
+
 class AppService(object):
     """docstring for RemiSersessionIdFromHeadersvice"""
 
@@ -648,9 +644,6 @@ class AppService(object):
             return self.clients[sessionId]
 
         client = self.newAppInstance()
-
-        # The root node requires a fixed ID for repaint to work
-        client.root.set_identifier("application_root")
 
         client.health_check = self.health_check
 
@@ -790,7 +783,8 @@ class AppService(object):
     def disconnect_socket(self, socketId):
 
         if socketId not in self.websocket_session:
-            raise Exception("socket session not found for %s" % socketId)
+            logging.warning("socket session not found for %s" % socketId)
+            return
 
         sessionId = self.websocket_session[socketId]
         if sessionId not in self.clients:
@@ -800,19 +794,6 @@ class AppService(object):
         del self.websocket_session[socketId]
 
         self._diag("session %s: socket disconnected" % sessionId)
-
-    def repaint(self, socketId, state):
-
-        if socketId not in self.websocket_session:
-            raise Exception("socket session not found for %s" % socketId)
-
-        sessionId = self.websocket_session[socketId]
-        if sessionId not in self.clients:
-            raise Exception("client not found for %s" % sessionId)
-
-        self.clients[sessionId].root._force_repaint = True
-        self.clients[sessionId].set_route(state)
-        self.clients[sessionId].do_gui_update()
 
     def set_client_state(self, sessionId, state):
         client = self._get_instance(sessionId)
@@ -838,6 +819,10 @@ class AppService(object):
                 "nsockets": len(client.websockets)
             }
         return obj
+
+    def upload_file(self, sessionId, filepath, stream):
+        client = self._get_instance(sessionId)
+        client.upload_file(filepath, stream)
 
 class GuiAppResource(WebResource):
     """
@@ -882,8 +867,12 @@ class GuiAppResource(WebResource):
 
     @post("/gui/upload")
     def upload_file(self):
-        print(request.headers)
-
+        sessionId = self.service.sessionIdFromHeaders(request.headers)
+        filepath = request.headers['filepath']
+        # this returns None or a flask FileStorage instance
+        # a FileStorage object implements read()
+        fs = request.files.get("upload")
+        self.service.upload_file(sessionId, filepath, fs)
         return "OK", 200
 
     @get("/res/<path:path>")
@@ -899,31 +888,16 @@ class GuiAppResource(WebResource):
     def connect(self, sid, msg):
         headers = {"cookie": msg.get('HTTP_COOKIE', "")}
         sessionId = self.service.sessionIdFromHeaders(headers)
-        self.service.connect_socket(sessionId, sid)
+        if sessionId not in self.service.clients:
+            logging.warning("socket connected for session %s which no longer exists" % sessionId)
+            self.emit("gui_reload", sid, "")
+        else:
+            self.service.connect_socket(sessionId, sid)
 
     @websocket("disconnect", "/api/ws")
     def disconnect(self, sid):
         """ """
         self.service.disconnect_socket(sid)
-
-    @websocket("gui_repaint", "/api/ws")
-    def gui_repaint(self, sid, msg):
-
-        msg = json.loads(msg)
-        cookies = {}
-        for cookie in msg.get("cookie", "").split(';'):
-            name, value = cookie.split("=", 1)
-            cookies[name.strip()] = value.strip()
-
-        info = urlparse(msg.get('location', ""))
-        # TODO: 'query', 'params', 'fragment'
-        # query    : ?foo=bar
-        # params   : ;foo=bar
-        # fragment : #foo=bar
-        state = AppRoute(info.path, info.query, cookies)
-
-        # TODO: this can maybe be done a better way
-        self.service.repaint(sid, state)
 
     @websocket("gui_set_location", "/api/ws")
     def gui_set_location(self, sid, msg):

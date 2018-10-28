@@ -95,15 +95,18 @@ class YueAppState(object):
 
         returns true if the token is valid and the user exists.
         """
+        logging.warning("setting auth %s" % token)
         if token:
             try:
-                user = self.userService.getUserFromToken(token)
-                user = self.userService.userDao.findUserByEmail(user['email'])
-                self.auth_info = self.userService.listUser(self.auth_user['id'])
-                self.auth_token = token
+                data = self.userService.getUserFromToken(token)
+                user = self.userService.userDao.findUserByEmail(data['email'])
+                info = self.userService.listUser(user['id'])
+                self.auth_info = info
                 self.auth_user = user
+                self.auth_token = token
                 return True
             except Exception as e:
+                logging.error(e)
                 self.auth_info = None
                 self.auth_token = None
                 self.auth_user = None

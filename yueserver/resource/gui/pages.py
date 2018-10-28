@@ -12,6 +12,23 @@ from .exception import AuthenticationError, LibraryException
 NAV_HEIGHT = "5em"
 NAVBAR_HEIGHT = "2em"
 
+class Palette(object):
+
+    P_LIGHT     = "#1455A3"  # "#0D5199"
+    P_MID_LIGHT = "#124E92"  # "#104479"
+    P_MID       = "#0D3981"  # "#0C3662"
+    P_MID_DARK  = "#052460"  # "#052445"
+    P_DARK      = "#031539"  # "#031528"
+
+    S_LIGHT     = "#aaaaaa"
+    S_MID_LIGHT = "#888888"
+    S_MID       = "#666666"
+    S_MID_DARK  = "#444444"
+    S_DARK      = "#222222"
+
+    WHITE = "#FFFFFF"
+    BLACK = "#000000"
+
 class SongWidget(gui.Widget):
     def __init__(self, song, index=None, *args, **kwargs):
         super(SongWidget, self).__init__(*args, **kwargs)
@@ -21,7 +38,7 @@ class SongWidget(gui.Widget):
         self.index = index
 
         self.height = "32px"
-        self.hbox = gui.Widget(height="100%", width="calc(100% - 20px)", parent=self)
+        self.hbox = gui.Widget(height="100%", width="100%", parent=self)
         self.hbox.style.update({
             'display':'flex',
             'justify-content':'space-around',
@@ -96,7 +113,8 @@ class TitleTextWidget(gui.Widget):
     def __init__(self, icon_url, text, *args, **kwargs):
         super(TitleTextWidget, self).__init__()
 
-        self.hbox = gui.Widget(height="100%", width="calc(100% - 20px)", parent=self)
+        # calc(100% - 20px)
+        self.hbox = gui.Widget(height="100%", width="100%", parent=self)
         self.hbox.style.update({
             'display': 'flex',
             'justify-content': 'space-around',
@@ -140,7 +158,7 @@ class IconBarWidget(gui.Widget):
     def __init__(self, *args, **kwargs):
         super(IconBarWidget, self).__init__()
 
-        self.hbox = gui.Widget(height="100%", width="calc(100% - 20px)", parent=self)
+        self.hbox = gui.Widget(height="100%", width="100%", parent=self)
 
         self.actions = []
 
@@ -148,19 +166,21 @@ class IconBarWidget(gui.Widget):
 
         btn = gui.Button()
         btn.onclick.connect(lambda w: callback())
-        self.hbox.append(btn)
-        btn.style.update({
-            "width": "2em",
-            "height": "2em",
-            "margin-left": "3%",
-            "margin-right": "3%",
-        })
-        del btn.style['margin']
         img = gui.Image(icon_url, parent=btn)
         img.style.update({"width": "100%", "height": "100%"})
-        self.actions.append(btn)
+        self.addWidget(btn)
 
     def addWidget(self, widget):
+
+        widget.style.update({
+            "width": "2.5em",
+            "height": "2.5em",
+            "margin-left": ".5em",
+            "margin-right": ".5em",
+            "margin-top": ".5em",
+            "margin-bottom": ".5em",
+        })
+        del widget.style['margin']
 
         self.hbox.append(widget)
         self.actions.append(widget)
@@ -270,11 +290,9 @@ class ScrollBox(gui.Widget):
         self.content = gui.Widget()
         self.content_scroll = gui.Widget()
 
-
         self.style.update({
             "width": "100%",
             "height": "100%",
-            "background": "#8f8"
         })
         self.content.style.update({
             "position": "relative",
@@ -287,6 +305,7 @@ class ScrollBox(gui.Widget):
             "bottom": "0",
             "left": "0",
             "overflow-y": "auto",
+            "overflow-x": "hidden",
         })
 
         self.content_scroll.attributes.update({"onscroll": "elementScrolled(this)"})
@@ -324,6 +343,7 @@ class NavBar2(gui.Widget):
             "width": "100%",
             "height": NAVBAR_HEIGHT,
             "border-bottom": "3px solid",
+            "background": Palette.S_MID_LIGHT
         })
 
         self.container = gui.Widget(height=("calc(100%% - %s)" % NAVBAR_HEIGHT), width="100%")
@@ -338,9 +358,9 @@ class NavBar2(gui.Widget):
 
         self.indexChanged = gui.Signal(int)
 
-    def addTabIcon(self, url, widget):
+    def addTabIcon(self, name, url, widget):
 
-        self.nav_children.append(widget)
+        self.nav_children.append((name, widget))
 
         button = gui.Widget(width="100%", height="32px", parent=self.hbox_nav)
         button.attributes.update({"class": "nav-button"})
@@ -361,7 +381,18 @@ class NavBar2(gui.Widget):
 
         # by default hide all extra tabs
         if len(self.nav_children) > 1:
-            widget.style.update({"display": "none"})
+            widget.set_visible(False)
+        else:
+            widget.set_visible(True)
+
+    def items(self):
+        return self.nav_children
+
+    def current(self):
+        for i, (name, child) in enumerate(self.nav_children):
+            if child.is_visible():
+                return (name, child)
+        raise Exception("no child is visible")
 
     def onNavClicked(self, widget):
 
@@ -369,7 +400,7 @@ class NavBar2(gui.Widget):
             return
 
         index = None
-        for i, child in enumerate(self.nav_children):
+        for i, (name, child) in enumerate(self.nav_children):
             child.set_visible(False)
             self.nav_buttons[i].attributes.update({"class": "nav-button"})
 
@@ -382,14 +413,14 @@ class NavBar2(gui.Widget):
         self.indexChanged.emit(index)
 
     def setIndex(self, index):
-        for i, child in enumerate(self.nav_children):
+        for i, (name, child) in enumerate(self.nav_children):
             child.set_visible(False)
             self.nav_buttons[i].attributes.update({"class": "nav-button"})
-        self.nav_children[index].set_visible(True)
+        self.nav_children[index][1].set_visible(True)
         self.nav_buttons[index].attributes.update({"class": "nav-button-primary"})
 
     def index(self):
-        for i, child in enumerate(self.nav_children):
+        for i, (name, child) in enumerate(self.nav_children):
             if child.is_visible():
                 return i
         return None
@@ -422,14 +453,15 @@ class AudioDisplay(gui.Widget):
 
         border_left = gui.Widget(parent=self.hbox_main)
         border_left.attributes.update({"class": "col-left", "z-index": "-2"})
-        border_left.style.update({"background": "#222222"})
+        border_left.style.update({"background": Palette.S_DARK})
 
         vbox = gui.VBox(parent=self.hbox_main)
         vbox.attributes.update({"class": "col-main", "z-index": "-2"})
+        vbox.style.update({"background": Palette.S_MID_LIGHT})
 
         border_left = gui.Widget(parent=self.hbox_main)
         border_left.attributes.update({"class": "col-left", "z-index": "-2"})
-        border_left.style.update({"background": "#222222"})
+        border_left.style.update({"background": Palette.S_DARK})
 
         # ---------------------------------------------------------------------
 
@@ -446,29 +478,33 @@ class AudioDisplay(gui.Widget):
             "order": "-1",
             "align-items": "center",
             "top": "20px",
-            "flex-direction": "row"
+            "flex-direction": "row",
+            "background": "transparent"
         })
 
-        self.btnPlayPause = gui.Button('', parent=self.hbox_player)
+        self.btnPlayPause = gui.Button(
+            _id="playbutton",
+            image='/res/app/media_play.svg',
+            parent=self.hbox_player)
         self.btnPlayPause.onclick.connect(self.onPlayPauseClicked)
         self.btnPlayPause.style.update({
             "order": "-1",
-            "width": "32px",
-            "height": "32px",
-            "border-radius": "16px"
+            "width": "3em",
+            "height": "3em",
+            "border-radius": "1.5em"
         })
-        gui.Image('/res/app/media_play.svg', parent=self.btnPlayPause)
 
-        self.btnNextSong = gui.Button('', parent=self.hbox_player)
+        self.btnNextSong = gui.Button(image='/res/app/media_next.svg',
+            parent=self.hbox_player)
         self.btnNextSong.onclick.connect(self.onNextSongClicked)
         self.btnNextSong.style.update({
             "order": "-1",
             "width": "32px",
             "height": "32px"
         })
-        gui.Image('/res/app/media_next.svg', parent=self.btnPlayPause)
 
-        self.btnAudioStatus = gui.Button('', parent=self.hbox_player)
+        self.btnAudioStatus = gui.Button(image='/res/app/media_next.svg',
+            parent=self.hbox_player)
         self.btnAudioStatus.onclick.connect(self.onAudioStatusClicked)
         self.btnAudioStatus.style.update({"order":"-1",
             "background-image": "url('/res/flag.png')",
@@ -478,19 +514,13 @@ class AudioDisplay(gui.Widget):
 
         self.progressbar = ProgressBar(parent=self.hbox_player)
 
-        # self.audio_player = gui.AudioPlayer('', parent=self.hbox_player)
-
         # ---------------------------------------------------------------------
 
         self.lbl_title = gui.Label('TITLE', parent=vbox)
-        self.lbl_title.style.update({"width": "100%"})
-
+        self.lbl_title.style.update({"width": "100%",
+            "background": "transparent"})
 
         # ---------------------------------------------------------------------
-
-        #self.audio_player.onplay.connect(lambda *args: sys.stdout.write("on play\n"))
-        #self.audio_player.onpause.connect(lambda *args: sys.stdout.write("on pause\n"))
-        #self.audio_player.onended.connect(self.onNextSongClicked)
 
         self._onPlaylistChanged = gui.Slot(self.onPlaylistChanged)
         self.context.playlistChanged.connect(self._onPlaylistChanged)
@@ -935,6 +965,11 @@ class FileSystemPage(gui.Page):
         self.path = ""
         self.context = context
 
+        # directories don't actually exist.
+        # support a user 'creating' a directory by storing
+        #   (root, path) => name
+        self.session_directories = {}
+
         self.lst = gui.WidgetList()
         self.append(self.lst)
 
@@ -1001,11 +1036,33 @@ class FileSystemPage(gui.Page):
             wdt.addWidget(btn)
             self.lst.append(wdt)
 
-            for file_info in self.context.listdir(self.root, self.path):
+            session_dirs = self.session_directories.get(
+                (self.root, self.path), set())
+
+            items = self.context.listdir(self.root, self.path)
+
+            for file_info in items:
+
+                if file_info['name'] in session_dirs:
+                    session_dirs.remove(file_info['name'])
+
                 item = FileInfoWidget(file_info)
                 item.openDirectory.connect(self._onOpenDirectory)
                 item.openPreview.connect(self._onOpenPreview)
                 self.lst.append(item)
+
+            for name in session_dirs:
+                file_info = {'name': name, 'isDir': True}
+                item = FileInfoWidget(file_info)
+                item.openDirectory.connect(self._onOpenDirectory)
+                item.openPreview.connect(self._onOpenPreview)
+                self.lst.insert(1, item)
+
+            # if the list is now empty (a file exists creating)
+            # the directory, remove the entry entirely
+            if not session_dirs and \
+               (self.root, self.path) in self.session_directories:
+                del self.session_directories[(self.root, self.path)]
 
     def onOpenDirectory(self, file_info):
         self.path = os.path.join(self.path, file_info['name'])
@@ -1059,27 +1116,33 @@ class HomePage(gui.Page):
         super(HomePage, self).__init__(*args, **kwargs)
 
         self.vbox = gui.VBox(height="100%", width="100%", parent=self)
+        self.vbox.style.update({
+            "background": Palette.S_DARK,
+        })
 
         self.panel = gui.Widget(parent=self.vbox)
         self.panel.style.update({
-            "height": "25%",
             "width": "100%",
-            "min-height": "240px",
-            "background": "#aaaaaa",
+            "background": Palette.S_MID_LIGHT,
+            "padding-top": "3em",
+            "padding-bottom": "3em",
         })
         del self.panel.style['margin']
 
-        self.label_email = gui.Label("Home:", parent=self.panel)
-        self.label_email.style.update({"width": "80%", "margin-left": "10%", "margin-right": "10%"})
-        del self.label_email.style['margin']
+        self.label_title = gui.Label("Welcome", parent=self.panel)
+        self.label_title.style.update({
+            "text-align": "center",
+            "font-size": "1.5em"
+        })
+        del self.label_title.style['margin']
 
-        self.hbox_submit = gui.Widget(parent=self.panel)
-        self.hbox_submit.style.update({"width": "80%", "margin-left": "10%", "margin-right": "10%", "background": "transparent"})
-        self.hbox_submit.style.update({"display": "flex", "justify-content": "flex-end"})
-        del self.hbox_submit.style['margin']
-
-        self.btn_submit = gui.Button("login", parent=self.hbox_submit)
-        self.btn_submit.style.update({"margin-top": "20px", "width": "25%"})
+        self.btn_submit = gui.Button("login", parent=self.panel)
+        self.btn_submit.style.update({
+            "margin-top": "20px",
+            "margin-left": "33%",
+            "margin-right": "33%",
+            "width": "34%"
+            })
         del self.btn_submit.style['margin']
 
         self.btn_submit.onclick.connect(self.onSubmitClicked)
@@ -1096,29 +1159,50 @@ class HomePage(gui.Page):
         self.login.emit()
 
 class LoginPage(gui.Page):
+    """
+    Signals:
+        login (username, password)
+        cancel()
+
+    """
     def __init__(self, *args, **kwargs):
         super(LoginPage, self).__init__(*args, **kwargs)
 
         self.vbox = gui.VBox(height="100%", width="100%", parent=self)
+        self.vbox.style.update({
+            "background": Palette.S_DARK,
+        })
 
         self.panel = gui.Widget(parent=self.vbox)
         self.panel.style.update({
-            "height": "25%",
             "width": "100%",
-            "min-height": "240px",
-            "background": "#aaaaaa",
+            "background": Palette.S_MID_LIGHT,
+            "padding-top": "3em",
+            "padding-bottom": "3em",
         })
         del self.panel.style['margin']
 
         self.label_email = gui.Label("Email:", parent=self.panel)
-        self.label_email.style.update({"width": "80%", "margin-left": "10%", "margin-right": "10%"})
+        self.label_email.style.update({
+            "width": "80%",
+            "margin-left": "10%",
+            "margin-right": "10%",
+            "margin-bottom": "0",
+            "margin-top": "1em",
+        })
         del self.label_email.style['margin']
         self.input_email = gui.Input("email", parent=self.panel)
         self.input_email.style.update({"width": "80%", "margin-left": "10%", "margin-right": "10%"})
         del self.input_email.style['margin']
 
         self.label_password = gui.Label("Password:", parent=self.panel)
-        self.label_password.style.update({"width": "80%", "margin-left": "10%", "margin-right": "10%"})
+        self.label_password.style.update({
+            "width": "80%",
+            "margin-left": "10%",
+            "margin-right": "10%",
+            "margin-bottom": "0",
+            "margin-top": "1em",
+        })
         del self.label_password.style['margin']
         self.input_password = gui.Input("password", parent=self.panel)
         self.input_password.style.update({"width": "80%", "margin-left": "10%", "margin-right": "10%"})
@@ -1145,7 +1229,10 @@ class LoginPage(gui.Page):
         self.input_password.onkeyup.connect(self.onKeyUp)
         self.input_email.onkeyup.connect(self.onKeyUp)
         self.btn_submit.onclick.connect(self.onSubmitClicked)
+        self.btn_cancel.onclick.connect(self.onCancelClicked)
+
         self.login = gui.Signal(str, str)
+        self.cancel = gui.Signal()
 
     def set_route(self, location, params, cookies):
 
@@ -1159,6 +1246,9 @@ class LoginPage(gui.Page):
         if key == "Enter":
             self.login.emit(self.input_email.get_value(),
                 self.input_password.get_value())
+
+    def onCancelClicked(self, widget):
+        self.cancel.emit()
 
     def onSubmitClicked(self, widget):
 
@@ -1192,7 +1282,11 @@ class MainPage(gui.Page):
         self.tabLibrary = LibraryPage(self.context,
             height="100%", width="100%")
 
-        print("creating tab", self.context.auth_info)
+        self.tabSearchLibrary = SearchLibraryPage(self.context,
+            height="100%", width="100%")
+
+        # TODO: conditionally create this tab
+        # print("creating tab", self.context.auth_info)
         # 'filesystem_read' in auth_info['roles'][0]['features']
         self.tabFileSystem = FileSystemPage(self.context,
             height="100%", width="100%")
@@ -1200,67 +1294,37 @@ class MainPage(gui.Page):
         self.tabSettings = SettingsPage(self.context,
             height="100%", width="100%")
 
-        self.tabSearchLibrary = SearchLibraryPage(self.context,
-            height="100%", width="100%")
-
-        self.navbar.addTabIcon("/res/app/playlist.svg", self.tabNowPlaying)
-        self.navbar.addTabIcon("/res/app/album.svg", self.tabLibrary)
-        self.navbar.addTabIcon("/res/app/search.svg", self.tabSearchLibrary)
-        self.navbar.addTabIcon("/res/app/documents.svg", self.tabFileSystem)
-        self.navbar.addTabIcon("/res/app/settings.svg", self.tabSettings)
+        self.navbar.addTabIcon("queue", "/res/app/playlist.svg", self.tabNowPlaying)
+        self.navbar.addTabIcon("library", "/res/app/album.svg", self.tabLibrary)
+        self.navbar.addTabIcon("search", "/res/app/search.svg", self.tabSearchLibrary)
+        self.navbar.addTabIcon("files", "/res/app/documents.svg", self.tabFileSystem)
+        self.navbar.addTabIcon("settings", "/res/app/settings.svg", self.tabSettings)
 
     def set_route(self, location, params, cookies):
         if len(location) == 0:
             self.navbar.setIndex(0)
             self.tabNowPlaying.set_route([], params, cookies)
-        elif location[0] == "queue":
-            self.navbar.setIndex(0)
-            self.tabNowPlaying.set_route(location[1:], params, cookies)
-        elif location[0] == "library":
-            self.navbar.setIndex(1)
-            self.tabLibrary.set_route(location[1:], params, cookies)
-        elif location[0] == "files":
-            self.navbar.setIndex(2)
-            self.tabFileSystem.set_route(location[1:], params, cookies)
-        elif location[0] == "settings":
-            self.navbar.setIndex(3)
-            self.tabSettings.set_route(location[1:], params, cookies)
         else:
-            raise InvalidRoute()
+            for i, (name, page) in enumerate(self.navbar.items()):
+                if name == location[0]:
+                    self.navbar.setIndex(i)
+                    page.set_route(location[1:], params, cookies)
+                    return
+
+            raise InvalidRoute(location)
 
     def get_route(self):
 
-        path = []
+        name, page = self.navbar.current()
+
+        path = [name]
         params = {}
         cookies = {}
-        index = self.navbar.index()
-        if index == 0:
-            path.append("queue")
-            _path, _params, _cookies = self.tabNowPlaying.get_route()
-            path += _path
-            params.update(_params)
-            cookies.update(_cookies)
 
-        elif index == 1:
-            path.append("library")
-            _path, _params, _cookies = self.tabLibrary.get_route()
-            path += _path
-            params.update(_params)
-            cookies.update(_cookies)
-
-        elif index == 2:
-            path.append("files")
-            _path, _params, _cookies = self.tabFileSystem.get_route()
-            path += _path
-            params.update(_params)
-            cookies.update(_cookies)
-
-        elif index == 3:
-            path.append("settings")
-            _path, _params, _cookies = self.tabSettings.get_route()
-            path += _path
-            params.update(_params)
-            cookies.update(_cookies)
+        _path, _params, _cookies = page.get_route()
+        path += _path
+        params.update(_params)
+        cookies.update(_cookies)
 
         return path, params, cookies
 
@@ -1283,7 +1347,7 @@ class AppPage(gui.Page):
 
         border_left = gui.Widget(parent=self.hbox_main)
         border_left.attributes.update({"class": "col-left", "z-index": "-2"})
-        border_left.style.update({"background": "#222222"})
+        border_left.style.update({"background": Palette.S_DARK})
 
         self.page_main = None
         self.page_login = None
@@ -1297,7 +1361,7 @@ class AppPage(gui.Page):
 
         border_right = gui.Widget(parent=self.hbox_main)
         border_right.attributes.update({"class": "col-right"})
-        border_right.style.update({"background": "#222222"})
+        border_right.style.update({"background": Palette.S_DARK})
 
         self.pages = [self.page_home]
 
@@ -1336,6 +1400,7 @@ class AppPage(gui.Page):
                 if self.context.is_authenticated():
                     page = self.getMainPage()
                 else:
+                    logging.warning("not auth")
                     page = self.getLoginPage()
                 page.set_visible(True)
                 page.set_route(location[1:], params, cookies)
@@ -1390,6 +1455,8 @@ class AppPage(gui.Page):
             self.page_login.style.update({"height": "100%", "display": "flex"})
             self._onLogin = gui.Slot(self.onLogin)
             self.page_login.login.connect(self._onLogin)
+            self._onCancelLogin = gui.Slot(self.onCancelLogin)
+            self.page_login.cancel.connect(self._onCancelLogin)
             self.hbox_main.insert(1, self.page_login)
             self.pages.append(self.page_login)
 
@@ -1423,6 +1490,12 @@ class AppPage(gui.Page):
         except Exception as e:
             logging.exception(e)
             self.getLoginPage().set_error(True)
+
+    def onCancelLogin(self):
+
+        for page in self.pages:
+            page.set_visible(False)
+        self.page_home.set_visible(True)
 
     def openLoginPage(self):
         for page in self.pages:

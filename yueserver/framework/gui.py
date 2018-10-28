@@ -937,10 +937,10 @@ class Page(Widget):
         return self.style.get('display', 'none') != 'none'
 
     def onOpen(self):
-        print("Open %s" % self.__class__.__name__)
+        logging.debug("Open %s" % self.__class__.__name__)
 
     def onClose(self):
-        print("Close %s" % self.__class__.__name__)
+        logging.debug("Close %s" % self.__class__.__name__)
 
 class GridBox(Widget):
     """It contains widgets automatically aligning them to the grid.
@@ -1241,8 +1241,14 @@ class _MixinTextualWidget(object):
 class Button(Widget, _MixinTextualWidget):
     """The Button widget. Have to be used in conjunction with its event onclick.
         Use Widget.onclick.connect in order to register the listener.
+
+    This class constructor supports text or an image url
+        Button(text="click me")
+        Button("click me")
+    or:
+        Button(image="/static/icon.svg")
     """
-    def __init__(self, text='', *args, **kwargs):
+    def __init__(self, text=None, image=None, *args, **kwargs):
         """
         Args:
             text (str): The text that will be displayed on the button.
@@ -1250,13 +1256,45 @@ class Button(Widget, _MixinTextualWidget):
         """
         super(Button, self).__init__(*args, **kwargs)
         self.type = 'button'
-        self.set_text(text)
+        if text:
+            self.set_text(text)
+        elif image:
+            self.div = Widget(parent=self)
+            self.div.set_identifier(self.identifier + "_div")
+            self.div.style.update({
+                "position": "relative",
+                "width": "100%",
+                "height": "100%",
+                "background": "transparent"
+            })
+
+            self.image = Image(image, parent=self.div)
+            self.image.set_identifier(self.identifier + "_image")
+            self.image.style.update({
+                "position": "absolute",
+                "max-width": "100%",
+                "width": "auto",
+                "max-height": "100%",
+                "height": "auto",
+                "top": "0",
+                "right": "0",
+                "bottom": "0",
+                "left": "0",
+                "margin": "auto",
+            })
 
 class UploadFileButton(Widget, _MixinTextualWidget):
     """
     A button which can have text or an icon. When clicked the user
     is shown a file selection dialog and upon selection, a file is
     automatically uploaded.
+
+    A "filepath" header will be set in the upload request to be:
+        ${urlbase}/${filename}
+    The filepath can be access with the onsuccess/onfailure signals
+
+    TODO: I may want to expand the concept of urlbase to be a
+    generic payload.
 
     Signals:
         onsuccess (widget, filepath)
@@ -1277,8 +1315,9 @@ class UploadFileButton(Widget, _MixinTextualWidget):
             self.set_text(text)
 
         elif image:
-            img = Image(image, parent=self)
-            img.style.update({"width": "100%", "height": "100%"})
+            self.image = Image(image, parent=self)
+            self.image.set_identifier(self.identifier + "_image")
+            self.image.style.update({"width": "100%", "height": "100%"})
 
         self.input = Widget(_type="input", parent=self)
         self.input.attributes.update({"type": "file", "hidden": None})

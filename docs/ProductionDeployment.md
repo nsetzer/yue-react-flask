@@ -107,7 +107,9 @@ by the root user
 ```bash
 mkdir /opt/yueserver/crypt
 python -m server.tools.manage generate_keypair --outdir /opt/yueserver/crypt rsa
-chmod chmod 600 crypt/rsa{.pem,.pub}
+chown root crypt/rsa{.pem,.pub}
+chmod 600 crypt/rsa{.pem,.pub}
+
 ```
 
 ```bash
@@ -119,7 +121,7 @@ drwxr-xr-x 2 root root 4096 Sep 16 09:49 .
 
 Running the encrypt64 command will produce a base64 string containing the AES encrypted secret:
 ```bash
-python -m server.tools.manage encrypt64  /opt/yueserver/crypt/rsa.pub "mysecret"
+python -m server.tools.manage encrypt64 /opt/yueserver/crypt/rsa.pub "mysecret"
 ```
 
 Add the encrypted value to the application configuration:
@@ -284,6 +286,10 @@ todo: notes on ufw, or use digital ocean firewall
 open 80 and 443
 
 ### NginX Configuration
+
+create:
+
+/etc/nginx/sites-available/yueapp
 
 ```
 server {
