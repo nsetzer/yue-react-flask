@@ -294,12 +294,20 @@ create:
 ```
 server {
     listen 80;
-    server_name yueapp.duckdns.org 104.248.122.206;
+    server_name www.example.com 203.0.113.1;
 
     location / {
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Host $host;
+
         include proxy_params;
-        proxy_pass http://unix:/opt/yueserver/yueserver.sock;
+        proxy_pass http://unix:/tmp/yueserver.sock;
         client_max_body_size 500M;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
     }
 }
 ```

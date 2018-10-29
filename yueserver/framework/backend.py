@@ -395,7 +395,11 @@ class AppClient(object):
 
         self.update_lock = threading.RLock()
 
-        self.location = "/"
+        # TODO: synchronous bug, if initialized to "/"
+        # then the first time we route to "/" will not
+        # be signaled
+        # on getHtml, set THIS location based on the route used
+        self.location = "not-set"
 
         self.css_head = kwargs.get("css_head", "")
         self.html_head = kwargs.get("html_head", "")
@@ -712,8 +716,10 @@ class AppService(object):
         f.write("<meta content='text/html;charset=utf-8'")
         f.write(" http-equiv='Content-Type'>\n")
         f.write("<meta content='utf-8' http-equiv='encoding'>")
+        # disallow pinch to zoom
         f.write("<meta name=\"viewport\"")
-        f.write(" content=\"width=device-width, initial-scale=1.0\">\n")
+        f.write(" content=\"width=device-width, initial-scale=1.0,")
+        f.write(" maximum-scale=1.0, user-scalable=no\">\n")
         f.write(client.css_head)
         f.write(client.html_head)
         f.write(client.js_head)

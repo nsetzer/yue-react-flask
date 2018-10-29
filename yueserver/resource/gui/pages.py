@@ -2,6 +2,11 @@
 import os, sys
 import logging
 
+"""
+settings:
+    button to delete  current playlist
+    test page layout when no playlist exists
+"""
 from ...framework import gui
 from ...framework.backend import InvalidRoute
 
@@ -9,7 +14,7 @@ from ...dao.util import string_quote
 
 from .exception import AuthenticationError, LibraryException
 
-NAV_HEIGHT = "5em"
+NAV_HEIGHT = "6em"
 NAVBAR_HEIGHT = "2em"
 
 class Palette(object):
@@ -450,6 +455,7 @@ class AudioDisplay(gui.Widget):
         self.hbox_main = gui.Widget(parent=self)
         self.hbox_main.attributes.update({"class": "flex-grid-thirds"})
         self.hbox_main.style.update({"height": "100%", "width": "100%"})
+        self.hbox_main.style.update({"background": Palette.S_MID_LIGHT})
 
         border_left = gui.Widget(parent=self.hbox_main)
         border_left.attributes.update({"class": "col-left", "z-index": "-2"})
@@ -517,8 +523,11 @@ class AudioDisplay(gui.Widget):
         # ---------------------------------------------------------------------
 
         self.lbl_title = gui.Label('TITLE', parent=vbox)
-        self.lbl_title.style.update({"width": "100%",
-            "background": "transparent"})
+        self.lbl_title.style.update({
+            "width": "100%",
+            "text-align": "center",
+            "background": "transparent"
+        })
 
         # ---------------------------------------------------------------------
 
@@ -1002,7 +1011,10 @@ class FileSystemPage(gui.Page):
             self.root = location[1]
             self.path = "/".join(location[2:])
 
-        self.listdir()
+        try:
+            self.listdir()
+        except Exception as e:
+            raise InvalidRoute(str(e))
 
     def setLocation(self, root, path):
         self.root = root
@@ -1112,6 +1124,10 @@ class SettingsPage(gui.Page):
         self.context.clear_authentication()
 
 class HomePage(gui.Page):
+    """
+    Signals:
+        login()
+    """
     def __init__(self, *args, **kwargs):
         super(HomePage, self).__init__(*args, **kwargs)
 
@@ -1142,7 +1158,7 @@ class HomePage(gui.Page):
             "margin-left": "33%",
             "margin-right": "33%",
             "width": "34%"
-            })
+        })
         del self.btn_submit.style['margin']
 
         self.btn_submit.onclick.connect(self.onSubmitClicked)
@@ -1158,15 +1174,15 @@ class HomePage(gui.Page):
 
         self.login.emit()
 
-class LoginPage(gui.Page):
+class NotFoundPage(gui.Page):
     """
     Signals:
-        login (username, password)
-        cancel()
-
+        submit()
     """
     def __init__(self, *args, **kwargs):
-        super(LoginPage, self).__init__(*args, **kwargs)
+        super(NotFoundPage, self).__init__(*args, **kwargs)
+
+        self.submit = gui.Signal()
 
         self.vbox = gui.VBox(height="100%", width="100%", parent=self)
         self.vbox.style.update({
@@ -1182,7 +1198,99 @@ class LoginPage(gui.Page):
         })
         del self.panel.style['margin']
 
+        self.label_title = gui.Label("404", parent=self.panel)
+        self.label_title.style.update({
+            "text-align": "center",
+            "font-size": "1.5em"
+        })
+        del self.label_title.style['margin']
+
+        self.btn_submit = gui.Button("return", parent=self.panel)
+        self.btn_submit.style.update({
+            "margin-top": "20px",
+            "margin-left": "33%",
+            "margin-right": "33%",
+            "width": "34%"
+        })
+        del self.btn_submit.style['margin']
+
+        self.btn_submit.onclick.connect(self.onSubmitClicked)
+
+        self.route = ([], {}, {})
+
+    def set_route(self, location, params, cookies):
+        """
+        persist the route that got us to a page that was not found
+        """
+        self.route = (location, params, cookies)
+
+    def get_route(self):
+        return route
+
+    def onSubmitClicked(self, widget):
+
+        self.submit.emit()
+
+class LoginPage(gui.Page):
+    """
+    Signals:
+        login (username, password)
+        cancel()
+
+    """
+
+    MSG_LOGIN_ERROR = "Invalid username or password"
+
+    JS_FOCUS = "document.getElementById('%s').focus();"
+
+    def __init__(self, *args, **kwargs):
+        super(LoginPage, self).__init__(*args, **kwargs)
+
+        # ---------------------------------------------------------------------
+        # define signals emitted by this page
+
+        self.login = gui.Signal(str, str)
+        self.cancel = gui.Signal()
+
+        # ---------------------------------------------------------------------
+        # Create the widgets that make up the form
+        # so that we can resolve reference loops
+
+        self.vbox = gui.VBox(height="100%", width="100%", parent=self)
+        self.panel = gui.Widget(parent=self.vbox)
+        self.focusguard1 = gui.Widget(parent=self.panel, _class="focusguard")
         self.label_email = gui.Label("Email:", parent=self.panel)
+        self.input_email = gui.Input("email", parent=self.panel)
+        self.label_password = gui.Label("Password:", parent=self.panel)
+        self.input_password = gui.Input("password", parent=self.panel)
+        self.label_error = gui.Label(self.MSG_LOGIN_ERROR, parent=self.panel)
+        self.hbox_submit = gui.Widget(parent=self.panel)
+        self.btn_cancel = gui.Button("cancel", parent=self.hbox_submit)
+        self.btn_submit = gui.Button("login", parent=self.hbox_submit)
+        self.focusguard2 = gui.Widget(parent=self.panel, _class="focusguard")
+
+        # ---------------------------------------------------------------------
+        # set attributes for all of the widgets
+
+        self.vbox.style.update({
+            "background": Palette.S_DARK,
+        })
+
+        self.panel.style.update({
+            "width": "100%",
+            "background": Palette.S_MID_LIGHT,
+            "padding-top": "3em",
+            "padding-bottom": "3em",
+        })
+        del self.panel.style['margin']
+
+        # A focus guard which focuses on the LAST element in the
+        # focus group when it receives keyboard focus
+        self.focusguard1.attributes['tabindex'] = "1"
+        js = self.JS_FOCUS % self.btn_submit.identifier
+        self.focusguard1.attributes['onfocus'] = js
+        self.focusguard1.style.update({"width": "0", "height": "0"})
+
         self.label_email.style.update({
             "width": "80%",
             "margin-left": "10%",
@@ -1191,11 +1299,16 @@ class LoginPage(gui.Page):
             "margin-top": "1em",
         })
         del self.label_email.style['margin']
-        self.input_email = gui.Input("email", parent=self.panel)
-        self.input_email.style.update({"width": "80%", "margin-left": "10%", "margin-right": "10%"})
+
+        self.input_email.attributes['tabindex'] = "2"
+        self.input_email.style.update({
+            "width": "80%",
+            "margin-left":
+            "10%",
+            "margin-right": "10%"
+        })
         del self.input_email.style['margin']
 
-        self.label_password = gui.Label("Password:", parent=self.panel)
         self.label_password.style.update({
             "width": "80%",
             "margin-left": "10%",
@@ -1204,35 +1317,66 @@ class LoginPage(gui.Page):
             "margin-top": "1em",
         })
         del self.label_password.style['margin']
-        self.input_password = gui.Input("password", parent=self.panel)
-        self.input_password.style.update({"width": "80%", "margin-left": "10%", "margin-right": "10%"})
+
+        self.input_password.attributes['tabindex'] = "3"
+        self.input_password.style.update({
+            "width": "80%",
+            "margin-left": "10%",
+            "margin-right": "10%"
+        })
         del self.input_password.style['margin']
 
-        self.label_error = gui.Label("Invalid username or password", parent=self.panel)
         self.label_error.style.update({"display": 'none'})
-        self.label_error.style.update({"width": "80%", "margin-left": "10%", "margin-right": "10%"})
+        self.label_error.style.update({
+            "width": "80%",
+            "margin-left": "10%",
+            "margin-right": "10%"
+        })
         del self.label_error.style['margin']
 
-        self.hbox_submit = gui.Widget(parent=self.panel)
-        self.hbox_submit.style.update({"width": "80%", "margin-left": "10%", "margin-right": "10%", "background": "transparent"})
-        self.hbox_submit.style.update({"display": "flex", "justify-content": "flex-end"})
+        self.hbox_submit.style.update({
+            "width": "80%",
+            "margin-left": "10%",
+            "margin-right": "10%",
+            "background":
+            "transparent"
+        })
+        self.hbox_submit.style.update({
+            "display": "flex",
+            "justify-content":
+            "flex-end"
+        })
         del self.hbox_submit.style['margin']
 
-        self.btn_cancel = gui.Button("cancel", parent=self.hbox_submit)
-        self.btn_cancel.style.update({"margin-right": "10%", "margin-top": "20px", "width": "25%"})
+        self.btn_cancel.attributes['tabindex'] = "4"
+        self.btn_cancel.style.update({
+            "margin-right": "10%",
+            "margin-top": "20px",
+            "width": "25%"
+        })
         del self.btn_cancel.style['margin']
 
-        self.btn_submit = gui.Button("login", parent=self.hbox_submit)
-        self.btn_submit.style.update({"margin-top": "20px", "width": "25%"})
+        self.btn_submit.attributes['tabindex'] = "5"
+        self.btn_submit.style.update({
+            "margin-top": "20px",
+            "width": "25%"
+        })
         del self.btn_submit.style['margin']
 
-        self.input_password.onkeyup.connect(self.onKeyUp)
+        # A focus guard which focuses on the FIRST element in the
+        # focus group when it receives keyboard focus
+        self.focusguard2.attributes['tabindex'] = "6"
+        js = self.JS_FOCUS % self.input_email.identifier
+        self.focusguard2.attributes['onfocus'] = js
+        self.focusguard2.style.update({"width": "0", "height": "0"})
+
+        # ---------------------------------------------------------------------
+        # connect signals / slots
+
         self.input_email.onkeyup.connect(self.onKeyUp)
+        self.input_password.onkeyup.connect(self.onKeyUp)
         self.btn_submit.onclick.connect(self.onSubmitClicked)
         self.btn_cancel.onclick.connect(self.onCancelClicked)
-
-        self.login = gui.Signal(str, str)
-        self.cancel = gui.Signal()
 
     def set_route(self, location, params, cookies):
 
@@ -1350,6 +1494,7 @@ class AppPage(gui.Page):
         border_left.style.update({"background": Palette.S_DARK})
 
         self.page_main = None
+        self.page_notfound = None
         self.page_login = None
 
         self.page_home = HomePage()
@@ -1409,16 +1554,16 @@ class AppPage(gui.Page):
                 page.set_visible(True)
                 page.set_route(location[1:], params, cookies)
             else:
-                # TODO: 404 page -> home page
-                self.page_home.set_visible(True)
-                self.page_home.set_route(location, params, cookies)
+                page = self.getNotFoundPage()
+                page.set_visible(True)
+                page.set_route(location, params, cookies)
 
         except InvalidRoute as e:
-            # TODO: 404 page -> home
             for page in self.pages:
                 page.set_visible(False)
-            self.page_home.set_visible(True)
-            self.page_home.set_route([], {}, {})
+            page = self.getNotFoundPage()
+            page.set_visible(True)
+            page.set_route([], {}, {})
 
         return
 
@@ -1430,6 +1575,12 @@ class AppPage(gui.Page):
 
         if self.page_home.is_visible():
             pass
+
+        elif self.page_notfound and self.page_notfound.is_visible():
+            _path, _params, _cookies = self.page_notfound.get_route()
+            path += _path
+            params.update(_params)
+            cookies.update(_cookies)
 
         elif self.page_main is not None and self.page_main.is_visible():
             path.append("m")
@@ -1446,6 +1597,19 @@ class AppPage(gui.Page):
             cookies.update(_cookies)
 
         return path, params, cookies
+
+    def getNotFoundPage(self):
+
+        if self.page_notfound is None:
+            self.page_notfound = NotFoundPage()
+            self.page_notfound.attributes.update({"class": "col-main"})
+            self.page_notfound.style.update({"height": "100%", "display": "flex"})
+            self._onNotFoundSubmit = gui.Slot(self.onNotFoundSubmit)
+            self.page_notfound.submit.connect(self._onNotFoundSubmit)
+            self.hbox_main.insert(1, self.page_notfound)
+            self.pages.append(self.page_notfound)
+
+        return self.page_notfound
 
     def getLoginPage(self):
 
@@ -1490,6 +1654,16 @@ class AppPage(gui.Page):
         except Exception as e:
             logging.exception(e)
             self.getLoginPage().set_error(True)
+
+    def onNotFoundSubmit(self):
+
+        for page in self.pages:
+            page.set_visible(False)
+
+        if self.context.is_authenticated():
+            self.getMainPage().set_visible(True)
+        else:
+            self.page_home.set_visible(True)
 
     def onCancelLogin(self):
 
