@@ -50,23 +50,11 @@ js_body_end = """
         var namespace = '/api/ws'
         var url = document.location.protocol + '//' + document.domain + ':' + location.port + namespace
 
-        function byteLength(str) {
-            // returns the byte length of an utf8 string
-            var s = str.length;
-            for (var i=str.length-1; i>=0; i--) {
-                var code = str.charCodeAt(i);
-                if (code > 0x7f && code <= 0x7ff) s++;
-                else if (code > 0x7ff && code <= 0xffff) s+=2;
-                if (code >= 0xDC00 && code <= 0xDFFF) i--; //trail surrogate
-            }
-            return s;
-        }
-
         function openSocket(){
 
             try{
 
-                socket = io.connect('http://' + document.domain + ':' + location.port + namespace);
+                socket = io.connect(url);
 
                 socket.on('connect', websocketOnOpen);
                 socket.on('reconnect', websocketOnReconnect);
@@ -81,8 +69,6 @@ js_body_end = """
                 console.log(ex)
                 alert('websocket not supported or server unreachable: ' + url);
             }
-
-
         }
 
         function websocketOnOpen(evt) {
@@ -97,6 +83,7 @@ js_body_end = """
         };
 
         function websocketOnReconnect(attemptNumber) {
+
             console.log("successfully reconnected. attempt: " + attemptNumber);
         };
 
@@ -144,12 +131,11 @@ js_body_end = """
                 elem.parentElement.replaceChild(ns.firstChild, elem);
             }
 
-            if (focusedElement == "") {
-                console.log("error: focusedElement is empty. no active element")
-            }
-            var elemToFocus = document.getElementById(focusedElement);
-            if( elemToFocus != null ){
-                document.getElementById(focusedElement).focus();
+            if (focusedElement !== "") {
+                var elemToFocus = document.getElementById(focusedElement);
+                if( elemToFocus != null ){
+                    document.getElementById(focusedElement).focus();
+                }
             }
         }
 
@@ -167,7 +153,6 @@ js_body_end = """
             // web socket connected, but the session does not exist anymore
             window.location.reload()
         }
-
 
         var sendCallbackParam = function (widgetID,functionName,params /*a dictionary of name:value*/){
             var state = {
@@ -271,6 +256,8 @@ def get_method_by_name(root_node, name):
             attr = getattr(root_node, name)
             if isinstance(attr, gui.ClassEventConnector):
                 val = attr
+    if val is None:
+        logging.warning("%s has no method %s" % (root_node, name))
     return val
 
 class InvalidRoute(Exception):
@@ -466,32 +453,36 @@ class AppClient(object):
     def do_gui_update(self):
         """ This method gets called also by Timer, a new thread, and so needs to lock the update
         """
-        with self.update_lock:
 
-            state = AppRoute(*self.root.get_route())
-            location = state.getLocation()
-            if location != self.location:
-                self.setLocation(location)
+        state = AppRoute(*self.root.get_route())
+        location = state.getLocation()
+        if location != self.location:
+            self.setLocation(location)
 
-            changed_widget_dict = {}
-            self.root.repr(changed_widget_dict)
+        changed_widget_dict = {}
+        self.root.repr(changed_widget_dict)
 
-            for widget in changed_widget_dict.keys():
-                html = changed_widget_dict[widget]
-                _id = str(widget.identifier)
-                msg = json.dumps({"id": _id, "repr": html})
-                self.socket_send("gui_update", msg)
+        # TODO: if the change for the widget is only append
+        # (e.g. adding to a list)
+        # then send a different update signal for only the new values
+        # var div = document.getElementById('divID');
+        # div.innerHTML += 'appended items';
+        # add the ability to record the type of child changes
+        for widget in changed_widget_dict.keys():
+            html = changed_widget_dict[widget]
+            _id = str(widget.identifier)
+            msg = json.dumps({"id": _id, "repr": html})
+            self.socket_send("gui_update", msg)
         self._need_update_flag = False
 
-    def set_root_widget(self, widget):
-        self.root = widget
-        self.root.disable_refresh()
-        self.root.attributes['data-parent-widget'] = str(id(self))
-        self.root._parent = self
-        self.root.enable_refresh()
-
-        msg = {"id": self.root.identifier, "repr": self.root.repr()}
-        self.socket_send("gui_update", json.dumps(msg))
+    #def set_root_widget(self, widget):
+    #    self.root = widget
+    #    self.root.disable_refresh()
+    #    self.root.attributes['data-parent-widget'] = str(id(self))
+    #    self.root._parent = self
+    #    self.root.enable_refresh()
+    #    msg = {"id": self.root.identifier, "repr": self.root.repr()}
+    #    self.socket_send("gui_update", json.dumps(msg))
 
     def execute_javascript(self, code):
         """ run arbitrary code """
@@ -547,27 +538,28 @@ class AppClient(object):
             return self.instance_registry[widget_id]
 
     def connect_socket(self, socketId):
-        self.websockets.add(socketId)
-        self._update_time = None
-        # TODO: >?
-        #print("on connect set location: %s" % self.location)
-        #self.execute_javascript("history.pushState(null, '', '%s');" % self.location)
+        with self.update_lock:
+            self.websockets.add(socketId)
+            self._update_time = None
 
     def disconnect_socket(self, socketId):
-        self.websockets.remove(socketId)
-        if len(self.websockets) == 0:
-            self._update_time = time.time()
+        with self.update_lock:
+            self.websockets.remove(socketId)
+            if len(self.websockets) == 0:
+                self._update_time = time.time()
 
     def socket_timeout(self):
-        if len(self.websockets) == 0 and self._update_time is not None:
-            return time.time() - self._update_time
-        return 0
+        with self.update_lock:
+            if len(self.websockets) == 0 and self._update_time is not None:
+                return time.time() - self._update_time
+            return 0
 
     def socket_send(self, event, payload):
-        if len(self.websockets) == 0:
-            logging.warning("no sockets connected to send message")
-        for socketId in self.websockets:
-            self._socket_send(event, socketId, payload)
+        with self.update_lock:
+            if len(self.websockets) == 0:
+                logging.warning("no sockets connected to send message")
+            for socketId in self.websockets:
+                self._socket_send(event, socketId, payload)
 
     def get_route(self):
         return AppRoute()
@@ -600,16 +592,7 @@ class AppService(object):
         self.thread = AppSessionManager(self)
         self.thread.start()
 
-    #def _get_list_from_app_args(self, name):
-    #    try:
-    #        v = self.kwargs[name]
-    #        if isinstance(v, (tuple, list)):
-    #            vals = v
-    #        else:
-    #            vals = [v]
-    #    except KeyError:
-    #        vals = []
-    #    return vals
+        self.client_lock = threading.RLock()
 
     def newAppInstance(self):
 
@@ -629,7 +612,7 @@ class AppService(object):
         sessionId = ""
 
         # checking previously defined session
-        for tok in headers.get('cookie',"").split(";"):
+        for tok in headers.get('cookie', "").split(";"):
             if 'yue_session=' in tok:
                 try:
                     sessionId = tok.replace('yue_session=', '').strip()
@@ -641,58 +624,31 @@ class AppService(object):
 
         return sessionId
 
-    def _get_instance(self, sessionId):
+    def _get_instance(self, sessionId, create=True):
 
-        # with self.update_lock:
-        if sessionId in self.clients:
-            return self.clients[sessionId]
+        with self.client_lock:
+            if sessionId in self.clients:
+                return self.clients[sessionId]
 
-        client = self.newAppInstance()
+            if not create:
+                return None
 
-        client.health_check = self.health_check
+            client = self.newAppInstance()
+            client.identifier = sessionId
 
-        client.update_interval = self.update_interval
+            client.update_interval = self.update_interval
 
-        # refreshing the script every instance() call, because of different net_interface_ip connections
-        # can happens for the same 'k'
-        client.js_body_end += js_body_end
+            client.js_body_end += js_body_end
 
-        # add built in js, extend with user js
-        # client.js_body_end += ('\n' + '\n'.join(self._get_list_from_app_args('js_body_end')))
-        # use the default css, but append a version based on its hash, to stop browser caching
+            client.title = self.title
 
-        # todo default sytle sheet
-        # with open(self._get_static_file('style.css'), 'rb') as f:
-        #    md5 = hashlib.md5(f.read()).hexdigest()
-        #    client.css_head = "<link href='/res/style.css?%s' rel='stylesheet' />\n" % md5
+            if not hasattr(client, 'websockets'):
+                client.websockets = []
 
-        # add built in css, extend with user css
-        #client.css_head += ('\n' + '\n'.join(self._get_list_from_app_args('css_head')))
+            self.clients[sessionId] = client
+            self._diag("session %s: session created" % sessionId)
 
-        # add user supplied extra html,css,js
-        #client.html_head = '\n'.join(self._get_list_from_app_args('html_head'))
-        #client.html_body_start = '\n'.join(self._get_list_from_app_args('html_body_start'))
-        #client.html_body_end = '\n'.join(self._get_list_from_app_args('html_body_end'))
-        #client.js_body_start = '\n'.join(self._get_list_from_app_args('js_body_start'))
-        #client.js_head = '\n'.join(self._get_list_from_app_args('js_head'))
-
-        client.title = self.title
-
-        if not hasattr(client, 'websockets'):
-            client.websockets = []
-
-        if not hasattr(client, '_need_update_flag'):
-            client._need_update_flag = False
-            client._stop_update_flag = False
-            if client.update_interval > 0:
-                client._update_thread = threading.Thread(target=self._idle_loop)
-                client._update_thread.setDaemon(True)
-                client._update_thread.start()
-
-        self.clients[sessionId] = client
-        self._diag("session %s: session created" % sessionId)
-
-        return client
+            return client
 
     def getHtml(self, sessionId, path="/", params=None, headers=None):
 
@@ -713,6 +669,8 @@ class AppService(object):
         f = io.StringIO()
         f.write("<!DOCTYPE html>\n")
         f.write("<html>\n<head>\n")
+        f.write("<link rel=\"shortcut icon\" type=\"image/png\" href=\"/favicon.png\"/>")
+        f.write("<link rel=\"shortcut icon\" type=\"image/x-icon\" href=\"/favicon.ico\"/>")
         f.write("<meta content='text/html;charset=utf-8'")
         f.write(" http-equiv='Content-Type'>\n")
         f.write("<meta content='utf-8' http-equiv='encoding'>")
@@ -793,10 +751,12 @@ class AppService(object):
             return
 
         sessionId = self.websocket_session[socketId]
-        if sessionId not in self.clients:
+
+        client = self._get_instance(sessionId, create=False)
+        if client is None:
             raise Exception("client not found for %s" % sessionId)
 
-        self.clients[sessionId].disconnect_socket(socketId)
+        client.disconnect_socket(socketId)
         del self.websocket_session[socketId]
 
         self._diag("session %s: socket disconnected" % sessionId)
@@ -810,9 +770,9 @@ class AppService(object):
         logging.info("%s [%d clients, %d sockets]" % (
             msg, len(self.clients), len(self.websocket_session)))
 
-    def health_check(self, sessionId):
+    def healthcheck(self, sessionId):
 
-        client = self.clients.get(sessionId, None)
+        client = self._get_instance(sessionId, create=False)
         obj = {
             "global": {
                 "nclients": len(self.clients),
@@ -822,6 +782,7 @@ class AppService(object):
 
         if client:
             obj['session'] = {
+                "identifier": sessionId,
                 "nsockets": len(client.websockets)
             }
         return obj
@@ -881,11 +842,22 @@ class GuiAppResource(WebResource):
         self.service.upload_file(sessionId, filepath, fs)
         return "OK", 200
 
+    @get("/favicon.<ext>")
+    def favicon(self, ext):
+        """ retrieve static files
+        """
+        if ext not in ("png", "ico"):
+            return httpError(403, "Invalid Extension")
+        return send_from_directory(self.static_dir, "favicon." + ext)
+
     @get("/res/<path:path>")
     def static(self, path):
         """ retrieve static files
         """
+        # throws werkzeug.exceptions.NotFound
+        # if the file does not exist
         return send_from_directory(self.static_dir, path)
+
 
     # todo run this example in "threading mode"
     # https://github.com/miguelgrinberg/python-socketio/blob/master/examples/wsgi/app.py
@@ -927,11 +899,24 @@ class GuiAppResource(WebResource):
     @websocket("gui_widget_rpc", "/api/ws")
     def gui_widget_rpc(self, sid, msg):
 
-        obj = json.loads(msg)
-        widgetId = obj['id']
-        method = obj['method']
-        params = obj['params']
+        try:
+            obj = json.loads(msg)
+            widgetId = obj['id']
+            method = obj['method']
+            params = obj['params']
+        except Exception as e:
+            logging.exception("invalid request")
+            return
 
-        sessionId = self.service.websocket_session[sid]
+        try:
 
-        self.service.rpc(sessionId, widgetId, method, params)
+            sessionId = self.service.websocket_session[sid]
+
+            self.service.rpc(sessionId, widgetId, method, params)
+        except Exception as e:
+            # TODO: this is a hack
+            # interpret an unhandled excpetoin as an invalid gui state
+            # force a page reload to fix the problem.
+            # try to enumerate why this could occur.
+            self.emit("gui_reload", sid, "")
+            logging.exception(str(e))

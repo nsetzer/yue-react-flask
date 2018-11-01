@@ -29,6 +29,9 @@ def url_uuid():
     b = base64.b64encode(b, b"-_")
     return b.replace(b"=", b"").decode("utf-8")
 
+# TODO unify Signal, Slot, and decorator decorate_event
+# decorate_event is a different Slot mechanism
+
 class Signal(object):
     def __init__(self, *ptypes, **kwtypes):
         super(Signal, self).__init__()
@@ -133,7 +136,7 @@ class ClassEventConnector(object):
 
 def decorate_event(method):
     """ setup a method as an event """
-    setattr(method, "__is_event", True )
+    setattr(method, "__is_event", True)
     return method
 
 def decorate_event_js(js_code):
@@ -204,6 +207,74 @@ class _EventDictionary(dict, EventSource):
         """
         self.__version__ += 1
         return ()
+
+class _OrderedEventDictionary(object):
+    """An event dictionary which maintains the order of elements
+    and also knows if the only changes made to it are appends
+    This can be used to optimize XML updates
+    """
+    def __init__(self):
+        super(OrderedEventDictionary, self).__init__()
+        self._append_only = True
+        self._order = []
+        # if only appends, then _order[last_index:] returns
+        # only the new elements
+        self._last_index = 0
+
+    def keys(self):
+        return self._order
+
+    def values(self):
+        for key in self._order:
+            yield self[key]
+
+    def items(self):
+        for key in self._order:
+            yield (key, self[key])
+
+    def __setitem__(self, key, value):
+        if key in self:
+            if self[key] == value:
+                return
+            self._append_only = False
+        else:
+            self._order.append(key)
+        ret = super(_OrderedEventDictionary, self).__setitem__(key, value)
+        return ret
+
+    def __delitem__(self, key):
+        if key not in self:
+            return
+        else:
+            self._order.remove(key)
+        self._append_only = False
+        ret = super(_OrderedEventDictionary, self).__delitem__(key)
+        return ret
+
+    def pop(self, key, d=None):
+        if key not in self:
+            return
+        else:
+            self._order.remove(key)
+        self._append_only = False
+        ret = super(_OrderedEventDictionary, self).pop(key, d)
+        return ret
+
+    def clear(self):
+        self._append_only = False
+        self._order = []
+        ret = super(_OrderedEventDictionary, self).clear()
+        return ret
+
+    def update(self, d):
+        self._append_only = False
+        for key, value in d.items():
+            self[key] = value
+
+    def align_version(self):
+        super(_OrderedEventDictionary, self).align_version()
+        self._append_only = True
+        self._last_index = len(self.order)
 
 class Tag(object):
     """
@@ -293,7 +364,7 @@ class Tag(object):
         """
         self.attributes['id'] = new_identifier
 
-    def repr(self, changed_widgets={}):
+    def repr(self, changed_widgets=None):
         """It is used to automatically represent the object to HTML format
         packs all the attributes, children and so on.
 
@@ -301,6 +372,9 @@ class Tag(object):
             changed_widgets (dict): A dictionary containing a collection of tags that have to be updated.
                 The tag that have to be updated is the key, and the value is its textual repr.
         """
+
+        if changed_widgets is None:
+            changed_widgets = {}
 
         _margins = set()
         for key, value in self.style.items():
@@ -408,8 +482,8 @@ class Tag(object):
 
         if key in self.children:
             self._render_children_list.remove(key)
-        self._render_children_list.append(key)
 
+        self._render_children_list.append(key)
         self.children[key] = value
 
     def get_child(self, key):
@@ -953,7 +1027,7 @@ class GridBox(Widget):
     """
     def __init__(self, *args, **kwargs):
         super(GridBox, self).__init__(*args, **kwargs)
-        self.style.update({'display':'grid'})
+        self.style.update({'display': 'grid'})
 
     def define_grid(self, matrix):
         """Populates the Table with a list of tuples of strings.
@@ -1680,12 +1754,12 @@ class ListView(Widget):
         keys = super(ListView, self).append(value, key=key)
         if type(value) in (list, tuple, dict):
             for k in keys:
-                if not self.EVENT_ONCLICK in self.children[k].attributes:
+                if self.EVENT_ONCLICK not in self.children[k].attributes:
                     self.children[k].onclick.connect(self.onselection)
                 self.children[k].attributes['selected'] = False
         else:
             # if an event listener is already set for the added item, it will not generate a selection event
-            if not self.EVENT_ONCLICK in value.attributes:
+            if self.EVENT_ONCLICK not in value.attributes:
                 value.onclick.connect(self.onselection)
             value.attributes['selected'] = False
         return keys

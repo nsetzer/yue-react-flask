@@ -6,6 +6,21 @@ import logging
 settings:
     button to delete  current playlist
     test page layout when no playlist exists
+
+    slider for audio volume 10% - 100%
+
+File "/opt/yueserver/yueserver/framework/backend.py", line 571, in socket_send
+    for socketId in self.websockets:
+RuntimeError: Set changed size during iteration
+
+detect http/https
+socket = io.connect('http://' + document.domain + ':' + location.port + namespace);
+
+res/
+    log if file exsits, use send file, not send from directory
+
+
+
 """
 from ...framework import gui
 from ...framework.backend import InvalidRoute
@@ -19,11 +34,11 @@ NAVBAR_HEIGHT = "2em"
 
 class Palette(object):
 
-    P_LIGHT     = "#1455A3"  # "#0D5199"
-    P_MID_LIGHT = "#124E92"  # "#104479"
-    P_MID       = "#0D3981"  # "#0C3662"
-    P_MID_DARK  = "#052460"  # "#052445"
-    P_DARK      = "#031539"  # "#031528"
+    P_LIGHT     = "#3475B3"  # "#1455A3"  # "#0D5199"
+    P_MID_LIGHT = "#325EA2"  # "#124E92"  # "#104479"
+    P_MID       = "#2D4991"  # "#0D3981"  # "#0C3662"
+    P_MID_DARK  = "#152480"  # "#052460"  # "#052445"
+    P_DARK      = "#131579"  # "#031539"  # "#031528"
 
     S_LIGHT     = "#aaaaaa"
     S_MID_LIGHT = "#888888"
@@ -197,7 +212,7 @@ class FileInfoWidget(gui.Widget):
 
         self.file_info = file_info
 
-        self.hbox = gui.Widget(height="100%", width="calc(100% - 20px)", parent=self)
+        self.hbox = gui.Widget(height="100%", width="100%", parent=self)
         self.hbox.style.update({
             'display': 'flex',
             'justify-content': 'space-around',
@@ -309,19 +324,29 @@ class ScrollBox(gui.Widget):
             "right": "0",
             "bottom": "0",
             "left": "0",
-            "overflow-y": "auto",
+            "overflow-y": "scroll",
             "overflow-x": "hidden",
         })
 
-        self.content_scroll.attributes.update({"onscroll": "elementScrolled(this)"})
+        self.content_scroll.attributes.update({
+            "onscroll": "elementScrolled(this, '%s')" % self.identifier})
 
         if child is not None:
             self.content_scroll.append(child)
         self.content.append(self.content_scroll)
         super(ScrollBox, self).append(self.content)
 
+        self.onscrollend = gui.ClassEventConnector(self, 'onscrollend',
+            lambda *args, **kwargs: tuple())
+        self.onscrollend.connect(self.onScrollEnd)
+
+        self.scrollend = gui.Signal()
+
     def append(self, widget):
         self.content_scroll.append(widget)
+
+    def onScrollEnd(self, widget):
+        self.scrollend.emit()
 
 class ProgressBar(gui.Widget):
     """docstring for ProgressBar"""
@@ -356,6 +381,7 @@ class NavBar2(gui.Widget):
         self.append(self.hbox_nav)
         self.append(self.container)
         self.scrollbox = ScrollBox(None)
+        self.scrollbox.scrollend.connect(gui.Slot(self.onScrollEnd))
         self.container.append(self.scrollbox)
 
         self.nav_children = []
@@ -429,6 +455,11 @@ class NavBar2(gui.Widget):
             if child.is_visible():
                 return i
         return None
+
+    def onScrollEnd(self):
+
+        name, child = self.current()
+        child.requestMoreData()
 
 class AudioDisplay(gui.Widget):
 
@@ -733,7 +764,27 @@ class PopPreview(gui.Widget):
 
 # ---------------------
 
-class NowPlayingPage(gui.Page):
+class ContentPage(gui.Page):
+    """docstring for ContentPage"""
+    def __init__(self, *args, **kwargs):
+        super(ContentPage, self).__init__(*args, **kwargs)
+
+    # TODO: define a way to register a content generator
+    #    which yields widgets, to be appended to a
+    #    list, which is also registered
+
+    def requestMoreData(self):
+        """
+        A method which is called when the user has requested more
+        dynamic data to be loaded.
+
+        Instead of returning all query results at once, display the
+        first page and wait for this signal before appending more data
+        to the current view
+        """
+        print("%s: request more data" % self.__class__.__name__)
+
+class NowPlayingPage(ContentPage):
     """docstring for NowPlayingPage"""
     def __init__(self, context, *args, **kwargs):
         super(NowPlayingPage, self).__init__(*args, **kwargs)
@@ -782,7 +833,7 @@ class NowPlayingPage(gui.Page):
             item.openMenu.connect(self._onOpenMenu)
             self.lst.append(item)
 
-class LibraryPage(gui.Page):
+class LibraryPage(ContentPage):
     """docstring for NowPlayingPage"""
     def __init__(self, context, *args, **kwargs):
         super(LibraryPage, self).__init__(*args, **kwargs)
@@ -833,9 +884,15 @@ class LibraryPage(gui.Page):
             self.lst.append(item)
 
         elif index == 1:  # show artists
-            item = TitleTextWidget('/res/app/return.svg', "..")
-            item.open.connect(gui.Slot(lambda: self.onOpenElement(0)))
-            self.lst.append(item)
+            wdt = IconBarWidget()
+            wdt.addAction("/res/app/return.svg", lambda: self.onOpenElement(0))
+            wdt.style.update({
+                "top": "0",
+                "position": "sticky",
+                "z-index": "1",
+                "border-bottom": "1px solid",
+            })
+            self.lst.append(wdt)
 
             for i, artist in enumerate(self.domain_info['artists']):
                 item = TitleTextWidget('/res/app/microphone.svg', artist['name'])
@@ -845,15 +902,20 @@ class LibraryPage(gui.Page):
 
         elif index == 2:  # show artist albums
 
-            item = TitleTextWidget('/res/app/return.svg', "..")
-            item.open.connect(gui.Slot(lambda: self.onOpenElement(1)))
-            self.lst.append(item)
+            wdt = IconBarWidget()
+            wdt.style.update({
+                "top": "0",
+                "position": "sticky",
+                "z-index": "1",
+                "border-bottom": "1px solid",
+            })
+            self.lst.append(wdt)
 
             artist = self.domain_info['artists'][self.page_artist_index]['name']
             query = "artist==%s" % string_quote(artist)
-            item = TitleTextWidget('/res/app/return.svg', "Random Play All")
-            item.open.connect(gui.Slot(lambda: self.onRandomPlay(query)))
-            self.lst.append(item)
+
+            wdt.addAction("/res/app/return.svg", lambda: self.onOpenElement(1))
+            wdt.addAction("/res/app/shuffle.svg", lambda: self.onRandomPlay(query))
 
             albums = self.domain_info['artists'][self.page_artist_index]['albums']
             self.page_albums = list(sorted(albums.items()))
@@ -864,9 +926,15 @@ class LibraryPage(gui.Page):
                 self.lst.append(item)
 
         elif index == 3:  # Genres
-            item = TitleTextWidget('/res/app/return.svg', "..")
-            item.open.connect(gui.Slot(lambda: self.onOpenElement(0)))
-            self.lst.append(item)
+            wdt = IconBarWidget()
+            wdt.style.update({
+                "top": "0",
+                "position": "sticky",
+                "z-index": "1",
+                "border-bottom": "1px solid",
+            })
+            self.lst.append(wdt)
+            wdt.addAction("/res/app/return.svg", lambda: self.onOpenElement(0))
 
             for i, genre in enumerate(self.domain_info['genres']):
                 item = TitleTextWidget('/res/app/genre.svg', genre['name'])
@@ -874,9 +942,17 @@ class LibraryPage(gui.Page):
                 self.lst.append(item)
 
         elif index == 4:  # Songs
-            item = TitleTextWidget('/res/app/return.svg', "..")
-            item.open.connect(gui.Slot(lambda: self.onOpenElement(2)))
-            self.lst.append(item)
+
+            wdt = IconBarWidget()
+            wdt.style.update({
+                "top": "0",
+                "position": "sticky",
+                "z-index": "1",
+                "border-bottom": "1px solid",
+            })
+            self.lst.append(wdt)
+            wdt.addAction("/res/app/return.svg", lambda: self.onOpenElement(2))
+            wdt.addAction("/res/app/shuffle.svg", lambda: self.onRandomPlay(self.page_query))
 
             item = TitleTextWidget('/res/app/return.svg', "Random Play All")
             item.open.connect(gui.Slot(lambda: self.onRandomPlay(self.page_query)))
@@ -888,13 +964,16 @@ class LibraryPage(gui.Page):
                 self.lst.append(item)
 
         elif index == 5:
-            item = TitleTextWidget('/res/file.png', "..")
-            item.open.connect(gui.Slot(lambda: self.onOpenElement(3)))
-            self.lst.append(item)
-
-            item = TitleTextWidget('/res/file.png', "Random Play All")
-            item.open.connect(gui.Slot(lambda: self.onRandomPlay(self.page_query)))
-            self.lst.append(item)
+            wdt = IconBarWidget()
+            wdt.style.update({
+                "top": "0",
+                "position": "sticky",
+                "z-index": "1",
+                "border-bottom": "1px solid",
+            })
+            self.lst.append(wdt)
+            wdt.addAction("/res/app/return.svg", lambda: self.onOpenElement(3))
+            wdt.addAction("/res/app/shuffle.svg", lambda: self.onRandomPlay(self.page_query))
 
             for song in self.context.search(self.page_query):
                 item = SongWidget(song, index=index)
@@ -944,7 +1023,7 @@ class LibraryPage(gui.Page):
 
         pass
 
-class SearchLibraryPage(gui.Page):
+class SearchLibraryPage(ContentPage):
     """docstring for SearchLibrary"""
     def __init__(self, context, *args, **kwargs):
         super(SearchLibraryPage, self).__init__(*args, **kwargs)
@@ -962,7 +1041,7 @@ class SearchLibraryPage(gui.Page):
         super(SearchLibraryPage, self).onOpen()
         # TODO: get health check for admins
 
-class FileSystemPage(gui.Page):
+class FileSystemPage(ContentPage):
     """docstring for FileSystemPage"""
 
     def __init__(self, context, *args, **kwargs):
@@ -1035,6 +1114,12 @@ class FileSystemPage(gui.Page):
 
             wdt = IconBarWidget()
             wdt.addAction("/res/app/return.svg", self.onOpenParent)
+            wdt.style.update({
+                "top": "0",
+                "position": "sticky",
+                "z-index": "1",
+                "border-bottom": "1px solid",
+            })
 
             if self.path:
                 urlbase = "%s/%s/" % (self.root, self.path)
@@ -1110,18 +1195,39 @@ class FileSystemPage(gui.Page):
 
         print("failed", filepath)
 
-class SettingsPage(gui.Page):
+class SettingsPage(ContentPage):
     def __init__(self, context, *args, **kwargs):
         super(SettingsPage, self).__init__(*args, **kwargs)
 
         self.context = context
 
         self.vbox = gui.VBox(height="100%", width="100%", parent=self)
+
         self.btn_logout = gui.Button("logout", parent=self.vbox)
         self.btn_logout.onclick.connect(self.onLogout)
+        self.btn_logout.style['margin'] = "1em"
+
+        self.lst = gui.WidgetList(parent=self)
 
     def onLogout(self, widget):
         self.context.clear_authentication()
+
+    def onOpen(self):
+        status = self.context.healthcheck()
+        flat = {}
+        for key1, obj in status.items():
+            if isinstance(obj, dict):
+                for key2, val in obj.items():
+                    flat["%s_%s" % (key1, key2)] = str(val)
+            else:
+                flat[key1] = str(val)
+
+        self.lst.empty()
+        for key, val in sorted(flat.items()):
+            wdt = gui.Widget(_type="li", parent=self.lst)
+            box = gui.HBox(parent=wdt)
+            lbl1 = gui.Label(key, parent=box)
+            lbl2 = gui.Label(val, parent=box)
 
 class HomePage(gui.Page):
     """
@@ -1145,6 +1251,15 @@ class HomePage(gui.Page):
         })
         del self.panel.style['margin']
 
+        self.icon = gui.Image("/res/icon2.png", parent=self.panel)
+        self.icon.style.update({
+            "display": "block",
+            "margin-left": "auto",
+            "margin-right": "auto",
+            "margin-bottom": "1em",
+        })
+        del self.icon.style['margin']
+
         self.label_title = gui.Label("Welcome", parent=self.panel)
         self.label_title.style.update({
             "text-align": "center",
@@ -1154,7 +1269,7 @@ class HomePage(gui.Page):
 
         self.btn_submit = gui.Button("login", parent=self.panel)
         self.btn_submit.style.update({
-            "margin-top": "20px",
+            "margin-top": "0",
             "margin-left": "33%",
             "margin-right": "33%",
             "width": "34%"

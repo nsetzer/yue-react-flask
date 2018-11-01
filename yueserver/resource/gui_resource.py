@@ -22,7 +22,7 @@ from yueserver.dao.library import Song, LibraryException
 from yueserver.dao.util import string_quote
 
 class DemoAppClient(AppClient):
-    def __init__(self, userService, audioService, fileService):
+    def __init__(self, guiService, userService, audioService, fileService):
         res_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'res')
 
         css_head = """<style>
@@ -89,7 +89,7 @@ class DemoAppClient(AppClient):
                 position: relative;
                 width: 100%;
                 height: 100%;
-                background: rgb(200,200,200);
+                background: ${P_LIGHT};
                 border: solid;
                 margin-top: 5%;
             }
@@ -102,7 +102,7 @@ class DemoAppClient(AppClient):
                 left: 10%;
                 top: 25%;
                 height: 50%;
-                background: orange;
+                background: ${P_MID_DARK};
             }
 
             .progressbar-progress {
@@ -110,7 +110,7 @@ class DemoAppClient(AppClient):
                 position: absolute;
                 width: 64%;
                 height: 100%;
-                background: rgba(255,0,0,.7);
+                background: ${P_MID_LIGHT}E0;
             }
 
             .progressbar-tick25 {
@@ -152,21 +152,21 @@ class DemoAppClient(AppClient):
             }
 
             .nav-button {
-                background: P_MID;
+                background: ${P_MID};
             }
 
             .nav-button-primary {
-                background: P_LIGHT;
+                background: ${P_LIGHT};
             }
 
             /* select order matters here */
 
             .nav-button:hover {
-                background: P_MID_LIGHT;
+                background: ${P_MID_LIGHT};
             }
 
             .nav-button:active {
-                background: P_MID_DARK;
+                background: ${P_MID_DARK};
             }
 
             .nav-button-icon {
@@ -179,7 +179,7 @@ class DemoAppClient(AppClient):
             if name == "WHITE" or name == "BLACK" or \
                name.startswith("P_") or \
                name.startswith("S_"):
-                css_head = css_head.replace(name, color)
+                css_head = css_head.replace("${%s}" % name, color)
 
         html_body_start = """
 
@@ -291,10 +291,12 @@ class DemoAppClient(AppClient):
                 console.log(audio.currentTime, audio.duration);
             }
 
-            function elementScrolled(elem) {
+            function elementScrolled(elem, wid) {
+                // elem: the scrolling element
+                // wid: widget id to send callback to
                 if(elem.offsetHeight + elem.scrollTop == elem.scrollHeight)
                 {
-                    console.log("End of Scroll Region");
+                    sendCallback(wid, 'onscrollend');
                 }
             }
 
@@ -306,11 +308,15 @@ class DemoAppClient(AppClient):
             js_body_end=js_body_end,
             static_file_path='./res/')
 
+        self.guiService = guiService
+
         self.state = YueAppState(userService, audioService, fileService)
 
         self.state.login.connect(gui.Slot(self.onLogin))
         self.state.logout.connect(gui.Slot(self.onLogout))
         self.state.execute.connect(gui.Slot(self.onExecute))
+
+        self.state.healthcheck = self.healthcheck
 
         self.root = AppPage(self.state)
 
@@ -355,6 +361,9 @@ class DemoAppClient(AppClient):
         self.state.fileService.saveFile(self.state.auth_user,
             root, path, stream)
 
+    def healthcheck(self):
+        return self.guiService.healthcheck(self.identifier)
+
 def boolean(s):
     return s.lower() == "true"
 
@@ -366,7 +375,7 @@ class AudioGuiResource(GuiAppResource):
         self.transcodeService = transcodeService
 
         self.cfg = cfg
-        factory = lambda: DemoAppClient(userService,
+        factory = lambda: DemoAppClient(self.service, userService,
             audioService, fileService)
         super(AudioGuiResource, self).__init__(factory, "Yue", self.cfg.static_dir)
 
