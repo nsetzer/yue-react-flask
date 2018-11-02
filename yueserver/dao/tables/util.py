@@ -8,6 +8,7 @@ from sqlalchemy.types import Integer, String, TypeDecorator
 from sqlalchemy.dialects.postgresql import ARRAY
 
 from sqlalchemy.dialects.sqlite.pysqlite import SQLiteDialect_pysqlite
+from sqlalchemy.dialects.postgresql import JSONB
 
 import uuid
 
@@ -48,3 +49,31 @@ class StringArrayType(TypeDecorator):
 
     def copy(self):
         return StringArrayType(self.impl.length)
+
+class JsonType(TypeDecorator):
+    """
+    String Array for SQite and PostreSQL
+        http://docs.sqlalchemy.org/en/latest/core/custom_types.html#sqlalchemy.types.TypeDecorator
+    """
+
+    impl = String
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == 'postgresql':
+            return JSONB
+        else:
+            return String
+
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            value = json.dumps(value)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            value = json.loads(value)
+        return value
+
+    def copy(self):
+        return StringArrayType(self.impl.length)
+

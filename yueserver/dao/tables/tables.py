@@ -8,7 +8,8 @@ from sqlalchemy.schema import Table
 
 from .user import DomainTable, RoleTable, UserTable, \
                   GrantedDomainTable, GrantedRoleTable, \
-                  FeatureTable, RoleFeatureTable
+                  FeatureTable, RoleFeatureTable, UserSessionTable, \
+                  UserPreferencesTable
 from .song import SongDataTable, SongUserDataTable, \
                   SongQueueTable, SongHistoryTable, SongPlaylistTable
 from .storage import FileSystemStorageTableV1, FileSystemStorageTableV2, \
@@ -58,7 +59,7 @@ class DatabaseTablesV1(BaseDatabaseTables):
     version = 1
 
     def __init__(self, metadata):
-        super(DatabaseTables, self).__init__()
+        super(DatabaseTablesV1, self).__init__()
 
         self.ApplicationSchemaTable = ApplicationSchemaTable(metadata)
 
@@ -69,6 +70,8 @@ class DatabaseTablesV1(BaseDatabaseTables):
         self.GrantedRoleTable = GrantedRoleTable(metadata)
         self.FeatureTable = FeatureTable(metadata)
         self.RoleFeatureTable = RoleFeatureTable(metadata)
+        self.UserSessionTable = UserSessionTable(metadata)
+        self.UserPreferencesTable = UserPreferencesTable(metadata)
 
         self.SongDataTable = SongDataTable(metadata)
         self.SongUserDataTable = SongUserDataTable(metadata)

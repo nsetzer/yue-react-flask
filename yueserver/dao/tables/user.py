@@ -12,7 +12,7 @@ can be added or removed per environment without requireing schema changes
 """
 from sqlalchemy.schema import Table, Column, ForeignKey
 from sqlalchemy.types import Integer, String
-from .util import generate_uuid
+from .util import generate_uuid, JsonType
 
 def DomainTable(metadata):
     """
@@ -97,4 +97,31 @@ def UserTable(metadata):
                nullable=False)
     )
 
+def UserSessionTable(metadata):
+    """
+    returns a table describing basic information of a user
+
+    email:
+    user_id: foregin key for a user
+    session_id: unique key for the users session
+    """
+    return Table('user_session', metadata,
+        Column('user_id', ForeignKey("user.id"), nullable=False),
+        Column('session_id', String, default=generate_uuid),
+        Column('creation_time', Integer, default=lambda: int(time.time())),
+    )
+
+def UserPreferencesTable(metadata):
+    """
+    returns a table describing basic information of a user
+
+    email:
+    user_id: foregin key for a user
+    session_id: unique key for the users session
+    """
+    return Table('user_preference', metadata,
+        Column('user_id', ForeignKey("user.id"), nullable=False),
+        Column('key', String, nullable=False),
+        Column('json', JsonType, nullable=False),
+    )
 
