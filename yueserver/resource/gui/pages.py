@@ -13,9 +13,6 @@ File "/opt/yueserver/yueserver/framework/backend.py", line 571, in socket_send
     for socketId in self.websockets:
 RuntimeError: Set changed size during iteration
 
-detect http/https
-socket = io.connect('http://' + document.domain + ':' + location.port + namespace);
-
 res/
     log if file exsits, use send file, not send from directory
 
@@ -460,6 +457,25 @@ class NavBar2(gui.Widget):
 
         name, child = self.current()
         child.requestMoreData()
+
+class VolumeSlider(gui.Input):
+
+    def __init__(self, default_value='', min=0, max=100, step=1, **kwargs):
+        """
+        Args:
+            default_value (str):
+            min (int):
+            max (int):
+            step (int):
+            kwargs: See Widget.__init__()
+        """
+        super(VolumeSlider, self).__init__('range', default_value, **kwargs)
+        self.attributes['min'] = str(min)
+        self.attributes['max'] = str(max)
+        self.attributes['step'] = str(step)
+        self.attributes[gui.Widget.EVENT_ONCHANGE] = \
+            "console.log(this.value);"
+
 
 class AudioDisplay(gui.Widget):
 
@@ -1209,6 +1225,13 @@ class SettingsPage(ContentPage):
 
         self.lst = gui.WidgetList(parent=self)
 
+        wdt = gui.Widget(_type="li", parent=self.lst)
+        box = gui.HBox(parent=wdt)
+        lbl1 = gui.Label("Volume", parent=box)
+        lbl2 = VolumeSlider(parent=box)
+
+        self.lst_info = gui.WidgetList(parent=self)
+
     def onLogout(self, widget):
         self.context.clear_authentication()
 
@@ -1222,9 +1245,9 @@ class SettingsPage(ContentPage):
             else:
                 flat[key1] = str(val)
 
-        self.lst.empty()
+        self.lst_info.empty()
         for key, val in sorted(flat.items()):
-            wdt = gui.Widget(_type="li", parent=self.lst)
+            wdt = gui.Widget(_type="li", parent=self.lst_info)
             box = gui.HBox(parent=wdt)
             lbl1 = gui.Label(key, parent=box)
             lbl2 = gui.Label(val, parent=box)
