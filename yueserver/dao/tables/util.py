@@ -60,9 +60,9 @@ class JsonType(TypeDecorator):
 
     def load_dialect_impl(self, dialect):
         if dialect.name == 'postgresql':
-            return JSONB
+            return dialect.type_descriptor(JSONB())
         else:
-            return String
+            return dialect.type_descriptor(String())
 
     def process_bind_param(self, value, dialect):
         if value is not None:

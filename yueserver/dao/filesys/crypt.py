@@ -79,6 +79,7 @@ def cryptkey(password, text=None, nonce=None, salt=None, workfactor=12):
     b64nonce = base64.b64encode(cipher.nonce)
     b64text = base64.b64encode(cipher.encrypt(text))
 
+    # TODO: add version id
     hmac.update(salt)
     hmac.update(b64nonce)
     hmac.update(b64text)
@@ -102,6 +103,8 @@ def decryptkey(password, key):
     # verify the mac before decrypting the text
     # this ensures the correct password is given
     # and that the key has not been tampered with
+
+    # TODO: add version id
     hmac.update(salt)
     hmac.update(b64nonce)
     hmac.update(b64text)

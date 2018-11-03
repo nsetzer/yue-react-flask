@@ -88,6 +88,18 @@ def db_connect_impl(tables_class, connection_string, readonly):
 
     return db
 
+def db_reconnect(db, tables_class):
+    db2 = lambda: None
+    db2.engine = db.engine
+    db2.session = db.session
+    db2.metadata = MetaData()
+    db2.tables = tables_class(db2.metadata)
+    db2.connection_string = db.connection_string
+    db2.kind = db.kind
+    db2.conn = db.conn
+
+    return db2
+
 def db_populate(db, dbtables, user_name, domain_name, json_objects):
     """
     username: username to associate with the new songs

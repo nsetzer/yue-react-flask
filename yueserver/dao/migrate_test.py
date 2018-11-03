@@ -11,7 +11,8 @@ from .db import db_connect_impl, db_add_column, db_get_columns, db_iter_rows
 
 from sqlalchemy.schema import Table, Column, ForeignKey
 from sqlalchemy.types import Integer, String
-from sqlalchemy import and_, or_, not_, select, column, update, insert, delete
+from sqlalchemy import MetaData, and_, or_, not_, select, column, \
+    update, insert, delete
 
 def DomainTableV1(metadata):
     return Table('user_test', metadata,
@@ -113,11 +114,7 @@ class MigrateTestCase(unittest.TestCase):
 
     def test_migrate_add_column(self):
 
-        path = "test.db"
-        if os.path.exists(path):
-            os.remove(path)
-
-        dburl = 'sqlite:///' + path
+        dburl = 'sqlite:///'
         db = db_connect_impl(DatabaseTablesV1, dburl, False)
 
         db.create_all()
@@ -141,7 +138,10 @@ class MigrateTestCase(unittest.TestCase):
 
         # ------------------------------------------------------------------------
         # migrate by adding a new column
-        db = db_connect_impl(DatabaseTablesV2, dburl, False)
+
+        db.metadata = MetaData()
+        db.tables = DatabaseTablesV2(db.metadata)
+        # db = db_connect_impl(DatabaseTablesV2, dburl, False)
         migratev2(db)
 
         keys = set(db_get_columns(db, db.tables.DomainTable))
@@ -159,7 +159,10 @@ class MigrateTestCase(unittest.TestCase):
 
         # ------------------------------------------------------------------------
         # migrate again by creating a new table
-        db = db_connect_impl(DatabaseTablesV3, dburl, False)
+
+        db.metadata = MetaData()
+        db.tables = DatabaseTablesV3(db.metadata)
+        # db = db_connect_impl(DatabaseTablesV3, dburl, False)
         migratev3(db)
 
         keys = set(db_get_columns(db, db.tables.DomainTable))
@@ -169,9 +172,6 @@ class MigrateTestCase(unittest.TestCase):
         self.assertTrue("version" in keys)
         nitems = len(list(db_iter_rows(db, db.tables.DomainTable)))
         self.assertEqual(nitems, 1000)
-
-        if os.path.exists(path):
-            os.remove(path)
 
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(MigrateTestCase)

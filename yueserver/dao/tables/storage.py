@@ -37,6 +37,15 @@ def FileSystemStorageTableV1(metadata):
 def FileSystemStorageTableV2(metadata):
     """ returns a table describing items in persistent storage
 
+    This new table enables the following features:
+        - private static file URLs
+        - optional public URLs which can be changed
+        - ability to associate a keyframe for previews
+        - file versioning
+        - data at rest encryption
+        - masking of the file name at rest
+            - the file name is in the database
+            - while the file on disk uses a random name
     user_id: the owner of the file
     file_path: the user specified relative path for the file
     storage_path: a fully qualified path (starting with file://, s3://, etc)
@@ -60,8 +69,7 @@ def FileSystemStorageTableV2(metadata):
         # text
         Column('file_path', String, nullable=False),
         Column('storage_path', String, nullable=False),
-        Column('preview_large', String, nullable=False),
-        Column('preview_small', String, nullable=False),
+        Column('preview_path', String),
         # number
         Column('permission', Integer, default=0o644),
         Column('version', Integer, default=0),
