@@ -1,0 +1,13 @@
+<svg enable-background="new 0 0 64 64" version="1.1" viewBox="0 0 64 80" x="0px" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:graph="http://ns.adobe.com/Graphs/1.0/" xmlns:i="http://ns.adobe.com/AdobeIllustrator/10.0/" xmlns:x="http://ns.adobe.com/Extensibility/1.0/" xmlns:xlink="http://www.w3.org/1999/xlink" y="0px">
+    <metadata>
+        <sfw xmlns="http://ns.adobe.com/SaveForWeb/1.0/">
+            <slices/>
+            <sliceSourceBounds bottomLeftOrigin="true" height="16384" width="16389" x="-8165" y="-8160"/>
+        </sfw>
+    </metadata>
+    <g>
+        <path d="M56,14c-1.104,0-2,0.896-2,2v13.526L33.177,14.382c-0.609-0.443-1.415-0.505-2.084-0.165C30.422,14.559,30,15.248,30,16   v13.527L9.176,14.382c-0.608-0.443-1.414-0.505-2.084-0.165C6.422,14.559,6,15.248,6,16v32c0,0.752,0.422,1.44,1.092,1.782   C7.379,49.928,7.69,50,8,50c0.415,0,0.828-0.129,1.176-0.383L30,34.473V48c0,0.752,0.422,1.44,1.092,1.782   C31.379,49.928,31.69,50,32,50c0.415,0,0.828-0.129,1.177-0.383L54,34.473V48c0,1.104,0.896,2,2,2s2-0.896,2-2V16   C58,14.896,57.104,14,56,14z"/>
+    </g>
+    <!--<text fill="#000000" font-family="'Helvetica Neue', Helvetica, Arial-Unicode, Arial, Sans-serif" font-size="5px" font-weight="bold" x="0" y="79">Created by Ralf Schmitzer</text>
+    <text fill="#000000" font-family="'Helvetica Neue', Helvetica, Arial-Unicode, Arial, Sans-serif" font-size="5px" font-weight="bold" x="0" y="84">from the Noun Project</text>-->
+</svg>
