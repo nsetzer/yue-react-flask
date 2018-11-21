@@ -11,3 +11,9 @@ sudo systemctl restart nginx
 
 
 sudo systemctl restart yueserver
+
+
+sudo -u yueapp psql   # connect to postgres db
+\c yueapp             # connect to yeuapp db
+\dt                   # list all tables
+select * from 'user'; # list users

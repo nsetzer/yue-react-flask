@@ -2,6 +2,13 @@
 
 """
 todo: create a stat cache to avoid making os calls for the same file
+
+add resolve-remote / resolve-local / resolve-fetch commands to fix conflicts
+    resolve-fetch to download a specific file as `${filename}.remote`
+    provide the oportunity to view the remote file, overwrite local
+    and then resolve-local
+    possibly sub commands e.g. `sync resolve <action> <action-args>`
+
 """
 import os, sys
 import argparse

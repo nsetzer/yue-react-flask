@@ -111,8 +111,10 @@ class StorageTestCase(unittest.TestCase):
 
         names = ["file1.txt", "folder"]
 
-        self.storageDao.insert(user_id, "file:///file1.txt", 1234, 1234567890)
-        self.storageDao.insert(user_id, "file:///folder/file2.txt", 1234, 1234567890)
+        path = "file:///file1.txt"
+        self.storageDao.insert(user_id, path, path, 1234, 1234567890)
+        path = "file:///folder/file2.txt"
+        self.storageDao.insert(user_id, path, path, 1234, 1234567890)
 
         count = 0
         for rec in self.storageDao.listdir(user_id, "file:///"):
@@ -128,9 +130,12 @@ class StorageTestCase(unittest.TestCase):
 
         user_id = self.USER['id']
 
-        self.storageDao.insert(user_id, "file:///file1.txt", 1234, 0)
-        self.storageDao.insert(user_id, "file:///file2.txt", 1234, 0)
-        self.storageDao.insert(user_id, "file:///folder/file3.txt", 1234, 0)
+        path = "file:///file1.txt"
+        self.storageDao.insert(user_id, path, path, 1234, 0)
+        path = "file:///file2.txt"
+        self.storageDao.insert(user_id, path, path, 1234, 0)
+        path = "file:///folder/file3.txt"
+        self.storageDao.insert(user_id, path, path, 1234, 0)
 
         names = ["file1.txt", "file2.txt", "folder/file3.txt"]
         count = 0
@@ -154,9 +159,12 @@ class StorageTestCase(unittest.TestCase):
 
         user_id = self.USER['id']
 
-        self.storageDao.insert(user_id, "file:///file1.txt", 1234, 0)
-        self.storageDao.insert(user_id, "file:///file2.txt", 1234, 0)
-        self.storageDao.insert(user_id, "file:///folder/file3.txt", 1234, 0)
+        path = "file:///file1.txt"
+        self.storageDao.insert(user_id, path, path, 1234, 0)
+        path = "file:///file2.txt"
+        self.storageDao.insert(user_id, path, path, 1234, 0)
+        path = "file:///folder/file3.txt"
+        self.storageDao.insert(user_id, path, path, 1234, 0)
 
         # get the files in pages of size 1, sorted by primary key
         names = ["file1.txt", "file2.txt", "folder/file3.txt"]
@@ -179,7 +187,7 @@ class StorageTestCase(unittest.TestCase):
         with self.assertRaises(StorageNotFoundException):
             self.storageDao.file_info(user_id, path)
 
-        self.storageDao.insert(user_id, path, 1234, 1234567890)
+        self.storageDao.insert(user_id, path, path, 1234, 1234567890)
 
         record = self.storageDao.file_info(user_id, path)
         self.assertEqual(name, record.name)
@@ -199,11 +207,11 @@ class StorageTestCase(unittest.TestCase):
         with self.assertRaises(StorageNotFoundException):
             self.storageDao.file_info(user_id, path)
 
-        self.storageDao.insert(user_id, path, 1234, 1234567890)
+        self.storageDao.insert(user_id, path, path, 1234, 1234567890)
 
         record1 = self.storageDao.file_info(user_id, path)
 
-        self.storageDao.update(user_id, path, 1000, 1000000000)
+        self.storageDao.update(user_id, path, path, 1000, 1000000000)
 
         record2 = self.storageDao.file_info(user_id, path)
 
@@ -218,10 +226,10 @@ class StorageTestCase(unittest.TestCase):
         with self.assertRaises(StorageNotFoundException):
             self.storageDao.file_info(user_id, path)
 
-        self.storageDao.upsert(user_id, path, 1234, 1234567890)
+        self.storageDao.upsert(user_id, path, path, 1234, 1234567890)
         record1 = self.storageDao.file_info(user_id, path)
 
-        self.storageDao.upsert(user_id, path, 2048, 1234567899)
+        self.storageDao.upsert(user_id, path, path, 2048, 1234567899)
         record2 = self.storageDao.file_info(user_id, path)
 
         self.assertEqual(record1.size, 1234)
@@ -245,7 +253,7 @@ class StorageTestCase(unittest.TestCase):
             self.storageDao.file_info(user_id, path1)
 
         # create and check that it exists
-        self.storageDao.insert(user_id, path1, 1234, 1234567890)
+        self.storageDao.insert(user_id, path1, path1, 1234, 1234567890)
         record1 = self.storageDao.file_info(user_id, path1)
 
         # rename and check the old name does not exist
@@ -268,9 +276,9 @@ class StorageTestCase(unittest.TestCase):
             self.storageDao.file_info(user_id, path1)
 
         # create and check that it exists
-        self.storageDao.insert(user_id, path1, 1234, 1234567890)
+        self.storageDao.insert(user_id, path1, path1, 1234, 1234567890)
         with self.assertRaises(StorageException):
-            self.storageDao.insert(user_id, path1, 1234, 1234567890)
+            self.storageDao.insert(user_id, path1, path1, 1234, 1234567890)
 
     def test_002b_rename_exists(self):
         """
@@ -285,8 +293,8 @@ class StorageTestCase(unittest.TestCase):
             self.storageDao.file_info(user_id, path1)
 
         # create and check that it exists
-        self.storageDao.insert(user_id, path1, 1234, 1234567890)
-        self.storageDao.insert(user_id, path2, 1234, 1234567890)
+        self.storageDao.insert(user_id, path1, path1, 1234, 1234567890)
+        self.storageDao.insert(user_id, path2, path2, 1234, 1234567890)
 
         # rename and check the old name does not exist
         with self.assertRaises(StorageException):
@@ -303,8 +311,10 @@ class StorageTestCase(unittest.TestCase):
     def test_004a_file_info(self):
 
         user_id = self.USER['id']
-        self.storageDao.insert(user_id, "file:///file1.txt", 1234, 0)
-        self.storageDao.insert(user_id, "file:///folder/file2.txt", 1234, 0)
+        path = "file:///file1.txt"
+        self.storageDao.insert(user_id, path, path, 1234, 0)
+        path = "file:///folder/file2.txt"
+        self.storageDao.insert(user_id, path, path, 1234, 0)
 
         with self.assertRaises(StorageException):
             self.storageDao.file_info(user_id, "file://")
@@ -372,17 +382,20 @@ class StorageTestCase(unittest.TestCase):
         self.assertEqual(0, count)
         self.assertEqual(0, usage)
 
-        self.storageDao.insert(user_id, "file:///file1.txt", 1024, 0)
+        path = "file:///file1.txt"
+        self.storageDao.insert(user_id, path, path, 1024, 0)
         count, usage = self.storageDao.userDiskUsage(user_id)
         self.assertEqual(1, count)
         self.assertEqual(1024, usage)
 
-        self.storageDao.insert(user_id, "file:///file2.txt", 512, 0)
+        path = "file:///file2.txt"
+        self.storageDao.insert(user_id, path, path, 512, 0)
         count, usage = self.storageDao.userDiskUsage(user_id)
         self.assertEqual(2, count)
         self.assertEqual(1536, usage)
 
-        self.storageDao.remove(user_id, "file:///file1.txt")
+        path = "file:///file1.txt"
+        self.storageDao.remove(user_id, path)
         count, usage = self.storageDao.userDiskUsage(user_id)
         self.assertEqual(1, count)
         self.assertEqual(512, usage)

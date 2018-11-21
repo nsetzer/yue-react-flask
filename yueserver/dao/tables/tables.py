@@ -34,7 +34,7 @@ class DatabaseTablesV0(BaseDatabaseTables):
     version = 0
 
     def __init__(self, metadata):
-        super(DatabaseTables, self).__init__()
+        super(DatabaseTablesV0, self).__init__()
 
         self.DomainTable = DomainTable(metadata)
         self.RoleTable = RoleTable(metadata)
@@ -84,7 +84,7 @@ class DatabaseTablesV1(BaseDatabaseTables):
         self.FileSystemPermissionTable = FileSystemPermissionTable(metadata)
         self.FileSystemUserDataTable = FileSystemUserDataTable(metadata)
 
-DatabaseTables = DatabaseTablesV0
+DatabaseTables = DatabaseTablesV1
 
 #all_tables= sorted([x for x in locals() if Base], key= x.version)
 # offset = current_version - all_tables[0].version

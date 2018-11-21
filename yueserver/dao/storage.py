@@ -91,7 +91,7 @@ class StorageDao(object):
 
         return self.insert(user_id, path, size, mtime)
 
-    def insert(self, user_id, path, size, mtime, permission=None, version=None, commit=True):
+    def insert(self, user_id, file_path, storage_path, size, mtime, preview_path=None, permission=None, version=None, commit=True):
 
         # TODO: required?
         #if path.endswith(delimiter):
@@ -100,7 +100,9 @@ class StorageDao(object):
         record = {
             'user_id': user_id,
             'version': version if version is not None else 1,
-            'path': path,
+            'file_path': file_path,
+            'storage_path': storage_path,
+            'preview_path': preview_path,
             'mtime': mtime,
             'size': size,
         }
@@ -123,9 +125,12 @@ class StorageDao(object):
         if ex is not None:
             raise ex
 
-    def update(self, user_id, path, size=None, mtime=None, permission=None, version=None, commit=True):
+    def update(self, user_id, file_path, storage_path=None, size=None, mtime=None, preview_path=None, permission=None, version=None, commit=True):
 
         record = {}
+
+        if storage_path is not None:
+            record['storage_path'] = storage_path
 
         if version is None:
             record['version'] = self.dbtables.FileSystemStorageTable.c.version + 1
@@ -145,7 +150,7 @@ class StorageDao(object):
             .values(record) \
             .where(
                 and_(self.dbtables.FileSystemStorageTable.c.user_id == user_id,
-                     self.dbtables.FileSystemStorageTable.c.path == path,
+                     self.dbtables.FileSystemStorageTable.c.file_path == file_path,
                      ))
 
         self.db.session.execute(query)
@@ -153,9 +158,9 @@ class StorageDao(object):
         if commit:
             self.db.session.commit()
 
-    def upsert(self, user_id, path, size=None, mtime=None, permission=0, version=None, commit=True):
+    def upsert(self, user_id, file_path, storage_path, size=None, mtime=None, preview_path=None, permission=0, version=None, commit=True):
 
-        where = self.dbtables.FileSystemStorageTable.c.path == path
+        where = self.dbtables.FileSystemStorageTable.c.file_path == file_path
         query = select(['*']) \
             .select_from(self.dbtables.FileSystemStorageTable) \
             .where(where)
@@ -163,21 +168,21 @@ class StorageDao(object):
         item = result.fetchone()
 
         if item is None:
-            self.insert(user_id, path, size, mtime, permission, version, commit)
+            self.insert(user_id, file_path, storage_path, size, mtime, preview_path, permission, version, commit)
         else:
-            self.update(user_id, path, size, mtime, permission, version, commit)
+            self.update(user_id, file_path, storage_path, size, mtime, preview_path, permission, version, commit)
 
     def rename(self, user_id, src_path, dst_path, commit=True):
 
         record = {
-            'path': dst_path,
+            'file_path': dst_path,
         }
 
         query = update(self.dbtables.FileSystemStorageTable) \
             .values(record) \
             .where(
                 and_(self.dbtables.FileSystemStorageTable.c.user_id == user_id,
-                     self.dbtables.FileSystemStorageTable.c.path == src_path,
+                     self.dbtables.FileSystemStorageTable.c.file_path == src_path,
                      ))
 
         ex = None
@@ -197,7 +202,7 @@ class StorageDao(object):
         query = delete(self.dbtables.FileSystemStorageTable) \
             .where(
                 and_(self.dbtables.FileSystemStorageTable.c.user_id == user_id,
-                     self.dbtables.FileSystemStorageTable.c.path == path,
+                     self.dbtables.FileSystemStorageTable.c.file_path == path,
                      ))
 
         self.db.session.execute(query)
@@ -206,7 +211,7 @@ class StorageDao(object):
             self.db.session.commit()
 
     def _item2record(self, item, path_prefix, delimiter):
-        item_path = item['path'].replace(path_prefix, "")
+        item_path = item['storage_path'].replace(path_prefix, "")
         if delimiter in item_path:
             name, _ = item_path.split(delimiter, 1)
             return FileRecord(name, True, 0, 0)
@@ -226,7 +231,7 @@ class StorageDao(object):
         if not path_prefix.endswith(delimiter):
             raise StorageException("invalid directory path. must end with `%s`" % delimiter)
 
-        where = FsTab.c.path.startswith(bindparam('path', path_prefix))
+        where = FsTab.c.file_path.startswith(bindparam('file_path', path_prefix))
         where = and_(FsTab.c.user_id == user_id, where)
 
         query = select(['*']) \
@@ -237,13 +242,13 @@ class StorageDao(object):
             query = query.limit(limit)
 
         if offset is not None:
-            query = query.offset(offset).order_by(asc(FsTab.c.path))
+            query = query.offset(offset).order_by(asc(FsTab.c.file_path))
 
         result = self.db.session.execute(query).fetchall()
 
         for item in result:
             obj = {
-                "path": item.path[len(path_prefix):],
+                "path": item.file_path[len(path_prefix):],
                 "version": item.version,
                 "size": item.size,
                 "mtime": item.mtime,
@@ -260,7 +265,7 @@ class StorageDao(object):
         if not path_prefix.endswith(delimiter):
             raise StorageException("invalid directory path. must end with `%s`" % delimiter)
 
-        where = FsTab.c.path.startswith(bindparam('path', path_prefix))
+        where = FsTab.c.file_path.startswith(bindparam('path', path_prefix))
         where = and_(FsTab.c.user_id == user_id, where)
 
         query = select(['*']) \
@@ -271,7 +276,7 @@ class StorageDao(object):
             query = query.limit(limit)
 
         if offset is not None:
-            query = query.offset(offset).order_by(asc(FsTab.c.path))
+            query = query.offset(offset).order_by(asc(FsTab.c.file_path))
 
         dirs = set()
         count = 0
@@ -301,11 +306,11 @@ class StorageDao(object):
             raise StorageException("empty path component")
 
         if path_prefix.endswith(delimiter):
-            where = FsTab.c.path.startswith(bindparam('path', path_prefix))
+            where = FsTab.c.file_path.startswith(bindparam('file_path', path_prefix))
             where = and_(FsTab.c.user_id == user_id, where)
             exact = False
         else:
-            where = FsTab.c.path == path_prefix
+            where = FsTab.c.file_path == path_prefix
             exact = True
 
         query = select(['*']) \
