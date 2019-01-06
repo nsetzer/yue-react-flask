@@ -139,8 +139,8 @@ class JsonUploader(object):
             "scale": 4,
             "metadata": {
                 "ARTIST": song.get('artist', "Unknown Artist"),
-                "ALBUM": song.get('title', "Unknown Title"),
-                "TITLE": song.get('album', "Unknown Album"),
+                "ALBUM": song.get('album', "Unknown Title"),
+                "TITLE": song.get('title', "Unknown Album"),
             }
         }
 
