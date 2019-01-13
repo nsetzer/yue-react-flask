@@ -18,6 +18,10 @@ from ..dao.user import UserDao
 import logging
 import time
 
+# TODO: validate fs_name and path since those values come from a user
+#       use the same validation as storage path,
+#       but path should return a relative path instead
+
 def trim_path(p, root):
     # todo, this seems problematic, and I think I have several
     # implementations throughout the source code. unify the implementations
@@ -60,20 +64,32 @@ class FileSysService(object):
     def getRootPath(self, user, fs_name):
         return self.storageDao.rootPath(user['id'], user['role_id'], fs_name)
 
-    def getPath(self, user, fs_name, path):
+    def getNewStoragePath(self, user, fs_name, path):
         """
         returns an absolute file path given the name of a
         file system (which determines the base directory) and a path.
         the path is guaranteed to be a sub directory of the named fs.
         """
 
-        return self.storageDao.absolutePath(user['id'], user['role_id'], \
+        return self.storageDao.absolutePath(user['id'], user['role_id'],
             fs_name, path)
+
+    def getFilePath(self, user, fs_name, path):
+        return self.storageDao.absoluteFilePath(user['id'], user['role_id'],
+            path)
+
+    def getStoragePath(self, user, fs_name, path):
+        abs_path = self.getFilePath(user, fs_name, path)
+        record = self.storageDao.file_info(user['id'], abs_path)
+        return record.storage_path
 
     def listSingleFile(self, user, fs_name, path):
 
-        os_root = self.getRootPath(user, fs_name)
-        abs_path = self.getPath(user, fs_name, path)
+        if self.fs.isabs(path):
+            raise FileSysServiceException(path)
+
+        os_root = '/'
+        abs_path = self.getFilePath(user, fs_name, path)
 
         if abs_path == os_root:
             parent = os_root
@@ -120,18 +136,24 @@ class FileSysService(object):
         use to load filters to remove elements from the response
         """
 
-        os_root = self.getRootPath(user, fs_name)
-        abs_path = self.getPath(user, fs_name, path)
+        if self.fs.isabs(path):
+            raise FileSysServiceException(path)
+
+        os_root = '/'
+        abs_path = self.getFilePath(user, fs_name, path)
 
         if abs_path == os_root:
             parent = os_root
         else:
             parent, _ = self.fs.split(abs_path)
 
+        if not abs_path.endswith("/"):
+            abs_path += "/"
+
         files = []
         dirs = []
 
-        records = self.storageDao.listdir(user['id'], abs_path + "/")
+        records = self.storageDao.listdir(user['id'], abs_path)
 
         for record in records:
             #pathname = self.fs.join(abs_path, record.name)
@@ -170,17 +192,32 @@ class FileSysService(object):
 
     def listIndex(self, user, fs_name, path, limit=None, offset=None):
 
-        os_root = self.getRootPath(user, fs_name)
-        abs_path = self.getPath(user, fs_name, path)
+        """
+        list all files, including files in a subdirectory, owned by a user
+        """
 
-        files = list(self.storageDao.listall(user['id'], abs_path + "/",
+        if self.fs.isabs(path):
+            raise FileSysServiceException(path)
+
+        if path:
+            abs_path = "/%s/" % path
+        else:
+            abs_path = "/"
+
+        files = list(self.storageDao.listall(user['id'], abs_path,
             limit=limit, offset=offset))
 
         return files
 
     def saveFile(self, user, fs_name, path, stream, mtime=None, version=0, permission=0):
 
-        storage_path = self.getPath(user, fs_name, path)
+        if self.fs.isabs(path):
+            raise FileSysServiceException(path)
+
+        os_root = '/'
+
+        storage_path = self.getNewStoragePath(user, fs_name, path)
+        file_path = self.getFilePath(user, fs_name, path)
 
         dirpath, _ = self.fs.split(storage_path)
         self.fs.makedirs(dirpath)
@@ -192,7 +229,7 @@ class FileSysService(object):
         # will likely reveal this file is in a conflict state
         if version > 0:
             try:
-                info = self.storageDao.file_info(user['id'], storage_path)
+                info = self.storageDao.file_info(user['id'], file_path)
                 if info.version >= version:
                     raise FileSysServiceException("invalid version", 409)
             except StorageNotFoundException as e:
@@ -212,20 +249,23 @@ class FileSysService(object):
 
         # todo: in the future, the logical file path, and the actual
         # storage path will be different for security reasons.
-        self.storageDao.upsert(user['id'], path, storage_path,
+        self.storageDao.upsert(user['id'], file_path, storage_path,
             size, mtime, permission, version)
 
     def remove(self, user, fs_name, path):
 
-        # storage_path = self.getPath(user, fs_name, path)
+        if self.fs.isabs(path):
+            raise FileSysServiceException("unexpected absolute path: %s" % path)
 
-        raise Exception("not implemented")
+        file_path = self.getFilePath(user, fs_name, path)
+
         # remote by storage path, by selecting by user_id and path
         # then remove by user_id and path
         try:
             # TODO: either both succeed or neither...
-            self.storageDao.remove(user['id'], path)
-            result = self.fs.remove(path)
+            record = self.storageDao.file_info(user['id'], file_path)
+            self.storageDao.remove(user['id'], file_path)
+            result = self.fs.remove(record.storage_path)
             return result
         except FileNotFoundError as e:
             raise e

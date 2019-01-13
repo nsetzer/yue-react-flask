@@ -7,10 +7,40 @@ import posixpath
 from collections import namedtuple
 from threading import Thread, Condition, Lock, current_thread
 
-# TODO: opportunity for a data class
-FileRecord = namedtuple('FileRecord',
-    ['name', 'isDir', 'size', 'mtime', 'version', 'permission'])
-FileRecord.__new__.__defaults__ = ("", False, 0, 0, 0, 0)
+class FileRecord(object):
+
+    # TODO: this class is being used in an overloaded
+    # context and should be fixed.
+    # yueserver.dao.filesys is a specific, filesystem wrapper
+    # yueserver.dao is more general and shouldnt be using this class
+    def __init__(self, name="", isDir=False, size=0, mtime=0, version=0, permission=0):
+        super(FileRecord, self).__init__()
+        self.name = name
+        self.isDir = isDir
+        self.size = size
+        self.mtime = mtime
+        self.version = version
+        self.permission = permission
+        self.encrypted = 0
+        self.storage_path = ""
+
+    @staticmethod
+    def fromDict(**kwargs):
+        record = FileRecord()
+        record.name = kwargs.get("name", 0)
+        record.isDir = kwargs.get("isDir", 0)
+        record.size = kwargs.get("size", 0)
+        record.mtime = kwargs.get("mtime", 0)
+        record.version = kwargs.get("version", 0)
+        record.permission = kwargs.get("permission", 0)
+        record.encrypted = kwargs.get("encrypted", 0)
+        record.storage_path = kwargs.get("storage_path", 0)
+        record.file_path = kwargs.get("file_path", 0)
+        return record
+
+    def __repr__(self):
+        return "FileRecord<%s@%s>" % (self.name, self.storage_path)
+
 
 def sh_escape(args):
     """

@@ -122,16 +122,14 @@ class FilesResource(WebResource):
         # TODO: move this into the service layer
 
         fs = self.filesys_service.fs
-        # application config should define a number of valid roots
-        # that can be listed.
-        abs_path = self.filesys_service.getPath(g.current_user, root, path)
+
+        abs_path = self.filesys_service.getFilePath(g.current_user, root, path)
 
         isFile = False
         try:
             info = self.filesys_service.storageDao.file_info(g.current_user['id'], abs_path)
             isFile = not info.isDir
         except StorageNotFoundException as e:
-
             pass
 
         if isFile:
@@ -140,8 +138,9 @@ class FilesResource(WebResource):
                 result = self.filesys_service.listSingleFile(g.current_user, root, path)
                 return jsonify(result=result)
             else:
-                _, name = self.filesys_service.fs.split(abs_path)
-                go = files_generator(self.filesys_service.fs, abs_path)
+                storage_path = info.storage_path
+                _, name = self.filesys_service.fs.split(storage_path)
+                go = files_generator(self.filesys_service.fs, storage_path)
                 headers = {
                     "X-YUE-VERSION": info.version,
                     "X-YUE-PERMISSION": info.permission,

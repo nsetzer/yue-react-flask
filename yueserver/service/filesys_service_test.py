@@ -6,6 +6,7 @@ import time
 
 from ..dao.db import main_test
 from ..dao.library import Song
+from ..dao.storage import StorageNotFoundException
 from ..app import TestApp
 
 from io import BytesIO
@@ -31,7 +32,7 @@ class FileServiceTestCase(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
 
-    def test_001a_saveFiles(self):
+    def test_001a_saveFile(self):
 
         root = "default"
         path = "test/test.txt"
@@ -45,13 +46,16 @@ class FileServiceTestCase(unittest.TestCase):
         self.assertEqual(result['files'][0]['version'], 1)
         self.assertEqual(result['path'], path)
 
-    def test_001b_saveFiles(self):
+        result = self.service.listDirectory(self.app.USER, root, "test")
+        print(result)
+
+    def test_001b_updateFile(self):
 
         # same test as 001a, but increment the version (upsert->update)
         root = "default"
         path = "test/test.txt"
 
-        self.service.saveFile(self.app.USER, root, path, BytesIO(b"abc123"))
+        self.service.saveFile(self.app.USER, root, path, BytesIO(b"def456"))
 
         result = self.service.listSingleFile(self.app.USER, root, path)
 
@@ -60,6 +64,34 @@ class FileServiceTestCase(unittest.TestCase):
         self.assertEqual(result['files'][0]['version'], 2)
         self.assertEqual(result['path'], path)
 
+        result = self.service.listDirectory(self.app.USER, root, "test")
+        print(result)
+
+    def test_001c_index(self):
+
+        # same test as 001a, but increment the version (upsert->update)
+        root = "default"
+        path = "test/test.txt"
+
+        print("----index")
+        result =self.service.listIndex(self.app.USER, root, "", limit=10, offset=0)
+        print(result)
+        result =self.service.listIndex(self.app.USER, root, "test", limit=10, offset=0)
+        print(result)
+
+    def test_001d_deleteFiles(self):
+
+        # same test as 001a, but increment the version (upsert->update)
+        root = "default"
+        path = "test/test.txt"
+
+        result = self.service.remove(self.app.USER, root, path)
+
+        with self.assertRaises(StorageNotFoundException):
+            self.service.listSingleFile(self.app.USER, root, path)
+
+        with self.assertRaises(StorageNotFoundException):
+            self.service.listDirectory(self.app.USER, root, "test")
 
 if __name__ == '__main__':
     main_test(sys.argv, globals())

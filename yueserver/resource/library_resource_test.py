@@ -18,9 +18,11 @@ class LibraryResourceTestCase(unittest.TestCase):
     def setUpClass(cls):
 
         cls.app = TestApp(cls.__name__)
-
+        cls.storageDao = cls.app.filesys_service.storageDao
+        cls.userDao = cls.app.filesys_service.userDao
         cls.app.create_test_songs()
-
+        cls.USERNAME = "admin"
+        cls.USER = cls.userDao.findUserByEmail(cls.USERNAME)
     @classmethod
     def tearDownClass(cls):
         cls.app.tearDown()
@@ -223,6 +225,13 @@ class LibraryResourceTestCase(unittest.TestCase):
             "path": "test/r160.mp3",
         }
 
+        # first add the song to the file system database
+        path1 = "test/r160.mp3"
+        file_path1 = "/%s" % path1
+        storage_path1 = os.path.join(os.getcwd(), path1)
+        self.storageDao.insert(self.USER['id'],
+            file_path1, storage_path1, 0, 0)
+
         username = "admin"
         with self.app.login(username, username) as app:
             url = '/api/library/%s/audio' % song_id
@@ -301,6 +310,13 @@ class LibraryResourceTestCase(unittest.TestCase):
             "root": "default",
             "path": "test/blank.png",
         }
+
+        # first add the art to the file system database
+        path1 = "test/blank.png"
+        file_path1 = "/%s" % path1
+        storage_path1 = os.path.join(os.getcwd(), path1)
+        self.storageDao.insert(self.USER['id'],
+            file_path1, storage_path1, 0, 0)
 
         username = "admin"
         with self.app.login(username, username) as app:

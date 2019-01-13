@@ -19,12 +19,20 @@ class _MigrateV1Context(object):
 
         pwd = os.getcwd()
 
+        # strip the filesystem root from the file_path
+        # the storage path contains the actual location of the resource
+        # while the file_path is the logical resource location the user
+        # will interact with.
+
+        # this use the first matching prefix assuming there are no
+        # overlaping prefixes in the environment
         file_path = row['path']
         for fs_name, fs_path in self.env_yaml['filesystems'].items():
             fs_root = format_storage_path(fs_path, row['user_id'], pwd)
             if file_path.startswith(fs_root):
                 file_path = file_path[len(fs_root):].lstrip("/").lstrip("\\")
                 break
+        # TODO: else error unrecognized base path?
 
         record = {
             'user_id': row['user_id'],

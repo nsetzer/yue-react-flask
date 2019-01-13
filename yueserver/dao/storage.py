@@ -194,6 +194,14 @@ class StorageDao(object):
 
         tab = self.dbtables.FileSystemStorageTable
 
+        query = tab.select().where(
+            and_(tab.c.user_id == user_id,
+                 tab.c.file_path == dst_path))
+        result = self.db.session.execute(query)
+        if result.fetchone() is not None:
+            raise StorageException("cannot rename file. name already exists")
+
+
         query = update(tab) \
             .values(record) \
             .where(
@@ -227,14 +235,27 @@ class StorageDao(object):
         if commit:
             self.db.session.commit()
 
+    def _item2dir(self, name):
+        return FileRecord(name, True, 0, 0)
+
+    def _item2file(self, name, item):
+        record = FileRecord(name, False, item['size'], item['mtime'],
+            item['version'], item['permission'])
+        record.storage_path = item['storage_path']
+        record.file_path = item['file_path']
+        record.encrypted = item['encrypted']
+        record.public = item['public']
+        return record
+
     def _item2record(self, item, path_prefix, delimiter):
-        item_path = item['storage_path'].replace(path_prefix, "")
+        item_path = item['file_path']
+        if item_path.startswith(path_prefix):
+            item_path = item_path[len(path_prefix):]
         if delimiter in item_path:
             name, _ = item_path.split(delimiter, 1)
-            return FileRecord(name, True, 0, 0)
+            return self._item2dir(name)
         else:
-            return FileRecord(item_path, False, item['size'], item['mtime'],
-                item['version'], item['permission'])
+            return self._item2file(item_path, item)
 
     def list(self):
         FsTab = self.dbtables.FileSystemStorageTable
@@ -282,7 +303,7 @@ class StorageDao(object):
         if not path_prefix.endswith(delimiter):
             raise StorageException("invalid directory path. must end with `%s`" % delimiter)
 
-        where = FsTab.c.file_path.startswith(bindparam('path', path_prefix))
+        where = FsTab.c.file_path.startswith(bindparam('file_path', path_prefix))
         where = and_(FsTab.c.user_id == user_id, where)
 
         query = select(['*']) \
@@ -297,7 +318,8 @@ class StorageDao(object):
 
         dirs = set()
         count = 0
-        for item in self.db.session.execute(query).fetchall():
+        result = self.db.session.execute(query)
+        for item in result.fetchall():
             rec = self._item2record(item, path_prefix, delimiter)
 
             if rec.isDir:
@@ -342,11 +364,10 @@ class StorageDao(object):
         elif exact:
             # an exact match for a file record
             name = path_prefix.split(delimiter)[-1]
-            return FileRecord(name, False, item['size'],
-                item['mtime'], item['version'], item['permission'])
+            return self._item2file(name, item)
         else:
             name = base_path.rstrip(delimiter).split(delimiter)[-1]
-            return FileRecord(name, True, 0, 0, 0)
+            return self._item2dir(name)
 
     def rootPath(self, user_id, role_id, root_name):
 
@@ -376,6 +397,31 @@ class StorageDao(object):
             user_id=user_id, pwd=os.getcwd())
 
         return root_path
+
+    def absoluteFilePath(self, user_id, role_id, rel_path):
+        """ compose an absolute path to a file's file_path
+        """
+
+        if self.fs.isabs(rel_path):
+            raise StorageException("path must not be absolute")
+
+        rel_path = rel_path.replace("\\", "/")
+
+        scheme, parts = self.fs.parts(rel_path)
+        if any([p in (".", "..") for p in parts]):
+            # path must be relative to root_path...
+            raise StorageException("relative paths not allowed")
+
+        if any([(not p.strip()) for p in parts]):
+            raise StorageException("empty path component")
+
+        # note: always checking the parts here since the path
+        # could exist for the user (as part of sync) even though
+        # server side the path will only ever be found in the database
+        if any([p in _windows_device_files for p in parts]):
+            raise StorageException("invalid windows path name")
+
+        return self.fs.join("/", rel_path)
 
     def absolutePath(self, user_id, role_id, root_name, rel_path):
         """ compose an absolute file path given a role and named directory base

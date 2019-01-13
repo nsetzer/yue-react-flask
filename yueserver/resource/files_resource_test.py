@@ -43,11 +43,17 @@ class FilesResourceTestCase(unittest.TestCase):
 
     def test_list_default(self):
 
-        path1 = os.path.join(os.getcwd(), "yueserver/app.py")
-        self.storageDao.insert(self.USER['id'], path1, path1, 0, 0)
+        path1 = "yueserver/app.py"
+        file_path1 = "/%s" % path1
+        storage_path1 = os.path.join(os.getcwd(), path1)
+        self.storageDao.insert(self.USER['id'],
+            file_path1, storage_path1, 0, 0)
 
-        path2 = os.path.join(os.getcwd(), "yueserver/framework/config.py")
-        self.storageDao.insert(self.USER['id'], path2, path2, 0, 0)
+        path2 = "yueserver/framework/config.py"
+        file_path2 = "/%s" % path2
+        storage_path2 = os.path.join(os.getcwd(), path2)
+        self.storageDao.insert(self.USER['id'],
+            file_path2, storage_path2, 0, 0)
 
         username = "admin"
         with self.app.login(username, username) as app:
@@ -57,7 +63,7 @@ class FilesResourceTestCase(unittest.TestCase):
             self.assertEqual(data['name'], "default")
             self.assertEqual(data['parent'], "")
             self.assertEqual(data['path'], "")
-            self.assertTrue("yueserver" in data['directories'])
+            self.assertTrue("yueserver" in data['directories'], data)
 
             data = app.get_json('/api/fs/default/path/yueserver')
             self.assertEqual(data['name'], "default")
@@ -90,8 +96,10 @@ class FilesResourceTestCase(unittest.TestCase):
 
     def test_download_file(self):
 
-        path1 = os.path.join(os.getcwd(), "yueserver/framework/config.py")
-        self.storageDao.insert(self.USER['id'], path1, path1, 0, 0)
+        path = "yueserver/framework/config.py"
+        file_path = "/" + path
+        storage_path = os.path.join(os.getcwd(), path)
+        self.storageDao.insert(self.USER['id'], file_path, storage_path, 0, 0)
 
         username = "admin"
         with self.app.login(username, username) as app:
@@ -133,8 +141,12 @@ class FilesResourceTestCase(unittest.TestCase):
         create an in-memory file, then use the file system end
         point to delete it
         """
+
+        file_path = "/test"
+        storage_path = "mem://test/test"
         fs = FileSystem()
-        fs.open("mem://test/test", "wb").close()
+        fs.open(storage_path, "wb").close()
+        self.storageDao.insert(self.USER['id'], file_path, storage_path, 0, 0)
 
         username = "admin"
         with self.app.login(username, username) as app:
@@ -156,7 +168,6 @@ class FilesResourceTestCase(unittest.TestCase):
                 path = 'test/%s' % name
                 paths.append(path)
                 url = '/api/fs/mem/path/' + path
-                print(url)
                 response = app.post(url, data=dat0)
                 self.assertEqual(response.status_code, 200, response.status_code)
 
@@ -192,8 +203,6 @@ class FilesResourceTestCase(unittest.TestCase):
                 path = response.json()['result'][0]['path']
 
                 self.assertEqual(path, name, path)
-
-
 
 if __name__ == '__main__':
     main_test(sys.argv, globals())
