@@ -67,8 +67,15 @@ def FileSystemStorageTableV2(metadata):
         Column('id', String, primary_key=True, default=generate_uuid),
         Column('user_id', ForeignKey("user.id"), nullable=False),
         # text
+        # 2019-01-06: the theory is that file_path and storage_path
+        # should always be unique.
+        #   file_path: since the path has a unique prefix per user
+        #     e.g.  $default/sample.txt => "s3://bucket/userid/sample.txt"
+        #   storage_path: since this must be unqiue per file
         Column('file_path', String, nullable=False),
-        Column('storage_path', String, nullable=False),
+        Column('storage_path', String, unique=True, nullable=False),
+        # however preview path may not be unique
+        # e.g. one album with 10 songs using the same jpeg.
         Column('preview_path', String),
         # number
         Column('permission', Integer, default=0o644),

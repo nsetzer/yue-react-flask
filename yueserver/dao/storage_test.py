@@ -277,6 +277,7 @@ class StorageTestCase(unittest.TestCase):
 
         # create and check that it exists
         self.storageDao.insert(user_id, path1, path1, 1234, 1234567890)
+
         with self.assertRaises(StorageException):
             self.storageDao.insert(user_id, path1, path1, 1234, 1234567890)
 

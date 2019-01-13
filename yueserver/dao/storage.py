@@ -11,7 +11,7 @@ from .search import SearchGrammar, ParseError, Rule
 from .filesys.filesys import FileSystem
 from .filesys.util import FileRecord
 from .exception import BackendException
-
+from .util import format_storage_path
 import os
 import sys
 import datetime, time
@@ -115,10 +115,11 @@ class StorageDao(object):
 
         ex = None
         try:
-            self.db.session.execute(query)
+            result = self.db.session.execute(query)
 
             if commit:
                 self.db.session.commit()
+
         except IntegrityError as e:
             ex = StorageException("%s" % e.args[0])
 
@@ -129,11 +130,17 @@ class StorageDao(object):
 
         record = {}
 
+        tab = self.dbtables.FileSystemStorageTable
+
+        assert isinstance(file_path, str)
+
+        # optionally update the storage path
         if storage_path is not None:
+            assert isinstance(storage_path, str)
             record['storage_path'] = storage_path
 
         if version is None:
-            record['version'] = self.dbtables.FileSystemStorageTable.c.version + 1
+            record['version'] = tab.c.version + 1
         else:
             record['version'] = version
 
@@ -146,11 +153,11 @@ class StorageDao(object):
         if permission is not None:
             record['permission'] = permission
 
-        query = update(self.dbtables.FileSystemStorageTable) \
+        query = update(tab) \
             .values(record) \
             .where(
-                and_(self.dbtables.FileSystemStorageTable.c.user_id == user_id,
-                     self.dbtables.FileSystemStorageTable.c.file_path == file_path,
+                and_(tab.c.user_id == user_id,
+                     tab.c.file_path == file_path,
                      ))
 
         self.db.session.execute(query)
@@ -160,9 +167,10 @@ class StorageDao(object):
 
     def upsert(self, user_id, file_path, storage_path, size=None, mtime=None, preview_path=None, permission=0, version=None, commit=True):
 
-        where = self.dbtables.FileSystemStorageTable.c.file_path == file_path
+        tab = self.dbtables.FileSystemStorageTable
+        where = tab.c.file_path == file_path
         query = select(['*']) \
-            .select_from(self.dbtables.FileSystemStorageTable) \
+            .select_from(tab) \
             .where(where)
         result = self.db.session.execute(query)
         item = result.fetchone()
@@ -173,24 +181,33 @@ class StorageDao(object):
             self.update(user_id, file_path, storage_path, size, mtime, preview_path, permission, version, commit)
 
     def rename(self, user_id, src_path, dst_path, commit=True):
+        """
+        rename a file from src to dst. this does not change the location
+        of the file in the underlying filesystem, only in the database.
 
+        This only updates the file path, the storage path stored in the
+        database is not modified.
+        """
         record = {
             'file_path': dst_path,
         }
 
-        query = update(self.dbtables.FileSystemStorageTable) \
+        tab = self.dbtables.FileSystemStorageTable
+
+        query = update(tab) \
             .values(record) \
             .where(
-                and_(self.dbtables.FileSystemStorageTable.c.user_id == user_id,
-                     self.dbtables.FileSystemStorageTable.c.file_path == src_path,
+                and_(tab.c.user_id == user_id,
+                     tab.c.file_path == src_path,
                      ))
 
         ex = None
         try:
-            self.db.session.execute(query)
+            result = self.db.session.execute(query)
 
             if commit:
                 self.db.session.commit()
+
         except IntegrityError as e:
             ex = StorageException("%s" % e.args[0])
 
@@ -355,7 +372,8 @@ class StorageDao(object):
         # allow substitutions on only the user id, and only on the
         # part of the path stored in the database. this allows
         # for a configuration file to specify a user sandbox
-        root_path = item.path.format(user_id=user_id, pwd=os.getcwd())
+        root_path = format_storage_path(item.path,
+            user_id=user_id, pwd=os.getcwd())
 
         return root_path
 

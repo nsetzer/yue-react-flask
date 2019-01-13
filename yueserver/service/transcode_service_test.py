@@ -12,7 +12,7 @@ from .transcode_service import ImageScale
 
 from PIL import Image
 
-class FilesResourceTestCase(unittest.TestCase):
+class TranscodeServiceTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):

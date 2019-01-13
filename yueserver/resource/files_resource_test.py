@@ -44,10 +44,10 @@ class FilesResourceTestCase(unittest.TestCase):
     def test_list_default(self):
 
         path1 = os.path.join(os.getcwd(), "yueserver/app.py")
-        self.storageDao.insert(self.USER['id'], path1, 0, 0)
+        self.storageDao.insert(self.USER['id'], path1, path1, 0, 0)
 
         path2 = os.path.join(os.getcwd(), "yueserver/framework/config.py")
-        self.storageDao.insert(self.USER['id'], path2, 0, 0)
+        self.storageDao.insert(self.USER['id'], path2, path2, 0, 0)
 
         username = "admin"
         with self.app.login(username, username) as app:
@@ -91,7 +91,7 @@ class FilesResourceTestCase(unittest.TestCase):
     def test_download_file(self):
 
         path1 = os.path.join(os.getcwd(), "yueserver/framework/config.py")
-        self.storageDao.insert(self.USER['id'], path1, 0, 0)
+        self.storageDao.insert(self.USER['id'], path1, path1, 0, 0)
 
         username = "admin"
         with self.app.login(username, username) as app:
@@ -156,6 +156,7 @@ class FilesResourceTestCase(unittest.TestCase):
                 path = 'test/%s' % name
                 paths.append(path)
                 url = '/api/fs/mem/path/' + path
+                print(url)
                 response = app.post(url, data=dat0)
                 self.assertEqual(response.status_code, 200, response.status_code)
 

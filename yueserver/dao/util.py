@@ -20,6 +20,13 @@ def hash_password(password, workfactor=12):
 def check_password_hash(hash, password):
     return bcrypt.checkpw(password.encode("utf-8"), hash)
 
+
+def format_storage_path(path, user_id, pwd, **kwargs):
+    """
+    format a filesystem storage path
+    """
+    return path.format(user_id=user_id, pwd=pwd, **kwargs)
+
 def parse_iso_format(dt_str):
     """
     parse a datestring into a datetime object

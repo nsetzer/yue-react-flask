@@ -1,5 +1,4 @@
 
-
 import os, sys
 import unittest
 
@@ -75,26 +74,37 @@ def v0_init(db):
         "folder/subfolder/sample3.txt",
     ]
 
+    pwd = os.getcwd()
+
     for path in sample_paths:
-        db.session.execute(insert(db.tables.FileSystemStorageTable)
-            .values(v0_file_record(user_id, "/mnt/data/%s" % path)))
 
         db.session.execute(insert(db.tables.FileSystemStorageTable)
-            .values(v0_file_record(user_id, "s3://bucket/%s" % path)))
+            .values(v0_file_record(user_id, "%s/data/%s/%s" % (
+                pwd, user_id, path))))
+
+        db.session.execute(insert(db.tables.FileSystemStorageTable)
+            .values(v0_file_record(user_id, "mem://memtest/%s" % path)))
 
     db.session.commit()
-
 
 class MigrateV1TestCase(unittest.TestCase):
 
     def test_migrate_v1(self):
 
+        env_yaml = {
+            "filesystems": {
+                "default": "{pwd}/data/{user_id}",
+                "mem": "mem://memtest",
+            }
+        }
+
         dbv0 = db_connect_impl(DatabaseTablesV0, 'sqlite:///', False)
         v0_init(dbv0)
 
         dbv1 = db_reconnect(dbv0, DatabaseTablesV1)
-        migratev1(dbv1)
+        migratev1(dbv1, env_yaml)
 
+        print("---migration success")
         for row in db_iter_rows(dbv1, dbv1.tables.FileSystemStorageTable):
             print(row)
 

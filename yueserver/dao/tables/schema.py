@@ -14,5 +14,6 @@ def ApplicationSchemaTable(metadata):
     """
     return Table('application_schema', metadata,
         Column('key', String, primary_key=True),
+        # TODO: change this to JSON
         Column('value', String, unique=True, nullable=False),
     )

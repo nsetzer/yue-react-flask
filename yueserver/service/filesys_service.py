@@ -180,9 +180,9 @@ class FileSysService(object):
 
     def saveFile(self, user, fs_name, path, stream, mtime=None, version=0, permission=0):
 
-        path = self.getPath(user, fs_name, path)
+        storage_path = self.getPath(user, fs_name, path)
 
-        dirpath, _ = self.fs.split(path)
+        dirpath, _ = self.fs.split(storage_path)
         self.fs.makedirs(dirpath)
 
         # the sync tool depends on an up-to-date local database
@@ -192,7 +192,7 @@ class FileSysService(object):
         # will likely reveal this file is in a conflict state
         if version > 0:
             try:
-                info = self.storageDao.file_info(user['id'], path)
+                info = self.storageDao.file_info(user['id'], storage_path)
                 if info.version >= version:
                     raise FileSysServiceException("invalid version", 409)
             except StorageNotFoundException as e:
@@ -202,7 +202,7 @@ class FileSysService(object):
             version = None
 
         size = 0
-        with self.fs.open(path, "wb") as wb:
+        with self.fs.open(storage_path, "wb") as wb:
             for buf in iter(lambda: stream.read(2048), b""):
                 wb.write(buf)
                 size += len(buf)
@@ -210,12 +210,18 @@ class FileSysService(object):
         if mtime is None:
             mtime = int(time.time())
 
-        self.storageDao.upsert(user['id'], path, size, mtime, permission, version)
+        # todo: in the future, the logical file path, and the actual
+        # storage path will be different for security reasons.
+        self.storageDao.upsert(user['id'], path, storage_path,
+            size, mtime, permission, version)
 
     def remove(self, user, fs_name, path):
 
-        path = self.getPath(user, fs_name, path)
+        # storage_path = self.getPath(user, fs_name, path)
 
+        raise Exception("not implemented")
+        # remote by storage path, by selecting by user_id and path
+        # then remove by user_id and path
         try:
             # TODO: either both succeed or neither...
             self.storageDao.remove(user['id'], path)

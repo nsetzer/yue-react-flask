@@ -19,7 +19,7 @@ from flask import jsonify, g, request
 
 from yueserver.resource.util import files_generator
 from yueserver.dao.library import Song, LibraryException
-from yueserver.dao.util import string_quote
+from yueserver.dao.util import string_quote, server_health
 
 class DemoAppClient(AppClient):
     def __init__(self, guiService, userService, audioService, fileService):
@@ -446,12 +446,13 @@ class AudioGuiResource(GuiAppResource):
         """
 
         # showing stats on an un-authenticated endpoint seems risky
-        health = self.db.health()
-        del health['stats']
+        # TODO: show db health,
+        #health = self.db.health()
+        #del health['stats']
 
         result = {
             "status": "OK",
-            "database": health,
+            "database": {},
             "server": server_health()
         }
 
