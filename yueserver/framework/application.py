@@ -69,6 +69,7 @@ class FlaskApp(object):
 
         self._registered_endpoints = []
         self._registered_websockets = []
+        self._registered_resources = []
 
         self.async_mode = "eventlet"
 
@@ -79,6 +80,8 @@ class FlaskApp(object):
             self.app.wsgi_app = SocketMiddleware(self.sio, self.app.wsgi_app)
 
     def add_resource(self, res):
+
+        self._registered_resources.append(res)
 
         for path, methods, name, func, params, body in res.endpoints():
             self.register(path, name, func,
@@ -178,6 +181,9 @@ class FlaskApp(object):
 
     def run(self):
 
+        for res in self._registered_resources:
+            res._start()
+
         ssl_context = self.get_ssl_context()
 
         routes = self.list_routes()
@@ -218,6 +224,11 @@ class FlaskApp(object):
     def __call__(self, env, start_response):
         # uwsgi support
         return self.app(env, start_response)
+
+    def tearDown(self):
+
+        for res in self._registered_resources:
+            res._stop()
 
 class TestResponse(Response):
 

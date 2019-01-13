@@ -386,4 +386,10 @@ class WebResource(object, metaclass=MetaWebResource):
         self.__endpoints.append(WebEndpoint(path, methods, name,
             func, _params, _body))
 
+    def _start(self):
+        """called just before the web listener is started"""
+        pass
 
+    def _end(self):
+        """called while tearing down the resource"""
+        pass

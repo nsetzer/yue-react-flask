@@ -113,7 +113,7 @@ class YueApp(FlaskApp):
         self.transcode_service = TranscodeService(config, self.db, self.db.tables)
         self.filesys_service = FileSysService(config, self.db, self.db.tables)
 
-        # self.add_resource(AppResource(self.config, self.db, self.db.tables))
+        #self.add_resource(AppResource(self.config, self.db, self.db.tables))
         self.add_resource(UserResource(self.user_service))
         self.add_resource(LibraryResource(self.user_service,
                                           self.audio_service,
@@ -122,8 +122,10 @@ class YueApp(FlaskApp):
         self.add_resource(QueueResource(self.user_service,
                                         self.audio_service))
         self.add_resource(FilesResource(self.user_service, self.filesys_service))
-        self.add_resource(AudioGuiResource(self.config, self.user_service,
-            self.audio_service, self.filesys_service, self.transcode_service))
+
+        self.gui_resource = AudioGuiResource(self.config, self.user_service,
+            self.audio_service, self.filesys_service, self.transcode_service)
+        self.add_resource(self.gui_resource)
 
         self.app.teardown_request(self.teardown_request)
         self.app.before_request(self.before_request)
@@ -140,6 +142,9 @@ class YueApp(FlaskApp):
         db_connect uses a scoped session for thread local sessions
         """
         self.db.session.remove()
+
+    def tearDown(self):
+        super(YueApp, self).tearDown()
 
 class TestApp(YueApp):
     """An app with helper functions for testing"""
@@ -273,8 +278,7 @@ class TestApp(YueApp):
                     self.SONGIDS.append(song_id)
 
     def tearDown(self):
-        # nothing to do
-        pass
+        super(TestApp, self).tearDown()
 
 def connect(host, username, password):
     """ return a client which sends credentials with every request"""

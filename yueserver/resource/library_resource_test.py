@@ -23,6 +23,7 @@ class LibraryResourceTestCase(unittest.TestCase):
         cls.app.create_test_songs()
         cls.USERNAME = "admin"
         cls.USER = cls.userDao.findUserByEmail(cls.USERNAME)
+
     @classmethod
     def tearDownClass(cls):
         cls.app.tearDown()

@@ -16,7 +16,8 @@ import uuid
 import json
 import time
 import posixpath
-from threading import Thread
+import traceback
+from threading import Thread, Condition, Lock
 
 from urllib.parse import urlparse
 
@@ -348,32 +349,49 @@ class AppSessionManager(Thread):
     """
 
     MAX_SESSION_AGE = 600
-    SLEEP_INTERVAL = 60
+    SLEEP_INTERVAL = 60  # seconds
 
     def __init__(self, service):
         super(AppSessionManager, self).__init__()
         self.alive = True
         self.service = service
 
+        self.lock_kill = Lock()
+        self.condvar_kill = Condition(self.lock_kill)
+
+        #traceback.print_stack()
+        return
+
     def run(self):
 
-        while self.alive:
+        print(">>> Creating Session Manager Thread")
 
-            # TODO: use a mutex to wake this thread up when there are sessions
-            # let it sleep indefinitly as long as there are no sessions
+        with self.lock_kill:
+            while self.alive:
 
-            # get a list of candidate sessions to remove
-            sessionIds = set()
+                # TODO: use a mutex to wake this thread up when there are sessions
+                # let it sleep indefinitly as long as there are no sessions
 
-            for sessionId, client in self.service.clients.items():
-                if client.socket_timeout() > self.MAX_SESSION_AGE:
-                    sessionIds.add(sessionId)
+                # get a list of candidate sessions to remove
+                sessionIds = set()
 
-            for sessionId in sessionIds:
-                del self.service.clients[sessionId]
-                self.service._diag("removing session %s" % sessionId)
+                for sessionId, client in self.service.clients.items():
+                    if client.socket_timeout() > self.MAX_SESSION_AGE:
+                        sessionIds.add(sessionId)
 
-            time.sleep(self.SLEEP_INTERVAL)
+                for sessionId in sessionIds:
+                    del self.service.clients[sessionId]
+                    self.service._diag("removing session %s" % sessionId)
+
+                self.condvar_kill.wait(self.SLEEP_INTERVAL)
+        logging.info("Gui Session Managger thread exited.")
+
+    def kill(self):
+
+        with self.lock_kill:
+            self.alive = False
+            self.condvar_kill.notify_all()
+
 
 class AppClient(object):
     """docstring for AppClient"""
@@ -571,7 +589,6 @@ class AppClient(object):
         raise NotImplementedError("cannot save: %s" % filepath)
 
 class AppService(object):
-    """docstring for RemiSersessionIdFromHeadersvice"""
 
     def __init__(self, factory, *args, **kwargs):
         super(AppService, self).__init__()
@@ -590,7 +607,10 @@ class AppService(object):
         # self.kwargs = kwargs
 
         self.thread = AppSessionManager(self)
-        self.thread.start()
+        # TODO: background thread is disabled until the arch can be fixed
+        # thread should only run if the application is 'run'
+        # and not when created.
+        #self.thread.start()
 
         self.client_lock = threading.RLock()
 
@@ -920,3 +940,6 @@ class GuiAppResource(WebResource):
             # try to enumerate why this could occur.
             self.emit("gui_reload", sid, "")
             logging.exception(str(e))
+
+    def _stop(self):
+        self.service.thread.kill()
