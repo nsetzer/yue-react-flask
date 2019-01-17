@@ -245,6 +245,12 @@ class FileSysService(object):
                 wb.write(buf)
                 size += len(buf)
 
+        # if the file is wrapped by an encryptor, subtract the size
+        # of the header information. This allows the user to stat
+        # the file later on, and see the expected file size
+        if isinstance(stream, FileEncryptorReader):
+            size -= FileEncryptorReader.HEADER_SIZE
+
         if mtime is None:
             mtime = int(time.time())
 

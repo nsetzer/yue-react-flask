@@ -6,7 +6,7 @@ import tempfile
 import json
 import time
 
-from io import StringIO
+from io import StringIO, BytesIO
 
 from .client import (split_auth, AuthenticatedRestClient,
     RegisteredEndpoint, Parameter, FlaskAppClient, generate_argparse,
@@ -219,31 +219,45 @@ class ParserTestCase(unittest.TestCase):
 
     def test_put(self):
 
-        args = self.parser.parse_args([
-            "--host=localhost",
-            "--username=admin",
-            "--password=admin",
-            "test.put_json",
-            "-"])
+        stdin = lambda: None
+        stdin.buffer = BytesIO(b"abc")
+        stdin_save = sys.stdin
+        try:
+            sys.stdin = stdin
+            args = self.parser.parse_args([
+                "--host=localhost",
+                "--username=admin",
+                "--password=admin",
+                "test.put_json",
+                "-"])
+            method, url, options = args.func(args)
+        finally:
+            sys.stdin = stdin_save
 
-        method, url, options = args.func(args)
         self.assertEqual(method, "put")
         self.assertEqual(url, "/api/put_json")
-        self.assertEqual(options['data'], sys.stdin.buffer)
+        self.assertEqual(options['data'].read(), b"abc")
 
     def test_post(self):
 
-        args = self.parser.parse_args([
-            "--host=localhost",
-            "--username=admin",
-            "--password=admin",
-            "test.post_json",
-            "-"])
+        stdin = lambda: None
+        stdin.buffer = BytesIO(b"abc")
+        stdin_save = sys.stdin
+        try:
+            sys.stdin = stdin
+            args = self.parser.parse_args([
+                "--host=localhost",
+                "--username=admin",
+                "--password=admin",
+                "test.post_json",
+                "-"])
+            method, url, options = args.func(args)
+        finally:
+            sys.stdin = stdin_save
 
-        method, url, options = args.func(args)
         self.assertEqual(method, "post")
         self.assertEqual(url, "/api/post_json")
-        self.assertEqual(options['data'], sys.stdin.buffer)
+        self.assertEqual(options['data'].read(), b"abc")
 
     def test_post_file(self):
 

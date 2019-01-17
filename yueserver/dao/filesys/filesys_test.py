@@ -33,8 +33,8 @@ class _ProcFileTest(object):
     data_map = {
         "New Folder": (True, 0, 0),
         "test": (True, 0, 0),
-        "New File": (False, 1474, 1527796670),
-        "file0": (False, 0, 1527796670),
+        "New File": (False, 1474, 1527782270),
+        "file0": (False, 0, 1527782270),
     }
 
     exitstatus = 0

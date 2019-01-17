@@ -228,6 +228,8 @@ class FileEncryptorWriter(_Closeable):
     """ wrap a writable file-like object and encrypt the contents as it is written
     an 8 byte header is added to the file
     """
+    HEADER_SIZE = HEADER_SIZE
+
     def __init__(self, wf, key, nonce=None, key2=None):
         super(FileEncryptorWriter, self).__init__()
         self.wf = wf
@@ -249,6 +251,8 @@ class FileEncryptorReader(_Closeable):
     """ wrap a readable file-like object and encrypt the contents as it is read
     an 8 byte header is added to the file
     """
+    HEADER_SIZE = HEADER_SIZE
+
     def __init__(self, rf, key, nonce=None, key2=None):
         super(FileEncryptorReader, self).__init__()
         self.rf = rf
