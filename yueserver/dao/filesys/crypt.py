@@ -299,7 +299,7 @@ class FileDecryptorReader(_Closeable):
         return self.cipher.decrypt(self.rf.read(*args))
 
     def close(self):
-        self.wf.close()
+        self.rf.close()
 
 class FileDecryptorWriter(_Closeable):
     """ wrap a writable file-like object and decrypt the contents as it is written

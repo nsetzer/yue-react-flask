@@ -16,7 +16,7 @@ from ..framework.web_resource import WebResource, \
     get, post, put, delete, body, header, compressed, param, httpError, \
     int_range, int_min, send_generator, null_validator
 
-from .util import requires_auth, files_generator
+from .util import requires_auth, files_generator, files_generator_v2
 
 class FilesResource(WebResource):
     """QueueResource
@@ -32,16 +32,20 @@ class FilesResource(WebResource):
         self.filesys_service = filesys_service
 
     @get("<root>/path/")
+    @header("X-YUE-PASSWORD")
     @requires_auth("filesystem_read")
     def get_path_root(self, root):
-        return self._list_path(root, "")
+        password = g.headers.get('X-YUE-PASSWORD', None)
+        return self._list_path(root, "", password=password)
 
     @get("<root>/path/<path:resPath>")
     @param("list", type_=bool, default=False,
         doc="do not retrieve contents for files if true")
+    @header("X-YUE-PASSWORD")
     @requires_auth("filesystem_read")
     def get_path(self, root, resPath):
-        return self._list_path(root, resPath, g.args.list)
+        password = g.headers.get('X-YUE-PASSWORD', None)
+        return self._list_path(root, resPath, g.args.list, password=password)
 
     @get("<root>/index/")
     @param("limit", type_=int_range(0, 500), default=50)
@@ -97,10 +101,10 @@ class FilesResource(WebResource):
         error codes:
             409: file already exists and is a newer version
         """
+        stream = g.body
 
         password = g.headers.get('X-YUE-PASSWORD', None)
 
-        stream = g.body
         if password is not None:
             stream = self.filesys_service.encryptStream(g.current_user,
                 password, stream, "r")
@@ -127,7 +131,7 @@ class FilesResource(WebResource):
         roots = self.filesys_service.getRoots(g.current_user)
         return jsonify(result=roots)
 
-    def _list_path(self, root, path, list_=False):
+    def _list_path(self, root, path, list_=False, password=None):
         # TODO: move this into the service layer
 
         # TODO: check for the header X-YUE-ENCRYPTION
@@ -153,7 +157,11 @@ class FilesResource(WebResource):
             else:
                 storage_path = info.storage_path
                 _, name = self.filesys_service.fs.split(storage_path)
-                go = files_generator(self.filesys_service.fs, storage_path)
+                stream = self.filesys_service.fs.open(storage_path, "rb")
+                if password is not None:
+                    stream = self.filesys_service.decryptStream(g.current_user,
+                        password, stream, "r")
+                go = files_generator_v2(stream)
                 headers = {
                     "X-YUE-VERSION": info.version,
                     "X-YUE-PERMISSION": info.permission,
@@ -187,7 +195,6 @@ class FilesResource(WebResource):
 
         password = g.headers['X-YUE-PASSWORD']
         new_password = g.body.read().decode("utf-8").strip()
-        print(password, new_password)
 
         self.filesys_service.changePassword(g.current_user,
             password, new_password)

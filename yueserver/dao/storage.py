@@ -513,7 +513,6 @@ class StorageDao(object):
             new_key = recryptkey(password, new_password, item.encryption_key)
             # expire the old password
             epoch = int(calendar.timegm(datetime.datetime.now().timetuple()))
-            print(epoch)
 
             statement = tab.update().values({"expired": epoch}).where(
                 and_(tab.c.user_id == user_id,
@@ -525,7 +524,6 @@ class StorageDao(object):
             "encryption_key": new_key,
             "expired": None})
         self.db.session.execute(statement)
-        print("insert", new_key)
 
         if commit:
             self.db.session.commit()

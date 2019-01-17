@@ -217,6 +217,8 @@ class FilesResourceTestCase(unittest.TestCase):
                 headers={'X-YUE-PASSWORD': 'password'})
             self.assertEqual(response.status_code, 200, response.status_code)
 
+            # POST a file, with the encryption header set
+            # file should be written to memory FS in an encrypted state
             dat0 = b"abc123"
             path = 'test/upload_encrypt.txt'
             url = '/api/fs/mem/path/' + path
@@ -225,14 +227,28 @@ class FilesResourceTestCase(unittest.TestCase):
             self.assertEqual(response.status_code, 200, response.status_code)
             self.assertTrue(os.path.exists(path))
             dat1_enc = open(path, "rb").read()
-            print(dat1_enc)
 
+            # get the key used for encryption
             key = self.storageDao.getEncryptionKey(self.USER['id'], 'password')
+
+            # read the file written to the memory FS, decrypt it
             with fs.open("mem://test/" + path, "rb") as rb:
                 stream = FileDecryptorReader(rb, key)
                 dat1 = stream.read()
             self.assertEqual(dat0, dat1)
-            print(dat0, dat1)
+
+            # a simple get on the data should return the encrypted file
+            # TODO: maybe the request should fail?
+            response = app.get(url)
+            dat2 = response.data
+            self.assertEqual(b'EYUE', dat2[:4])
+
+            # A get with the header set should return the unencrypted data
+            response = app.get(url,
+                headers={'X-YUE-PASSWORD': 'password'})
+            self.assertEqual(response.status_code, 200, response.status_code)
+            dat2 = response.data
+            self.assertEqual(dat0, dat2)
 
             # TODO: add a app.get request to retrieve the decrypted file
             return

@@ -251,3 +251,13 @@ def files_generator(fs, filepath, buffer_size=2048):
         while buf:
             yield buf
             buf = rb.read(buffer_size)
+
+def files_generator_v2(stream, buffer_size=2048):
+
+    try:
+        buf = stream.read(buffer_size)
+        while buf:
+            yield buf
+            buf = stream.read(buffer_size)
+    finally:
+        stream.close()

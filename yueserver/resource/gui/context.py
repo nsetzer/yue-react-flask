@@ -69,13 +69,9 @@ class YueAppState(object):
 
         try:
             # TODO: fix this, create a new token, return user
-            print(username, password)
             self.auth_token = self.userService.loginUser(username, password)
-            print(self.auth_token)
             self.auth_user = self.userService.getUserFromToken(self.auth_token)
-            print(self.auth_user)
             self.auth_info = self.userService.listUser(self.auth_user['id'])
-            print(self.auth_info)
         except Exception as e:
             logging.exception(e)
             self.auth_token = None

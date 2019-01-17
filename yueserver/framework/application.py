@@ -235,7 +235,7 @@ class FlaskApp(object):
     def tearDown(self):
 
         for res in self._registered_resources:
-            res._stop()
+            res._end()
 
 class TestResponse(Response):
 
