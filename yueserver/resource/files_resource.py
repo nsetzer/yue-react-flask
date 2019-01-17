@@ -13,7 +13,7 @@ from ..dao.storage import StorageNotFoundException
 from ..dao.filesys.filesys import MemoryFileSystemImpl
 
 from ..framework.web_resource import WebResource, \
-    get, post, put, delete, body, compressed, param, httpError, \
+    get, post, put, delete, body, header, compressed, param, httpError, \
     int_range, int_min, send_generator, null_validator
 
 from .util import requires_auth, files_generator
@@ -85,6 +85,7 @@ class FilesResource(WebResource):
     @param("mtime", type_=int, doc="set file modified time")
     @param("permission", type_=int, doc="unix file permissions", default=0o644)
     @param("version", type_=int, doc="file version", default=0)
+    @header("X-YUE-PASSWORD")
     @body(null_validator, content_type="application/octet-stream")
     @requires_auth("filesystem_write")
     def upload(self, root, resPath):
@@ -97,9 +98,17 @@ class FilesResource(WebResource):
             409: file already exists and is a newer version
         """
 
+        password = g.headers.get('X-YUE-PASSWORD', None)
+
+        stream = g.body
+        if password is not None:
+            stream = self.filesys_service.encryptStream(g.current_user,
+                password, stream, "r")
+
         self.filesys_service.saveFile(
-            g.current_user, root, resPath, g.body,
-            mtime=g.args.mtime, version=g.args.version, permission=g.args.permission)
+            g.current_user, root, resPath, stream,
+            mtime=g.args.mtime, version=g.args.version,
+            permission=g.args.permission)
 
         return jsonify(result="OK"), 200
 
@@ -120,6 +129,10 @@ class FilesResource(WebResource):
 
     def _list_path(self, root, path, list_=False):
         # TODO: move this into the service layer
+
+        # TODO: check for the header X-YUE-ENCRYPTION
+        # it should contain the base64 encoded password for the user
+        # use this to decrypt the file
 
         fs = self.filesys_service.fs
 
@@ -166,4 +179,17 @@ class FilesResource(WebResource):
         obj = self.filesys_service.getUserQuota(g.current_user)
         return jsonify(result=obj)
 
+    @put("change_password")
+    @header("X-YUE-PASSWORD")
+    @requires_auth("filesystem_write")
+    @body(null_validator, content_type="application/octet-stream")
+    def change_password(self):
 
+        password = g.headers['X-YUE-PASSWORD']
+        new_password = g.body.read().decode("utf-8").strip()
+        print(password, new_password)
+
+        self.filesys_service.changePassword(g.current_user,
+            password, new_password)
+
+        return jsonify(result="OK"), 200

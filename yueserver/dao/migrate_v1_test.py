@@ -36,10 +36,10 @@ def v0_init(db):
         .values({"feature": "filesystem_read"})).lastrowid
 
     fs_default = db.session.execute(insert(db.tables.FileSystemTable)
-        .values({"name": "default", "path": "/mnt/data/"})).lastrowid
+        .values({"name": "default", "path": "{pwd}/data/{user_id}"})).lastrowid
 
     fs_music = db.session.execute(insert(db.tables.FileSystemTable)
-        .values({"name": "music", "path": "s3://bucket/"})).lastrowid
+        .values({"name": "music", "path": "mem://memtest"})).lastrowid
 
     domain_prod_id = db.session.execute(insert(db.tables.DomainTable)
         .values({"name": "production"})).lastrowid
@@ -104,9 +104,16 @@ class MigrateV1TestCase(unittest.TestCase):
         dbv1 = db_reconnect(dbv0, DatabaseTablesV1)
         migratev1(dbv1, env_yaml)
 
-        print("---migration success")
+
+        # check that the file_path/storage_path was migrated correctly
+        sample_paths = [
+            "sample.txt",
+            "folder/sample2.txt",
+            "folder/subfolder/sample3.txt",
+        ]
+
         for row in db_iter_rows(dbv1, dbv1.tables.FileSystemStorageTable):
-            print(row)
+            self.assertTrue(row.file_path in sample_paths)
 
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(MigrateV1TestCase)

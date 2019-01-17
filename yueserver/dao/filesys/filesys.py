@@ -19,7 +19,7 @@ import datetime
 import time
 import subprocess
 import logging
-
+from ..util import epoch_time
 from stat import S_ISDIR, S_ISREG, S_IRGRP
 
 from .util import sh_escape, AbstractFileSystem, FileRecord
@@ -123,8 +123,7 @@ class MemoryFileSystemImpl(AbstractFileSystem):
             f = io.BytesIO() if 'b' in mode else io.StringIO()
             f.close = lambda: f.seek(0)
             f.fileno = lambda: -1
-            dt = datetime.datetime.now()
-            mtime = int(time.mktime(dt.timetuple()))
+            mtime = epoch_time()
             MemoryFileSystemImpl._mem_store[path] = [f, mtime]
             return f
         else:

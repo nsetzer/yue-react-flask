@@ -9,11 +9,12 @@ from .tables.storage import FileSystemStorageTableV1
 from .db import db_connect_impl, db_add_column, db_get_columns, db_iter_rows
 from .util import format_storage_path
 
+import logging
+
 class _MigrateV1Context(object):
-    def __init__(self, dbv1, env_yaml):
+    def __init__(self, dbv1):
         super(_MigrateV1Context, self).__init__()
         self.dbv1 = dbv1
-        self.env_yaml = env_yaml
 
     def fs_storage_v0_to_v1(self, row):
 
@@ -26,12 +27,21 @@ class _MigrateV1Context(object):
 
         # this use the first matching prefix assuming there are no
         # overlaping prefixes in the environment
+
+        # TODO: reimplement using db FileSystemTable
+        # there is no need for the environment config
+
+        fs_items = list(self.dbv1.session.execute(
+            self.dbv1.tables.FileSystemTable.select()).fetchall())
+
         file_path = row['path']
-        for fs_name, fs_path in self.env_yaml['filesystems'].items():
-            fs_root = format_storage_path(fs_path, row['user_id'], pwd)
+        for fs in fs_items:
+            fs_root = format_storage_path(fs.path, row['user_id'], pwd)
             if file_path.startswith(fs_root):
                 file_path = file_path[len(fs_root):].lstrip("/").lstrip("\\")
                 break
+        else:
+            raise Exception("unable to determine root for: %s" % file_path)
         # TODO: else error unrecognized base path?
 
         record = {
@@ -70,6 +80,7 @@ class _MigrateV1Context(object):
 def migratev1(dbv1, env_yaml):
     """
     dbv1: a database connection, db.tables must implement v1
+    env_yaml: the environment config. currently unused.
 
     v1 adds:
         - a table to store the application schema version
@@ -78,6 +89,9 @@ def migratev1(dbv1, env_yaml):
         - a table to store user session keys
         - updates file system storage table to v2
         - a table to store encryption keys
+    v1 requires:
+        - the file system table contains the set of valid file
+          systems (fs_name, fs_root)
     """
 
     # first create the new tables
@@ -91,7 +105,7 @@ def migratev1(dbv1, env_yaml):
 
     dbv1.session = dbv1.session()
     try:
-        ctxt = _MigrateV1Context(dbv1, env_yaml)
+        ctxt = _MigrateV1Context(dbv1)
         ctxt.migrate()
         dbv1.session.commit()
     except:

@@ -6,6 +6,7 @@ import datetime
 import time
 from threading import Thread, Lock
 
+from ..util import epoch_time
 boto3 = None
 botocore = None
 
@@ -70,7 +71,7 @@ class S3FileSystemImpl(AbstractFileSystem):
         if len(items) == 4:
             fdate, ftime, size, name = items
             dt = datetime.datetime.strptime(fdate + " " + ftime, fmt)
-            epoch = int(time.mktime(dt.timetuple()))
+            epoch = epoch_time(dt)
             return (name, False, int(size), epoch)
         elif len(items) > 0 and items[0] == 'PRE':
             # re-split, in case the directory name contains a space
@@ -349,7 +350,7 @@ class BotoFileSystemImpl(AbstractFileSystem):
 
         for obj in bucket.objects.filter(Prefix=key, Delimiter="/"):
             dt = obj.last_modified
-            epoch = int(time.mktime(dt.timetuple()))
+            epoch = epoch_time(dt)
             return FileRecord(obj.key, False, obj.size, epoch)
         raise FileNotFoundError(path)
 
@@ -391,6 +392,6 @@ class BotoFileSystemImpl(AbstractFileSystem):
                 name = content['Key']
                 name = name[len(key):]
                 size = content['Size']
-                epoch = int(time.mktime(content['LastModified'].timetuple()))
+                epoch = epoch_time(content['LastModified'])
                 if name:
                     yield FileRecord(name, False, size, epoch)

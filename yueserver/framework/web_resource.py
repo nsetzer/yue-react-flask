@@ -23,7 +23,7 @@ import mimetypes
 from re import findall
 
 WebEndpoint = namedtuple('WebEndpoint',
-    ['path', 'methods', 'name', 'method', 'params', 'body'])
+    ['path', 'methods', 'name', 'method', 'params', 'headers', 'body'])
 
 def validate(expr, value):
     if not expr:
@@ -72,6 +72,27 @@ def _endpoint_mapper(f):
                             param.name, request.args[param.name]))
 
                 setattr(g.args, param.name, value)
+        g.headers = dict()
+        if hasattr(f, "_headers"):
+            for header in f._headers:
+                if header.required and header.name not in request.headers:
+                    return httpError(400,
+                        "required query parameter `%s` not found" % header.name)
+
+                # validate the header parameter
+                try:
+                    if header.name in request.headers:
+                        value = header.type(request.headers[header.name])
+                    else:
+                        value = header.default
+                except Exception as e:
+                    logging.exception("%s" % e)
+                    return httpError(400,
+                        "unable to validate query parameter: %s=%s" % (
+                            header.name, request.headers[header.name]))
+
+                g.headers[header.name] = value
+
         if hasattr(f, "_body"):
             try:
                 type_, content_type = f._body
@@ -155,6 +176,16 @@ def param(name, type_=str, default=None, required=False, doc=""):
         if not hasattr(f, "_params"):
             f._params = []
         f._params.append(Parameter(name, type_, default, required, doc))
+        return f
+    return decorator
+
+def header(name, type_=str, default=None, required=False, doc=""):
+    """decorator which validates query parameters"""
+
+    def decorator(f):
+        if not hasattr(f, "_headers"):
+            f._headers = []
+        f._headers.append(Parameter(name, type_, default, required, doc))
         return f
     return decorator
 
@@ -324,8 +355,12 @@ class MetaWebResource(type):
                 if hasattr(func, "_params"):
                     _params = func._params
 
+                _headers = []
+                if hasattr(func, "_headers"):
+                    _headers = func._headers
+
                 endpoint = WebEndpoint(path, methods, fname,
-                    func, _params, _body)
+                    func, _params, _headers, _body)
 
                 cls._class_endpoints.append(endpoint)
 
@@ -352,7 +387,7 @@ class WebResource(object, metaclass=MetaWebResource):
 
         endpoints = self.__endpoints[:]
 
-        for path, methods, name, func, _params, _body in self._class_endpoints:
+        for path, methods, name, func, _params, _headers, _body in self._class_endpoints:
             # get the instance of the method which is bound to self
             bound_method = getattr(self, func.__name__)
             if path == "":
@@ -361,7 +396,7 @@ class WebResource(object, metaclass=MetaWebResource):
                 path = (self.root + '/' + path).replace("//", "/")
 
             endpoints.append(WebEndpoint(path, methods, name,
-                bound_method, _params, _body))
+                bound_method, _params, _headers, _body))
 
         return endpoints
 
@@ -383,8 +418,9 @@ class WebResource(object, metaclass=MetaWebResource):
         # todo, support _body, _params somehow
         _body = (None, None)
         _params = []
+        _headers = []
         self.__endpoints.append(WebEndpoint(path, methods, name,
-            func, _params, _body))
+            func, _params, _headers, _body))
 
     def _start(self):
         """called just before the web listener is started"""

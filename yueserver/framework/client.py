@@ -18,13 +18,14 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 from requests.utils import quote
 import logging
+from io import BytesIO
 
 from collections import namedtuple
 
 ##
 # A tuple describing a RESTful endpoint
 RegisteredEndpoint = namedtuple('RegisteredEndpoint',
-    ['path', 'long_name', 'doc', 'methods', 'params', 'body'])
+    ['path', 'long_name', 'doc', 'methods', 'params', 'headers', 'body'])
 
 ##
 # A tuple describing a query parameter
@@ -307,6 +308,11 @@ def _request_builder(endpoint, *args, **kwargs):
         if 'Content-Type' not in options['headers']:
             options['headers']['Content-Type'] = _mimetype
 
+    for header in endpoint.headers:
+        if header.name in kwargs:
+            options['headers'][header.name] = kwargs[header.name]
+            del kwargs[header.name]
+
     # TODO: this is a bug waiting to happen
     #       keep this for now, but also accept
     #       a kwarg 'params' which accepts a dictionary to do the same
@@ -333,12 +339,12 @@ def _request_builder(endpoint, *args, **kwargs):
     return method, url, options
 
 def _request_args_builder(endpoint, args):
-
     positional = []
     for typename, varname in url_decode(endpoint.path):
         positional.append(getattr(args, varname))
 
     kwargs = {param[0]: getattr(args, param.name) for param in endpoint.params}
+    kwargs.update({header[0]: getattr(args, header.name.replace("-", "_")) for header in endpoint.headers})
 
     for extra in ['stream', 'json', 'method']:
         if hasattr(args, extra):
@@ -360,7 +366,8 @@ def _request_args_builder(endpoint, args):
     if hasattr(args, 'data'):
         data = getattr(args, 'data')
         if data == "-":
-            data = sys.stdin.buffer
+            # support seeking the input
+            data = BytesIO(sys.stdin.buffer.read())
         else:
             data = open(data, "rb")
 
@@ -465,6 +472,13 @@ def generate_argparse(registered_endpoints):
                 help=param.doc,
                 default=param.default,
                 required=param.required)
+
+        # parse the registered headers, and generate optional arguments
+        for header in endpoint.headers:
+            end_parser.add_argument("--%s" % header.name,
+                help=header.doc,
+                default=header.default,
+                required=header.required)
 
         # parse the URL path, and generate positional arguments
 

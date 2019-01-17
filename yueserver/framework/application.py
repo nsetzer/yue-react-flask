@@ -83,9 +83,9 @@ class FlaskApp(object):
 
         self._registered_resources.append(res)
 
-        for path, methods, name, func, params, body in res.endpoints():
+        for path, methods, name, func, params, headers, body in res.endpoints():
             self.register(path, name, func,
-                params=params, body=body, methods=methods)
+                params=params, headers=headers, body=body, methods=methods)
 
         websockets = res.websockets()
         if len(websockets) > 0:
@@ -98,7 +98,7 @@ class FlaskApp(object):
 
                 self._registered_websockets.append((name, event, namespace, func))
 
-    def register(self, path, name, callback, params=None, body=None, **options):
+    def register(self, path, name, callback, params=None, headers=None, body=None, **options):
         msg = ""
         try:
             self.app.add_url_rule(path, name, callback, **options)
@@ -127,8 +127,15 @@ class FlaskApp(object):
                 data['type'] = param.type.__name__
                 new_params.append(Parameter(**data))
 
+            headers = headers or []
+            new_headers = []
+            for header in headers:
+                data = header._asdict()
+                data['type'] = header.type.__name__
+                new_headers.append(Parameter(**data))
+
             endpoint = RegisteredEndpoint(path, name, callback.__doc__,
-                options['methods'], new_params, new_body)
+                options['methods'], new_params, new_headers, new_body)
             self._registered_endpoints.append(endpoint)
 
             return

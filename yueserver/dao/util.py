@@ -5,12 +5,25 @@ A collection of helper functions for managing the database
 import time
 import os
 import sys
+from calendar import timegm
 from datetime import datetime, timedelta
 from collections import OrderedDict
 from io import StringIO
 import bcrypt
 
 from psutil import virtual_memory, cpu_count, cpu_percent
+
+def epoch_time(dt=None):
+    """
+    return the utc time stamp for a datetime object
+
+    uses datetime.now() if no argument is given.
+
+    the inverse of this function is datetime.utcfromtimestamp()
+    """
+    if dt is None:
+        dt = datetime.now()
+    return timegm(dt.timetuple())
 
 def hash_password(password, workfactor=12):
     salt = bcrypt.gensalt(workfactor)
@@ -19,7 +32,6 @@ def hash_password(password, workfactor=12):
 
 def check_password_hash(hash, password):
     return bcrypt.checkpw(password.encode("utf-8"), hash)
-
 
 def format_storage_path(path, user_id, pwd, **kwargs):
     """

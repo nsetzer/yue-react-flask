@@ -10,11 +10,15 @@ from sqlalchemy.sql.expression import bindparam
 from .search import SearchGrammar, ParseError, Rule
 from .filesys.filesys import FileSystem
 from .filesys.util import FileRecord
+from .filesys.crypt import cryptkey, decryptkey, recryptkey
 from .exception import BackendException
 from .util import format_storage_path
+
 import os
 import sys
-import datetime, time
+import datetime
+import time
+import calendar
 import uuid
 import posixpath
 
@@ -478,3 +482,50 @@ class StorageDao(object):
         #       users to exceed that quota, a value of zero is no limit
         return 0
 
+    def getEncryptionKey(self, user_id, password):
+
+        tab = self.dbtables.FileSystemUserDataTable
+
+        statement = tab.select().where(
+            and_(tab.c.user_id == user_id,
+                 tab.c.expired.is_(None)))
+
+        item = self.db.session.execute(statement).fetchone()
+
+        if item is None:
+            raise StorageException("key not found")
+
+        return decryptkey(password, item.encryption_key)
+
+    def changePassword(self, user_id, password, new_password, commit=True):
+
+        tab = self.dbtables.FileSystemUserDataTable
+
+        statement = tab.select().where(
+            and_(tab.c.user_id == user_id,
+                 tab.c.expired.is_(None)))
+
+        item = self.db.session.execute(statement).fetchone()
+
+        if item is None:
+            new_key = cryptkey(new_password)
+        else:
+            new_key = recryptkey(password, new_password, item.encryption_key)
+            # expire the old password
+            epoch = int(calendar.timegm(datetime.datetime.now().timetuple()))
+            print(epoch)
+
+            statement = tab.update().values({"expired": epoch}).where(
+                and_(tab.c.user_id == user_id,
+                     tab.c.expired.is_(None)))
+            self.db.session.execute(statement)
+
+        statement = tab.insert().values({
+            "user_id": user_id,
+            "encryption_key": new_key,
+            "expired": None})
+        self.db.session.execute(statement)
+        print("insert", new_key)
+
+        if commit:
+            self.db.session.commit()

@@ -9,9 +9,10 @@ file system.
 """
 import os, sys
 
-
 from .exception import FileSysServiceException
 from ..dao.filesys.filesys import FileSystem
+from ..dao.filesys.crypt import FileEncryptorWriter, FileEncryptorReader, \
+    FileDecryptorReader, FileDecryptorWriter
 from ..dao.storage import StorageDao, StorageNotFoundException
 from ..dao.user import UserDao
 
@@ -285,3 +286,49 @@ class FileSysService(object):
             "quota": quota,
         }
         return obj
+
+    def changePassword(self, user, password, new_password):
+        """
+        change the password used for file encryption
+        """
+
+        self.storageDao.changePassword(user['id'], password, new_password)
+
+    def encryptStream(self, user, password, stream, mode):
+        """
+        returns a file-like object wrapping stream
+        """
+
+        key = self.storageDao.getEncryptionKey(user['id'], password)
+
+        if mode == "r":
+            # encrypt the contents as the file is read
+            return FileEncryptorReader(stream, key)
+        elif mode == "w":
+            # encrypt the contents as they are written to the file
+            return FileEncryptorWriter(stream, key)
+        else:
+            raise FileSysServiceException("invalid mode: '%s'" % mode)
+
+    def decryptStream(self, user, password, stream, mode):
+        """
+        returns a file-like object wrapping stream
+        """
+
+        key = self.storageDao.getEncryptionKey(user['id'], password)
+
+        if mode == "r":
+            # decrypt the contents as the file is read
+            return FileDecryptorReader(stream, key)
+        elif mode == "w":
+            # decrypt the contents as the file is being written
+            return FileDecryptorWriter(stream, key)
+        else:
+            raise FileSysServiceException("invalid mode: '%s'" % mode)
+
+        # todo: consider the option of password protected files
+        # which are publicly available, require a password to download
+        # but are also not encrypted.
+
+
+

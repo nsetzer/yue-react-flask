@@ -6,6 +6,7 @@ import time
 
 from ..dao.db import main_test
 from ..dao.filesys.filesys import FileSystem
+from ..dao.filesys.crypt import FileDecryptorReader
 from ..app import TestApp
 
 class FilesResourceTestCase(unittest.TestCase):
@@ -203,6 +204,38 @@ class FilesResourceTestCase(unittest.TestCase):
                 path = response.json()['result'][0]['path']
 
                 self.assertEqual(path, name, path)
+
+    def test_upload_encrypt(self):
+
+        fs = FileSystem()
+        username = "admin"
+        with self.app.login(username, username) as app:
+
+            # create the password for encryption
+            url = '/api/fs/change_password'
+            response = app.put(url, data=b"password",
+                headers={'X-YUE-PASSWORD': 'password'})
+            self.assertEqual(response.status_code, 200, response.status_code)
+
+            dat0 = b"abc123"
+            path = 'test/upload_encrypt.txt'
+            url = '/api/fs/mem/path/' + path
+            response = app.post(url, data=dat0,
+                headers={'X-YUE-PASSWORD': 'password'})
+            self.assertEqual(response.status_code, 200, response.status_code)
+            self.assertTrue(os.path.exists(path))
+            dat1_enc = open(path, "rb").read()
+            print(dat1_enc)
+
+            key = self.storageDao.getEncryptionKey(self.USER['id'], 'password')
+            with fs.open("mem://test/" + path, "rb") as rb:
+                stream = FileDecryptorReader(rb, key)
+                dat1 = stream.read()
+            self.assertEqual(dat0, dat1)
+            print(dat0, dat1)
+
+            # TODO: add a app.get request to retrieve the decrypted file
+            return
 
 if __name__ == '__main__':
     main_test(sys.argv, globals())

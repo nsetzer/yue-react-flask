@@ -109,7 +109,7 @@ def FileSystemUserDataTable(metadata):
         Column('encryption_key', String, nullable=False),
         # expired is None for the latest version of a file
         # otherwise it is the date the version was retired
-        Column('expired', Integer)
+        Column('expired', Integer, nullable=True)
     )
 
 def FileSystemPermissionTable(metadata):

@@ -401,6 +401,26 @@ class StorageTestCase(unittest.TestCase):
         self.assertEqual(1, count)
         self.assertEqual(512, usage)
 
+    def test_007_encryption(self):
+
+        user_id = self.USER['id']
+        password = "password"
+        new_password = "new-password"
+
+        with self.assertRaises(StorageException):
+            self.storageDao.getEncryptionKey(user_id, password)
+
+        self.storageDao.changePassword(user_id, password, password)
+
+        key1 = self.storageDao.getEncryptionKey(user_id, password)
+
+        self.storageDao.changePassword(user_id, password, new_password)
+
+        key2 = self.storageDao.getEncryptionKey(user_id, new_password)
+
+        # changing the password should still keep the same key
+        self.assertEqual(key1, key2)
+
     # todo:
     #   test that a user cannot CRUD other users files
     #   rename when dst already exists should fail
