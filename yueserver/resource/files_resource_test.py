@@ -231,14 +231,27 @@ class FilesResourceTestCase(unittest.TestCase):
             # get the key used for encryption
             key = self.storageDao.getEncryptionKey(self.USER['id'], 'password')
 
+            # we cant guess the storage path anymore, since it is
+            # randomly generated
+            info = self.storageDao.file_info(self.USER['id'],
+                self.storageDao.absoluteFilePath(
+                    self.USER['id'], self.USER['role_id'], path))
+
+            # sanity check, the file path should be an absolute path
+            # form of what the user gave for the file
+            self.assertTrue(info.file_path.endswith(path))
+            # the storage path should not contain the user given path
+            self.assertTrue(path not in info.storage_path)
+            print(info.file_path, info.storage_path)
             # read the file written to the memory FS, decrypt it
-            with fs.open("mem://test/" + path, "rb") as rb:
+            with fs.open(info.storage_path, "rb") as rb:
                 stream = FileDecryptorReader(rb, key)
                 dat1 = stream.read()
             self.assertEqual(dat0, dat1)
 
             # a simple get on the data should return the encrypted file
             # TODO: maybe the request should fail?
+            #       likely not, so that I can implement client side encryption
             response = app.get(url)
             dat2 = response.data
             self.assertEqual(b'EYUE', dat2[:4])

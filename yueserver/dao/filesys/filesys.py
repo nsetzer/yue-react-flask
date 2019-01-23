@@ -221,6 +221,10 @@ class FileSystem(object):
             getattr(self.getFileSystemForPath(path), attr)(
                 path, *args, **kwargs)
 
+    def _mem(self):
+        return self._fs[MemoryFileSystemImpl.scheme]._mem_store
+
+
 def main():
 
     mode = sys.argv[1]

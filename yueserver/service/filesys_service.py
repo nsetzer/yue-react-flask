@@ -16,8 +16,12 @@ from ..dao.filesys.crypt import FileEncryptorWriter, FileEncryptorReader, \
 from ..dao.storage import StorageDao, StorageNotFoundException
 from ..dao.user import UserDao
 
+from datetime import datetime
+
 import logging
 import time
+import base64
+import uuid
 
 # TODO: validate fs_name and path since those values come from a user
 #       use the same validation as storage path,
@@ -65,15 +69,29 @@ class FileSysService(object):
     def getRootPath(self, user, fs_name):
         return self.storageDao.rootPath(user['id'], user['role_id'], fs_name)
 
-    def getNewStoragePath(self, user, fs_name, path):
+    def _getNewStoragePath(self, user, fs_name, path):
         """
+        user: the current user
+        fs_name: name for the file system root to use
+        path: a relative path
+
         returns an absolute file path given the name of a
         file system (which determines the base directory) and a path.
         the path is guaranteed to be a sub directory of the named fs.
         """
 
+        part1 = datetime.now().strftime("%Y/%m/%d")
+        # create a unique alpha-numerix name for this file
+        part2 = base64.b64encode(uuid.uuid4().bytes, b"-_") \
+            .replace(b"=", b"") \
+            .replace(b"-", b"AA") \
+            .replace(b"_", b"AB") \
+            .decode("utf-8")
+        rel_path = "%s/%s" % (part1, part2)
+
+        # get the unique absolute path
         return self.storageDao.absolutePath(user['id'], user['role_id'],
-            fs_name, path)
+            fs_name, rel_path)
 
     def getFilePath(self, user, fs_name, path):
         return self.storageDao.absoluteFilePath(user['id'], user['role_id'],
@@ -217,7 +235,7 @@ class FileSysService(object):
 
         os_root = '/'
 
-        storage_path = self.getNewStoragePath(user, fs_name, path)
+        storage_path = self._getNewStoragePath(user, fs_name, path)
         file_path = self.getFilePath(user, fs_name, path)
 
         dirpath, _ = self.fs.split(storage_path)

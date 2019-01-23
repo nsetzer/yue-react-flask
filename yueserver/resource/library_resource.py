@@ -224,11 +224,8 @@ class LibraryResource(WebResource):
     @requires_auth("library_write_song")
     def set_song_audio(self, song_id):
 
-        abs_path = self.filesys_service.getStoragePath(
-            g.current_user, g.body['root'], g.body['path'])
-
         self.audio_service.setSongFilePath(
-            g.current_user, song_id, abs_path)
+            g.current_user, song_id, g.body['root'], g.body['path'])
 
         return jsonify(result="OK"), 200
 
@@ -260,10 +257,8 @@ class LibraryResource(WebResource):
     @requires_auth("library_write_song")
     def set_song_art(self, song_id):
 
-        abs_path = self.filesys_service.getStoragePath(
-            g.current_user, g.body['root'], g.body['path'])
         self.audio_service.setSongAlbumArtPath(
-            g.current_user, song_id, abs_path)
+            g.current_user, song_id, g.body['root'], g.body['path'])
 
         return jsonify(result="OK"), 200
 
