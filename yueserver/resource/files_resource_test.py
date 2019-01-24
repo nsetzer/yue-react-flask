@@ -231,6 +231,12 @@ class FilesResourceTestCase(unittest.TestCase):
             # get the key used for encryption
             key = self.storageDao.getEncryptionKey(self.USER['id'], 'password')
 
+            # use the api to get the encrypted form of the key
+            url2 = '/api/fs/user_key'
+            response = app.get(url2)
+            user_key = response.json()['result']['key']
+            self.assertTrue(user_key.startswith("$2b$"))
+
             # we cant guess the storage path anymore, since it is
             # randomly generated
             info = self.storageDao.file_info(self.USER['id'],
@@ -254,7 +260,7 @@ class FilesResourceTestCase(unittest.TestCase):
             #       likely not, so that I can implement client side encryption
             response = app.get(url)
             dat2 = response.data
-            self.assertEqual(b'EYUE', dat2[:4])
+            self.assertEqual(b'EYUE', dat2[:4], dat2)
 
             # A get with the header set should return the unencrypted data
             response = app.get(url,

@@ -200,3 +200,13 @@ class FilesResource(WebResource):
             password, new_password)
 
         return jsonify(result="OK"), 200
+
+    @get("user_key")
+    @requires_auth("filesystem_write")
+    def user_key(self):
+        """
+        return the encrypted form of the current file encryption key.
+        """
+        key = self.filesys_service.getCurrentUserKey(g.current_user)
+
+        return jsonify(result={"key": key}), 200

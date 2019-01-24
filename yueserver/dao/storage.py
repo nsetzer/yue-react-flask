@@ -497,6 +497,24 @@ class StorageDao(object):
 
         return decryptkey(password, item.encryption_key)
 
+    def getCurrentUserKey(self, user_id):
+        """
+        return the encryption key without decrypting it first.
+        """
+
+        tab = self.dbtables.FileSystemUserDataTable
+
+        statement = tab.select().where(
+            and_(tab.c.user_id == user_id,
+                 tab.c.expired.is_(None)))
+
+        item = self.db.session.execute(statement).fetchone()
+
+        if item is None:
+            raise StorageException("key not found")
+
+        return item.encryption_key
+
     def changePassword(self, user_id, password, new_password, commit=True):
 
         tab = self.dbtables.FileSystemUserDataTable
@@ -527,3 +545,5 @@ class StorageDao(object):
 
         if commit:
             self.db.session.commit()
+
+

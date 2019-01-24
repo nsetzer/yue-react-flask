@@ -46,22 +46,73 @@ def _abort_flush(*args, **kwargs):
     sys.stderr.write("ERROR: flush. Database open in readonly mode\n")
     return
 
-def db_connect(connection_string=None, readonly=False):
+def connection_string(host=None, username=None, password=None, dbname=None):
+    """
+    host: the hostname to connect to, None, or a path to a local file
+          for postgres hostname[:port]
+    username: username to log in as
+    password: the users password
+    dbname: optional database use.
+    """
+    if host is None:
+        # in memory SQLite connection string
+        return 'sqlite://'
+
+    f = lambda x: x is None
+
+    if host is not None and all(map(f, [username, password, dbname])):
+        # SQLite connection to file on local disk
+        return 'sqlite://' + host
+
+    if password:
+        username = "%s:%s" % (username, password)
+
+    if dbname:
+        host = "%s/%s" % (host, dbname)
+
+    # postgres connection string
+    return "postgresql://%s@%s" % (username, host)
+
+class DatabaseConnection(object):
+    def __init__(self):
+        super(DatabaseConnection, self).__init__()
+
+    def execute(self, statement, params=None):
+        """
+        """
+
+        if isinstance(statement, str):
+            statement = text(statement)
+
+        return self.session.execute(statement, params)
+
+    def compile(self, statement):
+        """
+        returns a valid sql string repesentation of the statement
+        """
+
+        if isinstance(statement, str):
+            statement = text(statement)
+
+        return statement.compile(self.engine,
+            compile_kwargs={'literal_binds': True})
+
+def db_connect(url=None, readonly=False):
     """
     a reimplementation of the Flask-SqlAlchemy integration
     """
 
     # connect to a SQLite :memory: database
-    if connection_string is None or connection_string == ":memory:":
-        connection_string = 'sqlite://'
+    if url is None or url == ":memory:":
+        url = 'sqlite://'
 
-    return db_connect_impl(DatabaseTables, connection_string, readonly)
+    return db_connect_impl(DatabaseTables, url, readonly)
 
-def db_connect_impl(tables_class, connection_string, readonly):
-    engine = create_engine(connection_string)
+def db_connect_impl(tables_class, url, readonly):
+    engine = create_engine(url)
     session = scoped_session(sessionmaker(bind=engine))
 
-    db = lambda: None
+    db = DatabaseConnection()
     db.engine = engine
     db.metadata = MetaData()
 
@@ -75,26 +126,26 @@ def db_connect_impl(tables_class, connection_string, readonly):
     db.delete_all = lambda: db.tables.drop(db.engine)
     db.disconnect = lambda: engine.dispose()
     db.delete = lambda table: db.session.execute(delete(table))
-    db.connection_string = connection_string
-    db.kind = lambda: connection_string.split(":")[0]
+    db.url = url
+    db.kind = lambda: url.split(":")[0]
     db.health = lambda: db_health(db)
 
     db.conn = db.session.bind.connect()
-    if connection_string.startswith("sqlite:"):
+    if url.startswith("sqlite:"):
         db.conn.connection.create_function('REGEXP', 2, regexp)
-        path = connection_string[len("sqlite:///"):]
+        path = url[len("sqlite:///"):]
         if path and not os.access(path, os.W_OK):
-            logging.warning("database at %s not writable" % connection_string)
+            logging.warning("database at %s not writable" % url)
 
     return db
 
 def db_reconnect(db, tables_class):
-    db2 = lambda: None
+    db2 = DatabaseConnection()
     db2.engine = db.engine
     db2.session = db.session
     db2.metadata = MetaData()
     db2.tables = tables_class(db2.metadata)
-    db2.connection_string = db.connection_string
+    db2.url = db.url
     db2.kind = db.kind
     db2.conn = db.conn
 

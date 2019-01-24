@@ -318,6 +318,9 @@ class FileSysService(object):
 
         self.storageDao.changePassword(user['id'], password, new_password)
 
+    def getCurrentUserKey(self, user):
+        return self.storageDao.getCurrentUserKey(user['id'])
+
     def encryptStream(self, user, password, stream, mode):
         """
         returns a file-like object wrapping stream
