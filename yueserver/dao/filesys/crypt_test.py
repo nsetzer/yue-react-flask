@@ -5,16 +5,16 @@ import io
 from .crypt import \
     FileEncryptorWriter, FileEncryptorReader, \
     FileDecryptorWriter, FileDecryptorReader, \
-    cryptkey, decryptkey,  recryptkey, new_stream_cipher, get_stream_cipher
+    cryptkey, decryptkey, recryptkey, new_stream_cipher, get_stream_cipher
 
 class CryptTestCase(unittest.TestCase):
 
     def test_new_cipher_get_cipher(self):
 
         sampletext = b"hello world"
-        key1 = b"0"*32
-        key2 = b"1"*32
-        cipher, header = new_stream_cipher(b"0"*32)
+        key1 = b"0" * 32
+        key2 = b"1" * 32
+        cipher, header = new_stream_cipher(b"0" * 32)
 
         ciphertext = cipher.encrypt(sampletext)
         # when the correct password is used, a new cipher is used
@@ -30,9 +30,9 @@ class CryptTestCase(unittest.TestCase):
 
     def test_crypt_1(self):
 
-        key1 = b'0'*32
-        nonce = b"1"*8
-        key2 = b'0'*32
+        key1 = b'0' * 32
+        nonce = b"1" * 8
+        key2 = b'0' * 32
         text = b'The secret message to encrypt client side.'
 
         # ---------------------------------------------------------------------
@@ -48,13 +48,13 @@ class CryptTestCase(unittest.TestCase):
             bw = io.BytesIO()
             enc = FileEncryptorWriter(bw, key2, nonce, key2)
             for j in range(0, len(text), i):
-                enc.write(text[j:j+i])
+                enc.write(text[j:j + i])
             ciphertext_out = bw.getvalue()
             self.assertEqual(ciphertext, ciphertext_out)
 
     def test_crypt_2(self):
 
-        key = b'0'*32
+        key = b'0' * 32
         text = b'The secret message to encrypt client side.'
 
         # ---------------------------------------------------------------------
@@ -77,9 +77,9 @@ class CryptTestCase(unittest.TestCase):
 
     def test_crypt_3(self):
 
-        key1 = b'0'*32
-        key2 = b'0'*32
-        nonce = b'1'*8
+        key1 = b'0' * 32
+        key2 = b'0' * 32
+        nonce = b'1' * 8
         text = b'The secret message to encrypt client side.'
 
         # ---------------------------------------------------------------------
@@ -98,7 +98,7 @@ class CryptTestCase(unittest.TestCase):
 
     def test_crypt_4(self):
 
-        key = b'0'*32
+        key = b'0' * 32
         text = b'The secret message to encrypt client side.'
 
         # ---------------------------------------------------------------------
@@ -113,12 +113,12 @@ class CryptTestCase(unittest.TestCase):
             bw = io.BytesIO()
             dec = FileDecryptorWriter(bw, key)
             for j in range(0, len(ciphertext), i):
-                dec.write(ciphertext[j:j+i])
+                dec.write(ciphertext[j:j + i])
             self.assertEqual(bw.getvalue(), text)
 
     def test_crypt_5(self):
 
-        key = b'0'*32
+        key = b'0' * 32
         text = b'The secret message to encrypt client side.'
 
         # ---------------------------------------------------------------------
@@ -138,8 +138,10 @@ class CryptTestCase(unittest.TestCase):
         expected_enckey = b'0' * 32
         # the key is made up of a bcrypt salt, salsa 20 nonce,
         # the encrypted key, and finally an HMAC for the previous 3 components
-        expected_key = '$2b$04$0GNJpMOV5WWVtdVjOP/PMe:MTExMTExMTE=:Oyf9QOxkAcpw3e7L1StFEAymudz76FZ+RD2CKC8bH4M=:h4b3bkoak3pPu5uWDPJNENMZexyxzOF0UR/punvoYns='
-        key = cryptkey("password", b"0"*32, b"1"*8, salt)
+        expected_key = '01:$2b$04$0GNJpMOV5WWVtdVjOP/PMe:MTExMTExMTE=:' \
+            'Oyf9QOxkAcpw3e7L1StFEAymudz76FZ+RD2CKC8bH4M=:' \
+            'U+ZE9W6GTMKAtEpb76izbwJyRp6NoVU41VA+lJd6xcg='
+        key = cryptkey("password", b"0" * 32, b"1" * 8, salt)
         self.assertEqual(expected_key, key)
 
         enckey = decryptkey("password", key)
@@ -153,7 +155,7 @@ class CryptTestCase(unittest.TestCase):
         self.assertEqual(expected_enckey, enckey)
 
     def test_keygen_3(self):
-        """ show that an invalid password fails to decrypt the key correctly """
+        """ show that an invalid password fails to decrypt the key """
         expected_enckey = b'1' * 32
         key = cryptkey("password", expected_enckey, workfactor=4)
         with self.assertRaises(ValueError):
@@ -166,7 +168,7 @@ class CryptTestCase(unittest.TestCase):
 
         salt = b'invalid'
         with self.assertRaises(ValueError):
-            key = cryptkey("password", b"0"*32, b"1"*8, salt)
+            key = cryptkey("password", b"0" * 32, b"1" * 8, salt)
 
     def test_keygen_5(self):
         """ show that a key can be re-encrypted """

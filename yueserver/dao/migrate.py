@@ -28,9 +28,6 @@ class _MigrateV1Context(object):
         # this use the first matching prefix assuming there are no
         # overlaping prefixes in the environment
 
-        # TODO: reimplement using db FileSystemTable
-        # there is no need for the environment config
-
         fs_items = list(self.dbv1.session.execute(
             self.dbv1.tables.FileSystemTable.select()).fetchall())
 
@@ -42,7 +39,6 @@ class _MigrateV1Context(object):
                 break
         else:
             raise Exception("unable to determine root for: %s" % file_path)
-        # TODO: else error unrecognized base path?
 
         record = {
             'user_id': row['user_id'],

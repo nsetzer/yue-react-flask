@@ -33,9 +33,10 @@ def _crypt_cipher(salt, password, nonce=None):
     # hash the bcrypt output, which is only 248 bits.
     #   known values including the salt are 29 bytes
     #   while the hashed value is 31 bytes
-    # usw sha512, so that two 256 bit keys can be derived.
+    # use sha512, so that two 256 bit keys can be derived.
     key = sha512(hashed)
     # the first 32 bytes are used as the hmac key
+    # the digest is SHA256 to minimize the final output byte size
     key1 = key[:32]
     hmac = HMAC.new(key1, digestmod=SHA256)
     # the last 32 bytes are used for the cipher key
@@ -69,6 +70,7 @@ def cryptkey(password, text=None, nonce=None, salt=None, workfactor=12):
     a valid bcrypt salt, a ValueError is raised. If the salt is not
     given the workfactor is used to generate a new random salt
     """
+    btag = b"01"  # version tag
     if salt is None:
         salt = bcrypt.gensalt(workfactor)
     hmac, cipher = _crypt_cipher(salt, password, nonce)
@@ -79,7 +81,7 @@ def cryptkey(password, text=None, nonce=None, salt=None, workfactor=12):
     b64nonce = base64.b64encode(cipher.nonce)
     b64text = base64.b64encode(cipher.encrypt(text))
 
-    # TODO: add version id
+    hmac.update(btag)
     hmac.update(salt)
     hmac.update(b64nonce)
     hmac.update(b64text)
@@ -87,7 +89,8 @@ def cryptkey(password, text=None, nonce=None, salt=None, workfactor=12):
     b64mac = base64.b64encode(hmac.digest())
 
     # combine the bcrypt salt, the salsa nonce, and the encrypted text, and mac
-    return (b"%s:%s:%s:%s" % (salt, b64nonce, b64text, b64mac)).decode("utf-8")
+
+    return (b':'.join([btag, salt, b64nonce, b64text, b64mac])).decode("utf-8")
 
 def decryptkey(password, key):
     """
@@ -97,14 +100,14 @@ def decryptkey(password, key):
 
     a ValueError Exception is raised if an invalid password is given
     """
-    salt, b64nonce, b64text, b64mac = key.encode("utf-8").split(b':', 3)
+    btag, salt, b64nonce, b64text, b64mac = key.encode("utf-8").split(b':', 4)
     nonce = base64.b64decode(b64nonce)
     hmac, cipher = _crypt_cipher(salt, password, nonce)
     # verify the mac before decrypting the text
     # this ensures the correct password is given
     # and that the key has not been tampered with
 
-    # TODO: add version id
+    hmac.update(btag)
     hmac.update(salt)
     hmac.update(b64nonce)
     hmac.update(b64text)
@@ -249,7 +252,7 @@ class FileEncryptorWriter(_Closeable):
 
 class FileEncryptorReader(_Closeable):
     """ wrap a readable file-like object and encrypt the contents as it is read
-    an 8 byte header is added to the file
+    an 80 byte header is added to the file
     """
     HEADER_SIZE = HEADER_SIZE
 
@@ -273,18 +276,17 @@ class FileEncryptorReader(_Closeable):
             b = self.header[:n]
             self.header = self.header[n:]
             return b
-        else:
-            # return the requested number of bytes, encrypted
-            if self.header:
-                # return the header along and enough bytes to fill up to n
-                n = n - len(self.header)
-                b = self.header
-                self.header = b""
-                if n > 0:
-                    b += self.cipher.encrypt(self.rf.read(n))
-                return b
-            return self.cipher.encrypt(self.rf.read(n))
-        raise Exception("boo")
+
+        # return the requested number of bytes, encrypted
+        if self.header:
+            # return the header along and enough bytes to fill up to n
+            n = n - len(self.header)
+            b = self.header
+            self.header = b""
+            if n > 0:
+                b += self.cipher.encrypt(self.rf.read(n))
+            return b
+        return self.cipher.encrypt(self.rf.read(n))
 
     def close(self):
         self.rf.close()
