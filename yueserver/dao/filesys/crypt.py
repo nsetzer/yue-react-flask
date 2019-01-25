@@ -81,9 +81,13 @@ def cryptkey(password, text=None, nonce=None, salt=None, workfactor=12):
     b64nonce = base64.b64encode(cipher.nonce)
     b64text = base64.b64encode(cipher.encrypt(text))
 
+    hmac.update(struct.pack("<I", len(btag)))
     hmac.update(btag)
+    hmac.update(struct.pack("<I", len(salt)))
     hmac.update(salt)
+    hmac.update(struct.pack("<I", len(b64nonce)))
     hmac.update(b64nonce)
+    hmac.update(struct.pack("<I", len(b64text)))
     hmac.update(b64text)
 
     b64mac = base64.b64encode(hmac.digest())
@@ -100,6 +104,9 @@ def decryptkey(password, key):
 
     a ValueError Exception is raised if an invalid password is given
     """
+
+    # unfortunately, the way _crypt_cipher is implemented prevents me
+    # from validating the hmac before working with the string.
     btag, salt, b64nonce, b64text, b64mac = key.encode("utf-8").split(b':', 4)
     nonce = base64.b64decode(b64nonce)
     hmac, cipher = _crypt_cipher(salt, password, nonce)
@@ -107,9 +114,13 @@ def decryptkey(password, key):
     # this ensures the correct password is given
     # and that the key has not been tampered with
 
+    hmac.update(struct.pack("<I", len(btag)))
     hmac.update(btag)
+    hmac.update(struct.pack("<I", len(salt)))
     hmac.update(salt)
+    hmac.update(struct.pack("<I", len(b64nonce)))
     hmac.update(b64nonce)
+    hmac.update(struct.pack("<I", len(b64text)))
     hmac.update(b64text)
     hmac.verify(base64.b64decode(b64mac))
 

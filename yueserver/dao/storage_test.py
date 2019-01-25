@@ -373,7 +373,7 @@ class StorageTestCase(unittest.TestCase):
         expected = "mem:///opt/yueserver/user/%s/%s" % (user_id, name)
         self.assertEqual(expected, abspath)
 
-    def test_006_quota(self):
+    def test_006a_quota(self):
         """
         show that adding files increases the disk usage of a user
         """
@@ -401,6 +401,27 @@ class StorageTestCase(unittest.TestCase):
         self.assertEqual(1, count)
         self.assertEqual(512, usage)
 
+    def test_006b_set_quota(self):
+
+        # if not set at all for a user, return 0
+        quota = self.storageDao.userDiskQuota(self.USER['id'])
+        self.assertEqual(quota, 0)
+
+        # set the disk quota
+        self.storageDao.setUserDiskQuota(self.USER['id'], 1024)
+        quota = self.storageDao.userDiskQuota(self.USER['id'])
+        self.assertEqual(quota, 1024)
+
+        # set the disk quota
+        self.storageDao.setUserDiskQuota(self.USER['id'], 2048)
+        quota = self.storageDao.userDiskQuota(self.USER['id'])
+        self.assertEqual(quota, 2048)
+
+        # set the disk quota
+        self.storageDao.setUserDiskQuota(self.USER['id'], 0)
+        quota = self.storageDao.userDiskQuota(self.USER['id'])
+        self.assertEqual(quota, 0)
+
     def test_007_encryption(self):
 
         user_id = self.USER['id']
@@ -420,6 +441,8 @@ class StorageTestCase(unittest.TestCase):
 
         # changing the password should still keep the same key
         self.assertEqual(key1, key2)
+
+
 
     # todo:
     #   test that a user cannot CRUD other users files

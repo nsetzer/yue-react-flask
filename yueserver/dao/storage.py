@@ -477,14 +477,51 @@ class StorageDao(object):
         _count, _sum = result.fetchone()
         return _count, (_sum or 0)
 
-    def userDiskQuota(self, user_id, role_id):
+    def setUserDiskQuota(self, user_id, quota, commit=True):
+
+        tab = self.db.tables.FileSystemUserSupplementaryTable
+
+        statement = tab.select() \
+            .with_only_columns([tab.c.quota]) \
+            .where(tab.c.user_id == user_id)
+        item = self.db.session.execute(statement).fetchone()
+
+        if item is None:
+            statement = tab.insert().values({
+                "user_id": user_id,
+                "quota": quota
+            })
+        else:
+            statement = tab.update().values({
+                "quota": quota
+            }).where(tab.c.user_id == user_id)
+
+        result = self.db.session.execute(statement)
+
+        if commit:
+            self.db.session.commit()
+
+    def userDiskQuota(self, user_id):
         # todo: set default quota based on role_id, allow for individual
         #       users to exceed that quota, a value of zero is no limit
-        return 0
+
+        tab = self.db.tables.FileSystemUserSupplementaryTable
+
+        statement = tab.select() \
+            .with_only_columns([tab.c.quota]) \
+            .where(tab.c.user_id == user_id)
+
+        result = self.db.session.execute(statement)
+        item = result.fetchone()
+
+        if item is None:
+            return 0
+
+        return item.quota
 
     def getEncryptionKey(self, user_id, password):
 
-        tab = self.dbtables.FileSystemUserDataTable
+        tab = self.dbtables.FileSystemUserEncryptionTable
 
         statement = tab.select().where(
             and_(tab.c.user_id == user_id,
@@ -502,7 +539,7 @@ class StorageDao(object):
         return the encryption key without decrypting it first.
         """
 
-        tab = self.dbtables.FileSystemUserDataTable
+        tab = self.dbtables.FileSystemUserEncryptionTable
 
         statement = tab.select().where(
             and_(tab.c.user_id == user_id,
@@ -517,7 +554,7 @@ class StorageDao(object):
 
     def changePassword(self, user_id, password, new_password, commit=True):
 
-        tab = self.dbtables.FileSystemUserDataTable
+        tab = self.dbtables.FileSystemUserEncryptionTable
 
         statement = tab.select().where(
             and_(tab.c.user_id == user_id,

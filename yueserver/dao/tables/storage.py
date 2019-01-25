@@ -100,8 +100,16 @@ def FileSystemTable(metadata):
         Column('path', String, nullable=False),
     )
 
-def FileSystemUserDataTable(metadata):
-    return Table('filesystem_userdata', metadata,
+def FileSystemUserSupplementaryTable(metadata):
+    return Table('filesystem_user_supplementary_v1', metadata,
+        Column('user_id', ForeignKey("user.id"), nullable=False),
+        # quota is the maximum disk usage allowed by the user
+        # if not set or 0, then there is no maximum
+        Column('quota', Integer, nullable=False)
+    )
+
+def FileSystemUserEncryptionTable(metadata):
+    return Table('filesystem_encryption_v1', metadata,
         Column('user_id', ForeignKey("user.id"), nullable=False),
         # text
         # the encryption key is a string, itself encrypted using a password

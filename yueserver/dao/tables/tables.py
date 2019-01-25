@@ -14,7 +14,8 @@ from .song import SongDataTable, SongUserDataTable, \
                   SongQueueTable, SongHistoryTable, SongPlaylistTable
 from .storage import FileSystemStorageTableV1, FileSystemStorageTableV2, \
                      FileSystemTable, FileSystemPermissionTable, \
-                     FileSystemUserDataTable
+                     FileSystemUserSupplementaryTable, \
+                     FileSystemUserEncryptionTable
 from .schema import ApplicationSchemaTable
 
 class BaseDatabaseTables(object):
@@ -82,7 +83,10 @@ class DatabaseTablesV1(BaseDatabaseTables):
         self.FileSystemStorageTable = FileSystemStorageTableV2(metadata)
         self.FileSystemTable = FileSystemTable(metadata)
         self.FileSystemPermissionTable = FileSystemPermissionTable(metadata)
-        self.FileSystemUserDataTable = FileSystemUserDataTable(metadata)
+        self.FileSystemUserSupplementaryTable = \
+            FileSystemUserSupplementaryTable(metadata)
+        self.FileSystemUserEncryptionTable = \
+            FileSystemUserEncryptionTable(metadata)
 
 DatabaseTables = DatabaseTablesV1
 

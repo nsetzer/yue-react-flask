@@ -96,7 +96,8 @@ def migratev1(dbv1, env_yaml):
     dbv1.tables.UserSessionTable.create(dbv1.engine)
 
     dbv1.tables.FileSystemStorageTable.create(dbv1.engine)
-    dbv1.tables.FileSystemUserDataTable.create(dbv1.engine)
+    dbv1.tables.FileSystemUserSupplementaryTable.create(dbv1.engine)
+    dbv1.tables.FileSystemUserEncryptionTable.create(dbv1.engine)
     dbv1.tables.UserPreferencesTable.create(dbv1.engine)
 
     dbv1.session = dbv1.session()

@@ -140,7 +140,7 @@ class CryptTestCase(unittest.TestCase):
         # the encrypted key, and finally an HMAC for the previous 3 components
         expected_key = '01:$2b$04$0GNJpMOV5WWVtdVjOP/PMe:MTExMTExMTE=:' \
             'Oyf9QOxkAcpw3e7L1StFEAymudz76FZ+RD2CKC8bH4M=:' \
-            'U+ZE9W6GTMKAtEpb76izbwJyRp6NoVU41VA+lJd6xcg='
+            'NRzAs5Vb8DaOpo3KiNrMQKS75Ln7MEJDoL6B9h6CUCc='
         key = cryptkey("password", b"0" * 32, b"1" * 8, salt)
         self.assertEqual(expected_key, key)
 
