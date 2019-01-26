@@ -14,7 +14,7 @@ from ..dao.filesys.filesys import MemoryFileSystemImpl
 
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, body, header, compressed, param, httpError, \
-    int_range, int_min, send_generator, null_validator
+    int_range, int_min, send_generator, null_validator, boolean
 
 from .util import requires_auth, files_generator, files_generator_v2
 
@@ -39,13 +39,45 @@ class FilesResource(WebResource):
         return self._list_path(root, "", password=password)
 
     @get("<root>/path/<path:resPath>")
-    @param("list", type_=bool, default=False,
+    @param("list", type_=boolean, default=False,
         doc="do not retrieve contents for files if true")
     @header("X-YUE-PASSWORD")
     @requires_auth("filesystem_read")
     def get_path(self, root, resPath):
         password = g.headers.get('X-YUE-PASSWORD', None)
         return self._list_path(root, resPath, g.args.list, password=password)
+
+    @get("public/<fileId>")
+    @header("X-YUE-PASSWORD")
+    def get_public_file(self, fileId):
+        """
+        return a file that has a public access file identifier.
+        authentication is not required.
+        the file must not be encrypted
+        a password is optional. if the file requires a password it the password
+        will be used to validate the download can continue
+        """
+        # TODO: not implemented
+        return "OK"
+
+    @put("public/<root>/path/<path:resPath>")
+    @header("X-YUE-PASSWORD")
+    @param("revoke", type_=boolean, default=False)
+    @requires_auth("filesystem_write")
+    def make_public(self, root, resPath):
+        """
+
+        a password is optional, if set the password will be used to validate
+        downloads
+
+        the file must exist in the given root, with the given path.
+        """
+
+        password = g.headers['X-YUE-PASSWORD']
+        url = self.filesys_service.setFilePublic(g.current_user,
+            root, resPath, password=password, revoke=g.args.revoke)
+
+        return "OK"
 
     @get("<root>/index/")
     @param("limit", type_=int_range(0, 500), default=50)
@@ -131,6 +163,37 @@ class FilesResource(WebResource):
         roots = self.filesys_service.getRoots(g.current_user)
         return jsonify(result=roots)
 
+
+    @get("quota")
+    @requires_auth("filesystem_read")
+    def quota(self):
+        obj = self.filesys_service.getUserQuota(g.current_user)
+        return jsonify(result=obj)
+
+    @put("change_password")
+    @header("X-YUE-PASSWORD")
+    @requires_auth("filesystem_write")
+    @body(null_validator, content_type="application/octet-stream")
+    def change_password(self):
+
+        password = g.headers['X-YUE-PASSWORD']
+        new_password = g.body.read().decode("utf-8").strip()
+
+        self.filesys_service.changePassword(g.current_user,
+            password, new_password)
+
+        return jsonify(result="OK"), 200
+
+    @get("user_key")
+    @requires_auth("filesystem_write")
+    def user_key(self):
+        """
+        return the encrypted form of the current file encryption key.
+        """
+        key = self.filesys_service.getCurrentUserKey(g.current_user)
+
+        return jsonify(result={"key": key}), 200
+
     def _list_path(self, root, path, list_=False, password=None):
         # TODO: move this into the service layer
 
@@ -180,33 +243,3 @@ class FilesResource(WebResource):
 
             return httpError(404, "not found: root: `%s` path: `%s`" % (
                 root, path))
-
-    @get("quota")
-    @requires_auth("filesystem_read")
-    def quota(self):
-        obj = self.filesys_service.getUserQuota(g.current_user)
-        return jsonify(result=obj)
-
-    @put("change_password")
-    @header("X-YUE-PASSWORD")
-    @requires_auth("filesystem_write")
-    @body(null_validator, content_type="application/octet-stream")
-    def change_password(self):
-
-        password = g.headers['X-YUE-PASSWORD']
-        new_password = g.body.read().decode("utf-8").strip()
-
-        self.filesys_service.changePassword(g.current_user,
-            password, new_password)
-
-        return jsonify(result="OK"), 200
-
-    @get("user_key")
-    @requires_auth("filesystem_write")
-    def user_key(self):
-        """
-        return the encrypted form of the current file encryption key.
-        """
-        key = self.filesys_service.getCurrentUserKey(g.current_user)
-
-        return jsonify(result={"key": key}), 200

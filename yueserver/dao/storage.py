@@ -12,7 +12,7 @@ from .filesys.filesys import FileSystem
 from .filesys.util import FileRecord
 from .filesys.crypt import cryptkey, decryptkey, recryptkey
 from .exception import BackendException
-from .util import format_storage_path
+from .util import format_storage_path, hash_password, check_password_hash
 
 import os
 import sys
@@ -21,10 +21,18 @@ import time
 import calendar
 import uuid
 import posixpath
+import base64
 
 # taken from werkzeug.util.secure_file
 _windows_device_files = ('CON', 'AUX', 'COM1', 'COM2', 'COM3', 'COM4', 'LPT1',
                          'LPT2', 'LPT3', 'PRN', 'NUL')
+
+def url_uuid_v2():
+    """returns a randomly generated unique identifier"""
+    b = uuid.uuid4().bytes
+    b = base64.b64encode(b, b"-_")
+    b = b.replace(b"-", b"AA").replace(b"_", b"AB").replace(b"=", b"")
+    return b.decode("utf-8")
 
 class StorageException(BackendException):
     pass
@@ -582,5 +590,81 @@ class StorageDao(object):
 
         if commit:
             self.db.session.commit()
+
+    def setFilePublic(self, user_id, file_path, password=None, revoke=False, commit=True):
+
+        tab = self.db.tables.FileSystemStorageTable
+
+        columns = [tab.c.id, tab.c.public,
+            tab.c.public_password, tab.c.encrypted]
+        clause = and_(tab.c.user_id == user_id, tab.c.file_path == file_path)
+        statement = tab.select() \
+            .with_only_columns(columns) \
+            .where(clause)
+        item = self.db.session.execute(statement).fetchone()
+
+        if not item:
+            raise StorageNotFoundException(file_path)
+
+        if item.encrypted:
+            raise StorageException("file resource is encrypted")
+
+        if revoke:
+            record = {
+                "public": None,
+                "public_password": None
+            }
+        else:
+            password_hash = hash_password(password) if password else None
+
+            # bytes need to be encoded as strings when storing in postgres
+            if password_hash and self.db.kind() == "postgresql":
+                password_hash = password_hash.decode("utf-8")
+
+            record = {
+                "public": url_uuid_v2(),
+                "public_password": password_hash
+            }
+
+        statement = tab.update() \
+            .values(record).where(tab.c.id == item.id)
+
+        self.db.session.execute(statement)
+
+        return record['public']
+
+    def verifyPublicPassword(self, public_id, password):
+        """
+        return true if the password is valid for the given file
+        """
+        tab = self.db.tables.FileSystemStorageTable
+
+        statement = tab.select() \
+            .with_only_columns([tab.c.public_password]) \
+            .where(tab.c.public == public_id)
+        item = self.db.session.execute(statement).fetchone()
+
+        if not item:
+            raise StorageNotFoundException(file_path)
+
+        hash = item.public_password
+
+        if not hash:
+            return False
+
+        if self.db.kind() == "postgresql":
+            hash = hash.encode("utf-8")
+
+        return check_password_hash(hash, password)
+
+    def publicFileInfo(self, public_id, delimiter='/'):
+        tab = self.db.tables.FileSystemStorageTable
+
+        statement = tab.select().where(tab.c.public == public_id)
+        item = self.db.session.execute(statement).fetchone()
+        if not item:
+            raise StorageNotFoundException(public_id)
+        name = item.file_path.split(delimiter)[-1]
+        return self._item2file(name, item)
 
 

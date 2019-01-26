@@ -43,6 +43,9 @@ int_min = lambda min_: lambda v: vmin(min_, int(v))
 # validate that an integer is smaller than some number
 int_max = lambda max_: lambda v: vmax(max_, int(v))
 
+def boolean(s):
+    return s.lower() == "true"
+
 def httpError(code, message):
     # TODO: this should be at loglevel debug
     logging.error("[%3d] %s" % (code, message))

@@ -6,7 +6,7 @@ from ..framework import gui
 from ..framework.backend import GuiAppResource, AppClient
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, websocket, param, body, compressed, httpError, \
-    int_range, int_min, send_generator, null_validator
+    int_range, int_min, send_generator, null_validator, boolean
 
 from .gui.pages import AppPage, Palette
 from .gui.exception import AuthenticationError, LibraryException
@@ -363,9 +363,6 @@ class DemoAppClient(AppClient):
 
     def healthcheck(self):
         return self.guiService.healthcheck(self.identifier)
-
-def boolean(s):
-    return s.lower() == "true"
 
 class AudioGuiResource(GuiAppResource):
     def __init__(self, cfg, userService, audioService, fileService, transcodeService):

@@ -357,5 +357,8 @@ class FileSysService(object):
         # which are publicly available, require a password to download
         # but are also not encrypted.
 
+    def setFilePublic(self, user, fs_name, path, password=None, revoke=False):
 
-
+        abs_path = self.getFilePath(user, fs_name, path)
+        return self.storageDao.setFilePublic(
+            user['id'], abs_path, password=password, revoke=revoke)

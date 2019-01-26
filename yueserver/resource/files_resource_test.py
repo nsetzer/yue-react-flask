@@ -235,7 +235,7 @@ class FilesResourceTestCase(unittest.TestCase):
             url2 = '/api/fs/user_key'
             response = app.get(url2)
             user_key = response.json()['result']['key']
-            self.assertTrue(user_key.startswith("$2b$"))
+            self.assertTrue(user_key.startswith("01:$2b$"))
 
             # we cant guess the storage path anymore, since it is
             # randomly generated

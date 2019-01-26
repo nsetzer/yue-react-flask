@@ -77,6 +77,7 @@ def FileSystemStorageTableV2(metadata):
         # however preview path may not be unique
         # e.g. one album with 10 songs using the same jpeg.
         Column('preview_path', String),
+        Column('public_password', String),
         # number
         Column('permission', Integer, default=0o644),
         Column('version', Integer, default=0),
@@ -105,6 +106,7 @@ def FileSystemUserSupplementaryTable(metadata):
         Column('user_id', ForeignKey("user.id"), nullable=False),
         # quota is the maximum disk usage allowed by the user
         # if not set or 0, then there is no maximum
+        # value is in bytes
         Column('quota', Integer, nullable=False)
     )
 

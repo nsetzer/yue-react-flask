@@ -9,7 +9,7 @@ import time
 from .db import db_init_main, db_connect
 from .user import UserDao
 from .storage import StorageDao, StorageException, StorageNotFoundException
-
+from sqlalchemy import and_
 from sqlalchemy.exc import IntegrityError
 
 class StorageTestCase(unittest.TestCase):
@@ -442,7 +442,60 @@ class StorageTestCase(unittest.TestCase):
         # changing the password should still keep the same key
         self.assertEqual(key1, key2)
 
+    def test_008_public(self):
 
+        user_id = self.USER['id']
+        path1 = '/file_insert_public.txt'
+
+        # create and check that it exists
+        self.storageDao.insert(user_id, path1, path1, 1234, 1234567890)
+
+        # mark this file as public, generating a public unique id
+        public_id1 = self.storageDao.setFilePublic(user_id, path1)
+
+        # no password, this will always fail
+        self.assertFalse(self.storageDao.verifyPublicPassword(
+            public_id1, "wrong"))
+
+        # show the file is accessible with only the public id
+        rec = self.storageDao.publicFileInfo(public_id1)
+        self.assertEqual(rec.file_path, path1)
+
+        # mark this file as public, generating a public unique id
+        # also store a password
+        public_id2 = self.storageDao.setFilePublic(
+            user_id, path1, password="password")
+
+        # show that the old id is no longer useable
+        with self.assertRaises(StorageNotFoundException):
+            self.storageDao.publicFileInfo(public_id1)
+
+        # show the file is accessible with the new id
+        rec = self.storageDao.publicFileInfo(public_id2)
+        self.assertEqual(rec.file_path, path1)
+
+        # validate the password
+        self.assertTrue(self.storageDao.verifyPublicPassword(
+            public_id2, "password"))
+
+        self.assertFalse(self.storageDao.verifyPublicPassword(
+            public_id2, "wrong"))
+
+        # revoke the public permissions, show that it is not longer accessible
+        self.storageDao.setFilePublic(
+            user_id, path1, revoke=True)
+
+        with self.assertRaises(StorageNotFoundException):
+            self.storageDao.publicFileInfo(public_id1)
+
+        with self.assertRaises(StorageNotFoundException):
+            self.storageDao.publicFileInfo(public_id2)
+
+
+    def test_008_public_dne(self):
+
+        with self.assertRaises(StorageNotFoundException):
+            self.storageDao.publicFileInfo("dne")
 
     # todo:
     #   test that a user cannot CRUD other users files
