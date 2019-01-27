@@ -670,9 +670,11 @@ class AppService(object):
 
             return client
 
-    def getHtml(self, sessionId, path="/", params=None, headers=None):
+    def getHtml(self, sessionId, path="/", params=None, headers=None, remote_addr=None):
 
         client = self._get_instance(sessionId)
+
+        client.remote_addr = remote_addr
 
         cookies = {}
         for cookie in headers.get("Cookie", "").split(';'):
@@ -792,18 +794,29 @@ class AppService(object):
 
     def healthcheck(self, sessionId):
 
-        client = self._get_instance(sessionId, create=False)
+        clients = {}
+        for sid, client in self.clients.items():
+            clients[sid] = {
+                "remote_addr": client.remote_addr,
+                "nsockets": len(client.websockets)
+            }
+
         obj = {
             "global": {
                 "nclients": len(self.clients),
-                "nsockets": len(self.websocket_session)
+                "nsockets": len(self.websocket_session),
+
             },
+            "clients": clients
         }
+
+        client = self._get_instance(sessionId, create=False)
 
         if client:
             obj['session'] = {
                 "identifier": sessionId,
-                "nsockets": len(client.websockets)
+                "nsockets": len(client.websockets),
+                "remote_addr": client.remote_addr,
             }
         return obj
 
@@ -830,8 +843,22 @@ class GuiAppResource(WebResource):
         self.sio.emit(event, message, room=sid, namespace='/api/ws')
 
     def _index_path(self, path):
+
+        if 'HTTP_X_REAL_IP' in request.environ:
+            # for nginx
+            remote_addr = request.environ.get('HTTP_X_REAL_IP')
+        elif 'HTTP_X_FORWARDED_FOR' in request.environ:
+            # for nginx, and maybe other reverse proxies
+            remote_addr = request.environ.get('HTTP_X_FORWARDED_FOR')
+        else:
+            # for local dev, when not behind a proxy
+            remote_addr = request.remote_addr
+
+        logging.info("client ip connected: %s" % remote_addr)
+
         sessionId = self.service.sessionIdFromHeaders(request.headers)
-        html = self.service.getHtml(sessionId, path, request.args, request.headers)
+        html = self.service.getHtml(sessionId, path, request.args,
+            request.headers, remote_addr)
         response = make_response(html)
         response.headers["Set-Cookie"] = "yue_session=%s; Path=/" % (sessionId)
         response.headers['Content-Type'] = "text/html"
