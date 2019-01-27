@@ -1193,8 +1193,13 @@ def cli_init(args):
     # get the user apikey before creating any resources,
     # validate the user. use the apikey instead of a password
     # to prevent storing the password on disk
+
     client = connect(args.hostname, args.username, args.password)
-    userinfo = client.user_get_user().json()['result']
+    try:
+        userinfo = client.user_get_user().json()['result']
+    except Exception as e:
+        logging.error("unable to validate user: %s" % e)
+        return
     api_password = "APIKEY " + userinfo['apikey']
 
     #TODO: pwd should be empty

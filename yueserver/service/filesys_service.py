@@ -302,7 +302,7 @@ class FileSysService(object):
     def getUserQuota(self, user):
 
         nfiles, nbytes = self.storageDao.userDiskUsage(user['id'])
-        quota = self.storageDao.userDiskQuota(user['id'], user['role_id'])
+        quota = self.storageDao.userDiskQuota(user['id'])
 
         obj = {
             "nfiles": nfiles,

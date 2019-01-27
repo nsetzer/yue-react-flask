@@ -282,6 +282,9 @@ class TestApp(YueApp):
 
 def connect(host, username, password):
     """ return a client which sends credentials with every request"""
+    if not host.startswith('http://') and not host.startswith('https://'):
+        logging.warning("Protocol not specified in hostname (%s)"
+            " missing http:// or https:// prefix" % host)
     app = YueApp(Config.null())
     return app.client(host, username, password)
 
