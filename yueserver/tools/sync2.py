@@ -684,8 +684,12 @@ def _fetch(ctxt):
     limit = 500
     while True:
         params = {'limit': limit, 'page': page}
-        response = ctxt.client.files_get_index(
-            ctxt.root, ctxt.remote_base, **params)
+        try:
+            response = ctxt.client.files_get_index(
+                ctxt.root, ctxt.remote_base, **params)
+        except Exception as e:
+            logging.error("unable to fetch: %s" % e)
+            return
         if response.status_code != 200:
             sys.stderr.write("fetch error...")
             return
@@ -914,7 +918,7 @@ def _status_file_impl(ctxt, relpath, abspath):
     if ctxt.verbose > 1:
         print(ent.data())
 
-def _sync_file(ctxt, relpath, abspath, push=False, pull=False, force=False):
+def _sync_file(ctxt, relpath, abspath, push=False, pull=False, force=False, blacklist=None):
 
     ent = _check_file(ctxt, relpath, abspath)
 
@@ -922,12 +926,16 @@ def _sync_file(ctxt, relpath, abspath, push=False, pull=False, force=False):
         sys.stderr.write("not found: %s\n" % ent.remote_path)
         return
 
-    _sync_file_impl(ctxt, ent, push, pull, force)
+    _sync_file_impl(ctxt, ent, push, pull, force, blacklist)
 
-def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
+def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False, blacklist=None):
 
     state = ent.state().split(':')[0]
     sym = FileState.symbol(state)
+
+    if blacklist and ent.name() in blacklist:
+        if not force:
+            return
 
     if FileState.SAME == state:
         pass
@@ -1027,7 +1035,7 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
     else:
         print("unknown %s" % ent.remote_path)
 
-def _sync_impl(ctxt, paths, push=False, pull=False, force=False, recursive=False):
+def _sync_impl(ctxt, paths, push=False, pull=False, force=False, recursive=False, blacklist=None):
 
     for dent in paths:
 
@@ -1037,16 +1045,17 @@ def _sync_impl(ctxt, paths, push=False, pull=False, force=False, recursive=False
             result = _check(ctxt, dent.remote_base, dent.local_base)
 
             for fent in result.files:
-                _sync_file_impl(ctxt, fent, push, pull, force)
+                _sync_file_impl(ctxt, fent, push, pull, force, blacklist)
 
             if recursive:
-                _sync_impl(ctxt, result.dirs, push, pull, force, recursive)
+                _sync_impl(ctxt, result.dirs, push, pull,
+                    force, recursive, blacklist)
 
         else:
             # todo: load blacklist from directory containing this file
             #   only push if force is given
             _sync_file(ctxt, dent.remote_base, dent.local_base,
-                push, pull, force)
+                push, pull, force, blacklist)
 
 def _sync_get_file(ctxt, rpath, lpath):
 
@@ -1078,7 +1087,6 @@ def _sync_put_file(ctxt, lpath, rpath):
 
     if response.status_code > 201:
         raise Exception(response.text)
-
 
 def _copy_impl(client, fs, src, dst):
     """
@@ -1284,7 +1292,7 @@ def cli_sync(args):
     paths = _parse_path_args(ctxt.fs, ctxt.remote_base, ctxt.local_base, args.paths)
 
     _sync_impl(ctxt, paths, push=args.push, pull=args.pull,
-        force=args.force, recursive=args.recursion)
+        force=args.force, recursive=args.recursion, blacklist=ctxt.blacklist)
 
 def cli_get(args):
 
