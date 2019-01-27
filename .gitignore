@@ -32,3 +32,8 @@ logs/
 .well-known
 tmp/
 dist/
+yueserver.egg-info/
+venv/
+temp/
+data/
+crypt/
