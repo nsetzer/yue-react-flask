@@ -51,10 +51,8 @@ class YueAppState(object):
 
     def getFilePath(self, root, path):
 
-        path = self.fileService.storageDao.absolutePath(
-            self.auth_user['id'],
-            self.auth_user['role_id'],
-            root, path)
+        path = self.fileService.getStoragePath(
+            self.auth_user, root, path)
 
         return path
 
