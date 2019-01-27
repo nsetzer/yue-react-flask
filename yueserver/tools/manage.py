@@ -20,9 +20,11 @@ if (sys.version_info[0] == 2):
 
 from ..dao.util import hash_password
 from ..dao.db import db_remove, db_connect, db_init, \
-    db_update, db_repopulate, db_drop_all, db_drop_songs, db_health
+    db_update, db_repopulate, db_drop_all, db_drop_songs, db_health, \
+    connection_string
 from ..dao.user import UserDao
 from ..dao.storage import StorageDao
+from ..dao.migrate import migratev1
 from ..app import YueApp, generate_client
 from ..config import Config
 from ..resource.util import get_features
@@ -73,7 +75,7 @@ def create(args):
     """Creates the db tables."""
 
     if args.database_url.startswith("sqlite:"):
-        db_path = args.database_url.replace("sqlite:///","")
+        db_path = args.database_url.replace("sqlite:///", "")
         if not db_remove(db_path):
             raise Exception("cannot remove database")
 
@@ -83,6 +85,13 @@ def create(args):
 def update(args):
     """updates the db tables."""
     db = db_connect(args.database_url)
+    db_update(db, db.tables, args.env_cfg_path)
+
+def migrate(args):
+
+    print(args.database_url)
+    db = db_connect(args.database_url)
+    migratev1(db)
     db_update(db, db.tables, args.env_cfg_path)
 
 def routes(args):
@@ -343,6 +352,13 @@ def main():
     parser_update.set_defaults(func=update)
 
     ###########################################################################
+    # MIGRATE - migrate a database
+
+    parser_migrate = subparsers.add_parser('migrate',
+        help='migrate a database')
+    parser_migrate.set_defaults(func=migrate)
+
+    ###########################################################################
     # ROUTES - list known endpoints of the rest service
 
     parser_routes = subparsers.add_parser('routes',
@@ -503,6 +519,11 @@ def main():
         args.database_url = cfg.database.url
         logging.warning("database url not given. using profile default: %s" %
             cfg.database.dbhost)
+    else:
+        # TODO: username=None, password=None, dbname=None
+        # Note: almost no reason to give the db url as an argument
+        # since the config should have the connection settings
+        args.database_url = connection_string(args.database_url)
 
     if not os.path.exists(args.env_cfg_path):
         sys.stderr.write("cannot find env cfg: %s" % args.env_cfg_path)

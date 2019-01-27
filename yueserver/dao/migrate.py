@@ -73,10 +73,9 @@ class _MigrateV1Context(object):
             db.session.execute(insert(db.tables.FileSystemStorageTable)
                 .values(updated_row))
 
-def migratev1(dbv1, env_yaml):
+def migratev1(dbv1):
     """
     dbv1: a database connection, db.tables must implement v1
-    env_yaml: the environment config. currently unused.
 
     v1 adds:
         - a table to store the application schema version

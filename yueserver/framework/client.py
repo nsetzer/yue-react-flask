@@ -35,7 +35,7 @@ Parameter = namedtuple('Parameter',
 def split_auth(authas):
     """ parse a string into authorization parts
 
-    e.g. username@domain/role into (username, domain, role)
+    e.g. username@host#domain/role into (username@host, domain, role)
 
     username can be a name, or an email address.
 

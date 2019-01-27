@@ -485,7 +485,7 @@ def db_init_main(db, dbtables, data):
         default_domain = userDao.findDomainByName(domains.pop(0))
         default_role = userDao.findRoleByName(roles.pop(0))
 
-        logging.info("creating user: %s@%s/%s" % (
+        logging.info("creating user: %s#%s/%s" % (
             user['email'], default_domain['name'], default_role['name']))
 
         hash = not user['password'].startswith("$2b$")

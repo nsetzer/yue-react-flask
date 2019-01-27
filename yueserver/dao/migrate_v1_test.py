@@ -91,18 +91,11 @@ class MigrateV1TestCase(unittest.TestCase):
 
     def test_migrate_v1(self):
 
-        env_yaml = {
-            "filesystems": {
-                "default": "{pwd}/data/{user_id}",
-                "mem": "mem://memtest",
-            }
-        }
-
         dbv0 = db_connect_impl(DatabaseTablesV0, 'sqlite:///', False)
         v0_init(dbv0)
 
         dbv1 = db_reconnect(dbv0, DatabaseTablesV1)
-        migratev1(dbv1, env_yaml)
+        migratev1(dbv1)
 
 
         # check that the file_path/storage_path was migrated correctly
