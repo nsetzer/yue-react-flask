@@ -3,10 +3,10 @@ bcrypt==3.1.*
 SQLAlchemy==1.*
 pillow==5.*
 psycopg2-binary==2.*
-requests==2.*
+requests>=2.20.0
 boto3==1.*
-PyYAML==3.*
-pycryptodome==3.*
+PyYAML>=3.13
+pycryptodome>=3.6.6
 psutil==5.*
 python-socketio==2.*
 eventlet==0.24.*
