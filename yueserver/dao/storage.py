@@ -631,12 +631,16 @@ class StorageDao(object):
 
         self.db.session.execute(statement)
 
+        if commit:
+            self.db.session.commit()
+
         return record['public']
 
     def verifyPublicPassword(self, public_id, password):
         """
         return true if the password is valid for the given file
         """
+
         tab = self.db.tables.FileSystemStorageTable
 
         statement = tab.select() \
@@ -645,17 +649,25 @@ class StorageDao(object):
         item = self.db.session.execute(statement).fetchone()
 
         if not item:
-            raise StorageNotFoundException(file_path)
+            raise StorageNotFoundException(public_id)
 
         hash = item.public_password
 
+        # if no password set, return true only if
+        # no password was given
+
+
         if not hash:
+            return password is None
+
+        if password is None:
             return False
 
         if self.db.kind() == "postgresql":
             hash = hash.encode("utf-8")
 
-        return check_password_hash(hash, password)
+        res = check_password_hash(hash, password)
+        return res
 
     def publicFileInfo(self, public_id, delimiter='/'):
         tab = self.db.tables.FileSystemStorageTable

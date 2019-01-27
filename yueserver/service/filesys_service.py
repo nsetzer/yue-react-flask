@@ -362,3 +362,13 @@ class FileSysService(object):
         abs_path = self.getFilePath(user, fs_name, path)
         return self.storageDao.setFilePublic(
             user['id'], abs_path, password=password, revoke=revoke)
+
+    def verifyPublicPassword(self, public_id, password):
+
+        if not self.storageDao.verifyPublicPassword(public_id, password):
+            raise FileSysServiceException("invalid password")
+        return
+
+    def publicFileInfo(self, public_id):
+        return self.storageDao.publicFileInfo(public_id)
+

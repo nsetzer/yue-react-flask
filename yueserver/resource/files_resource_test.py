@@ -248,7 +248,6 @@ class FilesResourceTestCase(unittest.TestCase):
             self.assertTrue(info.file_path.endswith(path))
             # the storage path should not contain the user given path
             self.assertTrue(path not in info.storage_path)
-            print(info.file_path, info.storage_path)
             # read the file written to the memory FS, decrypt it
             with fs.open(info.storage_path, "rb") as rb:
                 stream = FileDecryptorReader(rb, key)
@@ -271,6 +270,85 @@ class FilesResourceTestCase(unittest.TestCase):
 
             # TODO: add a app.get request to retrieve the decrypted file
             return
+
+    def test_download_public_file(self):
+
+        username = "admin"
+        with self.app.login(username, username) as app:
+
+            ##################################################################
+            # upload a file
+            dat0 = b"abc123"
+            path = 'test/upload.txt'
+            url = '/api/fs/mem/path/' + path
+            response = app.post(url, data=dat0)
+            self.assertEqual(response.status_code, 200, response.status_code)
+
+            ##################################################################
+            # set a public url
+            url = '/api/fs/public/mem/path/' + path
+            response = app.put(url)
+            self.assertEqual(response.status_code, 200, response.status_code)
+            fileId = response.json()['result']['id']
+
+            ##################################################################
+            # retrieve the file
+            url = '/api/fs/public/' + fileId
+            response = app.get(url)
+            self.assertEqual(response.status_code, 200, response.dat)
+            self.assertEqual(dat0, response.data)
+
+            ##################################################################
+            # send a password -- 401
+            url = '/api/fs/public/' + fileId
+            response = app.get(url, headers={'X-YUE-PASSWORD': 'password'})
+            self.assertEqual(response.status_code, 401, response.status_code)
+
+            ##################################################################
+            # revoke public url
+            url = '/api/fs/public/mem/path/' + path
+            response = app.put(url, query_string={'revoke': True})
+            self.assertEqual(response.status_code, 200, response.status_code)
+            self.assertEqual(response.json()['result']['id'], "")
+
+            ##################################################################
+            # can no longer retrieve the file after revoking
+            url = '/api/fs/public/' + fileId
+            response = app.get(url)
+            self.assertEqual(response.status_code, 404, response.dat)
+
+    def test_download_public_file_password(self):
+
+        username = "admin"
+        with self.app.login(username, username) as app:
+
+            ##################################################################
+            # upload a file
+            dat0 = b"abc123"
+            path = 'test/upload.txt'
+            url = '/api/fs/mem/path/' + path
+            response = app.post(url, data=dat0)
+            self.assertEqual(response.status_code, 200, response.status_code)
+
+            ##################################################################
+            # set a public url
+            url = '/api/fs/public/mem/path/' + path
+            response = app.put(url, headers={'X-YUE-PASSWORD': 'password'})
+            self.assertEqual(response.status_code, 200, response.status_code)
+            fileId = response.json()['result']['id']
+
+            ##################################################################
+            # retrieve the file
+            url = '/api/fs/public/' + fileId
+            response = app.get(url)
+            self.assertEqual(response.status_code, 401, response.status_code)
+
+            ##################################################################
+            # send a password -- 401
+            url = '/api/fs/public/' + fileId
+            response = app.get(url, headers={'X-YUE-PASSWORD': 'password'})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(dat0, response.data)
 
 if __name__ == '__main__':
     main_test(sys.argv, globals())

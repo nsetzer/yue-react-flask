@@ -11,6 +11,7 @@ from ..dao.library import Song
 from ..dao.util import parse_iso_format, pathCorrectCase
 from ..dao.storage import StorageNotFoundException
 from ..dao.filesys.filesys import MemoryFileSystemImpl
+from ..service.exception import FileSysServiceException
 
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, body, header, compressed, param, httpError, \
@@ -57,8 +58,22 @@ class FilesResource(WebResource):
         a password is optional. if the file requires a password it the password
         will be used to validate the download can continue
         """
-        # TODO: not implemented
-        return "OK"
+
+        # first validate the password
+        # fails if incorrect or if given and not required
+        try:
+
+            password = g.headers.get('X-YUE-PASSWORD', None)
+            self.filesys_service.verifyPublicPassword(fileId, password)
+        except FileSysServiceException:
+            return httpError(401, "invalid file id or password")
+        except StorageNotFoundException:
+            return httpError(404, "invalid file id or password")
+
+        info = self.filesys_service.publicFileInfo(fileId)
+        stream = self.filesys_service.fs.open(info.storage_path, "rb")
+        go = files_generator_v2(stream)
+        return send_generator(go, info.name, file_size=None)
 
     @put("public/<root>/path/<path:resPath>")
     @header("X-YUE-PASSWORD")
@@ -74,10 +89,15 @@ class FilesResource(WebResource):
         """
 
         password = g.headers['X-YUE-PASSWORD']
-        url = self.filesys_service.setFilePublic(g.current_user,
+        fileId = self.filesys_service.setFilePublic(g.current_user,
             root, resPath, password=password, revoke=g.args.revoke)
 
-        return "OK"
+        if fileId is None:
+            fileId = ""
+
+        return jsonify({
+            "result": {"id": fileId},
+        })
 
     @get("<root>/index/")
     @param("limit", type_=int_range(0, 500), default=50)
