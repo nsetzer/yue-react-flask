@@ -1,6 +1,7 @@
 
 version=0.0.0
-
+githash=$(git rev-parse HEAD)
+branch=$(git rev-parse --abbrev-ref HEAD)
 mkdir -p dist
 
 cat <<EOF > start.sh
@@ -33,6 +34,12 @@ EOF
 chmod +x start.sh
 chmod +x uninstall.sh
 
+cat << EOF > yueserver/__init__.py
+__version__ = '$version'
+__branch__ = '$branch'
+__githash__ = '$githash'
+EOF
+
 tar -czv --exclude='*.pyc' --exclude='__pycache__' \
     config yueserver res wsgi.py requirements.txt setup.py \
     start.sh start_debug.sh uninstall.sh | \
@@ -42,3 +49,4 @@ rm start.sh
 rm start_debug.sh
 rm uninstall.sh
 
+echo "$version $branch $githash"

@@ -64,8 +64,8 @@ Change the directory permissions so that user has read and write
 access to files and folders where the service is installed
 
 ```bash
-sudo chmod yueapp .
-sudo chmod -R yueapp *
+sudo chown yueapp .
+sudo chown -R yueapp *
 
 sudo chgrp yueapp .
 sudo chgrp -R yueapp *

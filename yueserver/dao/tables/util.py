@@ -75,5 +75,5 @@ class JsonType(TypeDecorator):
         return value
 
     def copy(self):
-        return StringArrayType(self.impl.length)
+        return JsonType(self.impl.length)
 

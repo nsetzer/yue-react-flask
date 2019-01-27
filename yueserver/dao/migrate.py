@@ -35,7 +35,7 @@ class _MigrateV1Context(object):
         for fs in fs_items:
             fs_root = format_storage_path(fs.path, row['user_id'], pwd)
             if file_path.startswith(fs_root):
-                file_path = file_path[len(fs_root):].lstrip("/").lstrip("\\")
+                file_path = '/' + file_path[len(fs_root):].lstrip("/").lstrip("\\")
                 break
         else:
             raise Exception("unable to determine root for: %s" % file_path)

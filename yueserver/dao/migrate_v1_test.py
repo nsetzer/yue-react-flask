@@ -106,7 +106,13 @@ class MigrateV1TestCase(unittest.TestCase):
         ]
 
         for row in db_iter_rows(dbv1, dbv1.tables.FileSystemStorageTable):
-            self.assertTrue(row.file_path in sample_paths)
+            for path in sample_paths:
+                # paths now have a default prefix, /
+                path = "/" + path
+                if path == row.file_path:
+                    break
+            else:
+                self.assertFail("unable to match any payth")
 
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(MigrateV1TestCase)
