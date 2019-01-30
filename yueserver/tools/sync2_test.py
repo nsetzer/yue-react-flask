@@ -12,7 +12,7 @@ from ..framework.client import FlaskAppClient
 from ..framework.application import AppTestClientWrapper
 
 from .sync2 import db_connect, \
-    DatabaseTables, LocalStoragDao, SyncContext, \
+    DatabaseTables, LocalStorageDao, SyncContext, DirAttr, \
     _check, RecordBuilder, FileState, _sync_file, _sync_file_impl
 
 def createTestFile(storageDao, fs, state, variant, rel_path, remote_base, local_base, content=b""):
@@ -157,6 +157,13 @@ def createTestDirectory(storageDao, fs, dir_state, rel_path, remote_base, local_
         record = builder.build()
         storageDao.insert(remote_path, record)
 
+class TestSyncContext(SyncContext):
+    def __init__(self, *args, **kwargs):
+        super(TestSyncContext, self).__init__(*args, **kwargs)
+
+    def attr(self, directory):
+        return DirAttr({}, {".yue"})
+
 class CheckSyncTestCase(unittest.TestCase):
 
     """
@@ -175,11 +182,11 @@ class CheckSyncTestCase(unittest.TestCase):
         db = db_connect("sqlite://")  # memory
         db.create_all()
 
-        storageDao = LocalStoragDao(db, db.tables)
+        storageDao = LocalStorageDao(db, db.tables)
 
         fs = FileSystem()
 
-        ctxt = SyncContext(None, storageDao, fs, "mem", "local", "mem://local")
+        ctxt = TestSyncContext(None, storageDao, fs, "mem", "local", "mem://local")
 
         cls.db = db
         cls.storageDao = storageDao
@@ -370,13 +377,13 @@ class SyncTestCase(unittest.TestCase):
         db = db_connect("sqlite://")  # memory
         db.create_all()
 
-        storageDao = LocalStoragDao(db, db.tables)
+        storageDao = LocalStorageDao(db, db.tables)
 
         fs = FileSystem()
 
         client = TestClient(fs, storageDao)
 
-        ctxt = SyncContext(client, storageDao, fs, "mem", "", "mem://local")
+        ctxt = TestSyncContext(client, storageDao, fs, "mem", "", "mem://local")
         cls.db = db
         cls.storageDao = storageDao
         cls.fs = fs

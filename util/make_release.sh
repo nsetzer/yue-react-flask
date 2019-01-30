@@ -38,6 +38,7 @@ cat << EOF > yueserver/__init__.py
 __version__ = '$version'
 __branch__ = '$branch'
 __githash__ = '$githash'
+__date__ = '$(date '+%Y-%m-%d %H:%M:%S')'
 EOF
 
 tar -czv --exclude='*.pyc' --exclude='__pycache__' \

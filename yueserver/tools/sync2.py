@@ -9,6 +9,16 @@ add resolve-remote / resolve-local / resolve-fetch commands to fix conflicts
     and then resolve-local
     possibly sub commands e.g. `sync resolve <action> <action-args>`
 
+todo:
+    consider moving .yueignore to a .yueattr format:
+    ini file with sections for per folder settings and blacklist
+    e.g.
+        encryption: auto encrypt files in this dir
+        public: autogenerate public links for uploaded files
+
+    encryption keys should have a property/mode/type/name
+        e.g. 'default', 'system', 'client', etc
+
 """
 import os, sys
 import argparse
@@ -16,6 +26,7 @@ import posixpath
 import logging
 import json
 import datetime, time
+from fnmatch import fnmatch
 
 import yueserver
 from yueserver.tools.upload import S3Upload
@@ -87,9 +98,9 @@ class DatabaseTables(object):
         super(DatabaseTables, self).__init__()
         self.LocalStorageTable = LocalStorageTable(metadata)
 
-class LocalStoragDao(object):
+class LocalStorageDao(object):
     def __init__(self, db, dbtables):
-        super(LocalStoragDao, self).__init__()
+        super(LocalStorageDao, self).__init__()
         self.db = db
         self.dbtables = dbtables
 
@@ -252,7 +263,9 @@ class SyncContext(object):
         self.current_remote_base = remote_base
         self.current_local_base = local_base
         self.verbose = verbose
-        self.blacklist = set()
+
+    def attr(self, directory):
+        return DirAttr.openDir(self.local_base, directory)
 
 class RecordBuilder(object):
     """docstring for RecordBuilder"""
@@ -533,6 +546,150 @@ class FileEnt(object):
 
         return "%s %s %s %s" % (st_lv, st_as, st_ap[2:], st_am)
 
+    def local_directory(self):
+        return os.path.split(self.local_path)[0]
+
+class DirAttr(object):
+    """collection of meta directory attributes
+
+    Directories have a set of attributes, found in a .yueattr file.
+    Attributes control syncing behavior of files found in the directory
+    Attributes are automatically inherited by child directories
+    """
+    _cache = dict()
+
+    def __init__(self, settings, patterns):
+        """
+        settings: map str => str. a collection of settings for this
+            directory. that are automatically inherited by children
+        patterns: set str. a collection of unix-style glob patterns
+            used to blacklist certain files by name
+        """
+        super(DirAttr, self).__init__()
+        self.blacklist_patterns = set()
+        self.settings = {
+            "encrypt": False,
+            "encryption_mode": 'none',
+            "public": False,
+        }
+        self._init(settings, patterns)
+
+        # keep a reference to original values
+        self._settings = settings
+        self._patterns = patterns
+
+    def _init(self, settings, patterns):
+        _bool = lambda n: settings[n].lower() == "true"
+        _mode1 = lambda n: settings[n].lower()
+
+        for keyname in settings:
+            if keyname == 'encrypt':
+                self.settings['encrypt'] = _bool('encrypt')
+
+            elif keyname == 'encryption_mode':
+                self.settings['encryption_mode'] = _mode1('encryption_mode')
+                modes = {'none', 'client', 'server', 'system'}
+                if self.encryption_mode not in modes:
+                    raise Exception(
+                        "invalid encryption mode: %s" %
+                        self.settings['encryption_mode'])
+
+            elif keyname == 'public':
+                self.settings['public'] = _bool('public')
+
+            else:
+                raise Exception("unkown setting: %s" % keyname)
+
+        self.blacklist_patterns = self.blacklist_patterns | patterns
+
+    def doEncrypt(self):
+        return self.encrypt_uploads
+
+    def doGeneratePublicPath(self):
+        return self.generate_public
+
+    def match(self, name):
+        """ return true if the file should be excluded from status/upload """
+        for pattern in self.blacklist_patterns:
+            if fnmatch(name, pattern):
+                return True
+        return False
+
+    def update(self, settings, patterns):
+        """return a new DirAttr representing an immediate descendant"""
+
+        # clone this object
+        attr = DirAttr({}, self.blacklist_patterns)
+        attr.settings = dict(self.settings)
+
+        # apply the new configuration
+        attr._init(settings, patterns)
+        attr._settings = settings
+        attr._patterns = patterns
+
+        return attr
+
+    @staticmethod
+    def openDir(local_root, directory):
+        """open """
+
+        directory = directory.rstrip('/')
+
+        if not os.path.isabs(directory):
+            directory = os.path.join(local_root, directory)
+
+        # return the cached version
+        if directory in DirAttr._cache:
+            print("cache hit:", local_root, directory)
+            return DirAttr._cache[directory]
+
+        # open attr file, update the parent directory
+        attr_file = os.path.join(directory, ".yueattr")
+        settings, patterns = DirAttr.openAttrFile(attr_file)
+
+        # TODO: this check seems to be error prone
+        # but os.path.samefile uses os.stat
+        if local_root == directory or directory == "":
+            # construct the root attr
+            patterns = patterns | {'.yue'}
+            attr = DirAttr(settings, patterns)
+        else:
+            parent, name = os.path.split(directory)
+            if parent == directory:
+
+                raise Exception(parent)
+            attr = DirAttr.openDir(local_root, parent)
+            attr = attr.update(settings, patterns)
+
+        # cache for later
+        DirAttr._cache[directory] = attr
+
+        return attr
+
+    @staticmethod
+    def openAttrFile(attr_file):
+        settings = {}
+        patterns = set()
+
+        if os.path.exists(attr_file):
+
+            with open(attr_file, "r") as rf:
+                mode = 0
+                for line in rf:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if line == '[settings]':
+                        mode = 1
+                    elif line == '[blacklist]':
+                        mode = 0
+                    elif mode == 0:
+                        patterns.add(line)
+                    elif mode == 1:
+                        key, val = line.split('=', 1)
+                        settings[key] = val
+        return settings, patterns
+
 class CheckResult(object):
     def __init__(self, remote_base, dirs, files):
         self.remote_base = remote_base
@@ -597,29 +754,12 @@ def db_connect(connection_string):
 
     return db
 
-def get_blacklist(directory, default=None):
-
-    blacklist_file = os.path.join(directory, ".yueignore")
-    if default is None:
-        blacklist = set([".yue"])
-    else:
-        blacklist = set(default)
-    if os.path.exists(blacklist_file):
-        with open(blacklist_file, "r") as rf:
-            for line in rf:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                blacklist.add(line)
-    return blacklist
-
 def get_cfg(directory):
 
     cwd = directory
 
-    relpath = ""
+    relpath = ""  # the relative path / remote base
 
-    blacklist = get_blacklist(directory)
     names = os.listdir(directory)
     while '.yue' not in names:
         temp, t = os.path.split(directory)
@@ -630,7 +770,6 @@ def get_cfg(directory):
         if temp == directory:
             break
         directory = temp
-        blacklist |= get_blacklist(directory)
         names = os.listdir(directory)
 
     cfgdir = os.path.join(directory, '.yue')
@@ -653,7 +792,6 @@ def get_cfg(directory):
     userdata['local_base'] = directory
     userdata['current_local_base'] = cwd
     userdata['current_remote_base'] = posixpath.join(userdata['remote_base'], relpath)
-    userdata['blacklist'] = blacklist
     return userdata
 
 def get_ctxt(directory):
@@ -665,14 +803,13 @@ def get_ctxt(directory):
     client = connect(userdata['hostname'],
         userdata['username'], userdata['password'])
 
-    storageDao = LocalStoragDao(db, db.tables)
+    storageDao = LocalStorageDao(db, db.tables)
 
     fs = FileSystem()
 
     ctxt = SyncContext(client, storageDao, fs,
         userdata['root'], userdata['remote_base'], userdata['local_base'])
 
-    ctxt.blacklist = userdata['blacklist']
     ctxt.current_local_base = userdata['current_local_base']
     ctxt.current_remote_base = userdata['current_remote_base']
 
@@ -713,13 +850,12 @@ def _fetch(ctxt):
 
     ctxt.storageDao.db.session.commit()
 
-def _check(ctxt, remote_base, local_base, blacklist=None):
+def _check(ctxt, remote_base, local_base):
 
     if remote_base and not remote_base.endswith("/"):
         remote_base += "/"
 
-    if blacklist is None:
-        blacklist = {".yue"}
+    attr = ctxt.attr(local_base)
 
     dirs = []
     files = []
@@ -736,7 +872,7 @@ def _check(ctxt, remote_base, local_base, blacklist=None):
 
     for d in _dirs:
 
-        if d in blacklist:
+        if attr.match(d):
             continue
 
         remote_path = posixpath.join(remote_base, d)
@@ -796,7 +932,7 @@ def _check(ctxt, remote_base, local_base, blacklist=None):
         local_path = ctxt.fs.join(local_base, n)
         record = ctxt.fs.file_info(local_path)
 
-        if n in blacklist:
+        if attr.match(n):
             continue
 
         if record.isDir:
@@ -867,11 +1003,10 @@ def _check_file(ctxt, remote_path, local_path):
 
     return ent
 
-def _status_dir_impl(ctxt, remote_dir, local_dir, recursive, blacklist):
+def _status_dir_impl(ctxt, remote_dir, local_dir, recursive):
     # TODO: move recursive to the ctxt
-    blacklist = get_blacklist(local_dir, blacklist)
 
-    result = _check(ctxt, remote_dir, local_dir, blacklist)
+    result = _check(ctxt, remote_dir, local_dir)
 
     ents = list(result.dirs) + list(result.files)
 
@@ -891,7 +1026,7 @@ def _status_dir_impl(ctxt, remote_dir, local_dir, recursive, blacklist):
             if recursive:
                 rbase = posixpath.join(remote_dir, ent.name())
                 lbase = ctxt.fs.join(local_dir, ent.name())
-                _status_dir_impl(ctxt, rbase, lbase, recursive, blacklist)
+                _status_dir_impl(ctxt, rbase, lbase, recursive)
         else:
             state = ent.state().split(':')[0]
             sym = FileState.symbol(state)
@@ -918,7 +1053,7 @@ def _status_file_impl(ctxt, relpath, abspath):
     if ctxt.verbose > 1:
         print(ent.data())
 
-def _sync_file(ctxt, relpath, abspath, push=False, pull=False, force=False, blacklist=None):
+def _sync_file(ctxt, relpath, abspath, push=False, pull=False, force=False):
 
     ent = _check_file(ctxt, relpath, abspath)
 
@@ -926,24 +1061,26 @@ def _sync_file(ctxt, relpath, abspath, push=False, pull=False, force=False, blac
         sys.stderr.write("not found: %s\n" % ent.remote_path)
         return
 
-    _sync_file_impl(ctxt, ent, push, pull, force, blacklist)
+    _sync_file_impl(ctxt, ent, push, pull, force)
 
-def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False, blacklist=None):
+def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
 
     state = ent.state().split(':')[0]
     sym = FileState.symbol(state)
 
-    if blacklist and ent.name() in blacklist:
+    attr = ctxt.attr(ent.local_directory())
+
+    if attr.match(ent.name()):
         if not force:
             return
 
     if FileState.SAME == state:
         pass
     elif (FileState.PUSH == state and push) or \
-       (FileState.DELETE_REMOTE == state and not pull and push) or \
-       (FileState.CONFLICT_MODIFIED == state and not pull and push) or \
-       (FileState.CONFLICT_CREATED == state and not pull and push) or \
-       (FileState.CONFLICT_VERSION == state and not pull and push):
+         (FileState.DELETE_REMOTE == state and not pull and push) or \
+         (FileState.CONFLICT_MODIFIED == state and not pull and push) or \
+         (FileState.CONFLICT_CREATED == state and not pull and push) or \
+         (FileState.CONFLICT_VERSION == state and not pull and push):
 
         if FileState.PUSH != state and not force:
             print("%s is in a conflict state." % ent.remote_path)
@@ -972,10 +1109,10 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False, blacklist=No
         record = RecordBuilder().local(**ent.af).remote(**ent.af).build()
         ctxt.storageDao.upsert(ent.remote_path, record)
     elif (FileState.PULL == state and pull) or \
-       (FileState.DELETE_LOCAL == state and pull and not push) or \
-       (FileState.CONFLICT_MODIFIED == state and pull and not push) or \
-       (FileState.CONFLICT_CREATED == state and pull and not push) or \
-       (FileState.CONFLICT_VERSION == state and pull and not push):
+         (FileState.DELETE_LOCAL == state and pull and not push) or \
+         (FileState.CONFLICT_MODIFIED == state and pull and not push) or \
+         (FileState.CONFLICT_CREATED == state and pull and not push) or \
+         (FileState.CONFLICT_VERSION == state and pull and not push):
 
         if FileState.PULL != state and not force:
             print("%s is in a conflict state." % ent.remote_path)
@@ -1035,7 +1172,7 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False, blacklist=No
     else:
         print("unknown %s" % ent.remote_path)
 
-def _sync_impl(ctxt, paths, push=False, pull=False, force=False, recursive=False, blacklist=None):
+def _sync_impl(ctxt, paths, push=False, pull=False, force=False, recursive=False):
 
     for dent in paths:
 
@@ -1045,17 +1182,17 @@ def _sync_impl(ctxt, paths, push=False, pull=False, force=False, recursive=False
             result = _check(ctxt, dent.remote_base, dent.local_base)
 
             for fent in result.files:
-                _sync_file_impl(ctxt, fent, push, pull, force, blacklist)
+                _sync_file_impl(ctxt, fent, push, pull, force)
 
             if recursive:
                 _sync_impl(ctxt, result.dirs, push, pull,
-                    force, recursive, blacklist)
+                    force, recursive)
 
         else:
             # todo: load blacklist from directory containing this file
             #   only push if force is given
             _sync_file(ctxt, dent.remote_base, dent.local_base,
-                push, pull, force, blacklist)
+                push, pull, force)
 
 def _sync_get_file(ctxt, rpath, lpath):
 
@@ -1156,6 +1293,18 @@ def _list_impl(client, root, path):
             sys.stdout.write("%s %s %12d %s %s\n" % (
                 fvers, fdate, int(item['size']), fperm, item['name']))
 
+def _attr_impl(ctxt, path):
+
+    attr = ctxt.attr(path)
+
+    print("[settings]")
+    for keyname, value in attr.settings.items():
+        print("%s=%s" % (keyname, value))
+
+    print("\n[blacklist]")
+    for pattern in attr.blacklist_patterns:
+        print(pattern)
+
 def _parse_path_args(fs, remote_base, local_base, args_paths):
 
     paths = []
@@ -1240,7 +1389,7 @@ def cli_init(args):
     with open(userpath, "w") as wf:
         json.dump(userdata, wf, indent=4, sort_keys=True)
 
-    storageDao = LocalStoragDao(db, db.tables)
+    storageDao = LocalStorageDao(db, db.tables)
 
     fs = FileSystem()
 
@@ -1275,7 +1424,7 @@ def cli_status(args):
                 print("%s/" % dent.local_base)
 
             _status_dir_impl(ctxt, dent.remote_base, dent.local_base,
-                args.recursion, ctxt.blacklist)
+                args.recursion)
         else:
 
             _status_file_impl(ctxt, dent.remote_base, dent.local_base)
@@ -1292,7 +1441,7 @@ def cli_sync(args):
     paths = _parse_path_args(ctxt.fs, ctxt.remote_base, ctxt.local_base, args.paths)
 
     _sync_impl(ctxt, paths, push=args.push, pull=args.pull,
-        force=args.force, recursive=args.recursion, blacklist=ctxt.blacklist)
+        force=args.force, recursive=args.recursion)
 
 def cli_get(args):
 
@@ -1332,6 +1481,13 @@ def cli_list(args):
 
     root = args.root or ctxt.root
     _list_impl(ctxt.client, root, args.path)
+
+def cli_attr(args):
+
+    cwd = os.getcwd()
+    ctxt = get_ctxt(cwd)
+
+    _attr_impl(ctxt, args.path or cwd)
 
 def main():
 
@@ -1512,7 +1668,18 @@ def main():
     parser_list.add_argument("--root", default=None,
         help="file system root to list")
 
-    parser_list.add_argument('path', nargs="?", default="", help="relative remote path")
+    parser_list.add_argument('path', nargs="?", default="",
+        help="relative remote path")
+
+    ###########################################################################
+    # Attr
+
+    parser_attr = subparsers.add_parser('attr',
+        help="print directory attributes")
+    parser_attr.set_defaults(func=cli_attr)
+
+    parser_attr.add_argument('path', nargs="?", default="",
+        help="local directory path")
     ###########################################################################
     args = parser.parse_args()
 
