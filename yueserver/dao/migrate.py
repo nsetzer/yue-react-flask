@@ -8,6 +8,7 @@ from sqlalchemy import and_, or_, not_, select, column, update, insert, delete
 from .tables.storage import FileSystemStorageTableV1
 from .db import db_connect_impl, db_add_column, db_get_columns, db_iter_rows
 from .util import format_storage_path
+from .filesys.crypt import generate_secure_password
 
 import logging
 
@@ -61,6 +62,12 @@ class _MigrateV1Context(object):
         # init the new settings table
         db.session.execute(insert(db.tables.ApplicationSchemaTable)
             .values({"key": "db_version", "value": str(db.tables.version)}))
+
+        db.session.execute(insert(db.tables.ApplicationSchemaTable)
+            .values({
+                "key": "storage_system_key",
+                "value": generate_secure_password()
+            }))
 
         # create a connection for the old FileSystemStorageTable
         tbl = FileSystemStorageTableV1(db.metadata)

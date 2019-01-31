@@ -93,6 +93,15 @@ class FileServiceTestCase(unittest.TestCase):
         with self.assertRaises(StorageNotFoundException):
             self.service.listDirectory(self.app.USER, root, "test")
 
+    def test_002a_system(self):
+
+        key1 = self.service.getUserSystemPassword(self.app.USER)
+        key2 = self.service.getUserSystemPassword(self.app.USER)
+        print("system")
+        print("system", key1)
+        print("system", key2)
+        print("system", len(key2))
+
 if __name__ == '__main__':
     main_test(sys.argv, globals())
 

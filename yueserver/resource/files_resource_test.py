@@ -6,7 +6,7 @@ import time
 
 from ..dao.db import main_test
 from ..dao.filesys.filesys import FileSystem
-from ..dao.filesys.crypt import FileDecryptorReader
+from ..dao.filesys.crypt import FileDecryptorReader, cryptkey
 from ..app import TestApp
 
 class FilesResourceTestCase(unittest.TestCase):
@@ -350,5 +350,15 @@ class FilesResourceTestCase(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(dat0, response.data)
 
+    def test_set_client_key(self):
+
+        username = "admin"
+        with self.app.login(username, username) as app:
+
+            url = '/api/fs/user_key'
+            response = app.put(url, data=cryptkey('password'))
+            self.assertEqual(response.status_code, 200, response.status_code)
+
+        set_user_key
 if __name__ == '__main__':
     main_test(sys.argv, globals())

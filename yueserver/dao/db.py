@@ -9,6 +9,7 @@ from .settings import SettingsDao
 from .library import Song, LibraryDao
 from .tables.tables import DatabaseTables
 from .search import regexp
+from .filesys.crypt import generate_secure_password
 
 import os
 import sys
@@ -439,11 +440,12 @@ def db_init_main(db, dbtables, data):
 
     userDao = UserDao(db, dbtables)
 
-    try:
-        settingsDao = SettingsDao(db, dbtables)
-        settingsDao.set("db_version", str(dbtables.version))
-    except AttributeError as e:
-        logging.error("%s" % e)
+    # -------------------------------------------------------------------------
+    # Settings
+
+    settingsDao = SettingsDao(db, dbtables)
+    settingsDao.set("db_version", str(dbtables.version))
+    settingsDao.set("storage_system_key", generate_secure_password())
 
     # -------------------------------------------------------------------------
     # Features

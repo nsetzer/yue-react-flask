@@ -9,8 +9,9 @@ from flask import jsonify, render_template, g, request, send_file
 
 from ..dao.library import Song
 from ..dao.util import parse_iso_format, pathCorrectCase
-from ..dao.storage import StorageNotFoundException
+from ..dao.storage import StorageNotFoundException, CryptMode
 from ..dao.filesys.filesys import MemoryFileSystemImpl
+from ..dao.filesys.crypt import validatekey
 from ..service.exception import FileSysServiceException
 
 from ..framework.web_resource import WebResource, \
@@ -18,6 +19,23 @@ from ..framework.web_resource import WebResource, \
     int_range, int_min, send_generator, null_validator, boolean
 
 from .util import requires_auth, files_generator, files_generator_v2
+
+def validate_mode(s):
+    s = s.lower()
+    if s in [CryptMode.client, CryptMode.server]:
+        return s
+    raise Exception("invalid input")
+
+def validate_key(body):
+    """read the response body and decode the encryption key
+    validate that the key is well formed
+    """
+    content = request.headers.get('content-type')
+    if content and content != "text/plain":
+        # must be not given, or text/plain
+        raise Exception("invalid content type")
+    text = body.read().decode('utf-8')
+    return validatekey(text)
 
 class FilesResource(WebResource):
     """QueueResource
@@ -42,11 +60,14 @@ class FilesResource(WebResource):
     @get("<root>/path/<path:resPath>")
     @param("list", type_=boolean, default=False,
         doc="do not retrieve contents for files if true")
+    @param("crypt", type_=validate_mode, doc="decryption mode",
+        default=CryptMode.server)
     @header("X-YUE-PASSWORD")
     @requires_auth("filesystem_read")
     def get_path(self, root, resPath):
         password = g.headers.get('X-YUE-PASSWORD', None)
-        return self._list_path(root, resPath, g.args.list, password=password)
+        return self._list_path(root, resPath, g.args.list,
+            password=password, crypt=g.args.crypt)
 
     @get("public/<fileId>")
     @header("X-YUE-PASSWORD")
@@ -141,6 +162,8 @@ class FilesResource(WebResource):
     @param("mtime", type_=int, doc="set file modified time")
     @param("permission", type_=int, doc="unix file permissions", default=0o644)
     @param("version", type_=int, doc="file version", default=0)
+    @param("crypt", type_=validate_mode, doc="encryption mode",
+        default=CryptMode.server)
     @header("X-YUE-PASSWORD")
     @body(null_validator, content_type="application/octet-stream")
     @requires_auth("filesystem_write")
@@ -159,7 +182,7 @@ class FilesResource(WebResource):
 
         if password is not None:
             stream = self.filesys_service.encryptStream(g.current_user,
-                password, stream, "r")
+                password, stream, "r", g.args.crypt)
 
         self.filesys_service.saveFile(
             g.current_user, root, resPath, stream,
@@ -195,6 +218,12 @@ class FilesResource(WebResource):
     @requires_auth("filesystem_write")
     @body(null_validator, content_type="application/octet-stream")
     def change_password(self):
+        """
+        change the 'server' encryption key
+
+        Note: use set_user_key to change the 'client' encryption key
+        the 'system' encryption key can never be changed
+        """
 
         password = g.headers['X-YUE-PASSWORD']
         new_password = g.body.read().decode("utf-8").strip()
@@ -205,16 +234,29 @@ class FilesResource(WebResource):
         return jsonify(result="OK"), 200
 
     @get("user_key")
+    @param("mode", type_=validate_mode, default=CryptMode.server)
     @requires_auth("filesystem_write")
     def user_key(self):
         """
         return the encrypted form of the current file encryption key.
         """
-        key = self.filesys_service.getCurrentUserKey(g.current_user)
+        key = self.filesys_service.getUserKey(
+            g.current_user, g.args.mode)
 
         return jsonify(result={"key": key}), 200
 
-    def _list_path(self, root, path, list_=False, password=None):
+    @put("user_key")
+    @requires_auth("filesystem_write")
+    @body(validate_key, content_type="text/plain")
+    def set_user_key(self):
+        """
+        set the client encryption key
+        """
+        key = g.body
+        logging.info("received: %s", key)
+        return httpError(501, "not implemented")
+
+    def _list_path(self, root, path, list_=False, password=None, crypt=CryptMode.server):
         # TODO: move this into the service layer
 
         # TODO: check for the header X-YUE-ENCRYPTION
@@ -243,7 +285,7 @@ class FilesResource(WebResource):
                 stream = self.filesys_service.fs.open(storage_path, "rb")
                 if password is not None:
                     stream = self.filesys_service.decryptStream(g.current_user,
-                        password, stream, "r")
+                        password, stream, "r", crypt)
                 go = files_generator_v2(stream)
                 headers = {
                     "X-YUE-VERSION": info.version,

@@ -112,7 +112,7 @@ class MigrateV1TestCase(unittest.TestCase):
                 if path == row.file_path:
                     break
             else:
-                self.assertFail("unable to match any payth")
+                self.assertFail("unable to match any path")
 
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(MigrateV1TestCase)

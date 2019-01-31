@@ -9,6 +9,9 @@ import bcrypt
 import hashlib
 import base64
 
+def generate_secure_password():
+    return base64.b64encode(get_random_bytes(32)).decode("utf-8")
+
 def sha512(msg):
     """ return the sha256 digest of a byte-string """
     m = hashlib.sha512()
@@ -43,6 +46,9 @@ def _crypt_cipher(salt, password, nonce=None):
     key2 = key[32:]
     cipher = Salsa20.new(key2, nonce)
     return hmac, cipher
+
+KEY_LENGTH = 135
+KEY_LENGTH_PARTS = (2, 29, 12, 44, 44)
 
 def cryptkey(password, text=None, nonce=None, salt=None, workfactor=12):
     """
@@ -134,6 +140,42 @@ def recryptkey(password, new_password, key):
     enckey = decryptkey(password, key)
 
     return cryptkey(new_password, enckey)
+
+def validatekey(key):
+    """
+    check that the given key is fell formed.
+    It should be a string with a well known length,
+    And should be composed of multiple parts.
+    Each part also has a well known length.
+
+    raise an exception if the key is not well formed
+    return the key unmodifed if valid
+    """
+
+    if len(key) != KEY_LENGTH:
+        raise ValueError("Invalid key length")
+
+    alphabet = ".:=/+$0123456789" \
+        "abcdefghijklmnopqrstuvwxyz" \
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ" \
+
+    for c in key:
+        if c not in alphabet:
+            raise ValueError("Invalid character")
+
+    parts = key.split(':')
+
+    if len(parts) != len(KEY_LENGTH_PARTS):
+        raise ValueError("Invalid key length")
+
+    if not parts[1].startswith('$2b$'):
+        raise ValueError("Invalid key length")
+
+    for part, length in zip(parts, KEY_LENGTH_PARTS):
+        if len(part) != length:
+            raise ValueError("Invalid key length")
+
+    return key
 
 class _Closeable(object):
 

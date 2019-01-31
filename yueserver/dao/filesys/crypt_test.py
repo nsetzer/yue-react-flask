@@ -5,7 +5,9 @@ import io
 from .crypt import \
     FileEncryptorWriter, FileEncryptorReader, \
     FileDecryptorWriter, FileDecryptorReader, \
-    cryptkey, decryptkey, recryptkey, new_stream_cipher, get_stream_cipher
+    cryptkey, decryptkey, recryptkey, validatekey, \
+    new_stream_cipher, get_stream_cipher, \
+    KEY_LENGTH, KEY_LENGTH_PARTS
 
 class CryptTestCase(unittest.TestCase):
 
@@ -184,6 +186,37 @@ class CryptTestCase(unittest.TestCase):
         key = cryptkey("password", expected_enckey, workfactor=4)
         with self.assertRaises(ValueError):
             recryptkey("invalid", "secret", key)
+
+    def test_keygen_7(self):
+
+        key = cryptkey("password")
+        print(key)
+        self.assertTrue(validatekey(key))
+
+        # reject a key with an invalid length
+        with self.assertRaises(ValueError):
+            validatekey("0" * 100)
+
+        # reject valid length keys with invalid characters
+        with self.assertRaises(ValueError):
+            validatekey("@" * KEY_LENGTH)
+
+        # a key with an incorrect number of colon
+        # delimited parts will raise an error
+        with self.assertRaises(ValueError):
+            validatekey("0" * KEY_LENGTH)
+
+        # reject keys where the salt is incorrect
+        with self.assertRaises(ValueError):
+            key = ':'.join(["0" * n for n in KEY_LENGTH_PARTS])
+            validatekey(key)
+
+        # reject keys where the salt is incorrect
+        with self.assertRaises(ValueError):
+            key = ["0" * n for n in KEY_LENGTH_PARTS]
+            key[1] = '$2b$' + key[1][4:]
+            key = ':'.join(key)
+            validatekey(key + '0')
 
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(CryptTestCase)

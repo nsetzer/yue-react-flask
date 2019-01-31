@@ -23,9 +23,33 @@ import uuid
 import posixpath
 import base64
 
+from enum import Enum
+
 # taken from werkzeug.util.secure_file
 _windows_device_files = ('CON', 'AUX', 'COM1', 'COM2', 'COM3', 'COM4', 'LPT1',
                          'LPT2', 'LPT3', 'PRN', 'NUL')
+
+class CryptMode(object):
+    """
+    A set of encryption modes for files stored by the application
+    """
+    # none: no encryption is performed
+    none = 'none'
+    # client: file is encrypted, key is managed by the user client side
+    # files are encrypted and decrypted by the client
+    # files can only be decrypted by the owner
+    # the server (and database) never have access to the decrypted key
+    client = 'client'
+    # server: file is encrypted, key is managed by the user server side
+    # files are encrypted and decrypted by the server
+    # files can only be decrypted by the owner
+    # man in the middle attacks could determine the encryption key
+    server = 'server'
+    # system: file is encrypted, key is managed by the application
+    # files are encrypted and decrypted by the server
+    # files can be decrypted by users other than the file owner
+    # the encryption key is compromised if the database is compromised
+    system = 'system'
 
 def url_uuid_v2():
     """returns a randomly generated unique identifier"""
@@ -527,13 +551,14 @@ class StorageDao(object):
 
         return item.quota
 
-    def getEncryptionKey(self, user_id, password):
+    def getEncryptionKey(self, user_id, password, mode='server'):
 
         tab = self.dbtables.FileSystemUserEncryptionTable
 
         statement = tab.select().where(
             and_(tab.c.user_id == user_id,
-                 tab.c.expired.is_(None)))
+                 tab.c.expired.is_(None),
+                 tab.c.mode == mode))
 
         item = self.db.session.execute(statement).fetchone()
 
@@ -542,7 +567,7 @@ class StorageDao(object):
 
         return decryptkey(password, item.encryption_key)
 
-    def getCurrentUserKey(self, user_id):
+    def getUserKey(self, user_id, mode='server'):
         """
         return the encryption key without decrypting it first.
         """
@@ -551,7 +576,8 @@ class StorageDao(object):
 
         statement = tab.select().where(
             and_(tab.c.user_id == user_id,
-                 tab.c.expired.is_(None)))
+                 tab.c.expired.is_(None),
+                 tab.c.mode == mode))
 
         item = self.db.session.execute(statement).fetchone()
 
@@ -560,13 +586,14 @@ class StorageDao(object):
 
         return item.encryption_key
 
-    def changePassword(self, user_id, password, new_password, commit=True):
+    def changePassword(self, user_id, password, new_password, mode='server', commit=True):
 
         tab = self.dbtables.FileSystemUserEncryptionTable
 
         statement = tab.select().where(
             and_(tab.c.user_id == user_id,
-                 tab.c.expired.is_(None)))
+                 tab.c.expired.is_(None),
+                 tab.c.mode == mode))
 
         item = self.db.session.execute(statement).fetchone()
 
@@ -584,12 +611,15 @@ class StorageDao(object):
 
         statement = tab.insert().values({
             "user_id": user_id,
+            "mode": mode,
             "encryption_key": new_key,
             "expired": None})
         self.db.session.execute(statement)
 
         if commit:
             self.db.session.commit()
+
+        return new_key
 
     def setFilePublic(self, user_id, file_path, password=None, revoke=False, commit=True):
 

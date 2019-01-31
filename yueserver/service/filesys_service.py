@@ -12,9 +12,11 @@ import os, sys
 from .exception import FileSysServiceException
 from ..dao.filesys.filesys import FileSystem
 from ..dao.filesys.crypt import FileEncryptorWriter, FileEncryptorReader, \
-    FileDecryptorReader, FileDecryptorWriter
-from ..dao.storage import StorageDao, StorageNotFoundException
+    FileDecryptorReader, FileDecryptorWriter, decryptkey
+from ..dao.storage import StorageDao, \
+    StorageNotFoundException, StorageException, CryptMode
 from ..dao.user import UserDao
+from ..dao.settings import Settings, SettingsDao
 
 from datetime import datetime
 
@@ -50,6 +52,7 @@ class FileSysService(object):
         self.dbtables = dbtables
         self.storageDao = StorageDao(db, dbtables)
         self.userDao = UserDao(db, dbtables)
+        self.settingsDao = SettingsDao(db, dbtables)
 
         self.fs = FileSystem()
 
@@ -314,19 +317,41 @@ class FileSysService(object):
     def changePassword(self, user, password, new_password):
         """
         change the password used for file encryption
+
+        the only password that can be changed using this method
+        is the 'server' encryption key
         """
 
         self.storageDao.changePassword(user['id'], password, new_password)
 
-    def getCurrentUserKey(self, user):
-        return self.storageDao.getCurrentUserKey(user['id'])
+    def getUserSystemPassword(self, user):
+        password = self.settingsDao.get(Settings.storage_system_key)
 
-    def encryptStream(self, user, password, stream, mode):
+        try:
+            # get the system key if it exists
+            key = self.storageDao.getUserKey(user['id'], CryptMode.system)
+        except StorageException as e:
+            # create the system key if it does not exist
+            key = self.storageDao.changePassword(
+                user['id'], password, password, CryptMode.system)
+
+        # decrypt the key
+        return decryptkey(password, key)
+
+    def getUserKey(self, user, mode):
+        return self.storageDao.getUserKey(user['id'], mode)
+
+    def setUserClientKey(self, user, key):
+        raise NotImplementedError("setUserClientKey")
+
+    def encryptStream(self, user, password, stream, mode, crypt_mode):
         """
         returns a file-like object wrapping stream
+        contents are encrypted as they are written to the stream
         """
 
-        key = self.storageDao.getEncryptionKey(user['id'], password)
+        key = self.storageDao.getEncryptionKey(
+            user['id'], password, crypt_mode)
 
         if mode == "r":
             # encrypt the contents as the file is read
@@ -337,12 +362,14 @@ class FileSysService(object):
         else:
             raise FileSysServiceException("invalid mode: '%s'" % mode)
 
-    def decryptStream(self, user, password, stream, mode):
+    def decryptStream(self, user, password, stream, mode, crypt_mode):
         """
         returns a file-like object wrapping stream
+        contents are decrypted as they are read from the stream
         """
 
-        key = self.storageDao.getEncryptionKey(user['id'], password)
+        key = self.storageDao.getEncryptionKey(
+            user['id'], password, crypt_mode)
 
         if mode == "r":
             # decrypt the contents as the file is read

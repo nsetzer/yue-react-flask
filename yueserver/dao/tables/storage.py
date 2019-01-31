@@ -114,6 +114,12 @@ def FileSystemUserEncryptionTable(metadata):
     return Table('filesystem_encryption_v1', metadata,
         Column('user_id', ForeignKey("user.id"), nullable=False),
         # text
+        # mode is one of: client, server, system.
+        # indicates who owns the encryption key
+        #  client: fully owned by the user
+        #  server: set by the user, owned by the server
+        #  system: user has no control of encryption key
+        Column('mode', String, nullable=False),
         # the encryption key is a string, itself encrypted using a password
         # known only to the user.
         Column('encryption_key', String, nullable=False),
