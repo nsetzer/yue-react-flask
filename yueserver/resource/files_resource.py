@@ -22,9 +22,10 @@ from .util import requires_auth, files_generator, files_generator_v2
 
 def validate_mode(s):
     s = s.lower()
-    if s in [CryptMode.client, CryptMode.server]:
+    if s in [Cryptmode.none, CryptMode.client,
+      CryptMode.server, CryptMode.system]:
         return s
-    raise Exception("invalid input")
+    raise Exception("invalid encryption mode")
 
 def validate_key(body):
     """read the response body and decode the encryption key
@@ -163,7 +164,7 @@ class FilesResource(WebResource):
     @param("permission", type_=int, doc="unix file permissions", default=0o644)
     @param("version", type_=int, doc="file version", default=0)
     @param("crypt", type_=validate_mode, doc="encryption mode",
-        default=CryptMode.server)
+        default=None)
     @header("X-YUE-PASSWORD")
     @body(null_validator, content_type="application/octet-stream")
     @requires_auth("filesystem_write")
@@ -181,13 +182,14 @@ class FilesResource(WebResource):
         password = g.headers.get('X-YUE-PASSWORD', None)
 
         if password is not None:
+            # TODO: mode is server or system
             stream = self.filesys_service.encryptStream(g.current_user,
                 password, stream, "r", g.args.crypt)
 
         self.filesys_service.saveFile(
             g.current_user, root, resPath, stream,
             mtime=g.args.mtime, version=g.args.version,
-            permission=g.args.permission)
+            permission=g.args.permission, encryption=g.args.crypt)
 
         return jsonify(result="OK"), 200
 
@@ -234,11 +236,13 @@ class FilesResource(WebResource):
         return jsonify(result="OK"), 200
 
     @get("user_key")
-    @param("mode", type_=validate_mode, default=CryptMode.server)
+    @param("mode", type_=validate_mode, default=CryptMode.client)
     @requires_auth("filesystem_write")
     def user_key(self):
         """
         return the encrypted form of the current file encryption key.
+
+        by default return the client key,
         """
         key = self.filesys_service.getUserKey(
             g.current_user, g.args.mode)
@@ -250,11 +254,14 @@ class FilesResource(WebResource):
     @body(validate_key, content_type="text/plain")
     def set_user_key(self):
         """
-        set the client encryption key
+        set the 'client' encryption key
+
+        only the client key can be set in this way.
+        the system keys cannot be changed and the server key
+        can be changed via change password api
         """
-        key = g.body
-        logging.info("received: %s", key)
-        return httpError(501, "not implemented")
+        self.filesys_service.setUserClientKey(g.current_user, g.body)
+        return jsonify(result="OK"), 200
 
     def _list_path(self, root, path, list_=False, password=None, crypt=CryptMode.server):
         # TODO: move this into the service layer

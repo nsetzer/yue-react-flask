@@ -337,7 +337,7 @@ class FileState(object):
     DELETE_LOCAL = "delete-local"
 
     @staticmethod
-    def symbol(state):
+    def symbol_short(state):
         if FileState.SAME == state:
             sym = "--"
         if FileState.PUSH == state:
@@ -359,6 +359,36 @@ class FileState(object):
         if FileState.DELETE_LOCAL == state:
             sym = "x-"
         return sym
+
+    @staticmethod
+    def symbol_verbose(state):
+        if FileState.SAME == state:
+            sym = "SAME"
+        if FileState.PUSH == state:
+            sym = "PUSH"
+        if FileState.PULL == state:
+            sym = "PULL"
+        if FileState.ERROR == state:
+            sym = "ERR_"
+        if FileState.CONFLICT_MODIFIED == state:
+            sym = "CMOD"
+        if FileState.CONFLICT_CREATED == state:
+            sym = "CCRE"
+        if FileState.CONFLICT_VERSION == state:
+            sym = "CVER"
+        if FileState.DELETE_BOTH == state:
+            sym = "DEL_"
+        if FileState.DELETE_REMOTE == state:
+            sym = "DREM"
+        if FileState.DELETE_LOCAL == state:
+            sym = "DLOC"
+        return sym
+
+    @staticmethod
+    def symbol(state, verbose=False):
+        if verbose:
+            return FileState.symbol_verbose(state)
+        return FileState.symbol_short(state)
 
 class DirEnt(object):
     """docstring for DirEnt"""
@@ -640,7 +670,6 @@ class DirAttr(object):
 
         # return the cached version
         if directory in DirAttr._cache:
-            print("cache hit:", local_root, directory)
             return DirAttr._cache[directory]
 
         # open attr file, update the parent directory
@@ -1015,7 +1044,7 @@ def _status_dir_impl(ctxt, remote_dir, local_dir, recursive):
         if isinstance(ent, DirEnt):
 
             state = ent.state()
-            sym = FileState.symbol(state)
+            sym = FileState.symbol(state, ctxt.verbose > 1)
             path = ctxt.fs.relpath(ent.local_base, ctxt.current_local_base)
 
             if ctxt.verbose:
@@ -1029,14 +1058,14 @@ def _status_dir_impl(ctxt, remote_dir, local_dir, recursive):
                 _status_dir_impl(ctxt, rbase, lbase, recursive)
         else:
             state = ent.state().split(':')[0]
-            sym = FileState.symbol(state)
+            sym = FileState.symbol(state, ctxt.verbose > 1)
             path = ctxt.fs.relpath(ent.local_path, ctxt.current_local_base)
             if ctxt.verbose:
                 print("f%s %s %s" % (sym, ent.stat(), path))
             else:
                 print("f%s %s" % (sym, path))
             # in testing, it can be useful to see lf/rf/af state
-            if ctxt.verbose > 1:
+            if ctxt.verbose > 2:
                 print(ent.data())
 
 def _status_file_impl(ctxt, relpath, abspath):

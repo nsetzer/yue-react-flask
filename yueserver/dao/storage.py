@@ -127,7 +127,9 @@ class StorageDao(object):
 
         return self.insert(user_id, path, size, mtime)
 
-    def insert(self, user_id, file_path, storage_path, size, mtime, preview_path=None, permission=None, version=None, commit=True):
+    def insert(self, user_id, file_path, storage_path, size, mtime,
+      preview_path=None, permission=None, version=None,
+      encryption=None, commit=True):
 
         # TODO: required?
         #if path.endswith(delimiter):
@@ -139,6 +141,7 @@ class StorageDao(object):
             'file_path': file_path,
             'storage_path': storage_path,
             'preview_path': preview_path,
+            'encryption': encryption,
             'mtime': mtime,
             'size': size,
         }
@@ -162,7 +165,9 @@ class StorageDao(object):
         if ex is not None:
             raise ex
 
-    def update(self, user_id, file_path, storage_path=None, size=None, mtime=None, preview_path=None, permission=None, version=None, commit=True):
+    def update(self, user_id, file_path, storage_path=None, size=None,
+      mtime=None, preview_path=None, permission=None, version=None,
+      encryption=None, commit=True):
 
         record = {}
 
@@ -189,6 +194,9 @@ class StorageDao(object):
         if permission is not None:
             record['permission'] = permission
 
+        if encryption is not None:
+            record['encryption'] = encryption
+
         query = update(tab) \
             .values(record) \
             .where(
@@ -201,7 +209,9 @@ class StorageDao(object):
         if commit:
             self.db.session.commit()
 
-    def upsert(self, user_id, file_path, storage_path, size=None, mtime=None, preview_path=None, permission=0, version=None, commit=True):
+    def upsert(self, user_id, file_path, storage_path, size=None,
+      mtime=None, preview_path=None, permission=0, version=None,
+      encryption=None, commit=True):
 
         tab = self.dbtables.FileSystemStorageTable
         where = tab.c.file_path == file_path
@@ -212,9 +222,11 @@ class StorageDao(object):
         item = result.fetchone()
 
         if item is None:
-            self.insert(user_id, file_path, storage_path, size, mtime, preview_path, permission, version, commit)
+            self.insert(user_id, file_path, storage_path, size, mtime,
+                preview_path, permission, version, encryption, commit)
         else:
-            self.update(user_id, file_path, storage_path, size, mtime, preview_path, permission, version, commit)
+            self.update(user_id, file_path, storage_path, size, mtime,
+                preview_path, permission, version, encryption, commit)
 
     def rename(self, user_id, src_path, dst_path, commit=True):
         """
@@ -279,7 +291,7 @@ class StorageDao(object):
             item['version'], item['permission'])
         record.storage_path = item['storage_path']
         record.file_path = item['file_path']
-        record.encrypted = item['encrypted']
+        record.encryption = item['encryption']
         record.public = item['public']
         return record
 
@@ -586,6 +598,35 @@ class StorageDao(object):
 
         return item.encryption_key
 
+    def setUserKey(self, user_id, key, mode='server', commit=True):
+
+        tab = self.dbtables.FileSystemUserEncryptionTable
+
+        print("set user key ", mode, key)
+        statement = tab.select().where(
+            and_(tab.c.user_id == user_id,
+                 tab.c.expired.is_(None),
+                 tab.c.mode == mode))
+
+        item = self.db.session.execute(statement).fetchone()
+
+        # invalidate the old key if it exists
+        if item is not None:
+            epoch = int(calendar.timegm(datetime.datetime.now().timetuple()))
+            statement = tab.update().values({"expired": epoch}) \
+                .where(tab.c.id == item.id)
+            self.db.session.execute(statement)
+
+        statement = tab.insert().values({
+            "user_id": user_id,
+            "mode": mode,
+            "encryption_key": key,
+            "expired": None})
+        self.db.session.execute(statement)
+
+        if commit:
+            self.db.session.commit()
+
     def changePassword(self, user_id, password, new_password, mode='server', commit=True):
 
         tab = self.dbtables.FileSystemUserEncryptionTable
@@ -604,9 +645,8 @@ class StorageDao(object):
             # expire the old password
             epoch = int(calendar.timegm(datetime.datetime.now().timetuple()))
 
-            statement = tab.update().values({"expired": epoch}).where(
-                and_(tab.c.user_id == user_id,
-                     tab.c.expired.is_(None)))
+            statement = tab.update().values({"expired": epoch}) \
+                .where(tab.c.id == item.id)
             self.db.session.execute(statement)
 
         statement = tab.insert().values({
@@ -626,7 +666,7 @@ class StorageDao(object):
         tab = self.db.tables.FileSystemStorageTable
 
         columns = [tab.c.id, tab.c.public,
-            tab.c.public_password, tab.c.encrypted]
+            tab.c.public_password, tab.c.encryption]
         clause = and_(tab.c.user_id == user_id, tab.c.file_path == file_path)
         statement = tab.select() \
             .with_only_columns(columns) \
@@ -636,8 +676,11 @@ class StorageDao(object):
         if not item:
             raise StorageNotFoundException(file_path)
 
-        if item.encrypted:
+        if item.encryption == CryptMode.server:
             raise StorageException("file resource is encrypted")
+
+        if item.encryption == CryptMode.client:
+            raise StorageException("file resource is encrypted by the user")
 
         if revoke:
             record = {

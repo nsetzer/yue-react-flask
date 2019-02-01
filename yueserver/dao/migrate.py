@@ -49,7 +49,8 @@ class _MigrateV1Context(object):
             'version': 1,
             'size': row['size'],
             'expired': None,
-            'encrypted': 0,
+            'encryption': None,
+            'public_password': None,
             'public': None,
             'mtime': row['mtime'],
         }

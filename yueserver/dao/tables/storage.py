@@ -58,7 +58,7 @@ def FileSystemStorageTableV2(metadata):
     size: the size in bytes of the current version of the file
     expired: expired is None for the latest version of a file
              otherwise it is the date the version was retired
-    encrypted: non-zero if file is encrypted by the user
+    encryption: the encryption mode
     public: Null, or a uuid which is used for a public link
     mtime: the last time the file file was modified
            (the creation date for the latest version)
@@ -77,18 +77,21 @@ def FileSystemStorageTableV2(metadata):
         # however preview path may not be unique
         # e.g. one album with 10 songs using the same jpeg.
         Column('preview_path', String),
-        Column('public_password', String),
-        # number
+
         Column('permission', Integer, default=0o644),
         Column('version', Integer, default=0),
         Column('size', Integer, default=0),
         Column('expired', Integer),
-        # bool
-        Column('encrypted', Integer, default=0),
-        Column('public', String, unique=True),
-        # date
+
+        # encryption can be set to 'client', 'server', 'system'. or None
+        # indicates the encryption mode
+        Column('encryption', String, default=None),
+        # an optional password to protect public files
+        Column('public_password', String, nullable=True),
+        # a unique public identifier for this file
+        Column('public', String, unique=True, default=None),
+
         Column('mtime', Integer, default=lambda: int(time.time())),
-        #
     )
 
 def FileSystemTable(metadata):
@@ -112,6 +115,7 @@ def FileSystemUserSupplementaryTable(metadata):
 
 def FileSystemUserEncryptionTable(metadata):
     return Table('filesystem_encryption_v1', metadata,
+        Column('id', Integer, autoincrement=True),
         Column('user_id', ForeignKey("user.id"), nullable=False),
         # text
         # mode is one of: client, server, system.

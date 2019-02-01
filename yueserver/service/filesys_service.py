@@ -231,8 +231,10 @@ class FileSysService(object):
 
         return files
 
-    def saveFile(self, user, fs_name, path, stream, mtime=None, version=0, permission=0):
+    def saveFile(self, user, fs_name, path, stream,
+      mtime=None, version=0, permission=0, encryption=None):
 
+        # TODO: support an encryption mode (client / server / sytem / None)
         if self.fs.isabs(path):
             raise FileSysServiceException(path)
 
@@ -269,7 +271,9 @@ class FileSysService(object):
         # if the file is wrapped by an encryptor, subtract the size
         # of the header information. This allows the user to stat
         # the file later on, and see the expected file size
-        if isinstance(stream, FileEncryptorReader):
+        # TODO: should this be conditioned off encryption mode?
+        # if isinstance(stream, FileEncryptorReader):
+        if encryption is not None:
             size -= FileEncryptorReader.HEADER_SIZE
 
         if mtime is None:
@@ -278,7 +282,7 @@ class FileSysService(object):
         # todo: in the future, the logical file path, and the actual
         # storage path will be different for security reasons.
         self.storageDao.upsert(user['id'], file_path, storage_path,
-            size, mtime, permission, version)
+            size, mtime, permission, version, encryption)
 
     def remove(self, user, fs_name, path):
 
@@ -339,10 +343,14 @@ class FileSysService(object):
         return decryptkey(password, key)
 
     def getUserKey(self, user, mode):
-        return self.storageDao.getUserKey(user['id'], mode)
+        try:
+            return self.storageDao.getUserKey(user['id'], mode)
+        except StorageException as e:
+            pass
+        raise FileSysServiceException("key not found")
 
     def setUserClientKey(self, user, key):
-        raise NotImplementedError("setUserClientKey")
+        self.storageDao.setUserKey(user['id'], key, CryptMode.client)
 
     def encryptStream(self, user, password, stream, mode, crypt_mode):
         """

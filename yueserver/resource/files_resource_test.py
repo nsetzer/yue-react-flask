@@ -354,11 +354,36 @@ class FilesResourceTestCase(unittest.TestCase):
 
         username = "admin"
         with self.app.login(username, username) as app:
-
             url = '/api/fs/user_key'
-            response = app.put(url, data=cryptkey('password'))
+
+            # there should be no keys available
+            response = app.get(url)
+            self.assertEqual(response.status_code, 400, response.status_code)
+
+            response = app.get(url, query_string={'mode': 'server'})
+            self.assertEqual(response.status_code, 400, response.status_code)
+
+            response = app.get(url, query_string={'mode': 'client'})
+            self.assertEqual(response.status_code, 400, response.status_code)
+
+            # allow the user to set an encryption key
+            key = cryptkey('password')
+            response = app.put(url, data=key)
             self.assertEqual(response.status_code, 200, response.status_code)
 
-        set_user_key
+            # show we can get the key we just set
+            response = app.get(url, query_string={'mode': 'client'})
+            self.assertEqual(response.status_code, 200, response.status_code)
+            self.assertEqual(response.json()['result']['key'], key)
+
+    def test_set_client_key_invalid(self):
+
+        username = "admin"
+        with self.app.login(username, username) as app:
+
+            url = '/api/fs/user_key'
+            response = app.put(url, data="abc")
+            self.assertEqual(response.status_code, 400, response.status_code)
+
 if __name__ == '__main__':
     main_test(sys.argv, globals())

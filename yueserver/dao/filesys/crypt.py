@@ -150,6 +150,9 @@ def validatekey(key):
 
     raise an exception if the key is not well formed
     return the key unmodifed if valid
+
+    this does not attempt to decrypt the key to check
+    if the contents are valid
     """
 
     if len(key) != KEY_LENGTH:
