@@ -298,6 +298,7 @@ class StorageDao(object):
         record.file_path = item['file_path']
         record.encryption = item['encryption']
         record.public = item['public']
+        record.user_id = item['user_id']
         return record
 
     def _item2record(self, item, path_prefix, delimiter):

@@ -302,11 +302,13 @@ def _request_builder(endpoint, *args, **kwargs):
         del kwargs['stream']
 
     _type, _mimetype = endpoint.body
-    if _type is not None or method in ["put", "post"]:
+    if _type is not None and method in ["put", "post"]:
         options['data'] = positional.pop()
 
         if 'Content-Type' not in options['headers']:
             options['headers']['Content-Type'] = _mimetype
+    elif method in ["put", "post"]:
+        options['data'] = '/dev/null'
 
     for header in endpoint.headers:
         if header.name in kwargs:

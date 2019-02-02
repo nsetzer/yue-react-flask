@@ -11,8 +11,9 @@ from ..dao.library import Song
 from ..dao.util import parse_iso_format, pathCorrectCase
 from ..dao.storage import StorageNotFoundException, CryptMode
 from ..dao.filesys.filesys import MemoryFileSystemImpl
-from ..dao.filesys.crypt import validatekey
+from ..dao.filesys.crypt import validatekey, FileDecryptorReader, decryptkey
 from ..service.exception import FileSysServiceException
+from ..dao.settings import Settings, SettingsDao
 
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, body, header, compressed, param, httpError, \
@@ -91,7 +92,19 @@ class FilesResource(WebResource):
             return httpError(404, "invalid file id or password")
 
         info = self.filesys_service.publicFileInfo(fileId)
+
+        print(info.encryption, info.user_id)
         stream = self.filesys_service.fs.open(info.storage_path, "rb")
+
+        if info.encryption == CryptMode.system:
+            password = self.filesys_service.settingsDao.get(Settings.storage_system_key)
+            print("stream updated", password)
+            key = self.filesys_service.storageDao.getUserKey(info.user_id, CryptMode.system)
+            print("stream updated", key)
+            key = decryptkey(password, key)
+            stream = FileDecryptorReader(stream, key)
+            print("stream updated")
+
         go = files_generator_v2(stream)
         return send_generator(go, info.name, file_size=None)
 
