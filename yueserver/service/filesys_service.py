@@ -282,7 +282,7 @@ class FileSysService(object):
         # todo: in the future, the logical file path, and the actual
         # storage path will be different for security reasons.
         self.storageDao.upsert(user['id'], file_path, storage_path,
-            size, mtime, permission, version, encryption)
+            size, mtime, "", permission, version, encryption)
 
     def remove(self, user, fs_name, path):
 
@@ -358,8 +358,13 @@ class FileSysService(object):
         contents are encrypted as they are written to the stream
         """
 
-        key = self.storageDao.getEncryptionKey(
-            user['id'], password, crypt_mode)
+        if crypt_mode == CryptMode.server:
+            key = self.storageDao.getEncryptionKey(
+                user['id'], password, crypt_mode)
+        elif crypt_mode == CryptMode.system:
+            key = self.getUserSystemPassword(user)
+        else:
+            raise FileSysServiceException("invalid mode: '%s'" % crypt_mode)
 
         if mode == "r":
             # encrypt the contents as the file is read
@@ -375,9 +380,14 @@ class FileSysService(object):
         returns a file-like object wrapping stream
         contents are decrypted as they are read from the stream
         """
-
-        key = self.storageDao.getEncryptionKey(
-            user['id'], password, crypt_mode)
+        print(password, mode, crypt_mode)
+        if crypt_mode == CryptMode.server:
+            key = self.storageDao.getEncryptionKey(
+                user['id'], password, crypt_mode)
+        elif crypt_mode == CryptMode.system:
+            key = self.getUserSystemPassword(user)
+        else:
+            raise FileSysServiceException("invalid mode: '%s'" % crypt_mode)
 
         if mode == "r":
             # decrypt the contents as the file is read

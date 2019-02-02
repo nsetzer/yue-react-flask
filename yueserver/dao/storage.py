@@ -146,6 +146,8 @@ class StorageDao(object):
             'size': size,
         }
 
+        print(record)
+
         if permission is not None:
             record['permission'] = permission
 
@@ -194,10 +196,13 @@ class StorageDao(object):
         if permission is not None:
             record['permission'] = permission
 
+        # TODO: bug, cannot be updated to None using this scheme
         if encryption is not None:
             record['encryption'] = encryption
 
-        query = update(tab) \
+        print(record)
+
+        query = tab.update() \
             .values(record) \
             .where(
                 and_(tab.c.user_id == user_id,
@@ -215,11 +220,11 @@ class StorageDao(object):
 
         tab = self.dbtables.FileSystemStorageTable
         where = tab.c.file_path == file_path
-        query = select(['*']) \
-            .select_from(tab) \
-            .where(where)
+        query = tab.select().where(where)
         result = self.db.session.execute(query)
         item = result.fetchone()
+
+        print(mtime, preview_path, permission, version, encryption)
 
         if item is None:
             self.insert(user_id, file_path, storage_path, size, mtime,

@@ -22,7 +22,7 @@ from .util import requires_auth, files_generator, files_generator_v2
 
 def validate_mode(s):
     s = s.lower()
-    if s in [Cryptmode.none, CryptMode.client,
+    if s in [CryptMode.none, CryptMode.client,
       CryptMode.server, CryptMode.system]:
         return s
     raise Exception("invalid encryption mode")
@@ -61,14 +61,12 @@ class FilesResource(WebResource):
     @get("<root>/path/<path:resPath>")
     @param("list", type_=boolean, default=False,
         doc="do not retrieve contents for files if true")
-    @param("crypt", type_=validate_mode, doc="decryption mode",
-        default=CryptMode.server)
     @header("X-YUE-PASSWORD")
     @requires_auth("filesystem_read")
     def get_path(self, root, resPath):
         password = g.headers.get('X-YUE-PASSWORD', None)
         return self._list_path(root, resPath, g.args.list,
-            password=password, crypt=g.args.crypt)
+            password=password)
 
     @get("public/<fileId>")
     @header("X-YUE-PASSWORD")
@@ -179,10 +177,8 @@ class FilesResource(WebResource):
         """
         stream = g.body
 
-        password = g.headers.get('X-YUE-PASSWORD', None)
-
-        if password is not None:
-            # TODO: mode is server or system
+        if g.args.crypt in (CryptMode.server, CryptMode.system):
+            password = g.headers.get('X-YUE-PASSWORD', None)
             stream = self.filesys_service.encryptStream(g.current_user,
                 password, stream, "r", g.args.crypt)
 
@@ -263,7 +259,7 @@ class FilesResource(WebResource):
         self.filesys_service.setUserClientKey(g.current_user, g.body)
         return jsonify(result="OK"), 200
 
-    def _list_path(self, root, path, list_=False, password=None, crypt=CryptMode.server):
+    def _list_path(self, root, path, list_=False, password=None):
         # TODO: move this into the service layer
 
         # TODO: check for the header X-YUE-ENCRYPTION
@@ -290,9 +286,9 @@ class FilesResource(WebResource):
                 storage_path = info.storage_path
                 _, name = self.filesys_service.fs.split(storage_path)
                 stream = self.filesys_service.fs.open(storage_path, "rb")
-                if password is not None:
+                if info.encryption in (CryptMode.server, CryptMode.system):
                     stream = self.filesys_service.decryptStream(g.current_user,
-                        password, stream, "r", crypt)
+                        password, stream, "r", info.encryption)
                 go = files_generator_v2(stream)
                 headers = {
                     "X-YUE-VERSION": info.version,
