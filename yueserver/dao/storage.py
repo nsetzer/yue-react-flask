@@ -121,35 +121,24 @@ class StorageDao(object):
 
     # FileSystem Operations
 
+    # TODO: insert_path => insertPath, this method is broken
     def insert_path(self, user_id, path):
 
         name, is_dir, size, mtime = self.fs.file_info()
 
         return self.insert(user_id, path, size, mtime)
 
-    def insert(self, user_id, file_path, storage_path, size, mtime,
-      preview_path=None, permission=None, version=None,
-      encryption=None, commit=True):
+    def insertFile(self, user_id, file_path, record, commit=True):
 
         # TODO: required?
         #if path.endswith(delimiter):
         #    raise StorageException("invalid path")
 
-        record = {
-            'user_id': user_id,
-            'version': version if version is not None else 1,
-            'file_path': file_path,
-            'storage_path': storage_path,
-            'preview_path': preview_path,
-            'encryption': encryption,
-            'mtime': mtime,
-            'size': size,
-        }
+        record['user_id'] = user_id
+        record['file_path'] = file_path
 
-        print(record)
-
-        if permission is not None:
-            record['permission'] = permission
+        if version not in record:
+            record['version'] = tab.c.version + 1
 
         query = self.dbtables.FileSystemStorageTable.insert() \
             .values(record)
@@ -167,38 +156,12 @@ class StorageDao(object):
         if ex is not None:
             raise ex
 
-    def update(self, user_id, file_path, storage_path=None, size=None,
-      mtime=None, preview_path=None, permission=None, version=None,
-      encryption=None, commit=True):
-
-        record = {}
+    def updateFile(self, user_id, file_path, record, commit=True):
 
         tab = self.dbtables.FileSystemStorageTable
 
-        assert isinstance(file_path, str)
-
-        # optionally update the storage path
-        if storage_path is not None:
-            assert isinstance(storage_path, str)
-            record['storage_path'] = storage_path
-
-        if version is None:
+        if version not in record:
             record['version'] = tab.c.version + 1
-        else:
-            record['version'] = version
-
-        if mtime is not None:
-            record['mtime'] = mtime
-
-        if size is not None:
-            record['size'] = size
-
-        if permission is not None:
-            record['permission'] = permission
-
-        # TODO: bug, cannot be updated to None using this scheme
-        if encryption is not None:
-            record['encryption'] = encryption
 
         print(record)
 
@@ -214,24 +177,19 @@ class StorageDao(object):
         if commit:
             self.db.session.commit()
 
-    def upsert(self, user_id, file_path, storage_path, size=None,
-      mtime=None, preview_path=None, permission=0, version=None,
-      encryption=None, commit=True):
+    def upsertFile(self, user_id, file_path, record, commit=True):
 
         tab = self.dbtables.FileSystemStorageTable
-        where = tab.c.file_path == file_path
-        query = tab.select().where(where)
-        result = self.db.session.execute(query)
-        item = result.fetchone()
-
-        print(mtime, preview_path, permission, version, encryption)
+        query = tab.select().where(
+                and_(tab.c.user_id == user_id,
+                     tab.c.file_path == file_path,
+                     ))
+        item = self.db.session.execute(query).fetchone()
 
         if item is None:
-            self.insert(user_id, file_path, storage_path, size, mtime,
-                preview_path, permission, version, encryption, commit)
+            self.insert(user_id, file_path, record, commit)
         else:
-            self.update(user_id, file_path, storage_path, size, mtime,
-                preview_path, permission, version, encryption, commit)
+            self.update(user_id, file_path, record, commit)
 
     def rename(self, user_id, src_path, dst_path, commit=True):
         """
