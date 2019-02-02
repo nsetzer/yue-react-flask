@@ -6,6 +6,8 @@ import fnmatch
 import argparse
 import logging
 
+from yueserver.dao.util import CaptureOutput
+
 if (sys.version_info[0] == 2):
     raise RuntimeError("python2 not supported")
 
@@ -16,7 +18,8 @@ class Tests(object):
         test_runner = unittest.TextTestRunner(verbosity=verbose)
         pattern = pattern + "_test.py"
         test_suite = test_loader.discover(".", pattern=pattern)
-        return test_runner.run(test_suite)
+        with CaptureOutput():
+            return test_runner.run(test_suite)
 
 class Coverage(object):
     """

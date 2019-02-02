@@ -223,7 +223,8 @@ class FilesResourceTestCase(unittest.TestCase):
             path = 'test/upload_encrypt.txt'
             url = '/api/fs/mem/path/' + path
             response = app.post(url, data=dat0,
-                headers={'X-YUE-PASSWORD': 'password'})
+                headers={'X-YUE-PASSWORD': 'password'},
+                query_string={'crypt': 'SERVER'})
             self.assertEqual(response.status_code, 200, response.status_code)
             self.assertTrue(os.path.exists(path))
             dat1_enc = open(path, "rb").read()
@@ -250,16 +251,12 @@ class FilesResourceTestCase(unittest.TestCase):
             self.assertTrue(path not in info.storage_path)
             # read the file written to the memory FS, decrypt it
             with fs.open(info.storage_path, "rb") as rb:
+                print(info.storage_path)
+                print(rb.read())
+            with fs.open(info.storage_path, "rb") as rb:
                 stream = FileDecryptorReader(rb, key)
                 dat1 = stream.read()
             self.assertEqual(dat0, dat1)
-
-            # a simple get on the data should return the encrypted file
-            # TODO: maybe the request should fail?
-            #       likely not, so that I can implement client side encryption
-            response = app.get(url)
-            dat2 = response.data
-            self.assertEqual(b'EYUE', dat2[:4], dat2)
 
             # A get with the header set should return the unencrypted data
             response = app.get(url,
