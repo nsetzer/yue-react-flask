@@ -51,6 +51,46 @@ class CryptMode(object):
     # the encryption key is compromised if the database is compromised
     system = 'system'
 
+class FileRecord2(object):
+    def __init__(self, *args, **kwargs):
+        super(FileRecord2, self).__init__()
+
+        self.file_path = None
+        self.storage_path = None
+        self.preview_path = None
+
+        self.permission = 0o644
+        self.version = 0
+        self.size = 0
+        self.expired = None
+        self.mtime = 0
+
+        self.encryption = None
+        self.public_password = None
+        self.public = None
+
+        self._update(args, kwargs)
+
+    def _update(self, args, kwargs):
+
+        if len(args) > 0:
+            self.file_path = args[0]
+
+        if len(args) > 1:
+            self.storage_path = args[1]
+
+        for key, val in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, val)
+            else:
+                raise KeyError(key)
+
+    def __getitem__(self, key):
+        if hasattr(self, key):
+            return getattr(self, key)
+        else:
+            raise KeyError(key)
+
 def url_uuid_v2():
     """returns a randomly generated unique identifier"""
     b = uuid.uuid4().bytes
@@ -120,13 +160,6 @@ class StorageDao(object):
         return scheme, path
 
     # FileSystem Operations
-
-    # TODO: insert_path => insertPath, this method is broken
-    def insert_path(self, user_id, path):
-
-        name, is_dir, size, mtime = self.fs.file_info()
-
-        return self.insert(user_id, path, size, mtime)
 
     def insertFile(self, user_id, file_path, record, commit=True):
 

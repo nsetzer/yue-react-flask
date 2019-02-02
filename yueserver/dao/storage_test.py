@@ -8,7 +8,8 @@ import time
 
 from .db import db_init_main, db_connect
 from .user import UserDao
-from .storage import StorageDao, StorageException, StorageNotFoundException
+from .storage import StorageDao, \
+    StorageException, StorageNotFoundException, FileRecord2
 from sqlalchemy import and_
 from sqlalchemy.exc import IntegrityError
 
