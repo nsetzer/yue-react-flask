@@ -55,6 +55,10 @@ class FileRecord2(object):
     def __init__(self, *args, **kwargs):
         super(FileRecord2, self).__init__()
 
+        self.user_id = None
+
+        self.name = None
+
         self.file_path = None
         self.storage_path = None
         self.preview_path = None
@@ -68,6 +72,8 @@ class FileRecord2(object):
         self.encryption = None
         self.public_password = None
         self.public = None
+
+        self.isDir = False
 
         self._update(args, kwargs)
 
@@ -90,6 +96,10 @@ class FileRecord2(object):
             return getattr(self, key)
         else:
             raise KeyError(key)
+
+    @staticmethod
+    def fromRow(row):
+        pass
 
 def url_uuid_v2():
     """returns a randomly generated unique identifier"""
@@ -161,17 +171,17 @@ class StorageDao(object):
 
     # FileSystem Operations
 
-    def insertFile(self, user_id, file_path, record, commit=True):
+    def insertFile(self, user_id, file_path, data, commit=True):
 
         # TODO: required?
         #if path.endswith(delimiter):
         #    raise StorageException("invalid path")
 
-        record['user_id'] = user_id
-        record['file_path'] = file_path
+        data['user_id'] = user_id
+        data['file_path'] = user_id
 
         if version not in record:
-            record['version'] = tab.c.version + 1
+            record['version'] = 1
 
         query = self.dbtables.FileSystemStorageTable.insert() \
             .values(record)
@@ -189,28 +199,23 @@ class StorageDao(object):
         if ex is not None:
             raise ex
 
-    def updateFile(self, user_id, file_path, record, commit=True):
+    def updateFile(self, file_id, data, commit=True):
 
         tab = self.dbtables.FileSystemStorageTable
 
         if version not in record:
             record['version'] = tab.c.version + 1
 
-        print(record)
-
         query = tab.update() \
             .values(record) \
-            .where(
-                and_(tab.c.user_id == user_id,
-                     tab.c.file_path == file_path,
-                     ))
+            .where(tab.c.id == file_id)
 
         self.db.session.execute(query)
 
         if commit:
             self.db.session.commit()
 
-    def upsertFile(self, user_id, file_path, record, commit=True):
+    def upsertFile(self, user_id, file_path, data, commit=True):
 
         tab = self.dbtables.FileSystemStorageTable
         query = tab.select().where(
@@ -220,9 +225,9 @@ class StorageDao(object):
         item = self.db.session.execute(query).fetchone()
 
         if item is None:
-            self.insert(user_id, file_path, record, commit)
+            self.insertFile(user_id, file_path, data, commit)
         else:
-            self.update(user_id, file_path, record, commit)
+            self.updateFile(item.id, data, commit)
 
     def rename(self, user_id, src_path, dst_path, commit=True):
         """

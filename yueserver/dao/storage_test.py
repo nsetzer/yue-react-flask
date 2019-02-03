@@ -113,9 +113,10 @@ class StorageTestCase(unittest.TestCase):
         names = ["file1.txt", "folder"]
 
         path = "file:///file1.txt"
-        self.storageDao.insert(user_id, path, path, 1234, 1234567890)
+        data = dict(storage_path=path, size=1234, mtime=1234567890)
+        self.storageDao.insertFile(user_id, path, data)
         path = "file:///folder/file2.txt"
-        self.storageDao.insert(user_id, path, path, 1234, 1234567890)
+        self.storageDao.insertFile(user_id, path, data)
 
         count = 0
         for rec in self.storageDao.listdir(user_id, "file:///"):
