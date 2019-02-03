@@ -73,10 +73,9 @@ class FileServiceTestCase(unittest.TestCase):
         root = "default"
         path = "test/test.txt"
 
-        print("----index")
-        result =self.service.listIndex(self.app.USER, root, "", limit=10, offset=0)
+        result = self.service.listIndex(self.app.USER, root, "", limit=10, offset=0)
         print(result)
-        result =self.service.listIndex(self.app.USER, root, "test", limit=10, offset=0)
+        result = self.service.listIndex(self.app.USER, root, "test", limit=10, offset=0)
         print(result)
 
     def test_001d_deleteFiles(self):

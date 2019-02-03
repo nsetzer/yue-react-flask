@@ -180,7 +180,7 @@ class StorageDao(object):
         data['user_id'] = user_id
         data['file_path'] = file_path
 
-        if 'version' not in data:
+        if 'version' not in data or data['version'] is None:
             data['version'] = 1
 
         query = self.dbtables.FileSystemStorageTable.insert() \
@@ -207,7 +207,7 @@ class StorageDao(object):
         if 'user_id' in data:
             del data['user_id']
 
-        if 'version' not in data:
+        if 'version' not in data or data['version'] is None:
             data['version'] = tab.c.version + 1
 
         query = tab.update() \
@@ -239,54 +239,13 @@ class StorageDao(object):
         else:
             self.updateFile(item.id, data, commit)
 
-
-    def rename(self, user_id, src_path, dst_path, commit=True):
-        """
-        rename a file from src to dst. this does not change the location
-        of the file in the underlying filesystem, only in the database.
-
-        This only updates the file path, the storage path stored in the
-        database is not modified.
-        """
-        record = {
-            'file_path': dst_path,
-        }
+    def removeFile(self, user_id, file_path, commit=True):
 
         tab = self.dbtables.FileSystemStorageTable
-
-        query = tab.select().where(
-            and_(tab.c.user_id == user_id,
-                 tab.c.file_path == dst_path))
-        result = self.db.session.execute(query)
-        if result.fetchone() is not None:
-            raise StorageException("cannot rename file. name already exists")
-
-        query = update(tab) \
-            .values(record) \
+        query = tab.delete() \
             .where(
                 and_(tab.c.user_id == user_id,
-                     tab.c.file_path == src_path,
-                     ))
-
-        ex = None
-        try:
-            result = self.db.session.execute(query)
-
-            if commit:
-                self.db.session.commit()
-
-        except IntegrityError as e:
-            ex = StorageException("%s" % e.args[0])
-
-        if ex is not None:
-            raise ex
-
-    def remove(self, user_id, path, commit=True):
-
-        query = delete(self.dbtables.FileSystemStorageTable) \
-            .where(
-                and_(self.dbtables.FileSystemStorageTable.c.user_id == user_id,
-                     self.dbtables.FileSystemStorageTable.c.file_path == path,
+                     tab.c.file_path == file_path,
                      ))
 
         self.db.session.execute(query)

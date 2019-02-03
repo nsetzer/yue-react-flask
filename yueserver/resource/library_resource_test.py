@@ -230,8 +230,8 @@ class LibraryResourceTestCase(unittest.TestCase):
         path1 = "test/r160.mp3"
         file_path1 = "/%s" % path1
         storage_path1 = os.path.join(os.getcwd(), path1)
-        self.storageDao.insert(self.USER['id'],
-            file_path1, storage_path1, 0, 0)
+        self.storageDao.insertFile(self.USER['id'],
+            file_path1, dict(storage_path=storage_path1))
 
         username = "admin"
         with self.app.login(username, username) as app:
@@ -316,8 +316,8 @@ class LibraryResourceTestCase(unittest.TestCase):
         path1 = "test/blank.png"
         file_path1 = "/%s" % path1
         storage_path1 = os.path.join(os.getcwd(), path1)
-        self.storageDao.insert(self.USER['id'],
-            file_path1, storage_path1, 0, 0)
+        self.storageDao.insertFile(self.USER['id'],
+            file_path1, dict(storage_path=storage_path1))
 
         username = "admin"
         with self.app.login(username, username) as app:

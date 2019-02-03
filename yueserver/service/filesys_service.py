@@ -281,8 +281,17 @@ class FileSysService(object):
 
         # todo: in the future, the logical file path, and the actual
         # storage path will be different for security reasons.
-        self.storageDao.upsert(user['id'], file_path, storage_path,
-            size, mtime, "", permission, version, encryption)
+        data = dict(
+            storage_path=storage_path,
+            preview_path=None,
+            permission=permission,
+            version=version,
+            size=size,
+            mtime=mtime,
+            encryption=encryption
+        )
+
+        self.storageDao.upsertFile(user['id'], file_path, data)
 
     def remove(self, user, fs_name, path):
 
@@ -296,7 +305,7 @@ class FileSysService(object):
         try:
             # TODO: either both succeed or neither...
             record = self.storageDao.file_info(user['id'], file_path)
-            self.storageDao.remove(user['id'], file_path)
+            self.storageDao.removeFile(user['id'], file_path)
             result = self.fs.remove(record.storage_path)
             return result
         except FileNotFoundError as e:

@@ -47,14 +47,14 @@ class FilesResourceTestCase(unittest.TestCase):
         path1 = "yueserver/app.py"
         file_path1 = "/%s" % path1
         storage_path1 = os.path.join(os.getcwd(), path1)
-        self.storageDao.insert(self.USER['id'],
-            file_path1, storage_path1, 0, 0)
+        self.storageDao.insertFile(self.USER['id'],
+            file_path1, dict(storage_path=storage_path1))
 
         path2 = "yueserver/framework/config.py"
         file_path2 = "/%s" % path2
         storage_path2 = os.path.join(os.getcwd(), path2)
-        self.storageDao.insert(self.USER['id'],
-            file_path2, storage_path2, 0, 0)
+        self.storageDao.insertFile(self.USER['id'],
+            file_path2, dict(storage_path=storage_path2))
 
         username = "admin"
         with self.app.login(username, username) as app:
@@ -100,7 +100,8 @@ class FilesResourceTestCase(unittest.TestCase):
         path = "yueserver/framework/config.py"
         file_path = "/" + path
         storage_path = os.path.join(os.getcwd(), path)
-        self.storageDao.insert(self.USER['id'], file_path, storage_path, 0, 0)
+        self.storageDao.insertFile(self.USER['id'],
+            file_path, dict(storage_path=storage_path))
 
         username = "admin"
         with self.app.login(username, username) as app:
@@ -147,7 +148,8 @@ class FilesResourceTestCase(unittest.TestCase):
         storage_path = "mem://test/test"
         fs = FileSystem()
         fs.open(storage_path, "wb").close()
-        self.storageDao.insert(self.USER['id'], file_path, storage_path, 0, 0)
+        self.storageDao.insertFile(self.USER['id'], file_path,
+            dict(storage_path=storage_path))
 
         username = "admin"
         with self.app.login(username, username) as app:
