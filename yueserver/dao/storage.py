@@ -178,13 +178,13 @@ class StorageDao(object):
         #    raise StorageException("invalid path")
 
         data['user_id'] = user_id
-        data['file_path'] = user_id
+        data['file_path'] = file_path
 
-        if version not in record:
-            record['version'] = 1
+        if 'version' not in data:
+            data['version'] = 1
 
         query = self.dbtables.FileSystemStorageTable.insert() \
-            .values(record)
+            .values(data)
 
         ex = None
         try:
@@ -200,14 +200,18 @@ class StorageDao(object):
             raise ex
 
     def updateFile(self, file_id, data, commit=True):
-
         tab = self.dbtables.FileSystemStorageTable
 
-        if version not in record:
-            record['version'] = tab.c.version + 1
+        data = dict(data)
+
+        if 'user_id' in data:
+            del data['user_id']
+
+        if 'version' not in data:
+            data['version'] = tab.c.version + 1
 
         query = tab.update() \
-            .values(record) \
+            .values(data) \
             .where(tab.c.id == file_id)
 
         self.db.session.execute(query)
@@ -215,7 +219,7 @@ class StorageDao(object):
         if commit:
             self.db.session.commit()
 
-    def upsertFile(self, user_id, file_path, data, commit=True):
+    def selectFile(self, user_id, file_path):
 
         tab = self.dbtables.FileSystemStorageTable
         query = tab.select().where(
@@ -224,10 +228,17 @@ class StorageDao(object):
                      ))
         item = self.db.session.execute(query).fetchone()
 
+        return item
+
+    def upsertFile(self, user_id, file_path, data, commit=True):
+
+        item = self.selectFile(user_id, file_path)
+
         if item is None:
             self.insertFile(user_id, file_path, data, commit)
         else:
             self.updateFile(item.id, data, commit)
+
 
     def rename(self, user_id, src_path, dst_path, commit=True):
         """
@@ -249,7 +260,6 @@ class StorageDao(object):
         result = self.db.session.execute(query)
         if result.fetchone() is not None:
             raise StorageException("cannot rename file. name already exists")
-
 
         query = update(tab) \
             .values(record) \
@@ -356,9 +366,7 @@ class StorageDao(object):
         where = FsTab.c.file_path.startswith(bindparam('file_path', path_prefix))
         where = and_(FsTab.c.user_id == user_id, where)
 
-        query = select(['*']) \
-            .select_from(FsTab) \
-            .where(where)
+        query = FsTab.select().where(where)
 
         if limit is not None:
             query = query.limit(limit)
