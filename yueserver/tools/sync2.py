@@ -36,6 +36,7 @@ from yueserver.framework.client import split_auth
 from yueserver.framework.crypto import CryptoManager
 from yueserver.tools.sync import SyncManager
 from yueserver.dao.filesys.filesys import FileSystem
+from yueserver.dao.filesys.crypt import FileEncryptorReader, decryptkey
 
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm.session import sessionmaker
@@ -77,18 +78,17 @@ def LocalStorageTable(metadata):
     is zero, the file has never been pushed
     """
     return Table('filesystem_storage', metadata,
-        # text
         Column('rel_path', String, primary_key=True, nullable=False),
 
-        # number
         Column('local_version', Integer, default=0),
         Column('remote_version', Integer, default=0),
         Column('local_size', Integer, default=0),
         Column('remote_size', Integer, default=0),
         Column('local_permission', Integer, default=0),
         Column('remote_permission', Integer, default=0),
+        Column('remote_public', String, default=0),
+        Column('remote_encryption', String, default=0),
 
-        # date
         Column('local_mtime', Integer, default=0),
         Column('remote_mtime', Integer, default=0)
     )
@@ -264,8 +264,33 @@ class SyncContext(object):
         self.current_local_base = local_base
         self.verbose = verbose
 
+        self.encryption_server_password = None
+        self.encryption_client_key = None
+
     def attr(self, directory):
         return DirAttr.openDir(self.local_base, directory)
+
+    def getEncryptionServerPassword(self):
+        if self.encryption_server_password is None:
+            self.encryption_server_password = input("server password: ")
+        return self.encryption_server_password
+
+    def getEncryptionClientKey(self):
+        # return the key used for client side encryption
+        # the key should exist on the remote server if it
+        # does not exist locally,
+        # fail if the key cannot be found, or if the password
+        # is incorrect
+        # cache the key for subsequent files
+        if self.encryption_client_key is None:
+            # todo, fetch key from local file iff possible
+            response = self.client.files_user_key(mode='CLIENT')
+            key = response.json()['result']['key']
+
+            password = input("client password: ")
+
+            self.encryption_client_key = decryptkey(password, key)
+        return self.encryption_client_key
 
 class RecordBuilder(object):
     """docstring for RecordBuilder"""
@@ -632,8 +657,8 @@ class DirAttr(object):
 
         self.blacklist_patterns = self.blacklist_patterns | patterns
 
-    def doEncrypt(self):
-        return self.encrypt_uploads
+    def encryptionMode(self):
+        return self.settings['encryption_mode']
 
     def doGeneratePublicPath(self):
         return self.generate_public
@@ -870,7 +895,9 @@ def _fetch(ctxt):
                 "remote_size": f['size'],
                 "remote_mtime": f['mtime'],
                 "remote_permission": f['permission'],
-                "remote_version": f['version']
+                "remote_version": f['version'],
+                "remote_public": f['public'],
+                "remote_encryption": f['encryption'],
             }
             ctxt.storageDao.upsert(f['path'], record, commit=False)
         page += 1
@@ -1092,6 +1119,109 @@ def _sync_file(ctxt, relpath, abspath, push=False, pull=False, force=False):
 
     _sync_file_impl(ctxt, ent, push, pull, force)
 
+def _sync_file_push(ctxt, attr, ent):
+
+    # next version is 1 + current version
+
+    # todo:
+    #    server should reject if the version is less than expected
+    #    server response should include new version
+    #    force flag to disable server side version check
+    #    if only perm_ changed, send a metadata update instead
+    version = ent.af['version']
+    if ent.lf is not None:
+        version = max(ent.lf['version'], version)
+    ent.af['version'] = version + 1
+
+    mtime = ent.af['mtime']
+    perm_ = ent.af['permission']
+    f = ProgressFileReaderWrapper(ctxt.fs, ent.local_path, ent.remote_path)
+
+    crypt = None
+    headers = {}
+
+    if attr.encryptionMode().lower() == 'client':
+        crypt = 'client'
+        key = ctxt.getEncryptionClientKey()
+        f = FileEncryptorReader(f, key)
+
+    elif attr.encryptionMode().lower() == 'server':
+        crypt = 'server'
+        headers = {'X-YUE-PASSWORD': ctxt.getEncryptionServerPassword()}
+
+    elif attr.encryptionMode().lower() == 'system':
+        crypt = 'system'
+
+    # if public attr set, subsequent call to set a public path if not set
+    # public password attr should be be an encrypted string
+
+    response = ctxt.client.files_upload(ctxt.root, ent.remote_path, f,
+        mtime=mtime, permission=perm_, crypt=crypt, headers=headers)
+
+    if response.status_code == 409:
+        raise Exception("local database out of date. fetch first")
+
+    record = RecordBuilder().local(**ent.af).remote(**ent.af).build()
+    ctxt.storageDao.upsert(ent.remote_path, record)
+
+def _sync_file_pull(ctxt, attr, ent):
+    # todo:
+    #   server should return metadata (perm, version) in headers
+    #          X-YUE-PERMISSION
+    #          X-YUE-VERSION
+    #   if the version does not match rf, fail with an error indicating
+    #       the user must fetch first
+    #   the current version on the server. (user must fetch first)
+    #   if only a perm_ change, request metadata instead of file
+    #   response headers should contain meta data about the file
+    #     - size, mtime, perm
+
+    version = ent.rf['version']
+
+    print("pull: %s" % (ent.remote_path))
+
+    headers = {}
+
+    if attr.encryptionMode().lower() == 'server':
+        headers = {'X-YUE-PASSWORD': ctxt.getEncryptionServerPassword()}
+
+    elif attr.encryptionMode().lower() == 'system':
+        pass
+
+    response = ctxt.client.files_get_path(ctxt.root, ent.remote_path,
+        stream=True, headers=headers)
+    rv = int(response.headers['X-YUE-VERSION'])
+    rp = int(response.headers['X-YUE-PERMISSION'])
+    rm = int(response.headers['X-YUE-MTIME'])
+    if ent.rf['version'] != rv or \
+       ent.rf['permission'] != rp or \
+       ent.rf['mtime'] != rm:
+        raise Exception("local database out of date. fetch first")
+
+    dpath = ctxt.fs.split(ent.local_path)[0]
+    if not ctxt.fs.exists(dpath):
+        ctxt.fs.makedirs(dpath)
+
+    bytes_written = 0
+    with ctxt.fs.open(ent.local_path, "wb") as wb:
+
+        if attr.encryptionMode().lower() == 'client':
+
+            key = ctxt.getEncryptionClientKey()
+            # f = FileEncryptorReader(f, key)
+            # todo: decrypt stream
+            raise NotImplementedError()
+
+        stream = response.stream()
+
+        for chunk in stream:
+            bytes_written += len(chunk)
+            wb.write(chunk)
+
+    ctxt.fs.set_mtime(ent.local_path, ent.rf['mtime'])
+    record = RecordBuilder().local(**ent.rf).remote(**ent.rf).build()
+    ctxt.storageDao.update(ent.remote_path, record)
+
 def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
 
     state = ent.state().split(':')[0]
@@ -1114,29 +1244,8 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
         if FileState.PUSH != state and not force:
             print("%s is in a conflict state." % ent.remote_path)
 
-        # next version is 1 + current version
+        _sync_file_push(ctxt, attr, ent)
 
-        # todo:
-        #    server should reject if the version is less than expected
-        #    server response should include new version
-        #    force flag to disable server side version check
-        #    if only perm_ changed, send a metadata update instead
-        version = ent.af['version']
-        if ent.lf is not None:
-            version = max(ent.lf['version'], version)
-        ent.af['version'] = version + 1
-
-        mtime = ent.af['mtime']
-        perm_ = ent.af['permission']
-        f = ProgressFileReaderWrapper(ctxt.fs, ent.local_path, ent.remote_path)
-        response = ctxt.client.files_upload(ctxt.root, ent.remote_path, f,
-            mtime=mtime, permission=perm_)
-
-        if response.status_code == 409:
-            raise Exception("local database out of date. fetch first")
-
-        record = RecordBuilder().local(**ent.af).remote(**ent.af).build()
-        ctxt.storageDao.upsert(ent.remote_path, record)
     elif (FileState.PULL == state and pull) or \
          (FileState.DELETE_LOCAL == state and pull and not push) or \
          (FileState.CONFLICT_MODIFIED == state and pull and not push) or \
@@ -1146,42 +1255,8 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
         if FileState.PULL != state and not force:
             print("%s is in a conflict state." % ent.remote_path)
 
-        # todo:
-        #   server should return metadata (perm, version) in headers
-        #          X-YUE-PERMISSION
-        #          X-YUE-VERSION
-        #   if the version does not match rf, fail with an error indicating
-        #       the user must fetch first
-        #   the current version on the server. (user must fetch first)
-        #   if only a perm_ change, request metadata instead of file
-        #   response headers should contain meta data about the file
-        #     - size, mtime, perm
+        _sync_file_pull(ctxt, attr, ent)
 
-        version = ent.rf['version']
-
-        print("pull: %s" % (ent.remote_path))
-        response = ctxt.client.files_get_path(ctxt.root, ent.remote_path, stream=True)
-        rv = int(response.headers['X-YUE-VERSION'])
-        rp = int(response.headers['X-YUE-PERMISSION'])
-        rm = int(response.headers['X-YUE-MTIME'])
-        if ent.rf['version'] != rv or \
-           ent.rf['permission'] != rp or \
-           ent.rf['mtime'] != rm:
-            raise Exception("local database out of date. fetch first")
-
-        dpath = ctxt.fs.split(ent.local_path)[0]
-        if not ctxt.fs.exists(dpath):
-            ctxt.fs.makedirs(dpath)
-
-        bytes_written = 0
-        with ctxt.fs.open(ent.local_path, "wb") as wb:
-            for chunk in response.stream():
-                bytes_written += len(chunk)
-                wb.write(chunk)
-
-        ctxt.fs.set_mtime(ent.local_path, ent.rf['mtime'])
-        record = RecordBuilder().local(**ent.rf).remote(**ent.rf).build()
-        ctxt.storageDao.update(ent.remote_path, record)
     elif FileState.ERROR == state:
         print("error %s" % ent.remote_path)
     elif FileState.CONFLICT_MODIFIED == state:

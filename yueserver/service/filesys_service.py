@@ -130,7 +130,9 @@ class FileSysService(object):
                           "size": record.size,
                           "mtime": record.mtime,
                           "permission": record.permission,
-                          "version": record.version})
+                          "version": record.version,
+                          "public": record.public,
+                          "encryption": record.encryption})
 
         os_root_normalized = os_root.replace("\\", "/")
 
@@ -187,7 +189,9 @@ class FileSysService(object):
                               "size": record.size,
                               "mtime": record.mtime,
                               "permission": record.permission,
-                              "version": record.version})
+                              "version": record.version,
+                              "public": record.public,
+                              "encryption": record.encryption})
 
         files.sort(key=lambda f: f['name'])
         dirs.sort()

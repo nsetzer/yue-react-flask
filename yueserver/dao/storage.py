@@ -310,6 +310,8 @@ class StorageDao(object):
                 "size": item.size,
                 "mtime": item.mtime,
                 "permission": item.permission,
+                "public": item.public,
+                "encryption": item.encryption,
             }
             yield obj
 

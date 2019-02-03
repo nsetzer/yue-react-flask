@@ -4,6 +4,8 @@ import logging
 import posixpath
 import unittest
 
+from base64 import b64encode
+
 from ..dao.db import main_test
 from ..dao.filesys.filesys import FileSystem, MemoryFileSystemImpl
 
@@ -13,7 +15,8 @@ from ..framework.application import AppTestClientWrapper
 
 from .sync2 import db_connect, \
     DatabaseTables, LocalStorageDao, SyncContext, DirAttr, \
-    _check, RecordBuilder, FileState, _sync_file, _sync_file_impl
+    _check, RecordBuilder, FileState, _sync_file, _sync_file_impl, \
+    _fetch, _sync_file_push, _sync_file_pull, LocalStorageTable
 
 def createTestFile(storageDao, fs, state, variant, rel_path, remote_base, local_base, content=b""):
     """create a file which represents a requested state
@@ -164,6 +167,12 @@ class TestSyncContext(SyncContext):
     def attr(self, directory):
         return DirAttr({}, {".yue"})
 
+    def getEncryptionServerPassword(self):
+        return "password"
+
+    def getEncryptionClientKey(self):
+        return b"0" * 32
+
 class CheckSyncTestCase(unittest.TestCase):
 
     """
@@ -285,12 +294,13 @@ class TestClient(object):
         self.fs = fs
         self.storageDao = storageDao
 
-    def files_upload(self, root, relpath, rb, mtime=None, permission=None):
+    def files_upload(self, root, relpath, rb, mtime=None,
+      permission=None, crypt=None, headers=None):
 
         path = "mem://remote/%s" % (relpath)
 
         with self.fs.open(path, "wb") as wb:
-            #for buf in iter(lambda: rb.read(2048), b""):
+            # for buf in iter(lambda: rb.read(2048), b""):
             #    wb.write(buf)
             for buf in rb:
                 wb.write(buf)
@@ -302,7 +312,7 @@ class TestClient(object):
         response.status_code = 201
         return response
 
-    def files_get_path(self, root, rel_path, stream=False):
+    def files_get_path(self, root, rel_path, stream=False, headers=None):
         path = "mem://remote/%s" % (rel_path)
         response = lambda: None
         f = self.fs.open(path, "rb")
@@ -383,7 +393,8 @@ class SyncTestCase(unittest.TestCase):
 
         client = TestClient(fs, storageDao)
 
-        ctxt = TestSyncContext(client, storageDao, fs, "mem", "", "mem://local")
+        ctxt = TestSyncContext(client, storageDao, fs,
+            "mem", "", "mem://local")
         cls.db = db
         cls.storageDao = storageDao
         cls.fs = fs
@@ -655,6 +666,74 @@ class SyncTestCase(unittest.TestCase):
         with self.fs.open("mem://remote/test.txt", "wb") as wb:
             wb.write(b"hello world")
         self.__sync(FileState.DELETE_LOCAL, 0)
+
+class SyncApplicationTestCase(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        """
+        constructs a shared memory database
+        construct a true functioning application client,
+        and connect the local context to this client
+        """
+
+        cls.app = TestApp(cls.__name__)
+        cls.db = cls.app.db
+        cls.tables = cls.app.db.tables
+        cls.tables.LocalStorageTable = LocalStorageTable(cls.db.metadata)
+        cls.tables.LocalStorageTable.create(bind=cls.db.engine)
+
+        cls.remoteStorageDao = cls.app.filesys_service.storageDao
+        cls.userDao = cls.app.filesys_service.userDao
+
+        cls.localStorageDao = LocalStorageDao(cls.app.db, cls.app.db.tables)
+
+        cls.fs = cls.app.filesys_service.fs
+
+        # a test_client is a client which supports http methods
+        # e.g. .get, .post, etc
+        cls.token = 'Basic ' + b64encode(b"admin:admin").decode("utf-8")
+        cls.test_client = cls.app.test_client(cls.token)
+        # a client supports application methods
+        # e.g. .files_upload
+        cls.client = FlaskAppClient(cls.test_client,
+            cls.app._registered_endpoints)
+
+        cls.ctxt = TestSyncContext(cls.client, cls.localStorageDao, cls.fs,
+            "mem", "", "mem://local")
+
+    def setUp(self):
+        self.db.delete(self.tables.LocalStorageTable)
+        self.db.delete(self.tables.FileSystemStorageTable)
+        MemoryFileSystemImpl.clear()
+
+    def test_fetch_000(self):
+
+        # upload a file, outside of the sync application context
+        # a fetch will need to be run for the sync application
+        # to know about the file
+        url = '/api/fs/default/path/test/upload.txt'
+        response = self.test_client.post(url, data=b"abc123")
+        self.assertEqual(response.status_code, 200, response.status_code)
+
+        # show the file is not found locally
+        statement = self.tables.LocalStorageTable.select()
+        result = self.db.session.execute(statement)
+        self.assertEqual(len(result.fetchall()), 0)
+
+        # fetch, updating the local database
+        _fetch(self.ctxt)
+
+        # check that fetch succeeded
+        # the local database should be updated to contain the remote file
+        statement = self.tables.LocalStorageTable.select()
+        result = self.db.session.execute(statement)
+        items = result.fetchall()
+        self.assertEqual(len(items), 1)
+
+        item = items[0]
+        self.assertEqual(item['rel_path'], 'test/upload.txt')
+
 
 if __name__ == '__main__':
     main_test(sys.argv, globals())
