@@ -36,7 +36,8 @@ from yueserver.framework.client import split_auth
 from yueserver.framework.crypto import CryptoManager
 from yueserver.tools.sync import SyncManager
 from yueserver.dao.filesys.filesys import FileSystem
-from yueserver.dao.filesys.crypt import FileEncryptorReader, decryptkey
+from yueserver.dao.filesys.crypt import decryptkey, \
+    FileEncryptorReader, FileDecryptorWriter
 
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm.session import sessionmaker

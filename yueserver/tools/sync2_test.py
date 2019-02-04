@@ -13,6 +13,8 @@ from ..app import TestApp
 from ..framework.client import FlaskAppClient
 from ..framework.application import AppTestClientWrapper
 
+from ..dao.filesys.crypt import HEADER_SIZE
+
 from .sync2 import db_connect, \
     DatabaseTables, LocalStorageDao, SyncContext, DirAttr, FileEnt, \
     _check, RecordBuilder, FileState, _sync_file, _sync_file_impl, \
@@ -762,75 +764,80 @@ class SyncApplicationTestCase(unittest.TestCase):
         data = self.fs._mem()['mem://local/test/upload.txt'][0].getvalue()
         self.assertEqual(data, b"abc123")
 
-    def test_001_fetch_download_decrypt_server(self):
-        pass
+    def _upload_download(self, attr, encryption_mode):
 
-    def test_001_fetch_download_decrypt_system(self):
-        pass
-
-    def test_001_fetch_download_decrypt_client(self):
-        pass
-
-    def test_002_upload(self):
-        pass
-
-    def test_002_upload_encrypt_server(self):
+        # construct a local file in memory, and an entry
         remote_path = 'test/upload.txt'
         local_path = 'mem://local/test/upload.txt'
-        af = {'size': 6, 'mtime': 1234567890, 'version': 1, 'permission': 420}
-        lf = {'size': 6, 'mtime': 1234567890, 'version': 1, 'permission': 420}
+        af = {'size': 11, 'mtime': 1234567890, 'version': 1, 'permission': 420}
+        lf = {'size': 11, 'mtime': 1234567890, 'version': 1, 'permission': 420}
         rf = None
         ent = FileEnt(remote_path, local_path, lf, rf, af)
-        attr = DirAttr({'encryption_mode': 'SERVER'}, {'.yue'})
+        original_data = b"hello world"
         with self.fs.open(local_path, "wb") as wb:
-            wb.write(b"hello world")
+            wb.write(original_data)
+
+        # the remote table should be empty
+        statement = self.db.tables.FileSystemStorageTable.select()
+        result = self.db.session.execute(statement)
+        self.assertEqual(len(result.fetchall()), 0)
+
+        # upload the file
+        _sync_file_push(self.ctxt, attr, ent)
+
+        # check the remote table
+        statement = self.db.tables.FileSystemStorageTable.select()
+        result = self.db.session.execute(statement)
+        item = result.fetchone()
+
+        # validate the settings are correct
+        self.assertEqual(item.size, len(original_data))
+        self.assertEqual(item.encryption, encryption_mode)
+        self.assertTrue(item.mtime, 1234567890)
+        self.assertTrue(item.permission, 420)
+        self.assertTrue(item.version, 1)
+        with self.fs.open(item.storage_path, 'rb') as rb:
+            dat = rb.read()
+            if encryption_mode is None:
+                self.assertEqual(item.size, len(dat))
+                self.assertEqual(dat, original_data)
+            else:
+                self.assertEqual(HEADER_SIZE + item.size, len(dat))
+                self.assertEqual(dat[:4], b'EYUE')
+
+        local_path = 'mem://local/test/download.txt'
+        af = None
+        lf = None
+        rf = {'size': 11, 'mtime': 1234567890, 'version': 1, 'permission': 420}
+        ent2 = FileEnt(remote_path, local_path, lf, rf, af)
+
+        _sync_file_pull(self.ctxt, attr, ent2)
+
+        with self.fs.open(local_path, 'rb') as rb:
+            dat = rb.read()
+            self.assertEqual(original_data, dat)
+
+    def test_002_encrypt_none(self):
+        attr = DirAttr({}, {'.yue'})
+        self._upload_download(attr, None)
+
+    def test_002_encrypt_system(self):
+        attr = DirAttr({'encryption_mode': 'SYSTEM'}, {'.yue'})
+        self._upload_download(attr, 'system')
+
+    def test_002_encrypt_server(self):
 
         url = '/api/fs/change_password'
         response = self.test_client.put(url, data=b"password",
             headers={'X-YUE-PASSWORD': 'password'})
         self.assertEqual(response.status_code, 200, response.status_code)
 
-        statement = self.db.tables.FileSystemStorageTable.select()
-        result = self.db.session.execute(statement)
-        self.assertEqual(len(result.fetchall()), 0)
+        attr = DirAttr({'encryption_mode': 'SERVER'}, {'.yue'})
+        self._upload_download(attr, 'server')
 
-        _sync_file_push(self.ctxt, attr, ent)
-
-        statement = self.db.tables.FileSystemStorageTable.select()
-        result = self.db.session.execute(statement)
-        item = result.fetchone()
-
-        self.assertTrue(item.encryption, 'server')
-        print(item)
-
-    def test_002_upload_encrypt_system(self):
-
-        remote_path = 'test/upload.txt'
-        local_path = 'mem://local/test/upload.txt'
-        af = {'size': 6, 'mtime': 1234567890, 'version': 1, 'permission': 420}
-        lf = {'size': 6, 'mtime': 1234567890, 'version': 1, 'permission': 420}
-        rf = None
-        ent = FileEnt(remote_path, local_path, lf, rf, af)
-        attr = DirAttr({'encryption_mode': 'SYSTEM'}, {'.yue'})
-        with self.fs.open(local_path, "wb") as wb:
-            wb.write(b"hello world")
-
-        statement = self.db.tables.FileSystemStorageTable.select()
-        result = self.db.session.execute(statement)
-        self.assertEqual(len(result.fetchall()), 0)
-
-        _sync_file_push(self.ctxt, attr, ent)
-
-        statement = self.db.tables.FileSystemStorageTable.select()
-        result = self.db.session.execute(statement)
-        item = result.fetchone()
-
-        self.assertTrue(item.encryption, 'system')
-        print(item)
-
-    def test_002_upload_encrypt_client(self):
-        pass
-
+    def test_002_encrypt_client(self):
+        attr = DirAttr({'encryption_mode': 'CLIENT'}, {'.yue'})
+        self._upload_download(attr, 'client')
 
 if __name__ == '__main__':
     main_test(sys.argv, globals())
