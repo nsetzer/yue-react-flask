@@ -16,7 +16,7 @@ from ..framework.application import AppTestClientWrapper
 from .sync2 import db_connect, \
     DatabaseTables, LocalStorageDao, SyncContext, DirAttr, \
     _check, RecordBuilder, FileState, _sync_file, _sync_file_impl, \
-    _fetch, _sync_file_push, _sync_file_pull, LocalStorageTable
+    _fetch, _sync_file_push, _sync_file_pull, LocalStorageTable, _check_file
 
 def createTestFile(storageDao, fs, state, variant, rel_path, remote_base, local_base, content=b""):
     """create a file which represents a requested state
@@ -707,7 +707,7 @@ class SyncApplicationTestCase(unittest.TestCase):
         self.db.delete(self.tables.FileSystemStorageTable)
         MemoryFileSystemImpl.clear()
 
-    def test_fetch_000(self):
+    def test_000_fetch(self):
 
         # upload a file, outside of the sync application context
         # a fetch will need to be run for the sync application
@@ -733,6 +733,54 @@ class SyncApplicationTestCase(unittest.TestCase):
 
         item = items[0]
         self.assertEqual(item['rel_path'], 'test/upload.txt')
+
+    def test_001_fetch_download(self):
+
+        # upload a file, outside of the sync application context
+        # fetch, then pull the file down
+
+        url = '/api/fs/default/path/test/upload.txt'
+        response = self.test_client.post(url, data=b"abc123")
+        self.assertEqual(response.status_code, 200, response.status_code)
+
+        # show the file is not found locally
+        statement = self.tables.LocalStorageTable.select()
+        result = self.db.session.execute(statement)
+        self.assertEqual(len(result.fetchall()), 0)
+
+        # fetch, updating the local database
+        _fetch(self.ctxt)
+
+        ent = _check_file(self.ctxt, 'test/upload.txt',
+            'mem://local/test/upload.txt')
+        _sync_file_pull(self.ctxt, DirAttr({}, {".yue"}), ent)
+
+        # show the file was downloaded successfully
+        self.assertTrue('mem://local/test/upload.txt' in self.fs._mem())
+
+        data = self.fs._mem()['mem://local/test/upload.txt'][0].getvalue()
+        self.assertEqual(data, b"abc123")
+
+    def test_001_fetch_download_decrypt_server(self):
+        pass
+
+    def test_001_fetch_download_decrypt_system(self):
+        pass
+
+    def test_001_fetch_download_decrypt_client(self):
+        pass
+
+    def test_002_upload(self):
+        pass
+
+    def test_002_upload_encrypt_server(self):
+        pass
+
+    def test_002_upload_encrypt_system(self):
+        pass
+
+    def test_002_upload_encrypt_client(self):
+        pass
 
 
 if __name__ == '__main__':

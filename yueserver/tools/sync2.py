@@ -782,6 +782,31 @@ class ProgressFileReaderWrapper(object):
     def __len__(self):
         return self.info.size
 
+class ProgressStreamReaderWrapper(object):
+    def __init__(self, stream, remote_path, size):
+        super(ProgressStreamReaderWrapper, self).__init__()
+        self.stream = stream
+        self.remote_path = remote_path
+        self.size = size if size > 0 else 1
+        self.bytes_read = 0
+        self.percent = -1
+
+    def __iter__(self):
+
+        for chunk in self.stream:
+            self.bytes_read += len(chunk)
+
+            yield chunk
+
+            percent = int(self.bytes_read / max(self.bytes_read, self.size))
+            if percent != self.percent:
+                self.percent = percent
+                sys.stderr.write("\r%s - %d/%d     " % (
+                    self.remote_path, self.bytes_read, self.size))
+
+        sys.stderr.write("\r%s - %d/%d\n" % (
+            self.remote_path, self.bytes_read, self.size))
+
 def db_connect(connection_string):
 
     if connection_string is None or connection_string == ":memory:":
@@ -1206,13 +1231,11 @@ def _sync_file_pull(ctxt, attr, ent):
     with ctxt.fs.open(ent.local_path, "wb") as wb:
 
         if attr.encryptionMode().lower() == 'client':
-
             key = ctxt.getEncryptionClientKey()
-            # f = FileEncryptorReader(f, key)
-            # todo: decrypt stream
-            raise NotImplementedError()
+            wb = FileDecryptorWriter(wb, key)
 
-        stream = response.stream()
+        stream = ProgressStreamReaderWrapper(response.stream(),
+            ent.remote_path, ent.rf['size'])
 
         for chunk in stream:
             bytes_written += len(chunk)
