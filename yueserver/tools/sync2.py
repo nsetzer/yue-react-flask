@@ -644,7 +644,7 @@ class DirAttr(object):
             elif keyname == 'encryption_mode':
                 self.settings['encryption_mode'] = _mode1('encryption_mode')
                 modes = {'none', 'client', 'server', 'system'}
-                if self.encryption_mode not in modes:
+                if self.settings['encryption_mode'] not in modes:
                     raise Exception(
                         "invalid encryption mode: %s" %
                         self.settings['encryption_mode'])
@@ -758,16 +758,23 @@ class CheckResult(object):
         return "CheckResult<%s, %d,%d>" % (self.remote_base, len(self.dirs), len(self.files))
 
 class ProgressFileReaderWrapper(object):
-    def __init__(self, fs, path, remote_path):
+    def __init__(self, fs, path, remote_path, key=None):
         super(ProgressFileReaderWrapper, self).__init__()
         self.fs = fs
         self.path = path
         self.remote_path = remote_path
         self.info = self.fs.file_info(path)
         self.bytes_read = 0
+        self.key = key
 
     def __iter__(self):
+
         with self.fs.open(self.path, 'rb') as rb:
+
+            if self.key is not None:
+                # support for client encryption upload
+                rb = FileEncryptorReader(rb, self.key)
+
             for i, chunk in enumerate(iter(lambda: rb.read(2048), b"")):
                 yield chunk
                 self.bytes_read += len(chunk)
@@ -778,6 +785,11 @@ class ProgressFileReaderWrapper(object):
                         self.remote_path, self.bytes_read, self.info.size))
             sys.stderr.write("\r%s - %d/%d\n" % (
                 self.remote_path, self.bytes_read, self.info.size))
+
+    def read(self, *args, **kwargs):
+        # this is a hack for a bug found in the werkzeug test client
+        # it should not be used otherwise
+        return b"".join(list(self))
 
     def __len__(self):
         return self.info.size
@@ -1160,15 +1172,14 @@ def _sync_file_push(ctxt, attr, ent):
 
     mtime = ent.af['mtime']
     perm_ = ent.af['permission']
-    f = ProgressFileReaderWrapper(ctxt.fs, ent.local_path, ent.remote_path)
 
+    key = None
     crypt = None
     headers = {}
 
     if attr.encryptionMode().lower() == 'client':
         crypt = 'client'
         key = ctxt.getEncryptionClientKey()
-        f = FileEncryptorReader(f, key)
 
     elif attr.encryptionMode().lower() == 'server':
         crypt = 'server'
@@ -1177,9 +1188,12 @@ def _sync_file_push(ctxt, attr, ent):
     elif attr.encryptionMode().lower() == 'system':
         crypt = 'system'
 
+    f = ProgressFileReaderWrapper(
+        ctxt.fs, ent.local_path, ent.remote_path, key)
+    #f = ctxt.fs.open(ent.local_path, 'rb')
+
     # if public attr set, subsequent call to set a public path if not set
     # public password attr should be be an encrypted string
-
     response = ctxt.client.files_upload(ctxt.root, ent.remote_path, f,
         mtime=mtime, permission=perm_, crypt=crypt, headers=headers)
 
