@@ -30,6 +30,8 @@ from urllib.parse import unquote
 
 from fnmatch import fnmatch
 
+import yueserver
+
 """
     - auto detect need to page refresh: window.location.reload()
 """
@@ -807,7 +809,11 @@ class AppService(object):
                 "nsockets": len(self.websocket_session),
 
             },
-            "clients": clients
+            "clients": clients,
+            "version": yueserver.__version__,
+            "version_branch": yueserver.__branch__,
+            "version_git_hash": yueserver.__githash__,
+            "version_build_date": yueserver.__date__,
         }
 
         client = self._get_instance(sessionId, create=False)

@@ -1243,7 +1243,7 @@ class SettingsPage(ContentPage):
                 for key2, val in obj.items():
                     flat["%s_%s" % (key1, key2)] = str(val)
             else:
-                flat[key1] = str(val)
+                flat[key1] = str(obj)
 
         self.lst_info.empty()
         for key, val in sorted(flat.items()):
