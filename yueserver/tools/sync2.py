@@ -767,6 +767,7 @@ class ProgressFileReaderWrapper(object):
         self.info = self.fs.file_info(path)
         self.bytes_read = 0
         self.key = key
+        self._read = False
 
     def __iter__(self):
 
@@ -779,18 +780,24 @@ class ProgressFileReaderWrapper(object):
             for i, chunk in enumerate(iter(lambda: rb.read(2048), b"")):
                 yield chunk
                 self.bytes_read += len(chunk)
-                #percent = 100 * self.bytes_read / self.info.size
+                # percent = 100 * self.bytes_read / self.info.size
                 # send an update approximately every quarter MB
                 if i % 256 == 0:
-                    sys.stderr.write("\r%s - %d/%d     " % (
-                        self.remote_path, self.bytes_read, self.info.size))
-            sys.stderr.write("\r%s - %d/%d\n" % (
-                self.remote_path, self.bytes_read, self.info.size))
+                    sys.stderr.write("\r%10d/%10d - %s  " % (
+                        self.bytes_read, self.info.size, self.remote_path))
+            sys.stderr.write("\r%10d - %s             \n" % (
+                self.bytes_read, self.remote_path))
 
+    # TODO: only define this method in a test environment
     def read(self, *args, **kwargs):
         # this is a hack for a bug found in the werkzeug test client
         # it should not be used otherwise
-        return b"".join(list(self))
+        if self._read:
+            return b""
+        else:
+            self._read = True
+            return b"".join(list(self))
+
 
     def __len__(self):
         return self.info.size
@@ -811,14 +818,15 @@ class ProgressStreamReaderWrapper(object):
 
             yield chunk
 
-            percent = int(self.bytes_read / max(self.bytes_read, self.size))
+            # integer here controls the maximum number of updates
+            percent = int(4 * self.bytes_read / self.size)
             if percent != self.percent:
                 self.percent = percent
-                sys.stderr.write("\r%s - %d/%d     " % (
-                    self.remote_path, self.bytes_read, self.size))
+                sys.stderr.write("\r%10d/%10d - %s  " % (
+                    self.bytes_read, self.size, self.remote_path))
 
-        sys.stderr.write("\r%s - %d/%d\n" % (
-            self.remote_path, self.bytes_read, self.size))
+        sys.stderr.write("\r%10d - %s             \n" % (
+            self.bytes_read, self.remote_path))
 
 def db_connect(connection_string):
 
@@ -1218,8 +1226,6 @@ def _sync_file_pull(ctxt, attr, ent):
 
     version = ent.rf['version']
 
-    print("pull: %s" % (ent.remote_path))
-
     headers = {}
 
     if attr.encryptionMode().lower() == 'server':
@@ -1304,11 +1310,14 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
     elif FileState.CONFLICT_VERSION == state:
         pass
     elif FileState.DELETE_BOTH == state:
+        sys.stderr.write("delete     - %s" % ent.remote_path)
         ctxt.storageDao.remove(ent.remote_path)
     elif FileState.DELETE_REMOTE == state and pull:
+        sys.stderr.write("delete     - %s" % ent.remote_path)
         ctxt.fs.remove(ent.local_path)
         ctxt.storageDao.remove(ent.remote_path)
     elif FileState.DELETE_LOCAL == state and push:
+        sys.stderr.write("delete     - %s" % ent.remote_path)
         ctxt.client.files_delete(ctxt.root, ent.remote_path)
         ctxt.storageDao.remove(ent.remote_path)
     else:
