@@ -32,7 +32,7 @@ def _push(src, dst):
 
 def async_transcode(cmd, src, dst):
 
-        logging.info(' '.join(cmd))
+        logging.debug(' '.join(cmd))
 
         proc = subprocess.Popen(cmd,
             stdin=subprocess.PIPE,
@@ -80,7 +80,7 @@ class _TranscodeFile(object):
     def __init__(self, cmd, infile):
         super(_TranscodeFile, self).__init__()
 
-        logging.info("execute: %s" % sh_escape(cmd))
+        logging.debug("execute: %s" % sh_escape(cmd))
 
         self._proc = subprocess.Popen(cmd,
             stdin=subprocess.PIPE,
@@ -171,6 +171,9 @@ class FFmpeg(object):
                            "ALBUM": "album",
                            "TITLE": "title", } etc
         """
+
+        if self.binpath is None:
+            raise Exception("transcoder binpath is none")
         args = [self.binpath, "-i", "pipe:0"]
 
         args.append("-c:a")
@@ -214,7 +217,8 @@ class FFmpeg(object):
         return args
 
     def transcode(self, infile, outfile, args):
-        logging.warning(' '.join(args))
+        if args:
+            logging.debug(' '.join(args))
 
         async_transcode(args, infile, outfile)
 

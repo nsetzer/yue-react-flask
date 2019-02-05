@@ -87,22 +87,37 @@ class AudioService(object):
         did = user['domain_id']
         rid = user['role_id']
 
-        try:
-            file_path = self.storageDao.absoluteFilePath(
+        file_path = self.storageDao.absoluteFilePath(
                 user['id'], user['role_id'], rel_path)
+
+        try:
+
             info = self.storageDao.file_info(uid, file_path)
+            storage_path = info.storage_path
         except StorageNotFoundException as e:
             # if the file is not in the database, check the file system
             # then add it to the database
             # throws FileNotFoundError if dne
 
-            abs_path = self.storageDao.absolutePath(
+            storage_path = self.storageDao.absolutePath(
                 uid, rid, fs_name, rel_path)
-            info = self.fs.file_info(abs_path)
-            self.storageDao.insert(uid, rel_path, abs_path,
-                info.size, info.mtime, info.permission)
 
-        song = {Song.path: info.storage_path, Song.file_size: info.size}
+            try:
+                info = self.fs.file_info(storage_path)
+            except Exception as e:
+                logging.exception(e)
+                raise
+
+            data = dict(
+                storage_path=storage_path,
+                permission=info.permission,
+                size=info.size,
+                mtime=info.mtime,
+            )
+
+            self.storageDao.upsertFile(user['id'], file_path, data)
+
+        song = {Song.path: storage_path, Song.file_size: info.size}
         self.libraryDao.update(uid, did, song_id, song)
 
     def setSongAlbumArtPath(self, user, song_id, fs_name, rel_path):
@@ -338,7 +353,7 @@ class AudioService(object):
         path = song[Song.path]
 
         if not path or not self.fs.exists(path):
-            return FileNotFoundError("No audio for %s" % (song[Song.id]))
+            raise FileNotFoundError("No audio for %s" % (song[Song.id]))
 
         return path
 

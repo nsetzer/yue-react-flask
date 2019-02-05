@@ -74,21 +74,21 @@ class LocalFileSystemImpl(AbstractFileSystem):
         _, name = self.split(path)
 
         if not (st.st_mode & S_IRGRP):
-            return FileNotFoundError(path)
+            raise FileNotFoundError(path)
 
         is_dir = bool(S_ISDIR(st.st_mode))
 
         if is_dir or S_ISREG(st.st_mode):
             return FileRecord(name, is_dir, size, mtime, 0, permission)
 
-        return FileNotFoundError(path)
+        raise FileNotFoundError(path)
 
     def remove(self, path):
 
         os.remove(path)
 
         dir, _ = self.split(path)
-        if len(self.listdir(dir))==0:
+        if len(self.listdir(dir)) == 0:
             os.rmdir(dir)
 
 class MemoryFileSystemImpl(AbstractFileSystem):

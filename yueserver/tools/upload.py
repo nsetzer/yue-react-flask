@@ -10,13 +10,14 @@ on keys that are available for songs
 
 
     song = {
-        "ref_id": 1234
-        "static_path": "artist/album/title"
-        "file_path" : "/mnt/music/artist/album/title.mp3"
-        "art_path" : "/mnt/music/artist/album/folder.jpg"
-        "artist": "artistname"
-        "album": "albumname"
-        "title": "title"
+        "ref_id": 1234,
+        "static_path": "artist/album/title",
+        "file_path": "/mnt/music/artist/album/title.mp3",
+        "art_path": "/mnt/music/artist/album/folder.jpg",
+        "artist": "artistname",
+        "album": "albumname",
+        "title": "title",
+        "equalizer": 0,
     }
 
 """
@@ -93,8 +94,10 @@ class JsonUploader(object):
 
         if bucket is not None:
             self.s3fs = S3Upload(bucket)
+            self._upload_impl = self.s3fs.upload
         else:
             self.s3fs = None
+            self._upload_impl = self._api_upload
 
     def upload(self, songs, remote_songs, remote_files):
 
@@ -107,7 +110,7 @@ class JsonUploader(object):
             try:
                 self._upload_one(song, remote_songs, remote_files)
             except Exception as e:
-                logging.error("%s" % e)
+                logging.exception("upload %s" % e)
         end = time.time()
         success = self.updated + self.uploaded
         logging.warning("%d/%d (uploaded: %d updated: %d) in %s seconds" % (
@@ -149,10 +152,14 @@ class JsonUploader(object):
 
         if static_path in remote_songs:
             #logging.info("update: %s" % static_path)
+            song = remote_songs[static_path]
             self.updated += 1 if (aud_path in remote_files) else 0
 
             if self.noexec:
                 return
+
+            if not song['file_path']:
+                self._set_audio_path(song['id'], aud_path)
 
             # song['id'] = remote_songs[static_path]['id']
             # self._update_song(song)
@@ -173,15 +180,7 @@ class JsonUploader(object):
 
             song_id = self._create_song(song)
 
-            payload = {
-                "root": self.root,
-                "path": aud_path,
-            }
-            response = self.client.library_set_song_audio(song_id,
-                json.dumps(payload))
-            if response.status_code != 200:
-                print(response)
-                print(response.status_code)
+            self._set_audio_path(song_id, aud_path)
 
     def _transcode_upload(self, local_path, remote_path, opts):
         if not local_path.endswith("ogg"):
@@ -197,20 +196,14 @@ class JsonUploader(object):
                 logging.info("uploading file")
 
                 f.seek(0)
-                if self.s3fs is not None:
-                    self.s3fs.upload(remote_path, f)
-                else:
-                    self._api_upload(remote_path, f)
+                self._upload_impl(remote_path, f)
             finally:
                 f.close()
 
         else:
             logging.info("uploading file")
             with open(local_path, "rb") as rb:
-                if self.s3fs is not None:
-                    self.s3fs.upload(remote_path, rb)
-                else:
-                    self._api_upload(remote_path, rb)
+                self._upload_impl(remote_path, rb)
 
     def _api_upload(self, remote_path, fo):
         response = self.client.files_upload(self.root, remote_path, fo)
@@ -256,6 +249,17 @@ class JsonUploader(object):
             print(response.status_code)
             print(remote_song)
             print(response.text)
+
+    def _set_audio_path(self, song_id, aud_path):
+        payload = {
+            "root": self.root,
+            "path": aud_path,
+        }
+        print("set audio path", payload)
+        response = self.client.library_set_song_audio(song_id,
+            json.dumps(payload))
+        if response.status_code != 200:
+            raise Exception("[%s] unable to st audio" % response.status_code)
 
 def _read_json(path):
 
