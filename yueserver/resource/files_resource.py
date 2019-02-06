@@ -98,12 +98,9 @@ class FilesResource(WebResource):
 
         if info.encryption == CryptMode.system:
             password = self.filesys_service.settingsDao.get(Settings.storage_system_key)
-            print("stream updated", password)
             key = self.filesys_service.storageDao.getUserKey(info.user_id, CryptMode.system)
-            print("stream updated", key)
             key = decryptkey(password, key)
             stream = FileDecryptorReader(stream, key)
-            print("stream updated")
 
         go = files_generator_v2(stream)
         return send_generator(go, info.name, file_size=None)
@@ -121,7 +118,7 @@ class FilesResource(WebResource):
         the file must exist in the given root, with the given path.
         """
 
-        password = g.headers['X-YUE-PASSWORD']
+        password = g.headers.get('X-YUE-PASSWORD', None)
         fileId = self.filesys_service.setFilePublic(g.current_user,
             root, resPath, password=password, revoke=g.args.revoke)
 
@@ -236,8 +233,11 @@ class FilesResource(WebResource):
         the 'system' encryption key can never be changed
         """
 
-        password = g.headers['X-YUE-PASSWORD']
+        password = g.headers.get('X-YUE-PASSWORD', None)
         new_password = g.body.read().decode("utf-8").strip()
+
+        if not password or not new_password:
+            return httpError(400, "Invalid password")
 
         self.filesys_service.changePassword(g.current_user,
             password, new_password)
@@ -300,6 +300,8 @@ class FilesResource(WebResource):
                 _, name = self.filesys_service.fs.split(storage_path)
                 stream = self.filesys_service.fs.open(storage_path, "rb")
                 if info.encryption in (CryptMode.server, CryptMode.system):
+                    if not password:
+                        return httpError(400, "Invalid Password")
                     stream = self.filesys_service.decryptStream(g.current_user,
                         password, stream, "r", info.encryption)
                 go = files_generator_v2(stream)

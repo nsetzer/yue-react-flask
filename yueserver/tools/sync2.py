@@ -315,16 +315,21 @@ class RecordBuilder(object):
             "remote_size": 0,
             "remote_mtime": 0,
             "remote_permission": 0,
+            "remote_public": None,
+            "remote_encryption": None,
         }
 
     def _update_int(self, obj, key, value):
         if value is not None:
             obj[key] = value
 
+    def _update_null(self, obj, key, value):
+        obj[key] = value
+
     def localFromInfo(self, info):
         return self.local(info.version, info.size, info.mtime, info.permission)
 
-    def local(self, version=None, size=None, mtime=None, permission=None):
+    def local(self, version=None, size=None, mtime=None, permission=None, **kwargs):
 
         self._update_int(self.lf, "local_version", version)
         self._update_int(self.lf, "local_size", size)
@@ -336,12 +341,15 @@ class RecordBuilder(object):
     def remoteFromInfo(self, info):
         return self.remote(info.version, info.size, info.mtime, info.permission)
 
-    def remote(self, version=None, size=None, mtime=None, permission=None):
+    def remote(self, version=None, size=None, mtime=None, permission=None, **kwargs):
 
         self._update_int(self.rf, "remote_version", version)
         self._update_int(self.rf, "remote_size", size)
         self._update_int(self.rf, "remote_mtime", mtime)
         self._update_int(self.rf, "remote_permission", permission)
+        self._update_null(self.rf, "remote_public", kwargs.get('public', None))
+        self._update_null(self.rf, "remote_encryption",
+            kwargs.get('encryption', None))
 
         return self
 
@@ -1013,6 +1021,8 @@ def _check(ctxt, remote_base, local_base):
                 "size": f['remote_size'],
                 "mtime": f['remote_mtime'],
                 "permission": f['remote_permission'],
+                "public": f['remote_public'],
+                "encryption": f['remote_encryption'],
             }
 
         remote_path = posixpath.join(remote_base, f['rel_path'])
@@ -1100,6 +1110,8 @@ def _check_file(ctxt, remote_path, local_path):
                 "size": item['remote_size'],
                 "mtime": item['remote_mtime'],
                 "permission": item['remote_permission'],
+                "public": item['remote_public'],
+                "encryption": item['remote_encryption'],
             }
 
         ent = FileEnt(remote_path, local_path, lf, rf, af)
@@ -1231,10 +1243,14 @@ def _sync_file_pull(ctxt, attr, ent):
 
     headers = {}
 
-    if attr.encryptionMode().lower() == 'server':
+    encryption_mode = ent.rf['encryption']
+    if encryption_mode:
+        encryption_mode = encryption_mode.lower()
+
+    if encryption_mode == 'server':
         headers = {'X-YUE-PASSWORD': ctxt.getEncryptionServerPassword()}
 
-    elif attr.encryptionMode().lower() == 'system':
+    elif encryption_mode == 'system':
         pass
 
     response = ctxt.client.files_get_path(ctxt.root, ent.remote_path,
@@ -1254,7 +1270,7 @@ def _sync_file_pull(ctxt, attr, ent):
     bytes_written = 0
     with ctxt.fs.open(ent.local_path, "wb") as wb:
 
-        if attr.encryptionMode().lower() == 'client':
+        if encryption_mode == 'client':
             key = ctxt.getEncryptionClientKey()
             wb = FileDecryptorWriter(wb, key)
 
@@ -1263,6 +1279,7 @@ def _sync_file_pull(ctxt, attr, ent):
 
         for chunk in stream:
             bytes_written += len(chunk)
+            print(len(chunk), chunk)
             wb.write(chunk)
 
     ctxt.fs.set_mtime(ent.local_path, ent.rf['mtime'])

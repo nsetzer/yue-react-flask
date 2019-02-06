@@ -573,7 +573,6 @@ class StorageDao(object):
 
         tab = self.dbtables.FileSystemUserEncryptionTable
 
-        print("set user key ", mode, key)
         statement = tab.select().where(
             and_(tab.c.user_id == user_id,
                  tab.c.expired.is_(None),
