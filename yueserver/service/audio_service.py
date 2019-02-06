@@ -74,15 +74,16 @@ class AudioService(object):
 
         return song
 
-    def setSongFilePath(self, user, song_id, fs_name, rel_path):
-        """ set the location of the audio file for the song by song id
-
-        user: the current user
-        song_id: the song_id for the song to update
-        rel_path: a relative path (sample.jpg)
-        abs_path: an absolute path (s3://bucket/sample.jpg)
+    def _getOrCreateFileEntry(self, user, song_id, fs_name, rel_path):
         """
+        Get or Create a File Entry for a given path
 
+        look up a path in the file system table, or check
+        the underlying file system for a file of the same name
+
+        return the true storage path and file size, so that it can
+        be used as the path for audio or album art for a song
+        """
         uid = user['id']
         did = user['domain_id']
         rid = user['role_id']
@@ -117,7 +118,24 @@ class AudioService(object):
 
             self.storageDao.upsertFile(user['id'], file_path, data)
 
-        song = {Song.path: storage_path, Song.file_size: info.size}
+        return storage_path, info.size
+
+    def setSongFilePath(self, user, song_id, fs_name, rel_path):
+        """ set the location of the audio file for the song by song id
+
+        user: the current user
+        song_id: the song_id for the song to update
+        rel_path: a relative path (sample.jpg)
+        abs_path: an absolute path (s3://bucket/sample.jpg)
+        """
+
+        uid = user['id']
+        did = user['domain_id']
+
+        storage_path, size = self._getOrCreateFileEntry(
+            user, song_id, fs_name, rel_path)
+
+        song = {Song.path: storage_path, Song.file_size: size}
         self.libraryDao.update(uid, did, song_id, song)
 
     def setSongAlbumArtPath(self, user, song_id, fs_name, rel_path):
@@ -131,24 +149,11 @@ class AudioService(object):
 
         uid = user['id']
         did = user['domain_id']
-        rid = user['role_id']
 
-        try:
-            file_path = self.storageDao.absoluteFilePath(
-                user['id'], user['role_id'], rel_path)
-            info = self.storageDao.file_info(uid, file_path)
-        except StorageNotFoundException as e:
-            # if the file is not in the database, check the file system
-            # then add it to the database
-            # throws FileNotFoundError if dne
+        storage_path, size = self._getOrCreateFileEntry(
+            user, song_id, fs_name, rel_path)
 
-            abs_path = self.storageDao.absolutePath(
-                uid, rid, fs_name, rel_path)
-            info = self.fs.file_info(abs_path)
-            self.storageDao.insert(uid, rel_path, abs_path,
-                info.size, info.mtime, info.permission)
-
-        song = {Song.art_path: info.storage_path}
+        song = {Song.art_path: storage_path}
         self.libraryDao.update(uid, did, song_id, song)
 
     def getSongAudioPath(self, user, song_id):

@@ -208,6 +208,13 @@ class FileSystemTestCase(unittest.TestCase):
             self.assertEqual(rb.read(), b"abc123")
         self.assertEqual(rb.returncode, 0)
 
+    def test_s3fs_register_invalid(self):
+
+        FileSystem.register("http://", None)
+        fs = FileSystem()
+
+        with self.assertRaises(Exception):
+            fs.isfile('http://localhost')
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(FileSystemTestCase)
     unittest.TextTestRunner().run(suite)

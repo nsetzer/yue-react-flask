@@ -115,7 +115,7 @@ def FileSystemUserSupplementaryTable(metadata):
 
 def FileSystemUserEncryptionTable(metadata):
     return Table('filesystem_encryption_v1', metadata,
-        Column('id', Integer, autoincrement=True),
+        Column('id', Integer, primary_key=True),
         Column('user_id', ForeignKey("user.id"), nullable=False),
         # text
         # mode is one of: client, server, system.

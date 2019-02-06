@@ -232,11 +232,12 @@ class FilesResourceTestCase(unittest.TestCase):
             dat1_enc = open(path, "rb").read()
 
             # get the key used for encryption
-            key = self.storageDao.getEncryptionKey(self.USER['id'], 'password')
+            key = self.storageDao.getEncryptionKey(
+                self.USER['id'], 'password', mode='server')
 
             # use the api to get the encrypted form of the key
             url2 = '/api/fs/user_key'
-            response = app.get(url2)
+            response = app.get(url2, query_string={'mode': 'server'})
             user_key = response.json()['result']['key']
             self.assertTrue(user_key.startswith("01:$2b$"))
 
@@ -356,14 +357,11 @@ class FilesResourceTestCase(unittest.TestCase):
             url = '/api/fs/user_key'
 
             # there should be no keys available
-            response = app.get(url)
-            self.assertEqual(response.status_code, 400, response.status_code)
-
             response = app.get(url, query_string={'mode': 'server'})
-            self.assertEqual(response.status_code, 400, response.status_code)
+            self.assertEqual(response.status_code, 404, response.status_code)
 
             response = app.get(url, query_string={'mode': 'client'})
-            self.assertEqual(response.status_code, 400, response.status_code)
+            self.assertEqual(response.status_code, 404, response.status_code)
 
             # allow the user to set an encryption key
             key = cryptkey('password')

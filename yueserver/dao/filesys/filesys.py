@@ -203,16 +203,26 @@ class FileSystem(object):
         self._fs = dict(FileSystem.default_fs)
 
         self._fs[MemoryFileSystemImpl.scheme] = MemoryFileSystemImpl()
+        # by default s3 paths should fail, until registed
+        self._fs["s3://"] = None
 
         self._fs_default = LocalFileSystemImpl()
 
     @staticmethod
     def register(scheme, fs):
+        """
+        register a new filesystem implementation
+
+        scheme: prefix used to match urls
+        fs: an implementation or None to invalidate
+        """
         FileSystem.default_fs[scheme] = fs
 
     def getFileSystemForPath(self, path):
         for scheme, fs in self._fs.items():
             if path.startswith(scheme):
+                if fs is None:
+                    raise Exception("Invalid Scheme '%s'" % scheme)
                 return fs
         return self._fs_default
 

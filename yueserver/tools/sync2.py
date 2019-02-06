@@ -36,8 +36,8 @@ from yueserver.framework.client import split_auth
 from yueserver.framework.crypto import CryptoManager
 from yueserver.tools.sync import SyncManager
 from yueserver.dao.filesys.filesys import FileSystem
-from yueserver.dao.filesys.crypt import decryptkey, \
-    FileEncryptorReader, FileDecryptorWriter
+from yueserver.dao.filesys.crypt import cryptkey, decryptkey, recryptkey, \
+    validatekey, FileEncryptorReader, FileDecryptorWriter
 
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm.session import sessionmaker
@@ -286,6 +286,9 @@ class SyncContext(object):
         if self.encryption_client_key is None:
             # todo, fetch key from local file iff possible
             response = self.client.files_user_key(mode='CLIENT')
+            if response.status_code != 200:
+                raise Exception("Unable to retreive key: %s" %
+                    response.status_code)
             key = response.json()['result']['key']
 
             password = input("client password: ")
@@ -1456,6 +1459,116 @@ def _attr_impl(ctxt, path):
     for pattern in attr.blacklist_patterns:
         print(pattern)
 
+def _setpass_impl(ctxt):
+
+    response = ctxt.client.files_user_key(mode='SERVER')
+
+    # TODO: there seems to be a bug with expiring the keys client/server
+
+    if response.status_code == 200:
+
+        sys.stdout.write("Changing the Password for Server Side Encryption\n")
+        sys.stdout.write("Enter the current Server Password\n")
+        sys.stdout.write(
+            "Then enter the new password twice to confirm the change\n")
+        sys.stdout.write(
+                "Do not forget this password. It cannot be recovered!\n\n")
+
+        svr_password = input('server password: ')
+        new_password = input('   new password: ')
+        chk_password = input('retype password: ')
+
+    elif response.status_code == 404:
+        sys.stdout.write("Set the Password for Server Side Encryption\n")
+        sys.stdout.write(
+            "Type the new password twice to confirm setting the password\n")
+        sys.stdout.write(
+                "Do not forget this password. It cannot be recovered!\n\n")
+
+        svr_password = ""
+        new_password = input('server password: ')
+        chk_password = input('retype password: ')
+
+    else:
+        sys.stderr.write("Unexpected server error!\n")
+        sys.exit(1)
+
+    if new_password != chk_password:
+        sys.stderr.write("password do not match!\n")
+        sys.exit(1)
+
+    headers = {'X-YUE-PASSWORD': svr_password}
+    bpass = new_password.encode("utf-8")
+    response = ctxt.client.files_change_password(bpass, headers=headers)
+
+    if response.status_code != 200:
+        sys.stderr.write("Failed to change password!\n")
+        sys.exit(1)
+    else:
+        sys.stderr.write("Successfully changed password.\n")
+
+def _setkey_impl(ctxt, workfactor):
+
+    response = ctxt.client.files_user_key(mode='CLIENT')
+
+    if response.status_code == 200:
+
+        sys.stdout.write(
+            "Changing the Password for Client Side Encryption Key\n")
+        sys.stdout.write("Enter the current password\n")
+        sys.stdout.write(
+            "Then type the new password twice to confirm the change\n")
+        sys.stdout.write(
+            "Do not forget this password. It cannot be recovered!\n\n")
+
+        current_key = response.json()['result']['key']
+        validatekey(current_key)
+
+        cnt_password = input('client password: ')
+        new_password = input('   new password: ')
+        chk_password = input('retype password: ')
+
+        if new_password != chk_password:
+            sys.stderr.write("password do not match!\n")
+            sys.exit(1)
+
+        new_key = recryptkey(cnt_password,
+            new_password, current_key, workfactor=workfactor)
+        bkey = new_key.encode("utf-8")
+
+        response = ctxt.client.files_set_user_key(bkey)
+        if response.status_code != 200:
+            sys.stderr.write("Failed to update key!\n")
+        else:
+            sys.stderr.write("Successfully changed key.\n")
+
+    elif response.status_code == 404:
+
+        sys.stdout.write("Set the Client Side Encryption Key\n")
+        sys.stdout.write(
+            "Type the password twice to confirm setting the key\n\n")
+        sys.stdout.write(
+            "Do not forget this password. It cannot be recovered!\n\n")
+
+        cnt_password = input('client password: ')
+        chk_password = input('retype password: ')
+
+        if cnt_password != chk_password:
+            sys.stderr.write("password do not match!\n")
+            sys.exit(1)
+
+        new_key = cryptkey(cnt_password, workfactor=workfactor)
+        bkey = new_key.encode("utf-8")
+
+        response = ctxt.client.files_set_user_key(bkey)
+        if response.status_code != 200:
+            sys.stderr.write("Failed to update key!\n")
+        else:
+            sys.stderr.write("Successfully changed key.\n")
+    else:
+        sys.stderr.write("Unexpected server error!\n")
+        sys.exit(1)
+
 def _parse_path_args(fs, remote_base, local_base, args_paths):
 
     paths = []
@@ -1639,6 +1752,20 @@ def cli_attr(args):
     ctxt = get_ctxt(cwd)
 
     _attr_impl(ctxt, args.path or cwd)
+
+def cli_setpass(args):
+
+    cwd = os.getcwd()
+    ctxt = get_ctxt(cwd)
+
+    _setpass_impl(ctxt)
+
+def cli_setkey(args):
+
+    cwd = os.getcwd()
+    ctxt = get_ctxt(cwd)
+
+    _setkey_impl(ctxt, args.workfactor)
 
 def main():
 
@@ -1831,7 +1958,28 @@ def main():
 
     parser_attr.add_argument('path', nargs="?", default="",
         help="local directory path")
+
     ###########################################################################
+    # Set Encryption Server Password
+
+    parser_attr = subparsers.add_parser('setpass',
+        help="set or change encryption server password")
+    parser_attr.set_defaults(func=cli_setpass)
+
+    ###########################################################################
+
+    ###########################################################################
+    # Set Encryption Client Password
+
+    parser_attr = subparsers.add_parser('setkey',
+        help="set or change encryption client key")
+    parser_attr.set_defaults(func=cli_setkey)
+
+    parser_attr.add_argument('-w', '--workfactor', type=int, default=12,
+        help="bcrypt workfactor")
+
+    ###########################################################################
+
     args = parser.parse_args()
 
     if hasattr(args, "username"):

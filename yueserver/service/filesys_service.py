@@ -9,7 +9,7 @@ file system.
 """
 import os, sys
 
-from .exception import FileSysServiceException
+from .exception import FileSysServiceException, FileSysKeyNotFound
 from ..dao.filesys.filesys import FileSystem
 from ..dao.filesys.crypt import FileEncryptorWriter, FileEncryptorReader, \
     FileDecryptorReader, FileDecryptorWriter, decryptkey
@@ -360,7 +360,7 @@ class FileSysService(object):
             return self.storageDao.getUserKey(user['id'], mode)
         except StorageException as e:
             pass
-        raise FileSysServiceException("key not found")
+        raise FileSysKeyNotFound("key not found")
 
     def setUserClientKey(self, user, key):
         self.storageDao.setUserKey(user['id'], key, CryptMode.client)

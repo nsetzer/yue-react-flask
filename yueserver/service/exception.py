@@ -26,3 +26,7 @@ class TranscodeServiceException(ServiceException):
 class FileSysServiceException(ServiceException):
     def __init__(self, message, status=None):
         super().__init__(message, status)
+
+class FileSysKeyNotFound(FileSysServiceException):
+    def __init__(self, message, status=404):
+        super().__init__(message, status)

@@ -134,12 +134,12 @@ def decryptkey(password, key):
 
     return text
 
-def recryptkey(password, new_password, key):
+def recryptkey(password, new_password, key, workfactor=12):
     """decrypt a key using password, then re-encrypt using a new password"""
 
     enckey = decryptkey(password, key)
 
-    return cryptkey(new_password, enckey)
+    return cryptkey(new_password, enckey, workfactor=workfactor)
 
 def validatekey(key):
     """

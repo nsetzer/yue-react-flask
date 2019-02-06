@@ -457,7 +457,17 @@ class Storage2TestCase(unittest.TestCase):
 
         self.storageDao.changePassword(user_id, password, password)
 
+        tab = self.storageDao.dbtables.FileSystemUserEncryptionTable
+
         key1 = self.storageDao.getEncryptionKey(user_id, password)
+
+        # look up the encrypted key and use to further verify that
+        # the update logic on the table is performing correctly
+        cryptkey1 = self.storageDao.getUserKey(user_id)
+        query = tab.select().where(tab.c.encryption_key == cryptkey1)
+        item = self.db.session.execute(query).fetchone()
+        self.assertTrue(item.id is not None)
+        self.assertTrue(item.expired is None)
 
         self.storageDao.changePassword(user_id, password, new_password)
 
@@ -465,6 +475,18 @@ class Storage2TestCase(unittest.TestCase):
 
         # changing the password should still keep the same key
         self.assertEqual(key1, key2)
+
+        query = tab.select().where(tab.c.encryption_key == cryptkey1)
+        item1 = self.db.session.execute(query).fetchone()
+        self.assertTrue(item1.id is not None)
+        self.assertTrue(item1.expired is not None)
+
+        cryptkey2 = self.storageDao.getUserKey(user_id)
+        query = tab.select().where(tab.c.encryption_key == cryptkey2)
+        item2 = self.db.session.execute(query).fetchone()
+        self.assertTrue(item2.id is not None)
+        self.assertTrue(item2.expired is None)
+        self.assertTrue(item2.id != item1.id)
 
     def test_008_public(self):
 
