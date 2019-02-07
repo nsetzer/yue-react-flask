@@ -4,6 +4,8 @@ A Data Access Object for manipulating the library table
 
 """
 
+import logging
+
 from sqlalchemy.orm import relationship
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import and_, or_, not_, case, select, update, column, func, asc, desc
@@ -673,7 +675,7 @@ class LibraryDao(object):
             orderby = self._getSearchOrder(case_insensitive, orderby)
 
         if debug:
-            print(sql_rule)
+            logging.debug(sql_rule)
 
         return self._query(user_id, domain_id, sql_rule, orderby, limit, offset)
 

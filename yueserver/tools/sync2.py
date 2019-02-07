@@ -1,4 +1,3 @@
-#! python $this init -u admin:admin localhost:4200
 
 """
 
@@ -8,19 +7,9 @@ todo: create a stat cache to avoid making os calls for the same file
 
 add resolve-remote / resolve-local / resolve-fetch commands to fix conflicts
     resolve-fetch to download a specific file as `${filename}.remote`
-    provide the oportunity to view the remote file, overwrite local
+    provide the opportunity to view the remote file, overwrite local
     and then resolve-local
     possibly sub commands e.g. `sync resolve <action> <action-args>`
-
-todo:
-    consider moving .yueignore to a .yueattr format:
-    ini file with sections for per folder settings and blacklist
-    e.g.
-        encryption: auto encrypt files in this dir
-        public: autogenerate public links for uploaded files
-
-    encryption keys should have a property/mode/type/name
-        e.g. 'default', 'system', 'client', etc
 
 """
 import os, sys
@@ -1170,7 +1159,7 @@ def _status_dir_impl(ctxt, remote_dir, local_dir, recursive):
             path = ctxt.fs.relpath(ent.local_base, ctxt.current_local_base)
 
             if ctxt.verbose:
-                sys.stdout.write("d%s %s %s/\n" % (sym, " " * 42, path))
+                sys.stdout.write("d%s %s %s/\n" % (sym, " " * 46, path))
             else:
                 sys.stdout.write("d%s %s/\n" % (sym, path))
 
@@ -1185,7 +1174,7 @@ def _status_dir_impl(ctxt, remote_dir, local_dir, recursive):
             if ctxt.verbose:
                 sys.stdout.write("f%s %s %s\n" % (sym, ent.stat(), path))
             else:
-                sys.stdout.write("f%s %s\m" % (sym, path))
+                sys.stdout.write("f%s %s\n" % (sym, path))
             # in testing, it can be useful to see lf/rf/af state
             if ctxt.verbose > 2:
                 sys.stdout.write("%s\n" % ent.data())
