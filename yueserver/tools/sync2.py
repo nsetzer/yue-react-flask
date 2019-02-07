@@ -1,6 +1,9 @@
 #! python $this init -u admin:admin localhost:4200
 
 """
+
+git inspired sync tool.
+
 todo: create a stat cache to avoid making os calls for the same file
 
 add resolve-remote / resolve-local / resolve-fetch commands to fix conflicts
@@ -591,6 +594,7 @@ class FileEnt(object):
         rp = ("%5s"%oct(self.rf.get('permission', 0))) if self.rf else ("-"*5)
         ap = ("%5s"%oct(self.af.get('permission', 0))) if self.af else ("-"*5)
 
+
         triple = [
             (lv, rv, av),
             (lm, rm, am),
@@ -600,8 +604,21 @@ class FileEnt(object):
         return "/".join(["%s,%s,%s" % t for t in triple])
 
     def stat(self):
+        """
+        return stat information for this entry
 
-        st_lv = ("%2d" % self.lf.get('version', 0)) if self.lf else "--"
+        format:
+            version size permission mtime encryption
+
+        version: version number of the local file
+        size: local file size
+        permission: octal representation of the version
+        mtime: last modified time
+        encryption: 6 character representation of encryption scheme
+
+        """
+
+        st_lv = ("%4d" % self.lf.get('version', 0)) if self.lf else "--"
         #st_am = ("%11d" % self.af.get('mtime', 0)) if self.af else ("-"*11)
         mtime = self.af.get('mtime', 0) if self.af else 0
         if mtime > 0:
@@ -611,7 +628,16 @@ class FileEnt(object):
         st_ap = ("%5s"%oct(self.af.get('permission', 0))) if self.af else ("-"*5)
         st_as = ("%12d" % self.af.get('size', 0)) if self.af else ("-"*12)
 
-        return "%s %s %s %s" % (st_lv, st_as, st_ap[2:], st_am)
+        enc = self.rf.get("encryption", None)
+        if not enc:
+            enc = "------"
+        if len(enc) < 6:
+            enc += '-' * (6 - len(enc))
+        if len(enc) > 6:
+            enc = enc[:6]
+        enc = enc.lower()
+
+        return "%s %s %s %s %s" % (st_lv, st_as, st_ap[2:], st_am, enc)
 
     def local_directory(self):
         return os.path.split(self.local_path)[0]
@@ -806,7 +832,6 @@ class ProgressFileReaderWrapper(object):
     #def read(self, *args, **kwargs):
     #    # this is a hack for a bug found in the werkzeug test client
     #    # it should not be used otherwise
-    #    print("why you read this")
     #    if self._read:
     #        return b""
     #    else:
@@ -954,7 +979,7 @@ def _fetch(ctxt):
         try:
             files = response.json()['result']
         except Exception as e:
-            print(response.text)
+            logging.exception(response.text)
             raise e
         for f in files:
             record = {
@@ -1145,9 +1170,9 @@ def _status_dir_impl(ctxt, remote_dir, local_dir, recursive):
             path = ctxt.fs.relpath(ent.local_base, ctxt.current_local_base)
 
             if ctxt.verbose:
-                print("d%s %s %s/" % (sym, " " * 37, path))
+                sys.stdout.write("d%s %s %s/\n" % (sym, " " * 42, path))
             else:
-                print("d%s %s/" % (sym, path))
+                sys.stdout.write("d%s %s/\n" % (sym, path))
 
             if recursive:
                 rbase = posixpath.join(remote_dir, ent.name())
@@ -1158,12 +1183,12 @@ def _status_dir_impl(ctxt, remote_dir, local_dir, recursive):
             sym = FileState.symbol(state, ctxt.verbose > 1)
             path = ctxt.fs.relpath(ent.local_path, ctxt.current_local_base)
             if ctxt.verbose:
-                print("f%s %s %s" % (sym, ent.stat(), path))
+                sys.stdout.write("f%s %s %s\n" % (sym, ent.stat(), path))
             else:
-                print("f%s %s" % (sym, path))
+                sys.stdout.write("f%s %s\m" % (sym, path))
             # in testing, it can be useful to see lf/rf/af state
             if ctxt.verbose > 2:
-                print(ent.data())
+                sys.stdout.write("%s\n" % ent.data())
 
 def _status_file_impl(ctxt, relpath, abspath):
 
@@ -1172,12 +1197,12 @@ def _status_file_impl(ctxt, relpath, abspath):
     sym = FileState.symbol(state)
     path = ctxt.fs.relpath(ent.local_path, ctxt.current_local_base)
     if ctxt.verbose:
-        print("f%s %s %s" % (sym, ent.stat(), path))
+        sys.stdout.write("f%s %s %s\n" % (sym, ent.stat(), path))
     else:
-        print("f%s %s" % (sym, path))
+        sys.stdout.write("f%s %s\n" % (sym, path))
     # in testing, it can be useful to see lf/rf/af state
     if ctxt.verbose > 1:
-        print(ent.data())
+        sys.stdout.write("%s\n" % ent.data())
 
 def _sync_file(ctxt, relpath, abspath, push=False, pull=False, force=False):
 
@@ -1227,7 +1252,6 @@ def _sync_file_push(ctxt, attr, ent):
 
     # if public attr set, subsequent call to set a public path if not set
     # public password attr should be be an encrypted string
-    print("begin upload of ", ent.remote_path)
     response = ctxt.client.files_upload(ctxt.root, ent.remote_path, f,
         mtime=mtime, permission=perm_, crypt=crypt, headers=headers)
 
@@ -1289,7 +1313,6 @@ def _sync_file_pull(ctxt, attr, ent):
 
         for chunk in stream:
             bytes_written += len(chunk)
-            print(len(chunk), chunk)
             wb.write(chunk)
 
     ctxt.fs.set_mtime(ent.local_path, ent.rf['mtime'])
@@ -1316,7 +1339,7 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
          (FileState.CONFLICT_VERSION == state and not pull and push):
 
         if FileState.PUSH != state and not force:
-            print("%s is in a conflict state." % ent.remote_path)
+            sys.stdout.write("%s is in a conflict state.\n" % ent.remote_path)
 
         _sync_file_push(ctxt, attr, ent)
 
@@ -1327,12 +1350,12 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
          (FileState.CONFLICT_VERSION == state and pull and not push):
 
         if FileState.PULL != state and not force:
-            print("%s is in a conflict state." % ent.remote_path)
+            sys.stdout.write("%s is in a conflict state.\n" % ent.remote_path)
 
         _sync_file_pull(ctxt, attr, ent)
 
     elif FileState.ERROR == state:
-        print("error %s" % ent.remote_path)
+        sys.stdout.write("error %s\n" % ent.remote_path)
     elif FileState.CONFLICT_MODIFIED == state:
         pass
     elif FileState.CONFLICT_CREATED == state:
@@ -1340,18 +1363,18 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
     elif FileState.CONFLICT_VERSION == state:
         pass
     elif FileState.DELETE_BOTH == state:
-        sys.stderr.write("delete     - %s" % ent.remote_path)
+        sys.stdout.write("delete     - %s" % ent.remote_path)
         ctxt.storageDao.remove(ent.remote_path)
     elif FileState.DELETE_REMOTE == state and pull:
-        sys.stderr.write("delete     - %s" % ent.remote_path)
+        sys.stdout.write("delete     - %s" % ent.remote_path)
         ctxt.fs.remove(ent.local_path)
         ctxt.storageDao.remove(ent.remote_path)
     elif FileState.DELETE_LOCAL == state and push:
-        sys.stderr.write("delete     - %s" % ent.remote_path)
+        sys.stdout.write("delete     - %s" % ent.remote_path)
         ctxt.client.files_delete(ctxt.root, ent.remote_path)
         ctxt.storageDao.remove(ent.remote_path)
     else:
-        print("unknown %s" % ent.remote_path)
+        sys.stdout.write("unknown %s\n" % ent.remote_path)
 
 def _sync_impl(ctxt, paths, push=False, pull=False, force=False, recursive=False):
 
@@ -1634,7 +1657,7 @@ def cli_roots(args):
     roots = response.json()['result']
 
     for root in roots:
-        print(root)
+        sys.stdout.write("%s\n" % root)
 
 def cli_init(args):
 
@@ -1708,11 +1731,11 @@ def cli_status(args):
     for dent in paths:
 
         if not first:
-            print("")
+            sys.stdout.write("\n")
 
         if os.path.isdir(dent.local_base):
             if "" != dent.remote_base or len(paths) > 1:
-                print("%s/" % dent.local_base)
+                sys.stdout.write("%s/\n" % dent.local_base)
 
             _status_dir_impl(ctxt, dent.remote_base, dent.local_base,
                 args.recursion)
@@ -1722,7 +1745,6 @@ def cli_status(args):
 
         first = False
     end = time.time()
-    # print(end - start)
     return
 
 def cli_sync(args):
@@ -1749,6 +1771,11 @@ def cli_put(args):
     _sync_put_file(ctxt, args.local_path, args.remote_path)
 
 def cli_info(args):
+    """
+    print file count and quota information
+
+    verbose logging will print bytes instead of megabytes
+    """
 
     ctxt = get_ctxt(os.getcwd())
 
@@ -1756,9 +1783,15 @@ def cli_info(args):
 
     obj = response.json()['result']
 
-    print("file_count: %d" % obj['nfiles'])
-    print("usage: %.1f MB" % (obj['nbytes'] / 1024 / 1024))
-    print("capacity: %.1f MB" % (obj['quota'] / 1024 / 1024))
+    usage = obj['nbytes']
+    cap = obj['quota']
+    if args.verbose == 0:
+        cap = "%.1f MB" % (cap / 1024 / 1024)
+        usage = "%.1f MB" % (usage / 1024 / 1024)
+
+    sys.stdout.write("file_count: %d\n" % obj['nfiles'])
+    sys.stdout.write("usage: %s\n" % usage)
+    sys.stdout.write("capacity: %s\n" % cap)
 
 def cli_copy(args):
 
@@ -1838,9 +1871,12 @@ def main():
     ###########################################################################
     # Info
 
-    parser_fetch = subparsers.add_parser('info',
+    parser_info = subparsers.add_parser('info',
         help="view user information")
-    parser_fetch.set_defaults(func=cli_info)
+    parser_info.add_argument("-v", "--verbose", default=0,
+        action="count",
+        help="show detailed information")
+    parser_info.set_defaults(func=cli_info)
 
     ###########################################################################
     # Fetch
@@ -1852,7 +1888,7 @@ def main():
     ###########################################################################
     # Status
 
-    parser_status = subparsers.add_parser('status',
+    parser_status = subparsers.add_parser('status', aliases=['st'],
         help="check for changes")
     parser_status.set_defaults(func=cli_status)
 
