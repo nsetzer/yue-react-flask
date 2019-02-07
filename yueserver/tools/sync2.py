@@ -37,7 +37,7 @@ from yueserver.framework.crypto import CryptoManager
 from yueserver.tools.sync import SyncManager
 from yueserver.dao.filesys.filesys import FileSystem
 from yueserver.dao.filesys.crypt import cryptkey, decryptkey, recryptkey, \
-    validatekey, FileEncryptorReader, FileDecryptorWriter
+    validatekey, FileEncryptorReader, FileDecryptorWriter, HEADER_SIZE
 
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm.session import sessionmaker
@@ -779,6 +779,9 @@ class ProgressFileReaderWrapper(object):
         self.bytes_read = 0
         self.key = key
         self._read = False
+        self._size = self.info.size
+        if self.key is not None:
+            self._size += HEADER_SIZE
 
     def __iter__(self):
 
@@ -795,23 +798,29 @@ class ProgressFileReaderWrapper(object):
                 # send an update approximately every quarter MB
                 if i % 256 == 0:
                     sys.stderr.write("\r%10d/%10d - %s  " % (
-                        self.bytes_read, self.info.size, self.remote_path))
+                        self.bytes_read, self._size, self.remote_path))
             sys.stderr.write("\r%10d - %s             \n" % (
                 self.bytes_read, self.remote_path))
 
     # TODO: only define this method in a test environment
-    def read(self, *args, **kwargs):
-        # this is a hack for a bug found in the werkzeug test client
-        # it should not be used otherwise
-        if self._read:
-            return b""
-        else:
-            self._read = True
-            return b"".join(list(self))
+    #def read(self, *args, **kwargs):
+    #    # this is a hack for a bug found in the werkzeug test client
+    #    # it should not be used otherwise
+    #    print("why you read this")
+    #    if self._read:
+    #        return b""
+    #    else:
+    #        self._read = True
+    #        return b"".join(list(self))
 
 
     def __len__(self):
-        return self.info.size
+        # two strange bugs
+        # if not implemented requests will read the whole file
+        # to determine the size before sending
+        # if the value reported is incorrect, then requests
+        # will send all bytes, or the size reported, which ever is lower
+        return self._size
 
 class ProgressStreamReaderWrapper(object):
     def __init__(self, stream, remote_path, size):
@@ -1218,6 +1227,7 @@ def _sync_file_push(ctxt, attr, ent):
 
     # if public attr set, subsequent call to set a public path if not set
     # public password attr should be be an encrypted string
+    print("begin upload of ", ent.remote_path)
     response = ctxt.client.files_upload(ctxt.root, ent.remote_path, f,
         mtime=mtime, permission=perm_, crypt=crypt, headers=headers)
 
@@ -1468,13 +1478,13 @@ def _attr_impl(ctxt, path):
 
     attr = ctxt.attr(path)
 
-    print("[settings]")
+    sys.stdout.write("[settings]\n")
     for keyname, value in attr.settings.items():
-        print("%s=%s" % (keyname, value))
+        sys.stdout.write("%s=%s\n" % (keyname, value))
 
-    print("\n[blacklist]")
+    sys.stdout.write("\n[blacklist]\n")
     for pattern in attr.blacklist_patterns:
-        print(pattern)
+        sys.stdout.write("%s\n" % pattern)
 
 def _setpass_impl(ctxt):
 
