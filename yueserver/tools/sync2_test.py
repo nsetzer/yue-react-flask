@@ -18,7 +18,8 @@ from ..dao.filesys.crypt import HEADER_SIZE
 from .sync2 import db_connect, \
     DatabaseTables, LocalStorageDao, SyncContext, DirAttr, FileEnt, \
     _check, RecordBuilder, FileState, _sync_file, _sync_file_impl, \
-    _fetch, _sync_file_push, _sync_file_pull, LocalStorageTable, _check_file
+    _fetch, _sync_file_push, _sync_file_pull, LocalStorageTable, _check_file, \
+    ProgressFileReaderWrapper
 
 def createTestFile(storageDao, fs, state, variant, rel_path, remote_base, local_base, content=b""):
     """create a file which represents a requested state
@@ -327,6 +328,7 @@ class TestClient(object):
             'X-YUE-VERSION': info['remote_version'],
             'X-YUE-MTIME': info['remote_mtime'],
         }
+        response.status_code = 200
         return response
 
     def files_delete(self, root, relpath):
@@ -704,6 +706,15 @@ class SyncApplicationTestCase(unittest.TestCase):
         cls.ctxt = TestSyncContext(cls.client, cls.localStorageDao, cls.fs,
             "mem", "", "mem://local")
 
+        def _read(self, *args):
+            if hasattr(self, '_done'):
+                return b""
+            else:
+                setattr(self, "_done", True)
+                return b"".join(list(self))
+
+        ProgressFileReaderWrapper.read = _read
+
     def setUp(self):
         self.db.delete(self.tables.LocalStorageTable)
         self.db.delete(self.tables.FileSystemStorageTable)
@@ -808,7 +819,14 @@ class SyncApplicationTestCase(unittest.TestCase):
         local_path = 'mem://local/test/download.txt'
         af = None
         lf = None
-        rf = {'size': 11, 'mtime': 1234567890, 'version': 1, 'permission': 420}
+        rf = {
+            'size': 11,
+            'mtime': 1234567890,
+            'version': 1,
+            'permission': 420,
+            'encryption': encryption_mode,
+            'public': ""
+        }
         ent2 = FileEnt(remote_path, local_path, lf, rf, af)
 
         _sync_file_pull(self.ctxt, attr, ent2)

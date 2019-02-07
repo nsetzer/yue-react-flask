@@ -93,12 +93,13 @@ class FilesResource(WebResource):
 
         info = self.filesys_service.publicFileInfo(fileId)
 
-        print(info.encryption, info.user_id)
         stream = self.filesys_service.fs.open(info.storage_path, "rb")
 
         if info.encryption == CryptMode.system:
-            password = self.filesys_service.settingsDao.get(Settings.storage_system_key)
-            key = self.filesys_service.storageDao.getUserKey(info.user_id, CryptMode.system)
+            password = self.filesys_service.settingsDao.get(
+                Settings.storage_system_key)
+            key = self.filesys_service.storageDao.getUserKey(
+                info.user_id, CryptMode.system)
             key = decryptkey(password, key)
             stream = FileDecryptorReader(stream, key)
 

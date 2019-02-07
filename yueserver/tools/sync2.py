@@ -212,13 +212,13 @@ class LocalStorageDao(object):
 
         return item is not None
 
-    def file_info(self, path):
+    def file_info(self, rel_path):
 
         FsTab = self.dbtables.LocalStorageTable
 
         query = select(['*']) \
             .select_from(FsTab) \
-            .where(FsTab.c.rel_path == path)
+            .where(FsTab.c.rel_path == rel_path)
 
         item = self.db.session.execute(query).fetchone()
 
@@ -226,7 +226,7 @@ class LocalStorageDao(object):
             return None
 
         item = dict(item)
-        item['rel_path'] = posixpath.split(path)[1]
+        # item['rel_path'] = posixpath.split(rel_path)[1]
         return item
 
     def clearRemote(self, commit=True):
@@ -583,6 +583,7 @@ class FileEnt(object):
         rp = ("%5s"%oct(self.rf.get('permission', 0))) if self.rf else ("-"*5)
         ap = ("%5s"%oct(self.af.get('permission', 0))) if self.af else ("-"*5)
 
+        public = self.rf.get('public', None) or ""
 
         triple = [
             (lv, rv, av),
@@ -590,7 +591,7 @@ class FileEnt(object):
             (_ls, _rs, _as),
             (lp, rp, ap),
         ]
-        return "/".join(["%s,%s,%s" % t for t in triple])
+        return "/".join(["%s,%s,%s" % t for t in triple]) + ' ' + public
 
     def stat(self):
         """
@@ -1248,6 +1249,7 @@ def _sync_file_push(ctxt, attr, ent):
         raise Exception("local database out of date. fetch first")
 
     record = RecordBuilder().local(**ent.af).remote(**ent.af).build()
+    record['remote_encryption'] = crypt
     ctxt.storageDao.upsert(ent.remote_path, record)
 
 def _sync_file_pull(ctxt, attr, ent):
@@ -1278,12 +1280,23 @@ def _sync_file_pull(ctxt, attr, ent):
 
     response = ctxt.client.files_get_path(ctxt.root, ent.remote_path,
         stream=True, headers=headers)
-    rv = int(response.headers['X-YUE-VERSION'])
-    rp = int(response.headers['X-YUE-PERMISSION'])
-    rm = int(response.headers['X-YUE-MTIME'])
+
+    if response.status_code != 200:
+        logging.error("error %d for file %s/%s" % (
+            response.status_code, ctxt.root, ent.remote_path))
+
+        raise Exception("error %d for file %s/%s" % (
+            response.status_code, ctxt.root, ent.remote_path))
+
+    rv = int(response.headers.get('X-YUE-VERSION', "0"))
+    rp = int(response.headers.get('X-YUE-PERMISSION', "0"))
+    rm = int(response.headers.get('X-YUE-MTIME', "0"))
+
     if ent.rf['version'] != rv or \
        ent.rf['permission'] != rp or \
        ent.rf['mtime'] != rm:
+        logging.error("error fetching metadata for %s/%s" % (
+            ctxt.root, ent.remote_path))
         raise Exception("local database out of date. fetch first")
 
     dpath = ctxt.fs.split(ent.local_path)[0]
@@ -1352,14 +1365,14 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
     elif FileState.CONFLICT_VERSION == state:
         pass
     elif FileState.DELETE_BOTH == state:
-        sys.stdout.write("delete     - %s" % ent.remote_path)
+        sys.stdout.write("delete     - %s\n" % ent.remote_path)
         ctxt.storageDao.remove(ent.remote_path)
     elif FileState.DELETE_REMOTE == state and pull:
-        sys.stdout.write("delete     - %s" % ent.remote_path)
+        sys.stdout.write("delete     - %s\n" % ent.remote_path)
         ctxt.fs.remove(ent.local_path)
         ctxt.storageDao.remove(ent.remote_path)
     elif FileState.DELETE_LOCAL == state and push:
-        sys.stdout.write("delete     - %s" % ent.remote_path)
+        sys.stdout.write("delete     - %s\n" % ent.remote_path)
         ctxt.client.files_delete(ctxt.root, ent.remote_path)
         ctxt.storageDao.remove(ent.remote_path)
     else:
@@ -1608,6 +1621,69 @@ def _setkey_impl(ctxt, workfactor):
         sys.stderr.write("Unexpected server error!\n")
         sys.exit(1)
 
+def _setpublic_impl(ctxt, paths, password, revoke):
+
+    headers = {}
+    if password:
+        headers = {'X-YUE-PASSWORD': password}
+
+    for ent in paths:
+
+        if not ctxt.fs.isfile(ent.local_base):
+            sys.stderr.write("error is directory: %s\n" % ent.remote_base)
+            continue
+
+        info = ctxt.storageDao.file_info(ent.remote_base)
+
+        if not info or info['remote_version'] == 0:
+            sys.stderr.write("error: push '%s' first\n" % ent.remote_base)
+            continue
+
+        if info['remote_encryption'] in ('client', 'server'):
+            sys.stderr.write("error: '%s' is encrypted by %s\n" % (
+                ent.remote_base, info['remote_encryption']))
+            continue
+
+        response = ctxt.client.files_make_public(
+            ctxt.root, ent.remote_base,
+            revoke=revoke, headers=headers)
+
+        if response.status_code != 200:
+            sys.stderr.write("error: %s\n" % ent.remote_base)
+        else:
+
+            res_id = response.json()['result']['id']
+
+            ctxt.storageDao.update(ent.remote_base,
+                {'remote_public': res_id})
+
+            url = "api/fs/public/%s" % res_id
+
+            sys.stdout.write("%s/%s\n" % (ctxt.client.host(), url))
+
+def _getpublic_impl(ctxt, paths):
+
+    for ent in paths:
+
+        if not ctxt.fs.isfile(ent.local_base):
+            sys.stderr.write("error is directory: %s\n" % ent.remote_base)
+            continue
+
+        info = ctxt.storageDao.file_info(ent.remote_base)
+
+        if not info or not info['remote_public']:
+            sys.stderr.write(
+                "error: '%s' not publicly accessible\n" % ent.remote_base)
+            continue
+
+        res_id = info['remote_public']
+
+        if res_id:
+            url = "api/fs/public/%s" % res_id
+            sys.stdout.write("%s/%s\n" % (ctxt.client.host(), url))
+        else:
+            sys.stderr.write("error: %s\n" % ent.remote_base)
+
 def _parse_path_args(fs, remote_base, local_base, args_paths):
 
     paths = []
@@ -1714,7 +1790,8 @@ def cli_status(args):
 
     # ---
 
-    paths = _parse_path_args(ctxt.fs, ctxt.remote_base, ctxt.local_base, args.paths)
+    paths = _parse_path_args(ctxt.fs,
+        ctxt.remote_base, ctxt.local_base, args.paths)
 
     first = True
     for dent in paths:
@@ -1815,6 +1892,26 @@ def cli_setkey(args):
     ctxt = get_ctxt(cwd)
 
     _setkey_impl(ctxt, args.workfactor)
+
+def cli_setpublic(args):
+
+    cwd = os.getcwd()
+    ctxt = get_ctxt(cwd)
+
+    paths = _parse_path_args(ctxt.fs,
+        ctxt.remote_base, ctxt.local_base, args.paths)
+
+    _setpublic_impl(ctxt, paths, args.password, args.revoke)
+
+def cli_getpublic(args):
+
+    cwd = os.getcwd()
+    ctxt = get_ctxt(cwd)
+
+    paths = _parse_path_args(ctxt.fs,
+        ctxt.remote_base, ctxt.local_base, args.paths)
+
+    _getpublic_impl(ctxt, paths)
 
 def main():
 
@@ -2014,21 +2111,47 @@ def main():
     ###########################################################################
     # Set Encryption Server Password
 
-    parser_attr = subparsers.add_parser('setpass',
+    parser_setpass = subparsers.add_parser('setpass',
         help="set or change encryption server password")
-    parser_attr.set_defaults(func=cli_setpass)
-
-    ###########################################################################
+    parser_setpass.set_defaults(func=cli_setpass)
 
     ###########################################################################
     # Set Encryption Client Password
 
-    parser_attr = subparsers.add_parser('setkey',
+    parser_setkey = subparsers.add_parser('setkey',
         help="set or change encryption client key")
-    parser_attr.set_defaults(func=cli_setkey)
+    parser_setkey.set_defaults(func=cli_setkey)
 
-    parser_attr.add_argument('-w', '--workfactor', type=int, default=12,
+    parser_setkey.add_argument('-w', '--workfactor', type=int, default=12,
         help="bcrypt workfactor")
+
+    ###########################################################################
+    # Set or Revoke public access
+
+    parser_setpublic = subparsers.add_parser('setpublic',
+        help="set or revoke public access to a file")
+
+    parser_setpublic.add_argument("--password", default=None, type=str,
+        help="use as a password for public access")
+
+    parser_setpublic.add_argument("--revoke", action='store_true',
+        help="revoke public access")
+
+    parser_setpublic.add_argument("paths", nargs="*",
+        help="paths to modify")
+
+    parser_setpublic.set_defaults(func=cli_setpublic)
+
+    ###########################################################################
+    #  Get public URL
+
+    parser_getpublic = subparsers.add_parser('getpublic',
+        help="set or revoke public access to a file")
+
+    parser_getpublic.add_argument("paths", nargs="*",
+        help="paths to get information for")
+
+    parser_getpublic.set_defaults(func=cli_getpublic)
 
     ###########################################################################
 
