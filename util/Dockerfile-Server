@@ -1,0 +1,26 @@
+
+
+FROM yueapp/base:latest
+
+RUN python3 -m pip install wheel gunicorn
+
+# ----
+
+COPY res /opt/yue/res
+COPY yueserver /opt/yue/yueserver
+COPY config/docker /opt/yue/config/docker
+COPY requirements.txt /opt/yue/
+
+WORKDIR /opt/yue
+
+RUN python3 -m pip install -r requirements.txt
+
+COPY util/docker_configure.sh /opt/yue/configure
+RUN chmod +x /opt/yue/configure
+RUN /opt/yue/configure
+
+COPY util/docker_entrypoint.sh /opt/yue/entrypoint.sh
+RUN chmod +x /opt/yue/entrypoint.sh
+
+ENTRYPOINT ["/opt/yue/entrypoint.sh"]
+

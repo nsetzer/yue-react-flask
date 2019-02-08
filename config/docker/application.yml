@@ -1,0 +1,33 @@
+encryption_mode: none
+server:
+
+  host: 0.0.0.0
+  port: 4200
+
+  env: production
+  secret_key: "secret"
+
+  cors:
+    origins: "*"
+
+  database:
+    kind: "postgresql"
+    hostname: "localhost:5432"
+    username: "yueapp"
+    password: "CHANGEME"
+    database: "yueapp"
+
+  logging:
+    directory: "./logs"
+    filename: "server.log"
+    max_size: 2MB
+    num_backups: 10
+    level: info
+
+  transcode:
+    audio:
+      bin_path: /usr/bin/ffmpeg
+      tmp_path: /tmp/yue-audio
+    image: {}
+
+
