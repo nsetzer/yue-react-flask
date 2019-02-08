@@ -11,6 +11,19 @@ add resolve-remote / resolve-local / resolve-fetch commands to fix conflicts
     and then resolve-local
     possibly sub commands e.g. `sync resolve <action> <action-args>`
 
+
+add threading model
+    for example _sync_impl and _sync_file_impl are replaced by methods
+    that append tasks to a queue. the context then has a set of worker threads
+    pulling from that queue.
+    also create a logging queue / thread to synchronize logging.
+    allowing for update logs similar today (instead, number of tasks)
+    user_data can have a setting for thread parallel.
+    set to num cores by default
+
+neither or these cases are handled by _check:
+    remote directory, local file with same name
+    local directory, remote file with same name
 """
 import os, sys
 import argparse
@@ -140,8 +153,10 @@ class LocalStorageDao(object):
 
         if item is None:
             self.insert(rel_path, record, commit)
+            return "insert"
         else:
             self.update(rel_path, record, commit)
+            return "update"
 
     def remove(self, rel_path, commit=True):
 
@@ -243,6 +258,12 @@ class LocalStorageDao(object):
         if commit:
             self.db.session.commit()
 
+    def markedForDelete(self):
+        tab = self.dbtables.LocalStorageTable
+        query = tab.select() \
+            .where(tab.c.remote_version == 0)
+        return self.db.session.execute(query)
+
 class SyncContext(object):
     """docstring for SyncContext"""
     def __init__(self, client, storageDao, fs, root, remote_base, local_base, verbose=0):
@@ -276,7 +297,6 @@ class SyncContext(object):
         # is incorrect
         # cache the key for subsequent files
         if self.encryption_client_key is None:
-            # todo, fetch key from local file iff possible
             response = self.client.files_user_key(mode='CLIENT')
             if response.status_code != 200:
                 raise Exception("Unable to retreive key: %s" %
@@ -522,8 +542,6 @@ class FileEnt(object):
         # | 6 | true | true | none | deleted locally
         # | 7 | true | true | true | compare metadata and decide
 
-        # TODO: _del|local and _del|remote how to handle?
-
         lfnull = self.lf is None
         rfnull = self.rf is None
         afnull = self.af is None
@@ -586,6 +604,7 @@ class FileEnt(object):
         public = self.rf.get('public', None) or ""
 
         triple = [
+            ("L", "R", "A"),
             (lv, rv, av),
             (lm, rm, am),
             (_ls, _rs, _as),
@@ -638,6 +657,13 @@ class DirAttr(object):
     Directories have a set of attributes, found in a .yueattr file.
     Attributes control syncing behavior of files found in the directory
     Attributes are automatically inherited by child directories
+
+    'encryption_mode': none, client, server, system
+        the encryption mode to apply to files that are uploaded
+        in this directory and child directories
+
+    'public': Not implemented
+        intended to automatically make files public on push
     """
     _cache = dict()
 
@@ -651,7 +677,6 @@ class DirAttr(object):
         super(DirAttr, self).__init__()
         self.blacklist_patterns = set()
         self.settings = {
-            "encrypt": False,
             "encryption_mode": 'none',
             "public": False,
         }
@@ -666,10 +691,7 @@ class DirAttr(object):
         _mode1 = lambda n: settings[n].lower()
 
         for keyname in settings:
-            if keyname == 'encrypt':
-                self.settings['encrypt'] = _bool('encrypt')
-
-            elif keyname == 'encryption_mode':
+            if keyname == 'encryption_mode':
                 self.settings['encryption_mode'] = _mode1('encryption_mode')
                 modes = {'none', 'client', 'server', 'system'}
                 if self.settings['encryption_mode'] not in modes:
@@ -818,17 +840,6 @@ class ProgressFileReaderWrapper(object):
             sys.stderr.write("\r%10d - %s             \n" % (
                 self.bytes_read, self.remote_path))
 
-    # TODO: only define this method in a test environment
-    #def read(self, *args, **kwargs):
-    #    # this is a hack for a bug found in the werkzeug test client
-    #    # it should not be used otherwise
-    #    if self._read:
-    #        return b""
-    #    else:
-    #        self._read = True
-    #        return b"".join(list(self))
-
-
     def __len__(self):
         # two strange bugs
         # if not implemented requests will read the whole file
@@ -954,38 +965,54 @@ def _fetch(ctxt):
 
     page = 0
     limit = 500
-    while True:
-        params = {'limit': limit, 'page': page}
-        try:
-            response = ctxt.client.files_get_index(
-                ctxt.root, ctxt.remote_base, **params)
-        except Exception as e:
-            logging.error("unable to fetch: %s" % e)
-            return
-        if response.status_code != 200:
-            sys.stderr.write("fetch error...")
-            return
 
-        try:
-            files = response.json()['result']
-        except Exception as e:
-            logging.exception(response.text)
-            raise e
-        for f in files:
-            record = {
-                "remote_size": f['size'],
-                "remote_mtime": f['mtime'],
-                "remote_permission": f['permission'],
-                "remote_version": f['version'],
-                "remote_public": f['public'],
-                "remote_encryption": f['encryption'],
-            }
-            ctxt.storageDao.upsert(f['path'], record, commit=False)
-        page += 1
-        if len(files) != limit:
-            break
+    try:
+        ctxt.storageDao.clearRemote(False)
 
-    ctxt.storageDao.db.session.commit()
+        while True:
+            params = {'limit': limit, 'page': page}
+            try:
+                response = ctxt.client.files_get_index(
+                    ctxt.root, ctxt.remote_base, **params)
+            except Exception as e:
+                logging.error("unable to fetch: %s" % e)
+                return
+            if response.status_code != 200:
+                sys.stderr.write("fetch error...")
+                return
+
+            try:
+                files = response.json()['result']
+            except Exception as e:
+                logging.exception(response.text)
+                raise e
+            for f in files:
+                record = {
+                    "remote_size": f['size'],
+                    "remote_mtime": f['mtime'],
+                    "remote_permission": f['permission'],
+                    "remote_version": f['version'],
+                    "remote_public": f['public'],
+                    "remote_encryption": f['encryption'],
+                }
+                mode = ctxt.storageDao.upsert(f['path'], record, commit=False)
+
+                # indicate there are new files to pull
+                if mode == 'insert':
+                    sys.stdout.write("+ %s\n" % f['path'])
+
+            page += 1
+            if len(files) != limit:
+                break
+
+        # indicate that there are files to delete on pull
+        for item in ctxt.storageDao.markedForDelete():
+            sys.stdout.write("- %s\n" % item['rel_path'])
+    except Exception as e:
+        logging.exception(e)
+        ctxt.storageDao.db.session.rollback()
+    else:
+        ctxt.storageDao.db.session.commit()
 
 def _check(ctxt, remote_base, local_base):
 
@@ -1006,6 +1033,10 @@ def _check(ctxt, remote_base, local_base):
     # neither or these cases are handled:
     #   TODO: remote directory, local file with same name
     #   TODO: local directory, remote file with same name
+    #    - automatic conflict state
+    #    - suggest rename local file or directory
+    #    - use a file entry or dir ent?
+    #
 
     for d in _dirs:
 
@@ -1395,8 +1426,6 @@ def _sync_impl(ctxt, paths, push=False, pull=False, force=False, recursive=False
                     force, recursive)
 
         else:
-            # todo: load blacklist from directory containing this file
-            #   only push if force is given
             _sync_file(ctxt, dent.remote_base, dent.local_base,
                 push, pull, force)
 
@@ -1514,8 +1543,6 @@ def _attr_impl(ctxt, path):
 def _setpass_impl(ctxt):
 
     response = ctxt.client.files_user_key(mode='SERVER')
-
-    # TODO: there seems to be a bug with expiring the keys client/server
 
     if response.status_code == 200:
 
@@ -1738,7 +1765,9 @@ def cli_init(args):
         return
     api_password = "APIKEY " + userinfo['apikey']
 
-    #TODO: pwd should be empty
+    if len(os.listdir(args.local_base)):
+        sys.stderr.write("error: current directory is not empty\n")
+        return
 
     # create a database
     cfgdir = os.path.join(args.local_base, ".yue")

@@ -300,8 +300,9 @@ class FilesResource(WebResource):
                 storage_path = info.storage_path
                 _, name = self.filesys_service.fs.split(storage_path)
                 stream = self.filesys_service.fs.open(storage_path, "rb")
+                print("---", info.encryption, )
                 if info.encryption in (CryptMode.server, CryptMode.system):
-                    if not password:
+                    if not password and info.encryption == CryptMode.server:
                         return httpError(400, "Invalid Password")
                     stream = self.filesys_service.decryptStream(g.current_user,
                         password, stream, "r", info.encryption)
