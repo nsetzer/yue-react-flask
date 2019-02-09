@@ -53,6 +53,9 @@ from sqlalchemy import and_, or_, not_, select, column, \
     update, insert, delete, asc, desc
 from sqlalchemy.sql.expression import bindparam
 
+class SyncUserException(Exception):
+    pass
+
 def osname():
     """
     returns an equivalent to 'os.name'
@@ -298,6 +301,8 @@ class SyncContext(object):
         # cache the key for subsequent files
         if self.encryption_client_key is None:
             response = self.client.files_user_key(mode='CLIENT')
+            if response.status_code == 404:
+                raise SyncUserException("client key not set")
             if response.status_code != 200:
                 raise Exception("Unable to retreive key: %s" %
                     response.status_code)
@@ -381,6 +386,7 @@ class FileState(object):
     CONFLICT_MODIFIED = "conflict-modified"
     CONFLICT_CREATED = "conflict-created"
     CONFLICT_VERSION = "conflict-version"
+    CONFLICT_TYPE = "conflict-type"
     DELETE_BOTH = "delete-both"
     DELETE_REMOTE = "delete-remote"
     DELETE_LOCAL = "delete-local"
@@ -401,6 +407,8 @@ class FileState(object):
             sym = "cc"
         if FileState.CONFLICT_VERSION == state:
             sym = "vv"
+        if FileState.CONFLICT_TYPE == state:
+            sym = "tt"
         if FileState.DELETE_BOTH == state:
             sym = "xx"
         if FileState.DELETE_REMOTE == state:
@@ -425,6 +433,8 @@ class FileState(object):
             sym = "CCRE"
         if FileState.CONFLICT_VERSION == state:
             sym = "CVER"
+        if FileState.CONFLICT_TYPE == state:
+            sym = "CTYP"
         if FileState.DELETE_BOTH == state:
             sym = "DEL_"
         if FileState.DELETE_REMOTE == state:
@@ -601,7 +611,10 @@ class FileEnt(object):
         rp = ("%5s"%oct(self.rf.get('permission', 0))) if self.rf else ("-"*5)
         ap = ("%5s"%oct(self.af.get('permission', 0))) if self.af else ("-"*5)
 
-        public = self.rf.get('public', None) or ""
+        if self.rf:
+            public = self.rf.get('public', None) or ""
+        else:
+            public = ""
 
         triple = [
             ("L", "R", "A"),
@@ -637,14 +650,17 @@ class FileEnt(object):
         st_ap = ("%5s"%oct(self.af.get('permission', 0))) if self.af else ("-"*5)
         st_as = ("%12d" % self.af.get('size', 0)) if self.af else ("-"*12)
 
-        enc = self.rf.get("encryption", None)
-        if not enc:
+        if self.rf:
+            enc = self.rf.get("encryption", None)
+            if not enc:
+                enc = "------"
+            if len(enc) < 6:
+                enc += '-' * (6 - len(enc))
+            if len(enc) > 6:
+                enc = enc[:6]
+            enc = enc.lower()
+        else:
             enc = "------"
-        if len(enc) < 6:
-            enc += '-' * (6 - len(enc))
-        if len(enc) > 6:
-            enc = enc[:6]
-        enc = enc.lower()
 
         return "%s %s %s %s %s" % (st_lv, st_as, st_ap[2:], st_am, enc)
 
@@ -1026,9 +1042,11 @@ def _check(ctxt, remote_base, local_base):
     _dirs, _files = ctxt.storageDao.listdir(remote_base)
     # TODO: looks like memfs impl for exists is broken for dirs
     if not ctxt.fs.islocal(local_base) or ctxt.fs.exists(local_base):
-        _names = set(ctxt.fs.listdir(local_base))
+        _records = set(ctxt.fs.scandir(local_base))
     else:
-        _names = set()
+        _records = set()
+
+    _names = {r.name: r for r in _records}
 
     # neither or these cases are handled:
     #   TODO: remote directory, local file with same name
@@ -1037,7 +1055,7 @@ def _check(ctxt, remote_base, local_base):
     #    - suggest rename local file or directory
     #    - use a file entry or dir ent?
     #
-
+    print(_dirs, [f['rel_path'] for f in _files])
     for d in _dirs:
 
         if attr.match(d):
@@ -1047,16 +1065,29 @@ def _check(ctxt, remote_base, local_base):
         local_path = ctxt.fs.join(local_base, d)
         # check that the directory exists locally
         if d in _names:
-            _names.remove(d)
-            state = FileState.SAME
+            # TODO os.scan would eliminate an extra stat call
+            if _names[d].isDir:
+                state = FileState.SAME
+            else:
+                state = FileState.CONFLICT_TYPE
+            del _names[d]
         else:
             state = FileState.PULL
 
         dirs.append(DirEnt(d, remote_path, local_path, state))
 
     for f in _files:
-        if f['rel_path'] in _names:
-            _names.remove(f['rel_path'])
+        name = f['rel_path']
+        remote_path = posixpath.join(remote_base, f['rel_path'])
+        local_path = ctxt.fs.join(local_base, f['rel_path'])
+
+        if name in _names:
+            del _names[name]
+
+        if _records[name].isDir:
+            state = FileState.CONFLICT_TYPE
+            dirs.append(DirEnt(name, remote_path, local_path, state))
+            continue
 
         if f['local_version'] == 0:
             lf = None
@@ -1080,8 +1111,7 @@ def _check(ctxt, remote_base, local_base):
                 "encryption": f['remote_encryption'],
             }
 
-        remote_path = posixpath.join(remote_base, f['rel_path'])
-        local_path = ctxt.fs.join(local_base, f['rel_path'])
+
 
         try:
             record = ctxt.fs.file_info(local_path)
@@ -1097,6 +1127,7 @@ def _check(ctxt, remote_base, local_base):
 
         files.append(FileEnt(remote_path, local_path, lf, rf, af))
 
+    print(_names)
     for n in _names:
         remote_path = posixpath.join(remote_base, n)
         local_path = ctxt.fs.join(local_base, n)
@@ -1129,6 +1160,9 @@ def _check_file(ctxt, remote_path, local_path):
     whether it exists, in the local database, or remotely.
 
     """
+
+    # TODO: if there is a remote directory with the same name
+    # then this function fails to correctly display the status
 
     item = ctxt.storageDao.file_info(remote_path)
 
@@ -1169,8 +1203,15 @@ def _check_file(ctxt, remote_path, local_path):
                 "encryption": item['remote_encryption'],
             }
 
+        print(lf, rf, af)
         ent = FileEnt(remote_path, local_path, lf, rf, af)
     else:
+        # TODO: I could add extra context information,
+        # since this is causes a CONFLICT_TYPE state
+        # when the remote contains a directory named the same
+        # as a local file
+        if ctxt.storageDao.isDir(remote_path):
+            af = None
         ent = FileEnt(remote_path, local_path, None, None, af)
 
     return ent
@@ -1277,7 +1318,10 @@ def _sync_file_push(ctxt, attr, ent):
         mtime=mtime, permission=perm_, crypt=crypt, headers=headers)
 
     if response.status_code == 409:
-        raise Exception("local database out of date. fetch first")
+        raise SyncUserException("local database out of date. fetch first")
+
+    if response.status_code != 200:
+        raise Exception("unexpected error: %s" % response.status_code)
 
     record = RecordBuilder().local(**ent.af).remote(**ent.af).build()
     record['remote_encryption'] = crypt
@@ -1429,36 +1473,36 @@ def _sync_impl(ctxt, paths, push=False, pull=False, force=False, recursive=False
             _sync_file(ctxt, dent.remote_base, dent.local_base,
                 push, pull, force)
 
-def _sync_get_file(ctxt, rpath, lpath):
-
-    response = ctxt.client.files_get_path(ctxt.root, rpath, stream=True)
-    rv = int(response.headers['X-YUE-VERSION'])
-    rp = int(response.headers['X-YUE-PERMISSION'])
-    rm = int(response.headers['X-YUE-MTIME'])
-
-    dpath = ctxt.fs.split(lpath)[0]
-    if not ctxt.fs.exists(dpath):
-        ctxt.fs.makedirs(dpath)
-
-    bytes_written = 0
-    with ctxt.fs.open(lpath, "wb") as wb:
-        for chunk in response.stream():
-            bytes_written += len(chunk)
-            wb.write(chunk)
-
-def _sync_put_file(ctxt, lpath, rpath):
-
-    record = ctxt.fs.file_info(local_path)
-
-    f = ProgressFileReaderWrapper(ctxt.fs, lpath, rpath)
-    response = ctxt.client.files_upload(ctxt.root, rpath, f,
-        mtime=record.mtime, permission=record.permission)
-
-    if response.status_code == 409:
-        raise Exception("local database out of date. fetch first")
-
-    if response.status_code > 201:
-        raise Exception(response.text)
+### def _sync_get_file(ctxt, rpath, lpath):
+###
+###     response = ctxt.client.files_get_path(ctxt.root, rpath, stream=True)
+###     rv = int(response.headers['X-YUE-VERSION'])
+###     rp = int(response.headers['X-YUE-PERMISSION'])
+###     rm = int(response.headers['X-YUE-MTIME'])
+###
+###     dpath = ctxt.fs.split(lpath)[0]
+###     if not ctxt.fs.exists(dpath):
+###         ctxt.fs.makedirs(dpath)
+###
+###     bytes_written = 0
+###     with ctxt.fs.open(lpath, "wb") as wb:
+###         for chunk in response.stream():
+###             bytes_written += len(chunk)
+###             wb.write(chunk)
+###
+### def _sync_put_file(ctxt, lpath, rpath):
+###
+###     record = ctxt.fs.file_info(local_path)
+###
+###     f = ProgressFileReaderWrapper(ctxt.fs, lpath, rpath)
+###     response = ctxt.client.files_upload(ctxt.root, rpath, f,
+###         mtime=record.mtime, permission=record.permission)
+###
+###     if response.status_code == 409:
+###         raise Exception("local database out of date. fetch first")
+###
+###     if response.status_code > 201:
+###         raise Exception(response.text)
 
 def _copy_impl(client, fs, src, dst):
     """
@@ -1567,6 +1611,7 @@ def _setpass_impl(ctxt):
         svr_password = ""
         new_password = input('server password: ')
         chk_password = input('retype password: ')
+        svr_password = new_password
 
     else:
         sys.stderr.write("Unexpected server error!\n")
@@ -1828,7 +1873,7 @@ def cli_status(args):
         if not first:
             sys.stdout.write("\n")
 
-        if os.path.isdir(dent.local_base):
+        if ctxt.fs.isdir(dent.local_base):
             if "" != dent.remote_base or len(paths) > 1:
                 sys.stdout.write("%s/\n" % dent.local_base)
 
@@ -1846,24 +1891,29 @@ def cli_sync(args):
 
     ctxt = get_ctxt(os.getcwd())
 
-    paths = _parse_path_args(ctxt.fs, ctxt.remote_base, ctxt.local_base, args.paths)
+    if args.update:
+        # TODO: consider a quite option, no logging
+        _fetch(ctxt)
+
+    paths = _parse_path_args(ctxt.fs, ctxt.remote_base,
+        ctxt.local_base, args.paths)
 
     _sync_impl(ctxt, paths, push=args.push, pull=args.pull,
         force=args.force, recursive=args.recursion)
 
-def cli_get(args):
-
-    ctxt = get_ctxt(os.getcwd())
-
-    args.local_path = os.path.abspath(args.local_path)
-
-    _sync_get_file(ctxt, args.remote_path, args.local_path)
-
-def cli_put(args):
-
-    ctxt = get_ctxt(os.getcwd())
-
-    _sync_put_file(ctxt, args.local_path, args.remote_path)
+### def cli_get(args):
+###
+###     ctxt = get_ctxt(os.getcwd())
+###
+###     args.local_path = os.path.abspath(args.local_path)
+###
+###     _sync_get_file(ctxt, args.remote_path, args.local_path)
+###
+### def cli_put(args):
+###
+###     ctxt = get_ctxt(os.getcwd())
+###
+###     _sync_put_file(ctxt, args.local_path, args.remote_path)
 
 def cli_info(args):
     """
@@ -2027,6 +2077,10 @@ def main():
     parser_sync.set_defaults(push=True)
     parser_sync.set_defaults(pull=True)
 
+    parser_sync.add_argument('-u', "--update",
+        action="store_true",
+        help="fetch prior to sync")
+
     parser_sync.add_argument('-f', "--force",
         action="store_true",
         help="overwrite conflicts")
@@ -2038,31 +2092,31 @@ def main():
     parser_sync.add_argument("paths", nargs="*",
         help="list of paths to check the status on")
 
-    ###########################################################################
-    # Get
-
-    parser_get = subparsers.add_parser('get',
-        help="copy a remote file locally")
-    parser_get.set_defaults(func=cli_get)
-
-    parser_get.add_argument("remote_path",
-        help="path to a remote file")
-
-    parser_get.add_argument("local_path", default=None, nargs="?",
-        help="path to a local file")
-
-    ###########################################################################
-    # Put
-
-    parser_put = subparsers.add_parser('put',
-        help="copy a local file to remote")
-    parser_put.set_defaults(func=cli_put)
-
-    parser_put.add_argument("local_path",
-        help="path to a local file")
-
-    parser_put.add_argument("remote_path",
-        help="path to a remote file")
+    ### ###########################################################################
+    ### # Get
+    ###
+    ### parser_get = subparsers.add_parser('get',
+    ###     help="copy a remote file locally")
+    ### parser_get.set_defaults(func=cli_get)
+    ###
+    ### parser_get.add_argument("remote_path",
+    ###     help="path to a remote file")
+    ###
+    ### parser_get.add_argument("local_path", default=None, nargs="?",
+    ###     help="path to a local file")
+    ###
+    ### ###########################################################################
+    ### # Put
+    ###
+    ### parser_put = subparsers.add_parser('put',
+    ###     help="copy a local file to remote")
+    ### parser_put.set_defaults(func=cli_put)
+    ###
+    ### parser_put.add_argument("local_path",
+    ###     help="path to a local file")
+    ###
+    ### parser_put.add_argument("remote_path",
+    ###     help="path to a remote file")
 
     ###########################################################################
     # Pull
@@ -2072,6 +2126,10 @@ def main():
     parser_pull.set_defaults(func=cli_sync)
     parser_pull.set_defaults(push=False)
     parser_pull.set_defaults(pull=True)
+
+    parser_pull.add_argument('-u', "--update",
+        action="store_true",
+        help="fetch prior to sync")
 
     parser_pull.add_argument('-f', "--force",
         action="store_true",
@@ -2092,6 +2150,10 @@ def main():
     parser_push.set_defaults(func=cli_sync)
     parser_push.set_defaults(push=True)
     parser_push.set_defaults(pull=False)
+
+    parser_push.add_argument('-u', "--update",
+        action="store_true",
+        help="fetch prior to sync")
 
     parser_push.add_argument('-f', "--force",
         action="store_true",

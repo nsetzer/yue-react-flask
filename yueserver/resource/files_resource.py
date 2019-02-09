@@ -237,8 +237,12 @@ class FilesResource(WebResource):
         password = g.headers.get('X-YUE-PASSWORD', None)
         new_password = g.body.read().decode("utf-8").strip()
 
-        if not password or not new_password:
-            return httpError(400, "Invalid password")
+        if not password:
+            print(password)
+            return httpError(400, "Invalid password 1")
+        if not new_password:
+            print(new_password)
+            return httpError(400, "Invalid password 2")
 
         self.filesys_service.changePassword(g.current_user,
             password, new_password)
