@@ -177,6 +177,9 @@ class FileSysService(object):
         files = []
         dirs = []
 
+        # TODO: there is a bug here related to fs roots
+        # this will list all files across all roots
+        # may require migrating /$path to /$rootname/$path
         records = self.storageDao.listdir(user['id'], abs_path)
 
         for record in records:
@@ -393,7 +396,6 @@ class FileSysService(object):
         returns a file-like object wrapping stream
         contents are decrypted as they are read from the stream
         """
-        print(password, mode, crypt_mode)
         if crypt_mode == CryptMode.server:
             key = self.storageDao.getEncryptionKey(
                 user['id'], password, crypt_mode)

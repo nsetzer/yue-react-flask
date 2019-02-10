@@ -5,6 +5,9 @@ git inspired sync tool.
 
 todo: create a stat cache to avoid making os calls for the same file
 
+# todo: 500 errors should stop everything
+#       400 errors are user errors and should proceed to the next file
+
 add resolve-remote / resolve-local / resolve-fetch commands to fix conflicts
     resolve-fetch to download a specific file as `${filename}.remote`
     provide the opportunity to view the remote file, overwrite local
@@ -1322,7 +1325,7 @@ def _sync_file_push(ctxt, attr, ent):
     if response.status_code == 409:
         raise SyncUserException("local database out of date. fetch first")
 
-    if response.status_code != 200:
+    if response.status_code != 200 and response.status_code != 201:
         raise Exception("unexpected error: %s" % response.status_code)
 
     record = RecordBuilder().local(**ent.af).remote(**ent.af).build()

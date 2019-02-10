@@ -195,7 +195,9 @@ class FileSystem(object):
     all paths must be absolute file file paths, the correct
     implementation of open depends on the path scheme
     """
-    default_fs = dict()
+
+    # by default s3 paths should fail, until registed
+    default_fs = {"s3://": None}
 
     def __init__(self):
         super(FileSystem, self).__init__()
@@ -203,8 +205,6 @@ class FileSystem(object):
         self._fs = dict(FileSystem.default_fs)
 
         self._fs[MemoryFileSystemImpl.scheme] = MemoryFileSystemImpl()
-        # by default s3 paths should fail, until registed
-        self._fs["s3://"] = None
 
         self._fs_default = LocalFileSystemImpl()
 
