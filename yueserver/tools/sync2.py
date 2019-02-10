@@ -1041,9 +1041,12 @@ def _check(ctxt, remote_base, local_base):
     files = []
     _dirs, _files = ctxt.storageDao.listdir(remote_base)
     # TODO: looks like memfs impl for exists is broken for dirs
-    if not ctxt.fs.islocal(local_base) or ctxt.fs.exists(local_base):
-        _records = set(ctxt.fs.scandir(local_base))
-    else:
+    try:
+        if not ctxt.fs.islocal(local_base) or ctxt.fs.exists(local_base):
+            _records = set(ctxt.fs.scandir(local_base))
+        else:
+            _records = set()
+    except NotADirectoryError:
         _records = set()
 
     _names = {r.name: r for r in _records}
@@ -1055,7 +1058,6 @@ def _check(ctxt, remote_base, local_base):
     #    - suggest rename local file or directory
     #    - use a file entry or dir ent?
     #
-    print(_dirs, [f['rel_path'] for f in _files])
     for d in _dirs:
 
         if attr.match(d):
@@ -1082,12 +1084,13 @@ def _check(ctxt, remote_base, local_base):
         local_path = ctxt.fs.join(local_base, f['rel_path'])
 
         if name in _names:
-            del _names[name]
-
-        if _records[name].isDir:
-            state = FileState.CONFLICT_TYPE
-            dirs.append(DirEnt(name, remote_path, local_path, state))
-            continue
+            if _names[name].isDir:
+                state = FileState.CONFLICT_TYPE
+                dirs.append(DirEnt(name, remote_path, local_path, state))
+                del _names[name]
+                continue
+            else:
+                del _names[name]
 
         if f['local_version'] == 0:
             lf = None
@@ -1111,8 +1114,6 @@ def _check(ctxt, remote_base, local_base):
                 "encryption": f['remote_encryption'],
             }
 
-
-
         try:
             record = ctxt.fs.file_info(local_path)
 
@@ -1124,10 +1125,11 @@ def _check(ctxt, remote_base, local_base):
             }
         except FileNotFoundError:
             af = None
+        except NotADirectoryError:
+            af = None
 
         files.append(FileEnt(remote_path, local_path, lf, rf, af))
 
-    print(_names)
     for n in _names:
         remote_path = posixpath.join(remote_base, n)
         local_path = ctxt.fs.join(local_base, n)
@@ -1379,18 +1381,22 @@ def _sync_file_pull(ctxt, attr, ent):
         ctxt.fs.makedirs(dpath)
 
     bytes_written = 0
-    with ctxt.fs.open(ent.local_path, "wb") as wb:
+    try:
+        with ctxt.fs.open(ent.local_path, "wb") as wb:
 
-        if encryption_mode == 'client':
-            key = ctxt.getEncryptionClientKey()
-            wb = FileDecryptorWriter(wb, key)
+            if encryption_mode == 'client':
+                key = ctxt.getEncryptionClientKey()
+                wb = FileDecryptorWriter(wb, key)
 
-        stream = ProgressStreamReaderWrapper(response.stream(),
-            ent.remote_path, ent.rf['size'])
+            stream = ProgressStreamReaderWrapper(response.stream(),
+                ent.remote_path, ent.rf['size'])
 
-        for chunk in stream:
-            bytes_written += len(chunk)
-            wb.write(chunk)
+            for chunk in stream:
+                bytes_written += len(chunk)
+                wb.write(chunk)
+    except NotADirectoryError:
+        sys.stderr.write("conflict: not a directory: %s\n" % ent.remote_path)
+        return
 
     ctxt.fs.set_mtime(ent.local_path, ent.rf['mtime'])
     record = RecordBuilder().local(**ent.rf).remote(**ent.rf).build()
@@ -1504,43 +1510,43 @@ def _sync_impl(ctxt, paths, push=False, pull=False, force=False, recursive=False
 ###     if response.status_code > 201:
 ###         raise Exception(response.text)
 
-def _copy_impl(client, fs, src, dst):
-    """
-    copy from the remote server to a local path, or from a local path
-    to a remote server.
-
-    src: either "server://${root}/${remote_path}" or a local file
-    dst: either "server://${root}/${remote_path}" or a local file
-
-    both src and dst cannot be both remote or local paths
-    """
-
-    tag = "server://"
-    if src.startswith(tag):
-        root, remote_path = src[len(tag):].split("/", 1)
-
-        if dst.startswith(tag):
-            raise Exception("invalid path: %s" % dst)
-
-        response = client.files_get_path(root, remote_path, stream=True)
-        with fs.open(dst, "wb") as wb:
-            for chunk in response.stream():
-                wb.write(chunk)
-
-    elif dst.startswith(tag):
-        root, remote_path = dst[len(tag):].split("/", 1)
-
-        if src.startswith(tag) or not os.access(src, os.R_OK):
-            raise Exception("invalid path: %s" % src)
-
-        info = fs.file_info(src)
-
-        f = ProgressFileReaderWrapper(fs, src, remote_path)
-        response = client.files_upload(root, remote_path, f,
-            mtime=info.mtime, permission=info.permission)
-
-    else:
-        raise Exception("invalid source and destiniation path")
+###def _copy_impl(client, fs, src, dst):
+###    """
+###    copy from the remote server to a local path, or from a local path
+###    to a remote server.
+###
+###    src: either "server://${root}/${remote_path}" or a local file
+###    dst: either "server://${root}/${remote_path}" or a local file
+###
+###    both src and dst cannot be both remote or local paths
+###    """
+###
+###    tag = "server://"
+###    if src.startswith(tag):
+###        root, remote_path = src[len(tag):].split("/", 1)
+###
+###        if dst.startswith(tag):
+###            raise Exception("invalid path: %s" % dst)
+###
+###        response = client.files_get_path(root, remote_path, stream=True)
+###        with fs.open(dst, "wb") as wb:
+###            for chunk in response.stream():
+###                wb.write(chunk)
+###
+###    elif dst.startswith(tag):
+###        root, remote_path = dst[len(tag):].split("/", 1)
+###
+###        if src.startswith(tag) or not os.access(src, os.R_OK):
+###            raise Exception("invalid path: %s" % src)
+###
+###        info = fs.file_info(src)
+###
+###        f = ProgressFileReaderWrapper(fs, src, remote_path)
+###        response = client.files_upload(root, remote_path, f,
+###            mtime=info.mtime, permission=info.permission)
+###
+###    else:
+###        raise Exception("invalid source and destiniation path")
 
 def _list_impl(client, root, path):
     """
@@ -1891,6 +1897,9 @@ def cli_sync(args):
 
     ctxt = get_ctxt(os.getcwd())
 
+    # todo: consider disabling delete on SYNC by default
+    #       leave on for push and pull
+
     if args.update:
         # TODO: consider a quite option, no logging
         _fetch(ctxt)
@@ -1938,18 +1947,18 @@ def cli_info(args):
     sys.stdout.write("usage: %s\n" % usage)
     sys.stdout.write("capacity: %s\n" % cap)
 
-def cli_copy(args):
-
-    ctxt = get_ctxt(os.getcwd())
-
-    _copy_impl(ctxt.client, ctxt.fs, args.src, args.dst)
+###def cli_copy(args):
+###
+###    ctxt = get_ctxt(os.getcwd())
+###
+###    _copy_impl(ctxt.client, ctxt.fs, args.src, args.dst)
 
 def cli_list(args):
 
     ctxt = get_ctxt(os.getcwd())
 
     root = args.root or ctxt.root
-    _list_impl(ctxt.client, root, args.path)
+    _list_impl(ctxt.client, root, args.path.strip("/"))
 
 def cli_attr(args):
 
@@ -2169,12 +2178,12 @@ def main():
     ###########################################################################
     # Copy
 
-    parser_copy = subparsers.add_parser('copy', aliases=['cp'],
-        help="copy a file up or down")
-    parser_copy.set_defaults(func=cli_copy)
-
-    parser_copy.add_argument('src', help="source file to copy")
-    parser_copy.add_argument('dst', help="destination path")
+    ### parser_copy = subparsers.add_parser('copy', aliases=['cp'],
+    ###     help="copy a file up or down")
+    ### parser_copy.set_defaults(func=cli_copy)
+    ###
+    ### parser_copy.add_argument('src', help="source file to copy")
+    ### parser_copy.add_argument('dst', help="destination path")
 
     ###########################################################################
     # List
