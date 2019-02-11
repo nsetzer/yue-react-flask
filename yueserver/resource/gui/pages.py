@@ -22,7 +22,7 @@ res/
 from ...framework import gui
 from ...framework.backend import InvalidRoute
 
-from ...dao.util import string_quote
+from ...dao.util import string_quote, format_bytes
 
 from .exception import AuthenticationError, LibraryException
 
@@ -1312,6 +1312,229 @@ class HomePage(gui.Page):
 
         self.login.emit()
 
+class PublicAccessPage(gui.Page):
+    """
+    Signals:
+        submit()
+    """
+    def __init__(self, context, *args, **kwargs):
+        super(PublicAccessPage, self).__init__(*args, **kwargs)
+
+        self.context = context
+        self.file_info = None
+
+        self.submit = gui.Signal()
+
+        self.vbox = gui.VBox(height="100%", width="100%", parent=self)
+        self.vbox.style.update({
+            "background": Palette.S_DARK,
+        })
+
+        self.panel = gui.Widget(parent=self.vbox)
+        self.panel.style.update({
+            "width": "100%",
+            "background": Palette.S_MID_LIGHT,
+            "padding-top": "3em",
+            "padding-bottom": "3em",
+        })
+        del self.panel.style['margin']
+
+        self.label_title = gui.Label("Download File", parent=self.panel)
+        self.label_title.style.update({
+            "text-align": "center",
+            "font-size": "1.5em"
+        })
+        del self.label_title.style['margin']
+
+        self.label_name = gui.Label("File Name:", parent=self.panel)
+        self.label_name.style.update({
+            "width": "80%",
+            "margin-left": "10%",
+            "margin-right": "10%",
+            "margin-bottom": "0",
+            "margin-top": "1em",
+            "font-weight": "bold"
+        })
+        del self.label_name.style['margin']
+
+        self.label_name_value = gui.Label("", parent=self.panel)
+        self.label_name_value.style.update({
+            "width": "80%",
+            "margin-left": "10%",
+            "margin-right": "10%",
+            "margin-bottom": "0",
+            "margin-top": "1em",
+        })
+        del self.label_name_value.style['margin']
+
+        self.label_size = gui.Label("File Size:", parent=self.panel)
+        self.label_size.style.update({
+            "width": "80%",
+            "margin-left": "10%",
+            "margin-right": "10%",
+            "margin-bottom": "0",
+            "margin-top": "1em",
+            "font-weight": "bold"
+        })
+        del self.label_size.style['margin']
+
+        self.label_size_value = gui.Label("", parent=self.panel)
+        self.label_size_value.style.update({
+            "width": "80%",
+            "margin-left": "10%",
+            "margin-right": "10%",
+            "margin-bottom": "0",
+            "margin-top": "1em",
+        })
+        del self.label_size_value.style['margin']
+
+        self.label_password = gui.Label("Password:", parent=self.panel)
+        self.label_password.style.update({
+            "width": "80%",
+            "margin-left": "10%",
+            "margin-right": "10%",
+            "margin-bottom": "0",
+            "margin-top": "1em",
+            "font-weight": "bold"
+        })
+        del self.label_password.style['margin']
+
+        self.div_image = gui.Widget(_type="div", parent=self.panel)
+        self.div_image.style.update({
+            "width": "60%",
+            "margin-left": "20%",
+            "margin-right": "20%",
+            "margin-bottom": "0",
+            "margin-top": "1em",
+            "background": "transparent",
+        })
+        del self.div_image.style['margin']
+
+        self.audio_preview = gui.AudioPlayer("", parent=self.div_image)
+        self.audio_preview.style.update({
+            "display": "none",
+        })
+        del self.audio_preview.style['margin']
+
+        self.image_preview = gui.Image("", parent=self.div_image)
+        self.image_preview.style.update({
+            "max-width": "100%",
+            "display": "none",
+        })
+        del self.image_preview.style['margin']
+
+        self.form_login = gui.Widget(_type="form", parent=self.panel)
+        self.form_login.attributes['autocomplete'] = "off"
+
+        self.input_password = gui.Input("text", parent=self.form_login)
+        self.input_password.attributes['tabindex'] = "2"
+        self.input_password.attributes['autocomplete'] = "off"
+        self.input_password.attributes['autofocus'] = True
+        self.input_password.attributes['name'] = "public"
+        self.input_password.style.update({
+            "width": "80%",
+            "margin-left": "10%",
+            "margin-right": "10%"
+        })
+        del self.input_password.style['margin']
+
+        self.label_status = gui.Label("", parent=self.panel)
+        self.label_status.style.update({
+            "width": "80%",
+            "margin-left": "10%",
+            "margin-right": "10%",
+            "margin-bottom": "0",
+            "margin-top": "1em",
+        })
+        del self.label_status.style['margin']
+
+        self.btn_download = gui.Button("Download", parent=self.panel)
+        self.btn_download.style.update({
+            "margin-top": "20px",
+            "margin-left": "33%",
+            "margin-right": "33%",
+            "width": "34%"
+        })
+        del self.btn_download.style['margin']
+
+        js = "alert('error');"
+        self.btn_download.attributes['onclick'] = js
+
+        self.onfailure = gui.ClassEventConnector(self, 'onfailure',
+            lambda *args, **kwargs: tuple([kwargs.get('status', None)]))
+        self.onfailure.connect(self.onFailure)
+
+        self.onsuccess = gui.ClassEventConnector(self, 'onsuccess',
+            lambda *args, **kwargs: tuple())
+        self.onsuccess.connect(self.onSuccess)
+
+        self.route = ([], {}, {})
+
+    def set_route(self, location, params, cookies):
+        """
+        persist the route that got us to a page that was not found
+        """
+        self.route = (location, params, cookies)
+
+        if len(location) == 1:
+            self.file_info = self.context.publicFileInfo(location[0])
+
+        self.update()
+
+    def get_route(self):
+        return self.route
+
+    def onSubmitClicked(self, widget):
+
+        self.submit.emit()
+
+    def update(self):
+
+        if self.file_info is None:
+            return
+
+        self.label_name_value.set_text(self.file_info.name)
+        self.label_size_value.set_text(format_bytes(self.file_info.size))
+
+        if self.file_info.public_password is not None:
+            self.input_password.attributes['value'] = ""
+            pass
+        else:
+            self.label_password.style['display'] = 'none'
+            self.input_password.style['display'] = 'none'
+
+            url = "/api/fs/public/%s?dl=0" % self.file_info.public
+            if self.file_info.name.endswith(".png"):
+                self.image_preview.style.update({"display": "block"})
+                self.audio_preview.style.update({"display": "none"})
+                self.image_preview.set_image(url)
+
+            elif self.file_info.name.endswith(".ogg"):
+                self.image_preview.style.update({"display": "none"})
+                self.audio_preview.style.update({"display": "block"})
+                self.audio_preview.set_source(url)
+
+        js = "downloadFile('%s', '%s', document.getElementById('%s').value);" % (
+            self.identifier,
+            self.file_info.public,
+            self.input_password.identifier)
+        self.btn_download.attributes['onclick'] = js
+
+    def onFailure(self, widget, status):
+        """
+        download request failed with status
+        """
+        if status == 401:
+            self.label_status.set_text("Invalid password")
+        else:
+            self.label_status.set_text("Unexpected error")
+
+    def onSuccess(self, widget):
+        """
+        user successfully downloaded the file
+        """
+        self.label_status.set_text("Downloading File")
+
 class NotFoundPage(gui.Page):
     """
     Signals:
@@ -1363,7 +1586,7 @@ class NotFoundPage(gui.Page):
         self.route = (location, params, cookies)
 
     def get_route(self):
-        return route
+        return self.route
 
     def onSubmitClicked(self, widget):
 
@@ -1439,6 +1662,7 @@ class LoginPage(gui.Page):
         del self.label_email.style['margin']
 
         self.input_email.attributes['tabindex'] = "2"
+        self.input_email.attributes['name'] = "username"
         self.input_email.style.update({
             "width": "80%",
             "margin-left":
@@ -1457,6 +1681,7 @@ class LoginPage(gui.Page):
         del self.label_password.style['margin']
 
         self.input_password.attributes['tabindex'] = "3"
+        self.input_password.attributes['name'] = "password"
         self.input_password.style.update({
             "width": "80%",
             "margin-left": "10%",
@@ -1634,6 +1859,7 @@ class AppPage(gui.Page):
         self.page_main = None
         self.page_notfound = None
         self.page_login = None
+        self.page_public = None
 
         self.page_home = HomePage()
         self.page_home.attributes.update({"class": "col-main"})
@@ -1691,6 +1917,10 @@ class AppPage(gui.Page):
                 page = self.getLoginPage()
                 page.set_visible(True)
                 page.set_route(location[1:], params, cookies)
+            elif location[0] == "p":
+                page = self.getPublicPage()
+                page.set_visible(True)
+                page.set_route(location[1:], params, cookies)
             else:
                 page = self.getNotFoundPage()
                 page.set_visible(True)
@@ -1734,7 +1964,25 @@ class AppPage(gui.Page):
             params.update(_params)
             cookies.update(_cookies)
 
+        elif self.page_public is not None and self.page_public.is_visible():
+            path.append("p")
+            _path, _params, _cookies = self.page_public.get_route()
+            path += _path
+            params.update(_params)
+            cookies.update(_cookies)
+
         return path, params, cookies
+
+    def getPublicPage(self):
+
+        if self.page_public is None:
+            self.page_public = PublicAccessPage(self.context)
+            self.page_public.attributes.update({"class": "col-main"})
+            self.page_public.style.update({"height": "100%", "display": "flex"})
+            self.hbox_main.insert(1, self.page_public)
+            self.pages.append(self.page_public)
+
+        return self.page_public
 
     def getNotFoundPage(self):
 

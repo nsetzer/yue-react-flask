@@ -263,6 +263,7 @@ class StorageDao(object):
         record.file_path = item['file_path']
         record.encryption = item['encryption']
         record.public = item['public']
+        record.public_password = item['public_password']
         record.user_id = item['user_id']
         return record
 

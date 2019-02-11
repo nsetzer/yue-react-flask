@@ -297,10 +297,14 @@ def send_file(filepath):
 
     return response
 
-def send_generator(go, attachment_name, file_size=None, headers=None):
+def send_generator(go, attachment_name, file_size=None, headers=None, attachment=True):
     """
     this may not work on chrome, although that may also be a webkit
     issue with mp3 files...
+
+    attachment: under certain browser senarios, such as 'right click > view image'
+        if there is a attachment header then the file will be downloaded
+        instead of being displayed in the browser
     """
 
     mimetype = mimetypes.guess_type(attachment_name)[0] or \
@@ -315,10 +319,12 @@ def send_generator(go, attachment_name, file_size=None, headers=None):
         for key, val in headers.items():
             response.headers.set(key, str(val))
 
-    # TODO: do i need this?
-
-    #response.headers.add('Content-Disposition', 'attachment',
-    #    filename=attachment_name)
+    if attachment:
+        response.headers.add('Content-Disposition', 'attachment',
+            filename=attachment_name)
+    else:
+        response.headers.add('Content-Disposition', "",
+            filename=attachment_name)
 
     return response
 

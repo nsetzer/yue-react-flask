@@ -174,3 +174,7 @@ class YueAppState(object):
         self.current_playlist.pop(0)
         self.currentSongChanged.emit()
         return self.current_playlist[0]
+
+    def publicFileInfo(self, public_id):
+
+        return self.fileService.publicFileInfo(public_id)

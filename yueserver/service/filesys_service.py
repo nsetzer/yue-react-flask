@@ -179,7 +179,7 @@ class FileSysService(object):
 
         # TODO: there is a bug here related to fs roots
         # this will list all files across all roots
-        # may require migrating /$path to /$rootname/$path
+        # migrate: add column to storage table 'root' name
         records = self.storageDao.listdir(user['id'], abs_path)
 
         for record in records:

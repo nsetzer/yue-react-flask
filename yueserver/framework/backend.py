@@ -235,6 +235,64 @@ js_body_end = """
             xhr.send(fd);
         };
 
+        function downloadFile(widgetID, fileId, password) {
+            var postData = new FormData();
+
+            // https://stackoverflow.com/questions/22724070/
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/api/fs/public/' + fileId);
+            console.log(password)
+            console.log(!password)
+            console.log(password.length > 0)
+            console.log(!password && password.length > 0)
+            if (password.length > 0) {
+                console.log("setting header");
+                xhr.setRequestHeader('X-YUE-PASSWORD', password);
+            }
+            xhr.responseType = 'blob';
+            xhr.onload = function (this_, event_) {
+                var blob = this_.target.response;
+
+
+                console.log(blob)
+                console.log(this_.target.status)
+
+                if (!blob || this_.target.status != 200) {
+                    var params={};
+                    params['status'] = this_.target.status;
+                    sendCallbackParam(widgetID, 'onfailure', params);
+                } else {
+                    var contentDispo = xhr.getResponseHeader('Content-Disposition');
+                    // https://stackoverflow.com/a/23054920/
+                    var fileName = contentDispo.match(/filename[^;=\\n]*=((['"]).*?\\2|[^;\\n]*)/)[1];
+                    saveBlob(blob, fileName);
+                    sendCallbackParam(widgetID, 'onsuccess', null);
+                }
+            }
+            xhr.send(postData);
+        }
+
+        function saveBlob(blob, fileName) {
+            var a = document.createElement('a');
+            a.href = window.URL.createObjectURL(blob);
+            a.download = fileName;
+            a.dispatchEvent(new MouseEvent('click'));
+        }
+
+        function saveOrOpenBlob(blob, fileName) {
+            window.requestFileSystem = window.requestFileSystem || window.webkitRequestFileSystem;
+            window.requestFileSystem(window.TEMPORARY, 1024 * 1024, function (fs) {
+                fs.root.getFile(fileName, { create: true }, function (fileEntry) {
+                    fileEntry.createWriter(function (fileWriter) {
+                        fileWriter.addEventListener("writeend", function () {
+                            window.location = fileEntry.toURL();
+                        }, false);
+                        fileWriter.write(blob, "_blank");
+                    }, function () { });
+                }, function () { });
+            }, function () { });
+        }
+
         window.onpopstate = function (event) {
             var state = {
                 location: '' + document.location,
@@ -726,6 +784,9 @@ class AppService(object):
             try:
                 widget = client.get_widget_by_id(widget_id)
                 method = get_method_by_name(widget, method_id)
+                if method is None:
+                    msg = 'attr %s/%s not available' % (widget_id, method_id)
+                    raise AppServiceException(400, msg)
                 result = method(**params)
                 client.do_gui_update()
                 return result

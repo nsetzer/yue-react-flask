@@ -70,6 +70,7 @@ class FilesResource(WebResource):
             password=password)
 
     @get("public/<fileId>")
+    @param("dl", type_=boolean, default=True)
     @header("X-YUE-PASSWORD")
     def get_public_file(self, fileId):
         """
@@ -104,7 +105,8 @@ class FilesResource(WebResource):
             stream = FileDecryptorReader(stream, key)
 
         go = files_generator_v2(stream)
-        return send_generator(go, info.name, file_size=None)
+        return send_generator(go, info.name,
+            file_size=info.size, attachment=g.args.dl)
 
     @put("public/<root>/path/<path:resPath>")
     @header("X-YUE-PASSWORD")
@@ -214,7 +216,6 @@ class FilesResource(WebResource):
         # todo this should be a list of names
         roots = self.filesys_service.getRoots(g.current_user)
         return jsonify(result=roots)
-
 
     @get("quota")
     @requires_auth("filesystem_read")

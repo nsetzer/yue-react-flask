@@ -2354,6 +2354,7 @@ class Input(Widget):
         """
         Args:
             input_type (str): HTML5 input type
+                text, password, button, radio, etc
             default_value (str):
             kwargs: See Widget.__init__()
         """
