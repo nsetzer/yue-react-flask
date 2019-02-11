@@ -1,5 +1,5 @@
 
-import os, sys
+import os, sys, io
 import logging
 
 from .exception import AuthenticationError, LibraryException
@@ -178,3 +178,50 @@ class YueAppState(object):
     def publicFileInfo(self, public_id):
 
         return self.fileService.publicFileInfo(public_id)
+
+    def listNotes(self):
+
+        try:
+            return self.fileService.getUserNotes(
+                self.auth_user, "default", "public/notes")
+        except StorageNotFoundException:
+            return []
+
+    def getNoteContent(self, filename):
+        """
+        notes are lightly structured text files
+        each line is a separate list item
+        """
+
+        name = "public/notes/" + filename
+
+        stream = self.fileService.loadFile(self.auth_user, "default", name)
+
+        try:
+            content = stream.read() \
+                .decode("utf-8") \
+                .replace("\r", "\n") \
+                .split("\n")
+            return content
+        finally:
+            stream.close()
+
+    def setNoteContent(self, filename, content):
+
+        name = "public/notes/" + filename
+
+        stream = io.BytesIO()
+        first = True
+        for line in content:
+            if not first:
+                stream.write(b"\n")
+            stream.write(line.encode("utf-8"))
+            first = False
+        stream.seek(0)
+
+        stream = self.fileService.encryptStream(
+            self.auth_user, None, stream, "rb", "system")
+
+        self.fileService.saveFile(self.auth_user, "default", name,
+            stream, encryption="system")
+

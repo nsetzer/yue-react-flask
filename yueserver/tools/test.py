@@ -13,7 +13,7 @@ if (sys.version_info[0] == 2):
 
 class Tests(object):
 
-    def run(self, pattern, verbose):
+    def run(self, pattern="*", verbose=1):
         test_loader = unittest.defaultTestLoader
         test_runner = unittest.TextTestRunner(verbosity=verbose)
         pattern = pattern + "_test.py"

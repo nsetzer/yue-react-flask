@@ -238,6 +238,20 @@ class FileSysService(object):
 
         return files
 
+    def loadFile(self, user, fs_name, path, password=None):
+
+        abs_path = self.getFilePath(user, fs_name, path)
+        record = self.storageDao.file_info(user['id'], abs_path)
+
+        stream = self.fs.open(record.storage_path, "rb")
+
+        if record.encryption is not None:
+            stream = self.decryptStream(user, password,
+                stream, "rb", record.encryption)
+
+        return stream
+
+    # TODO: version defaulting to 0 may be a bug, change to None
     def saveFile(self, user, fs_name, path, stream,
       mtime=None, version=0, permission=0, encryption=None):
 
@@ -382,10 +396,10 @@ class FileSysService(object):
         else:
             raise FileSysServiceException("invalid mode: '%s'" % crypt_mode)
 
-        if mode == "r":
+        if mode.startswith("r"):
             # encrypt the contents as the file is read
             return FileEncryptorReader(stream, key)
-        elif mode == "w":
+        elif mode.startswith("w"):
             # encrypt the contents as they are written to the file
             return FileEncryptorWriter(stream, key)
         else:
@@ -404,10 +418,10 @@ class FileSysService(object):
         else:
             raise FileSysServiceException("invalid mode: '%s'" % crypt_mode)
 
-        if mode == "r":
+        if mode.startswith("r"):
             # decrypt the contents as the file is read
             return FileDecryptorReader(stream, key)
-        elif mode == "w":
+        elif mode.startswith("w"):
             # decrypt the contents as the file is being written
             return FileDecryptorWriter(stream, key)
         else:
