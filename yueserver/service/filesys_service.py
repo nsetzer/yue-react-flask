@@ -432,3 +432,32 @@ class FileSysService(object):
     def publicFileInfo(self, public_id):
         return self.storageDao.publicFileInfo(public_id)
 
+    def getUserNotes(self, user, fs_name, dir_path="public/notes"):
+        """
+        return the list of public notes
+
+        Notes are text files which can be edited using the gui.
+        They are stored on the file system, so can be synced between devices.
+        By default they are stored in the public directory, so can be shared.
+        """
+
+        abs_path = self.getFilePath(user, fs_name, dir_path)
+        if not abs_path.endswith("/"):
+            abs_path += "/"
+        records = self.storageDao.listdir(user['id'], abs_path)
+
+        files = []
+        for record in records:
+            if not record.isDir:
+                if record.name.endswith('.txt'):
+                    name = record.name[:-4].replace("_", " ")
+                    files.append({
+                        "name": name,
+                        "file_name": record.name,
+                        "size": record.size,
+                        "mtime": record.mtime
+                    })
+        files.sort(key=lambda f: f['name'])
+
+        return files
+

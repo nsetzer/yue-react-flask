@@ -101,6 +101,26 @@ class FileServiceTestCase(unittest.TestCase):
         print("system", key2)
         print("system", len(key2))
 
+    def test_003_user_notes(self):
+
+        root = "default"
+        path = "public/notes/test_note.txt"
+        self.service.saveFile(self.app.USER, root, path, BytesIO(b"hello"))
+
+        root = "default"
+        path = "public/notes/subfolder/nope.txt"
+        self.service.saveFile(self.app.USER, root, path, BytesIO(b"hello"))
+
+        root = "default"
+        path = "public/notes/nope.png"
+        self.service.saveFile(self.app.USER, root, path, BytesIO(b"hello"))
+
+        files = self.service.getUserNotes(self.app.USER, root, "public/notes")
+
+        self.assertEqual(len(files), 1)
+        self.assertEqual(files[0]['name'], 'test note')
+        self.assertEqual(files[0]['file_name'], 'test_note.txt')
+
 if __name__ == '__main__':
     main_test(sys.argv, globals())
 

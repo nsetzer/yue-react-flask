@@ -140,4 +140,3 @@ def FileSystemPermissionTable(metadata):
         Column('role_id', ForeignKey("user_role.id"), nullable=False),
         Column('file_id', ForeignKey("filesystem.id"), nullable=False),
     )
-
