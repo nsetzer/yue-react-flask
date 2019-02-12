@@ -81,32 +81,19 @@ class FilesResource(WebResource):
         will be used to validate the download can continue
         """
 
-        # first validate the password
-        # fails if incorrect or if given and not required
         try:
 
             password = g.headers.get('X-YUE-PASSWORD', None)
-            self.filesys_service.verifyPublicPassword(fileId, password)
+            info, stream = self.filesys_service.loadPublicFile(
+                fileId, password)
+            go = files_generator_v2(stream)
+            return send_generator(go, info.name,
+                file_size=info.size, attachment=g.args.dl)
+
         except FileSysServiceException:
             return httpError(401, "invalid file id or password")
         except StorageNotFoundException:
             return httpError(404, "invalid file id or password")
-
-        info = self.filesys_service.publicFileInfo(fileId)
-
-        stream = self.filesys_service.fs.open(info.storage_path, "rb")
-
-        if info.encryption == CryptMode.system:
-            password = self.filesys_service.settingsDao.get(
-                Settings.storage_system_key)
-            key = self.filesys_service.storageDao.getUserKey(
-                info.user_id, CryptMode.system)
-            key = decryptkey(password, key)
-            stream = FileDecryptorReader(stream, key)
-
-        go = files_generator_v2(stream)
-        return send_generator(go, info.name,
-            file_size=info.size, attachment=g.args.dl)
 
     @put("public/<root>/path/<path:resPath>")
     @header("X-YUE-PASSWORD")

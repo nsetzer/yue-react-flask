@@ -241,15 +241,41 @@ class FileSysService(object):
     def loadFile(self, user, fs_name, path, password=None):
 
         abs_path = self.getFilePath(user, fs_name, path)
-        record = self.storageDao.file_info(user['id'], abs_path)
+        info = self.storageDao.file_info(user['id'], abs_path)
+        return self.loadFileFromInfo(user, info, password)
 
-        stream = self.fs.open(record.storage_path, "rb")
+    def loadFileFromInfo(self, user, info, password=None):
 
-        if record.encryption is not None:
+        stream = self.fs.open(info.storage_path, "rb")
+
+        if info.encryption is not None:
             stream = self.decryptStream(user, password,
-                stream, "rb", record.encryption)
+                stream, "rb", info.encryption)
 
         return stream
+
+    def loadPublicFile(self, fileId, password=None):
+
+        # validate that the given password is correct
+        # authenticating that the download can continue
+        if not self.storageDao.verifyPublicPassword(fileId, password):
+            raise FileSysServiceException("invalid password")
+
+        # look up the storage path by id, open the file
+        info = self.storageDao.publicFileInfo(fileId)
+        stream = self.fs.open(info.storage_path, "rb")
+
+        # decrypt the file using the file owner's system key
+        # server and client encryption modes are not possible
+        if info.encryption == CryptMode.system:
+            password = self.settingsDao.get(
+                Settings.storage_system_key)
+            key = self.storageDao.getUserKey(
+                info.user_id, CryptMode.system)
+            key = decryptkey(password, key)
+            stream = FileDecryptorReader(stream, key)
+
+        return info, stream
 
     # TODO: version defaulting to 0 may be a bug, change to None
     def saveFile(self, user, fs_name, path, stream,
@@ -437,15 +463,6 @@ class FileSysService(object):
         return self.storageDao.setFilePublic(
             user['id'], abs_path, password=password, revoke=revoke)
 
-    def verifyPublicPassword(self, public_id, password):
-
-        if not self.storageDao.verifyPublicPassword(public_id, password):
-            raise FileSysServiceException("invalid password")
-        return
-
-    def publicFileInfo(self, public_id):
-        return self.storageDao.publicFileInfo(public_id)
-
     def getUserNotes(self, user, fs_name, dir_path="public/notes"):
         """
         return the list of public notes
@@ -464,14 +481,13 @@ class FileSysService(object):
         for record in records:
             if not record.isDir:
                 if record.name.endswith('.txt'):
-                    name = record.name[:-4].replace("_", " ")
                     files.append({
-                        "name": name,
                         "file_name": record.name,
+                        "file_path": "%s/%s" % (dir_path, record.name),
                         "size": record.size,
                         "mtime": record.mtime
                     })
-        files.sort(key=lambda f: f['name'])
+        files.sort(key=lambda f: f['file_name'])
 
         return files
 

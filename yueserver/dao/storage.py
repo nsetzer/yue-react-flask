@@ -700,7 +700,6 @@ class StorageDao(object):
         # if no password set, return true only if
         # no password was given
 
-
         if not hash:
             return password is None
 

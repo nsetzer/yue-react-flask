@@ -182,8 +182,13 @@ class YueAppState(object):
     def listNotes(self):
 
         try:
-            return self.fileService.getUserNotes(
+            notes = self.fileService.getUserNotes(
                 self.auth_user, "default", "public/notes")
+
+            for note in notes:
+                note['name'] = note['file_name'][:-4].replace("_", " ")
+
+            return notes
         except StorageNotFoundException:
             return []
 
