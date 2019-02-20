@@ -485,7 +485,8 @@ class FileSysService(object):
                         "file_name": record.name,
                         "file_path": "%s/%s" % (dir_path, record.name),
                         "size": record.size,
-                        "mtime": record.mtime
+                        "mtime": record.mtime,
+                        "encryption": record.encryption,
                     })
         files.sort(key=lambda f: f['file_name'])
 

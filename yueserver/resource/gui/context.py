@@ -180,53 +180,53 @@ class YueAppState(object):
         return self.fileService.publicFileInfo(public_id)
 
     def listNotes(self):
-
+        """
+        returns meta data describing notes
+        """
         try:
             notes = self.fileService.getUserNotes(
                 self.auth_user, "default", "public/notes")
 
             for note in notes:
                 note['name'] = note['file_name'][:-4].replace("_", " ")
+                try:
+                    note['content'] = self.getNoteContent(note['file_path'])
+                except Exception as e:
+                    print(e)
+                    note['content'] = ''
 
             return notes
         except StorageNotFoundException:
             return []
 
-    def getNoteContent(self, filename):
+    def getNoteContent(self, filepath):
         """
         notes are lightly structured text files
         each line is a separate list item
         """
 
-        name = "public/notes/" + filename
-
-        stream = self.fileService.loadFile(self.auth_user, "default", name)
+        stream = self.fileService.loadFile(self.auth_user, "default", filepath)
 
         try:
             content = stream.read() \
                 .decode("utf-8") \
-                .replace("\r", "\n") \
-                .split("\n")
+                .replace("\r", "")
             return content
         finally:
             stream.close()
 
-    def setNoteContent(self, filename, content):
-
-        name = "public/notes/" + filename
+    def setNoteContent(self, filepath, content):
 
         stream = io.BytesIO()
-        first = True
-        for line in content:
-            if not first:
-                stream.write(b"\n")
-            stream.write(line.encode("utf-8"))
-            first = False
+        stream.write(content.encode("utf-8"))
         stream.seek(0)
 
         stream = self.fileService.encryptStream(
             self.auth_user, None, stream, "rb", "system")
 
-        self.fileService.saveFile(self.auth_user, "default", name,
+        self.fileService.saveFile(self.auth_user, "default", filepath,
             stream, encryption="system")
 
+    def removeNote(self, filepath):
+
+        self.fileService.remove(self.auth_user, "default", filepath)

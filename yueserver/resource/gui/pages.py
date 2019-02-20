@@ -176,6 +176,7 @@ class IconBarWidget(gui.Widget):
         super(IconBarWidget, self).__init__()
 
         self.hbox = gui.Widget(height="100%", width="100%", parent=self)
+        self.hbox.style['background'] = "transparent"
 
         self.actions = []
 
@@ -185,7 +186,7 @@ class IconBarWidget(gui.Widget):
         btn.onclick.connect(lambda w: callback())
         img = gui.Image(icon_url, parent=btn)
         img.style.update({"width": "100%", "height": "100%"})
-        self.addWidget(btn)
+        return self.addWidget(btn)
 
     def addWidget(self, widget):
 
@@ -201,6 +202,12 @@ class IconBarWidget(gui.Widget):
 
         self.hbox.append(widget)
         self.actions.append(widget)
+        return widget
+
+    def _addWidget(self, widget):
+        self.hbox.append(widget)
+        self.actions.append(widget)
+        return widget
 
 class FileInfoWidget(gui.Widget):
     """docstring for FileInfoWidget"""
@@ -271,6 +278,89 @@ class FileInfoWidget(gui.Widget):
     def _onOpenPreviewClicked(self, widget):
         if not self.file_info['isDir']:
             self.openPreview.emit(self.file_info)
+
+class SmallNoteCardWidget(gui.Widget):
+
+    def __init__(self, info, *args, **kwargs):
+        super(SmallNoteCardWidget, self).__init__()
+
+        self.style.update({
+            "border-style": "solid",
+            "border-width": "1px",
+            "border-radius": "10px 10px 10px 10px",
+            "margin-top": "5px",
+            "margin-left": "10px",
+            "margin-right": "10px",
+            "margin-bottom": "10px",
+            "box-shadow": "5px 5px 5px rgba(0, 0, 0, 0.5);",
+        })
+        del self.style['margin']
+
+        self.actionBar = IconBarWidget()
+        self.actionBar.style.update({
+            "background": "transparent",
+            "border-bottom": "1px solid",
+        })
+        self.append(self.actionBar)
+
+        self.actionBar.addAction("/res/app/edit.svg", self._onEditClicked)
+        self.lblTitle = gui.Label("", style={
+            "display": "inline",
+            "width": "100%",
+            "margin": "auto"
+        })
+        self.actionBar.addWidget(self.lblTitle)
+
+        self.lst = gui.WidgetList()
+        self.lst.style.update({
+            "background": "transparent"
+        })
+        self.append(self.lst)
+
+        self.edit = gui.Signal()
+
+        self.setInfo(info)
+
+    def _onEditClicked(self):
+        self.edit.emit()
+
+    def _summarize(self, text):
+        max_length = 140
+
+        # get at most N characters, prevent splitting a word
+        subtext = text[:max_length + 1]
+        if len(text) > max_length:
+            index = subtext.rfind(" ")
+            subtext = subtext[:index]
+
+        # split into multiple lines
+        lines = subtext.replace("\r", "").split("\n")[:5]
+        if len(text) > max_length:
+            lines.append("...")
+        return lines
+
+    def setInfo(self, info):
+        self.info = info
+
+        title = info['name']
+        content = info['content']
+        summary = self._summarize(content)
+
+        self.lblTitle.set_text(title)
+
+        self.lst.empty()
+
+        for line in summary:
+            lbl = gui.Label(line, width="80%")
+            lbl.style.update({
+                "background": "transparent",
+                "margin-bottom": "2px",
+                "margin-top": "2px",
+                "margin-left": "auto",
+                "margin-right": "auto",
+            })
+            del lbl.style['margin']
+            self.lst.append(lbl)
 
 class AppViewWrapper(gui.Widget):
     """docstring for AppView"""
@@ -475,7 +565,6 @@ class VolumeSlider(gui.Input):
         self.attributes['step'] = str(step)
         self.attributes[gui.Widget.EVENT_ONCHANGE] = \
             "console.log(this.value);"
-
 
 class AudioDisplay(gui.Widget):
 
@@ -1252,6 +1341,158 @@ class SettingsPage(ContentPage):
             lbl1 = gui.Label(key, parent=box)
             lbl2 = gui.Label(val, parent=box)
 
+class NotesPage(ContentPage):
+    """docstring for NotesPage"""
+    def __init__(self, context, *args, **kwargs):
+        super(NotesPage, self).__init__(*args, **kwargs)
+        self.context = context
+
+        self.style.update({"height": "100%"})
+
+        self.lst = gui.WidgetList()
+        self.lst.style.update({"height": "100%"})
+        self.append(self.lst)
+
+        self.actionBarMain = IconBarWidget()
+        self.actionBarMain.style.update({
+            "top": "0",
+            "position": "sticky",
+            "z-index": "1",
+            "border-bottom": "1px solid",
+        })
+
+        self.actionBarMain.addAction("/res/app/create.svg",
+            self.onCreateNote)
+
+        self.actionBarEdit = IconBarWidget()
+        self.actionBarEdit.style.update({
+            "top": "0",
+            "position": "sticky",
+            "z-index": "1",
+            "border-bottom": "1px solid",
+        })
+
+        self.actionBarEdit.addAction("/res/app/save.svg",
+            lambda: self.onCloseNote(True))
+        self.actionBarEdit.addAction("/res/app/media_error.svg",
+            lambda: self.onCloseNote(False))
+
+        self.textTitle = gui.TextInput(True)
+        self.textEdit = gui.TextInput(False)
+        self.textEdit.style.update({"height": "100%"})
+        del self.textEdit.style['margin']
+        # maxlength
+
+        self._opened = False
+
+    def loadNotes(self):
+        # TODO: this needs to be a background process
+        self.notes = []
+        for info in self.context.listNotes():
+            note = SmallNoteCardWidget(info)
+            self.notes.append(note)
+
+    def onOpen(self):
+        super().onOpen()
+        if not self._opened:
+            self._opened = True
+            self.loadNotes()
+            self.showPage()
+
+    def showPage(self, index=None):
+
+        self.lst.empty()
+        if index is None or index < 0 or index >= len(self.notes):
+            self.lst.append(self.actionBarMain)
+            for i, note in enumerate(self.notes):
+                self.lst.append(note)
+                note.edit.clear()
+                note.edit.connect(gui.Slot(lambda i=i: self.onEditNote(i)))
+            self.current_index = None
+        else:
+            self.lst.append(self.actionBarEdit)
+            self.lst.append(self.textTitle)
+            self.lst.append(self.textEdit)
+
+            note = self.notes[index]
+
+            self.textTitle.set_value(note.info['name'])
+            self.textEdit.set_value(note.info['content'])
+            self.current_index = index
+
+    def get_route(self):
+        path = ""
+        if self.current_index is not None:
+            path = str(self.current_index)
+        return [path], {}, {}
+
+    def set_route(self, location, params, cookies):
+        if len(location) > 0:
+            self.showPage(int(location[0]))
+        else:
+            self.showPage()
+
+    def _generateName(self, base):
+        # generate a unique name for this note
+        name = base
+        count = 2
+        index = 0
+        while index < len(self.notes):
+            note = self.notes[index]
+            if note.info['name'] == name:
+                index = 0
+                name = "%s (%d)" % (base, count)
+                count += 1
+            index += 1
+        return name
+
+    def onCreateNote(self):
+
+        name = self._generateName("New Note")
+        info = {'name': name, 'content': ''}
+        note = SmallNoteCardWidget(info)
+        index = len(self.notes)
+        self.notes.append(note)
+        self.showPage(index)
+
+    def onCloseNote(self, save):
+
+        if save:
+            note = self.notes[self.current_index]
+            cur_name = note.info['name']
+            txt_name = self.textTitle.get_value().strip()
+
+            remove_path = None
+            if cur_name != txt_name:
+                # cache the old path, to delete after saving
+                if 'file_path' in note.info:
+                    remove_path = note.info['file_path']
+                note.info['name'] = self._generateName(txt_name)
+                note.info['file_name'] = note.info['name'] \
+                    .replace(" ", "_") + ".txt"
+                note.info['file_path'] = "public/notes/%s" % note.info['file_name']
+            elif 'file_path' not in note.info:
+                note.info['file_name'] = note.info['name'] \
+                    .replace(" ", "_") + ".txt"
+                note.info['file_path'] = "public/notes/%s" % note.info['file_name']
+
+            logging.info("saving note: %s" % note.info['file_path'])
+            content = self.textEdit.get_value()
+            note.info['content'] = content
+
+            # todo, create a rename api to preserve version number
+            self.context.setNoteContent(note.info['file_path'], content)
+            if remove_path:
+                self.context.removeNote(remove_path)
+
+            note.setInfo(note.info)
+
+        self.showPage()
+
+    def onEditNote(self, index):
+
+        self.showPage(index)
+
 class HomePage(gui.Page):
     """
     Signals:
@@ -1801,11 +2042,15 @@ class MainPage(gui.Page):
         self.tabSettings = SettingsPage(self.context,
             height="100%", width="100%")
 
+        self.tabNotes = NotesPage(self.context,
+            height="100%", width="100%")
+
         self.navbar.addTabIcon("queue", "/res/app/playlist.svg", self.tabNowPlaying)
         self.navbar.addTabIcon("library", "/res/app/album.svg", self.tabLibrary)
         self.navbar.addTabIcon("search", "/res/app/search.svg", self.tabSearchLibrary)
         self.navbar.addTabIcon("files", "/res/app/documents.svg", self.tabFileSystem)
         self.navbar.addTabIcon("settings", "/res/app/settings.svg", self.tabSettings)
+        self.navbar.addTabIcon("notes", "/res/app/note.svg", self.tabNotes)
 
     def set_route(self, location, params, cookies):
         if len(location) == 0:

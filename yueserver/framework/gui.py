@@ -56,6 +56,9 @@ class Signal(object):
         # logging.warning("Signal expected %d arguments" % len(self.ptypes))
         self.slots.append(slot)
 
+    def clear(self):
+        self.slots = []
+
     def __repr__(self):
         v = ["%s" % t.__name__ for t in self.ptypes]
         v += ["%s=%s" % (k, t.__name__) for k, t in self.kwtypes.items()]
