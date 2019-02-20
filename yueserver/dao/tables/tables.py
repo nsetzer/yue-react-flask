@@ -13,6 +13,7 @@ from .user import DomainTable, RoleTable, UserTable, \
 from .song import SongDataTable, SongUserDataTable, \
                   SongQueueTable, SongHistoryTable, SongPlaylistTable
 from .storage import FileSystemStorageTableV1, FileSystemStorageTableV2, \
+                     FileSystemStorageTableV3, \
                      FileSystemTable, FileSystemPermissionTable, \
                      FileSystemUserSupplementaryTable, \
                      FileSystemUserEncryptionTable
@@ -88,7 +89,40 @@ class DatabaseTablesV1(BaseDatabaseTables):
         self.FileSystemUserEncryptionTable = \
             FileSystemUserEncryptionTable(metadata)
 
-DatabaseTables = DatabaseTablesV1
+class DatabaseTablesV2(BaseDatabaseTables):
+    """define all tables required for the database"""
+    version = 2
+
+    def __init__(self, metadata):
+        super(DatabaseTablesV2, self).__init__()
+
+        self.ApplicationSchemaTable = ApplicationSchemaTable(metadata)
+
+        self.DomainTable = DomainTable(metadata)
+        self.RoleTable = RoleTable(metadata)
+        self.UserTable = UserTable(metadata)
+        self.GrantedDomainTable = GrantedDomainTable(metadata)
+        self.GrantedRoleTable = GrantedRoleTable(metadata)
+        self.FeatureTable = FeatureTable(metadata)
+        self.RoleFeatureTable = RoleFeatureTable(metadata)
+        self.UserSessionTable = UserSessionTable(metadata)
+        self.UserPreferencesTable = UserPreferencesTable(metadata)
+
+        self.SongDataTable = SongDataTable(metadata)
+        self.SongUserDataTable = SongUserDataTable(metadata)
+        self.SongQueueTable = SongQueueTable(metadata)
+        self.SongHistoryTable = SongHistoryTable(metadata)
+        self.SongPlaylistTable = SongPlaylistTable(metadata)
+
+        self.FileSystemStorageTable = FileSystemStorageTableV3(metadata)
+        self.FileSystemTable = FileSystemTable(metadata)
+        self.FileSystemPermissionTable = FileSystemPermissionTable(metadata)
+        self.FileSystemUserSupplementaryTable = \
+            FileSystemUserSupplementaryTable(metadata)
+        self.FileSystemUserEncryptionTable = \
+            FileSystemUserEncryptionTable(metadata)
+
+DatabaseTables = DatabaseTablesV2
 
 #all_tables= sorted([x for x in locals() if Base], key= x.version)
 # offset = current_version - all_tables[0].version

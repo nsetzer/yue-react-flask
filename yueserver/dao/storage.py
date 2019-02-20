@@ -171,13 +171,14 @@ class StorageDao(object):
 
     # FileSystem Operations
 
-    def insertFile(self, user_id, file_path, data, commit=True):
+    def insertFile(self, user_id, fsname, file_path, data, commit=True):
 
         # TODO: required?
-        #if path.endswith(delimiter):
+        # if path.endswith(delimiter):
         #    raise StorageException("invalid path")
 
         data['user_id'] = user_id
+        data['filesystem'] = fsname
         data['file_path'] = file_path
 
         if 'version' not in data or data['version'] is None:
@@ -195,6 +196,7 @@ class StorageDao(object):
 
         except IntegrityError as e:
             ex = StorageException("%s" % e.args[0])
+            ex.original = e
 
         if ex is not None:
             raise ex
@@ -219,32 +221,34 @@ class StorageDao(object):
         if commit:
             self.db.session.commit()
 
-    def selectFile(self, user_id, file_path):
+    def selectFile(self, user_id, fsname, file_path):
 
         tab = self.dbtables.FileSystemStorageTable
         query = tab.select().where(
                 and_(tab.c.user_id == user_id,
+                     tab.c.filesystem == fsname,
                      tab.c.file_path == file_path,
                      ))
         item = self.db.session.execute(query).fetchone()
 
         return item
 
-    def upsertFile(self, user_id, file_path, data, commit=True):
+    def upsertFile(self, user_id, fsname, file_path, data, commit=True):
 
-        item = self.selectFile(user_id, file_path)
+        item = self.selectFile(user_id, fsname, file_path)
 
         if item is None:
-            self.insertFile(user_id, file_path, data, commit)
+            self.insertFile(user_id, fsname, file_path, data, commit)
         else:
             self.updateFile(item.id, data, commit)
 
-    def removeFile(self, user_id, file_path, commit=True):
+    def removeFile(self, user_id, fsname, file_path, commit=True):
 
         tab = self.dbtables.FileSystemStorageTable
         query = tab.delete() \
             .where(
                 and_(tab.c.user_id == user_id,
+                     tab.c.filesystem == fsname,
                      tab.c.file_path == file_path,
                      ))
 

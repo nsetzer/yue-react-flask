@@ -112,9 +112,9 @@ class StorageTestCase(unittest.TestCase):
             encryption=None,
             public_password=None,
             public=None)
-        self.storageDao.insertFile(user_id, path, data)
+        self.storageDao.insertFile(user_id, 'default', path, data)
 
-        item = self.storageDao.selectFile(user_id, path)
+        item = self.storageDao.selectFile(user_id, 'default', path)
 
         self.assertEqual(user_id, item['user_id'])
         self.assertEqual(path, item['file_path'])
@@ -133,7 +133,7 @@ class StorageTestCase(unittest.TestCase):
             public_password='password',
             public='randomid')
         self.storageDao.updateFile(item.id, data)
-        item = self.storageDao.selectFile(user_id, path)
+        item = self.storageDao.selectFile(user_id, 'default', path)
 
         self.assertEqual(user_id, item['user_id'])
         self.assertEqual(path, item['file_path'])
@@ -144,7 +144,7 @@ class StorageTestCase(unittest.TestCase):
         data['size'] = 555
         data['version'] += 1
         self.storageDao.updateFile(item.id, dict(size=555))
-        item = self.storageDao.selectFile(user_id, path)
+        item = self.storageDao.selectFile(user_id, 'default', path)
 
         self.assertEqual(user_id, item['user_id'])
         self.assertEqual(path, item['file_path'])
@@ -154,7 +154,7 @@ class StorageTestCase(unittest.TestCase):
         # show that the file path can be changed
         data['version'] += 1
         self.storageDao.updateFile(item.id, dict(file_path="/foo"))
-        item = self.storageDao.selectFile(user_id, "/foo")
+        item = self.storageDao.selectFile(user_id, 'default', "/foo")
 
         self.assertEqual(user_id, item['user_id'])
         self.assertEqual("/foo", item['file_path'])
@@ -174,9 +174,9 @@ class StorageTestCase(unittest.TestCase):
             encryption=None,
             public_password=None,
             public=None)
-        self.storageDao.upsertFile(user_id, path, data)
+        self.storageDao.upsertFile(user_id, 'default', path, data)
 
-        item = self.storageDao.selectFile(user_id, path)
+        item = self.storageDao.selectFile(user_id, 'default', path)
 
         self.assertEqual(user_id, item['user_id'])
         self.assertEqual(path, item['file_path'])
@@ -184,8 +184,8 @@ class StorageTestCase(unittest.TestCase):
             self.assertEqual(data[key], item[key], key)
 
         data2 = dict(user_id='0', size=555)
-        self.storageDao.upsertFile(user_id, path, data2)
-        item = self.storageDao.selectFile(user_id, path)
+        self.storageDao.upsertFile(user_id, 'default', path, data2)
+        item = self.storageDao.selectFile(user_id, 'default', path)
 
         data['size'] = 555
         data['version'] = data['version'] + 1
@@ -196,6 +196,66 @@ class StorageTestCase(unittest.TestCase):
         for key, val in data.items():
             self.assertEqual(data[key], item[key], key)
 
+    def test_001c_insert_constraint(self):
+        # user_id, filesystem, filepath cannot be null
+        user_id = self.USER['id']
+
+        path = "/insert_null"
+        data = dict(storage_path='mem://test/' + path,
+            preview_path="mem://test/img",
+            permission=0o644,
+            version=2,
+            size=1234,
+            expired=None,
+            mtime=1234567890,
+            encryption=None,
+            public_password=None,
+            public=None)
+        # not null
+        with self.assertRaises(StorageException):
+            self.storageDao.insertFile(user_id, None, path, data)
+
+    def test_001d_insert_constraint(self):
+        # user_id, filesystem, filepath cannot be null
+        user_id = self.USER['id']
+
+        path = "/insert_null"
+        data = dict(storage_path='mem://test/' + path,
+            preview_path="mem://test/img",
+            permission=0o644,
+            version=2,
+            size=1234,
+            expired=None,
+            mtime=1234567890,
+            encryption=None,
+            public_password=None,
+            public=None)
+        # not null
+        with self.assertRaises(StorageException):
+            self.storageDao.insertFile(user_id, "default", None, data)
+
+    def test_001e_insert_constraint(self):
+        # user_id, filesystem, filepath must be unique
+        user_id = self.USER['id']
+
+        fsname = "default"
+        path = "/insert_null"
+        data = dict(storage_path='mem://test/' + path,
+            preview_path="mem://test/img",
+            permission=0o644,
+            version=2,
+            size=1234,
+            expired=None,
+            mtime=1234567890,
+            encryption=None,
+            public_password=None,
+            public=None)
+        self.storageDao.insertFile(user_id, fsname, path, data)
+
+        # integrity error: unique constraint fails
+        with self.assertRaises(StorageException):
+            self.storageDao.insertFile(user_id, fsname, path, data)
+
     def test_002a_listdir_insert(self):
         user_id = self.USER['id']
 
@@ -205,13 +265,13 @@ class StorageTestCase(unittest.TestCase):
 
         path = "/file1.txt"
         data = dict(storage_path='file://' + path, size=1234)
-        self.storageDao.insertFile(user_id, path, data)
+        self.storageDao.insertFile(user_id, 'default', path, data)
         path = "/file2.txt"
         data = dict(storage_path='file://' + path, size=1234)
-        self.storageDao.insertFile(user_id, path, data)
+        self.storageDao.insertFile(user_id, 'default', path, data)
         path = "/folder/file3.txt"
         data = dict(storage_path='file://' + path, size=1234)
-        self.storageDao.insertFile(user_id, path, data)
+        self.storageDao.insertFile(user_id, 'default', path, data)
 
     def test_002b_listdir(self):
         """
@@ -345,10 +405,10 @@ class Storage2TestCase(unittest.TestCase):
             self.storageDao.file_info(user_id, path1)
 
         data = dict(storage_path=path2)
-        self.storageDao.insertFile(user_id, path1, data)
+        self.storageDao.insertFile(user_id, 'default', path1, data)
 
         with self.assertRaises(StorageException):
-            self.storageDao.insertFile(user_id, path1, data)
+            self.storageDao.insertFile(user_id, 'default', path1, data)
 
     def test_003a_listdir_error(self):
 
@@ -407,20 +467,20 @@ class Storage2TestCase(unittest.TestCase):
         self.assertEqual(0, usage)
 
         data = dict(storage_path="file:///file1.txt", size=1024)
-        self.storageDao.insertFile(user_id, "/file1.txt", data)
+        self.storageDao.insertFile(user_id, 'default', "/file1.txt", data)
         count, usage = self.storageDao.userDiskUsage(user_id)
         self.assertEqual(1, count)
         self.assertEqual(1024, usage)
 
         path = "file:///file2.txt"
         data = dict(storage_path="file:///file2.txt", size=512)
-        self.storageDao.insertFile(user_id, "/file2.txt", data)
+        self.storageDao.insertFile(user_id, 'default', "/file2.txt", data)
         count, usage = self.storageDao.userDiskUsage(user_id)
         self.assertEqual(2, count)
         self.assertEqual(1536, usage)
 
         path = "/file1.txt"
-        self.storageDao.removeFile(user_id, path)
+        self.storageDao.removeFile(user_id, 'default', path)
         count, usage = self.storageDao.userDiskUsage(user_id)
         self.assertEqual(1, count)
         self.assertEqual(512, usage)
@@ -495,7 +555,7 @@ class Storage2TestCase(unittest.TestCase):
 
         # create and check that it exists
         data = dict(storage_path=path1)
-        self.storageDao.insertFile(user_id, path1, data)
+        self.storageDao.insertFile(user_id, 'default', path1, data)
 
         # mark this file as public, generating a public unique id
         public_id1 = self.storageDao.setFilePublic(user_id, path1)

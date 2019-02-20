@@ -1,6 +1,6 @@
 
 
-from sqlalchemy.schema import Table, Column, ForeignKey
+from sqlalchemy.schema import Table, Column, ForeignKey, UniqueConstraint
 from sqlalchemy.types import Integer, String, Boolean
 
 from .util import generate_uuid, StringArrayType
@@ -93,6 +93,67 @@ def FileSystemStorageTableV2(metadata):
 
         Column('mtime', Integer, default=lambda: int(time.time())),
     )
+
+def FileSystemStorageTableV3(metadata):
+    """ returns a table describing items in persistent storage
+
+    This new table enables the following features:
+        - private static file URLs
+        - optional public URLs which can be changed
+        - ability to associate a keyframe for previews
+        - file versioning
+        - data at rest encryption
+        - masking of the file name at rest
+            - the file name is in the database
+            - while the file on disk uses a random name
+    user_id: the owner of the file
+    file_path: the user specified relative path for the file
+    storage_path: a fully qualified path (starting with file://, s3://, etc)
+          the location of a resource
+    preview_large:
+    preview_small:
+    permission: an integer (octal) representing unix permissions, e.g. 0o644
+    version: an incrementing integer counting how many times the file has
+             been rewritten
+    size: the size in bytes of the current version of the file
+    expired: expired is None for the latest version of a file
+             otherwise it is the date the version was retired
+    encryption: the encryption mode
+    public: Null, or a uuid which is used for a public link
+    mtime: the last time the file file was modified
+           (the creation date for the latest version)
+    """
+    return Table('filesystem_storage_v3', metadata,
+        Column('id', String, primary_key=True, default=generate_uuid),
+        Column('user_id', ForeignKey("user.id"), nullable=False),
+        Column('filesystem', String, nullable=False),
+        # file_path must not be null, and start with '/'
+        # but may not be unique.
+        # the set (user_id, filesystem, file_path) must be unique
+        Column('file_path', String, nullable=False),
+        Column('storage_path', String, unique=True, nullable=False),
+        # however preview path may not be unique
+        # e.g. one album with 10 songs using the same jpeg.
+        Column('preview_path', String),
+
+        Column('permission', Integer, default=0o644),
+        Column('version', Integer, default=0),
+        Column('size', Integer, default=0),
+        Column('expired', Integer),
+
+        # encryption can be set to 'client', 'server', 'system'. or None
+        # indicates the encryption mode
+        Column('encryption', String, default=None),
+        # an optional password to protect public files
+        Column('public_password', String, nullable=True),
+        # a unique public identifier for this file
+        Column('public', String, unique=True, default=None),
+
+        Column('mtime', Integer, default=lambda: int(time.time())),
+
+        UniqueConstraint('user_id', 'filesystem', 'file_path', name='uix_fs'),
+    )
+
 
 def FileSystemTable(metadata):
     """ returns a table which maps a 'root' name to a file system location
