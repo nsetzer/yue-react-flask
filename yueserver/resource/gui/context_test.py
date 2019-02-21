@@ -42,7 +42,7 @@ class ContextTestCase(unittest.TestCase):
 
         print(self.ctxt.listNotes())
 
-        content1 = ['abc', 'a23']
+        content1 = 'abc\na23'
         self.ctxt.setNoteContent("test.txt", content1)
 
         content2 = self.ctxt.getNoteContent("test.txt")
