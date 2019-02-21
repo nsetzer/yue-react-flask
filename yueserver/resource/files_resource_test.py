@@ -23,6 +23,11 @@ class FilesResourceTestCase(unittest.TestCase):
 
         cls.db = cls.app.db
 
+        user_id = cls.USER['id']
+        role_id = cls.USER['role_id']
+        cls.fs_default_id = cls.storageDao.getFilesystemId(
+            user_id, role_id, "default")
+
     @classmethod
     def tearDownClass(cls):
         cls.app.tearDown()
@@ -47,13 +52,13 @@ class FilesResourceTestCase(unittest.TestCase):
         path1 = "yueserver/app.py"
         file_path1 = "/%s" % path1
         storage_path1 = os.path.join(os.getcwd(), path1)
-        self.storageDao.insertFile(self.USER['id'],
+        self.storageDao.insertFile(self.USER['id'], self.fs_default_id,
             file_path1, dict(storage_path=storage_path1))
 
         path2 = "yueserver/framework/config.py"
         file_path2 = "/%s" % path2
         storage_path2 = os.path.join(os.getcwd(), path2)
-        self.storageDao.insertFile(self.USER['id'],
+        self.storageDao.insertFile(self.USER['id'], self.fs_default_id,
             file_path2, dict(storage_path=storage_path2))
 
         username = "admin"
@@ -100,7 +105,7 @@ class FilesResourceTestCase(unittest.TestCase):
         path = "yueserver/framework/config.py"
         file_path = "/" + path
         storage_path = os.path.join(os.getcwd(), path)
-        self.storageDao.insertFile(self.USER['id'],
+        self.storageDao.insertFile(self.USER['id'], self.fs_default_id,
             file_path, dict(storage_path=storage_path))
 
         username = "admin"
@@ -148,8 +153,8 @@ class FilesResourceTestCase(unittest.TestCase):
         storage_path = "mem://test/test"
         fs = FileSystem()
         fs.open(storage_path, "wb").close()
-        self.storageDao.insertFile(self.USER['id'], file_path,
-            dict(storage_path=storage_path))
+        self.storageDao.insertFile(self.USER['id'], self.fs_default_id,
+            file_path, dict(storage_path=storage_path))
 
         username = "admin"
         with self.app.login(username, username) as app:
@@ -244,6 +249,7 @@ class FilesResourceTestCase(unittest.TestCase):
             # we cant guess the storage path anymore, since it is
             # randomly generated
             info = self.storageDao.file_info(self.USER['id'],
+                self.fs_default_id,
                 self.storageDao.absoluteFilePath(
                     self.USER['id'], self.USER['role_id'], path))
 

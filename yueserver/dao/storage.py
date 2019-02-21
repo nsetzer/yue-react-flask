@@ -23,6 +23,7 @@ import uuid
 import posixpath
 import base64
 
+from functools import lru_cache
 from enum import Enum
 
 # taken from werkzeug.util.secure_file
@@ -171,14 +172,14 @@ class StorageDao(object):
 
     # FileSystem Operations
 
-    def insertFile(self, user_id, fsname, file_path, data, commit=True):
+    def insertFile(self, user_id, fs_id, file_path, data, commit=True):
 
         # TODO: required?
         # if path.endswith(delimiter):
         #    raise StorageException("invalid path")
 
         data['user_id'] = user_id
-        data['filesystem'] = fsname
+        data['filesystem_id'] = fs_id
         data['file_path'] = file_path
 
         if 'version' not in data or data['version'] is None:
@@ -221,34 +222,34 @@ class StorageDao(object):
         if commit:
             self.db.session.commit()
 
-    def selectFile(self, user_id, fsname, file_path):
+    def selectFile(self, user_id, fs_id, file_path):
 
         tab = self.dbtables.FileSystemStorageTable
         query = tab.select().where(
                 and_(tab.c.user_id == user_id,
-                     tab.c.filesystem == fsname,
+                     tab.c.filesystem_id == fs_id,
                      tab.c.file_path == file_path,
                      ))
         item = self.db.session.execute(query).fetchone()
 
         return item
 
-    def upsertFile(self, user_id, fsname, file_path, data, commit=True):
+    def upsertFile(self, user_id, fs_id, file_path, data, commit=True):
 
-        item = self.selectFile(user_id, fsname, file_path)
+        item = self.selectFile(user_id, fs_id, file_path)
 
         if item is None:
-            self.insertFile(user_id, fsname, file_path, data, commit)
+            self.insertFile(user_id, fs_id, file_path, data, commit)
         else:
             self.updateFile(item.id, data, commit)
 
-    def removeFile(self, user_id, fsname, file_path, commit=True):
+    def removeFile(self, user_id, fs_id, file_path, commit=True):
 
         tab = self.dbtables.FileSystemStorageTable
         query = tab.delete() \
             .where(
                 and_(tab.c.user_id == user_id,
-                     tab.c.filesystem == fsname,
+                     tab.c.filesystem_id == fs_id,
                      tab.c.file_path == file_path,
                      ))
 
@@ -287,18 +288,18 @@ class StorageDao(object):
 
         return self.db.session.execute(query).fetchall()
 
-    def listall(self, user_id, path_prefix, limit=None, offset=None, delimiter='/'):
+    def listall(self, user_id, fs_id, path_prefix, limit=None, offset=None, delimiter='/'):
         FsTab = self.dbtables.FileSystemStorageTable
 
         if not path_prefix.endswith(delimiter):
             raise StorageException("invalid directory path. must end with `%s`" % delimiter)
 
-        where = FsTab.c.file_path.startswith(bindparam('file_path', path_prefix))
-        where = and_(FsTab.c.user_id == user_id, where)
+        where = and_(FsTab.c.user_id == user_id,
+                     FsTab.c.filesystem_id == fs_id,
+                     FsTab.c.file_path.startswith(
+                        bindparam('file_path', path_prefix)))
 
-        query = select(['*']) \
-            .select_from(FsTab) \
-            .where(where)
+        query = FsTab.select().where(where)
 
         if limit is not None:
             query = query.limit(limit)
@@ -320,7 +321,7 @@ class StorageDao(object):
             }
             yield obj
 
-    def listdir(self, user_id, path_prefix, limit=None, offset=None, delimiter='/'):
+    def listdir(self, user_id, fs_id, path_prefix, limit=None, offset=None, delimiter='/'):
         # search for persistent objects with prefix, that also do not contain
         # the delimiter
 
@@ -329,8 +330,10 @@ class StorageDao(object):
         if not path_prefix.endswith(delimiter):
             raise StorageException("invalid directory path. must end with `%s`" % delimiter)
 
-        where = FsTab.c.file_path.startswith(bindparam('file_path', path_prefix))
-        where = and_(FsTab.c.user_id == user_id, where)
+        where = and_(FsTab.c.user_id == user_id,
+                     FsTab.c.filesystem_id == fs_id,
+                     FsTab.c.file_path.startswith(
+                        bindparam('file_path', path_prefix)))
 
         query = FsTab.select().where(where)
 
@@ -360,7 +363,7 @@ class StorageDao(object):
         if count == 0:
             raise StorageNotFoundException("[listdir] not found: %s" % path_prefix)
 
-    def file_info(self, user_id, path_prefix, delimiter='/'):
+    def file_info(self, user_id, fs_id, path_prefix, delimiter='/'):
         FsTab = self.dbtables.FileSystemStorageTable
 
         scheme, base_path = self.splitScheme(path_prefix)
@@ -370,7 +373,9 @@ class StorageDao(object):
 
         if path_prefix.endswith(delimiter):
             where = FsTab.c.file_path.startswith(bindparam('file_path', path_prefix))
-            where = and_(FsTab.c.user_id == user_id, where)
+            where = and_(FsTab.c.user_id == user_id,
+                         FsTab.c.filesystem_id == fs_id,
+                         where)
             exact = False
         else:
             where = FsTab.c.file_path == path_prefix
@@ -393,12 +398,38 @@ class StorageDao(object):
             name = base_path.rstrip(delimiter).split(delimiter)[-1]
             return self._item2dir(name)
 
+    @lru_cache(maxsize=16)
+    def getFilesystemId(self, user_id, role_id, root_name):
+        FsTab = self.dbtables.FileSystemTable
+        FsPermissionTab = self.dbtables.FileSystemPermissionTable
+
+        query = select([column("id")]) \
+            .select_from(
+                FsTab.join(
+                    FsPermissionTab,
+                    FsTab.c.id == FsPermissionTab.c.file_id,
+                    isouter=True)) \
+            .where(and_(FsPermissionTab.c.role_id == role_id,
+                        FsTab.c.name == root_name))
+
+        result = self.db.session.execute(query)
+        item = result.fetchone()
+
+        if item is None:
+            raise StorageException(
+                "FileSystem %s not defined or permission denied" % root_name)
+
+        return item.id
+
     def rootPath(self, user_id, role_id, root_name):
+        """
+        returns the root path for the given filesystem name
+        """
 
         FsTab = self.dbtables.FileSystemTable
         FsPermissionTab = self.dbtables.FileSystemPermissionTable
 
-        query = select([column("path"), ]) \
+        query = select([column("path")]) \
             .select_from(
                 FsTab.join(
                     FsPermissionTab,
@@ -422,8 +453,13 @@ class StorageDao(object):
 
         return root_path
 
+    # TODO: refactor absoluteFilePath, absolutePath
+    # be more clear on return value
+    # remove call to rootPath
+
     def absoluteFilePath(self, user_id, role_id, rel_path):
-        """ compose an absolute path to a file's file_path
+        """ path computation to sanitize user input
+        return an absolute file path
         """
 
         if self.fs.isabs(rel_path):
@@ -446,6 +482,7 @@ class StorageDao(object):
             raise StorageException("invalid windows path name")
 
         return self.fs.join("/", rel_path)
+
 
     def absolutePath(self, user_id, role_id, root_name, rel_path):
         """ compose an absolute file path given a role and named directory base

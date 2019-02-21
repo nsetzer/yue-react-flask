@@ -126,7 +126,7 @@ def FileSystemStorageTableV3(metadata):
     return Table('filesystem_storage_v3', metadata,
         Column('id', String, primary_key=True, default=generate_uuid),
         Column('user_id', ForeignKey("user.id"), nullable=False),
-        Column('filesystem', String, nullable=False),
+        Column('filesystem_id', ForeignKey("filesystem.id"), nullable=False),
         # file_path must not be null, and start with '/'
         # but may not be unique.
         # the set (user_id, filesystem, file_path) must be unique
@@ -151,7 +151,7 @@ def FileSystemStorageTableV3(metadata):
 
         Column('mtime', Integer, default=lambda: int(time.time())),
 
-        UniqueConstraint('user_id', 'filesystem', 'file_path', name='uix_fs'),
+        UniqueConstraint('user_id', 'filesystem_id', 'file_path', name='uix_fs'),
     )
 
 

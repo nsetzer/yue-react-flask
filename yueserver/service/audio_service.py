@@ -88,12 +88,15 @@ class AudioService(object):
         did = user['domain_id']
         rid = user['role_id']
 
+        fs_id = self.storageDao.getFilesystemId(
+                user['id'], user['role_id'], fs_name)
+
         file_path = self.storageDao.absoluteFilePath(
                 user['id'], user['role_id'], rel_path)
 
         try:
 
-            info = self.storageDao.file_info(uid, file_path)
+            info = self.storageDao.file_info(uid, fs_id, file_path)
             storage_path = info.storage_path
         except StorageNotFoundException as e:
             # if the file is not in the database, check the file system
@@ -116,7 +119,7 @@ class AudioService(object):
                 mtime=info.mtime,
             )
 
-            self.storageDao.upsertFile(user['id'], file_path, data)
+            self.storageDao.upsertFile(user['id'], fs_id, file_path, data)
 
         return storage_path, info.size
 

@@ -81,6 +81,62 @@ class _MigrateV1Context(object):
             db.session.execute(insert(db.tables.FileSystemStorageTable)
                 .values(updated_row))
 
+class _MigrateV2Context(object):
+    def __init__(self, dbv2):
+        super(_MigrateV1Context, self).__init__()
+        self.dbv2 = dbv2
+
+    def fs_storage_v1_to_v2(self, row):
+
+        pwd = os.getcwd()
+
+        # strip the filesystem root from the file_path
+        # the storage path contains the actual location of the resource
+        # while the file_path is the logical resource location the user
+        # will interact with.
+
+        # this use the first matching prefix assuming there are no
+        # overlaping prefixes in the environment
+
+        fs_items = list(self.dbv1.session.execute(
+            self.dbv1.tables.FileSystemTable.select()).fetchall())
+
+        fsname = None
+        for fs in fs_items:
+            fsname = format_storage_path(fs.path, row['user_id'], pwd)
+            if row['storage_path'].startswith(fsname):
+                break
+        else:
+            raise Exception("unable to determine root for: %s" % file_path)
+
+        record = {
+            'user_id': row['user_id'],
+            'file_path': "/%s%s" % (fsname, file_path),
+            'storage_path': row['path'],
+            'permission': row['permission'],
+            'version': 1,
+            'size': row['size'],
+            'expired': None,
+            'encryption': None,
+            'public_password': None,
+            'public': None,
+            'mtime': row['mtime'],
+        }
+        return record
+
+    def migrate(self):
+
+        db = self.dbv1
+
+        # create a connection for the old FileSystemStorageTable
+        tbl = FileSystemStorageTableV2(db.metadata)
+
+        for row in db_iter_rows(db, tbl):
+            updated_row = self.fs_storage_v1_to_v2(row)
+
+            db.session.execute(db.tables.FileSystemStorageTable.insert()
+                .values(updated_row))
+
 def migratev1(dbv1):
     """
     dbv1: a database connection, db.tables must implement v1
@@ -121,5 +177,20 @@ def migratev1(dbv1):
     # delete the old FileSystemStorageTable table
     # tbl = FileSystemStorageTableV1(db.metadata)
     # tbl.drop(db.engine)
+
+    return
+
+def migratev2(dbv2):
+
+    dbv2.session = dbv2.session()
+    try:
+        ctxt = _MigrateV2Context(dbv2)
+        ctxt.migrate()
+        dbv2.session.commit()
+    except:
+        dbv2.session.rollback()
+        raise
+    finally:
+        dbv2.session.close()
 
     return

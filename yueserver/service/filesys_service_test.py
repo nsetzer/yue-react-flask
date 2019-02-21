@@ -118,7 +118,6 @@ class FileServiceTestCase(unittest.TestCase):
         files = self.service.getUserNotes(self.app.USER, root, "public/notes")
 
         self.assertEqual(len(files), 1)
-        self.assertEqual(files[0]['name'], 'test note')
         self.assertEqual(files[0]['file_name'], 'test_note.txt')
 
 if __name__ == '__main__':

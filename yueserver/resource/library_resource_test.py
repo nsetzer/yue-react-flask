@@ -24,6 +24,11 @@ class LibraryResourceTestCase(unittest.TestCase):
         cls.USERNAME = "admin"
         cls.USER = cls.userDao.findUserByEmail(cls.USERNAME)
 
+        user_id = cls.USER['id']
+        role_id = cls.USER['role_id']
+        cls.fs_default_id = cls.storageDao.getFilesystemId(
+            user_id, role_id, "default")
+
     @classmethod
     def tearDownClass(cls):
         cls.app.tearDown()
@@ -230,7 +235,7 @@ class LibraryResourceTestCase(unittest.TestCase):
         path1 = "test/r160.mp3"
         file_path1 = "/%s" % path1
         storage_path1 = os.path.join(os.getcwd(), path1)
-        self.storageDao.insertFile(self.USER['id'],
+        self.storageDao.insertFile(self.USER['id'], self.fs_default_id,
             file_path1, dict(storage_path=storage_path1))
 
         username = "admin"
@@ -316,7 +321,7 @@ class LibraryResourceTestCase(unittest.TestCase):
         path1 = "test/blank.png"
         file_path1 = "/%s" % path1
         storage_path1 = os.path.join(os.getcwd(), path1)
-        self.storageDao.insertFile(self.USER['id'],
+        self.storageDao.insertFile(self.USER['id'], self.fs_default_id,
             file_path1, dict(storage_path=storage_path1))
 
         username = "admin"

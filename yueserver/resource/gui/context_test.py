@@ -37,12 +37,10 @@ class ContextTestCase(unittest.TestCase):
         pass
 
     def test_000_notes(self):
-        """ show that a null search returns all songs
-        """
 
         print(self.ctxt.listNotes())
 
-        content1 = ['abc', 'a23']
+        content1 = 'abc\n123'
         self.ctxt.setNoteContent("test.txt", content1)
 
         content2 = self.ctxt.getNoteContent("test.txt")

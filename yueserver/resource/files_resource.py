@@ -278,7 +278,10 @@ class FilesResource(WebResource):
 
         isFile = False
         try:
-            info = self.filesys_service.storageDao.file_info(g.current_user['id'], abs_path)
+            fs_id = self.filesys_service.storageDao.getFilesystemId(
+                g.current_user['id'], g.current_user['role_id'], root)
+            info = self.filesys_service.storageDao.file_info(
+                g.current_user['id'], fs_id, abs_path)
             isFile = not info.isDir
         except StorageNotFoundException as e:
             pass

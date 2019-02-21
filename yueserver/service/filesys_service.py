@@ -102,7 +102,9 @@ class FileSysService(object):
 
     def getStoragePath(self, user, fs_name, path):
         abs_path = self.getFilePath(user, fs_name, path)
-        record = self.storageDao.file_info(user['id'], abs_path)
+        fs_id = self.storageDao.getFilesystemId(
+            user['id'], user['role_id'], fs_name)
+        record = self.storageDao.file_info(user['id'], fs_id, abs_path)
         return record.storage_path
 
     def listSingleFile(self, user, fs_name, path):
@@ -118,7 +120,10 @@ class FileSysService(object):
         else:
             parent, _ = self.fs.split(abs_path)
 
-        record = self.storageDao.file_info(user['id'], abs_path)
+        fs_id = self.storageDao.getFilesystemId(
+            user['id'], user['role_id'], fs_name)
+
+        record = self.storageDao.file_info(user['id'], fs_id, abs_path)
 
         files = []
         dirs = []
@@ -180,7 +185,10 @@ class FileSysService(object):
         # TODO: there is a bug here related to fs roots
         # this will list all files across all roots
         # migrate: add column to storage table 'root' name
-        records = self.storageDao.listdir(user['id'], abs_path)
+        fs_id = self.storageDao.getFilesystemId(
+            user['id'], user['role_id'], fs_name)
+
+        records = self.storageDao.listdir(user['id'], fs_id, abs_path)
 
         for record in records:
             #pathname = self.fs.join(abs_path, record.name)
@@ -233,7 +241,10 @@ class FileSysService(object):
         else:
             abs_path = "/"
 
-        files = list(self.storageDao.listall(user['id'], abs_path,
+        fs_id = self.storageDao.getFilesystemId(
+            user['id'], user['role_id'], fs_name)
+
+        files = list(self.storageDao.listall(user['id'], fs_id, abs_path,
             limit=limit, offset=offset))
 
         return files
@@ -241,7 +252,9 @@ class FileSysService(object):
     def loadFile(self, user, fs_name, path, password=None):
 
         abs_path = self.getFilePath(user, fs_name, path)
-        info = self.storageDao.file_info(user['id'], abs_path)
+        fs_id = self.storageDao.getFilesystemId(
+            user['id'], user['role_id'], fs_name)
+        info = self.storageDao.file_info(user['id'], fs_id, abs_path)
         return self.loadFileFromInfo(user, info, password)
 
     def loadFileFromInfo(self, user, info, password=None):
@@ -285,6 +298,9 @@ class FileSysService(object):
         if self.fs.isabs(path):
             raise FileSysServiceException(path)
 
+        fs_id = self.storageDao.getFilesystemId(
+            user['id'], user['role_id'], fs_name)
+
         os_root = '/'
 
         storage_path = self._getNewStoragePath(user, fs_name, path)
@@ -300,7 +316,7 @@ class FileSysService(object):
         # will likely reveal this file is in a conflict state
         if version > 0:
             try:
-                info = self.storageDao.file_info(user['id'], file_path)
+                info = self.storageDao.file_info(user['id'], fs_id, file_path)
                 if info.version >= version:
                     raise FileSysServiceException("invalid version", 409)
             except StorageNotFoundException as e:
@@ -338,7 +354,7 @@ class FileSysService(object):
             encryption=encryption
         )
 
-        self.storageDao.upsertFile(user['id'], file_path, data)
+        self.storageDao.upsertFile(user['id'], fs_id, file_path, data)
 
     def remove(self, user, fs_name, path):
 
@@ -347,12 +363,15 @@ class FileSysService(object):
 
         file_path = self.getFilePath(user, fs_name, path)
 
+        fs_id = self.storageDao.getFilesystemId(
+            user['id'], user['role_id'], fs_name)
+
         # remote by storage path, by selecting by user_id and path
         # then remove by user_id and path
         try:
             # TODO: either both succeed or neither...
-            record = self.storageDao.file_info(user['id'], file_path)
-            self.storageDao.removeFile(user['id'], file_path)
+            record = self.storageDao.file_info(user['id'], fs_id, file_path)
+            self.storageDao.removeFile(user['id'], fs_id, file_path)
             result = self.fs.remove(record.storage_path)
             return result
         except FileNotFoundError as e:
@@ -475,7 +494,9 @@ class FileSysService(object):
         abs_path = self.getFilePath(user, fs_name, dir_path)
         if not abs_path.endswith("/"):
             abs_path += "/"
-        records = self.storageDao.listdir(user['id'], abs_path)
+        fs_id = self.storageDao.getFilesystemId(
+            user['id'], user['role_id'], fs_name)
+        records = self.storageDao.listdir(user['id'], fs_id, abs_path)
 
         files = []
         for record in records:
