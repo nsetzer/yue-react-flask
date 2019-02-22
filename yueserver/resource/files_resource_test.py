@@ -5,7 +5,7 @@ import json
 import time
 
 from ..dao.db import main_test
-from ..dao.filesys.filesys import FileSystem
+from ..dao.filesys.filesys import FileSystem, MemoryFileSystemImpl
 from ..dao.filesys.crypt import FileDecryptorReader, cryptkey
 from ..app import TestApp
 
@@ -131,16 +131,21 @@ class FilesResourceTestCase(unittest.TestCase):
 
         show that a file can be uploaded to a pre-defined sub directory
         """
+
+        MemoryFileSystemImpl.clear()
         username = "admin"
         with self.app.login(username, username) as app:
             dat0 = b"abc123"
             path = 'test/upload.txt'
-            url = '/api/fs/default/path/' + path
+            url = '/api/fs/mem/path/' + path
             response = app.post(url, data=dat0)
             self.assertEqual(response.status_code, 200, response.status_code)
-            self.assertTrue(os.path.exists(path))
-            dat1 = open(path, "rb").read()
-            self.assertEqual(dat0, dat1)
+
+            fs = FileSystem()
+            self.assertEqual(len(fs._mem()), 1)
+            for path, content in fs._mem().items():
+                dat1 = content[0].getvalue()
+                self.assertEqual(dat0, dat1)
 
     def test_delete_file(self):
         """ test remove file

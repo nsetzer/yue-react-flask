@@ -93,6 +93,7 @@ class FileSysService(object):
         rel_path = "%s/%s" % (part1, part2)
 
         # get the unique absolute path
+
         return self.storageDao.absolutePath(user['id'], user['role_id'],
             fs_name, rel_path)
 

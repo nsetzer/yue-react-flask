@@ -31,21 +31,19 @@ class ContextTestCase(unittest.TestCase):
 
         self.ctxt.authenticate("admin", "admin")
 
+        self.ctxt.note_filesystem = 'mem'
+
     def tearDown(self):
         pass
 
     def test_000_notes(self):
 
-        print(self.ctxt.listNotes())
-
-        content1 = 'abc\n123'
+        content1 = 'abc\n123\n'
         self.ctxt.setNoteContent("test.txt", content1)
 
         content2 = self.ctxt.getNoteContent("test.txt")
 
         self.assertEqual(content1, content2)
-
-        print(self.ctxt.listNotes())
 
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ContextTestCase)

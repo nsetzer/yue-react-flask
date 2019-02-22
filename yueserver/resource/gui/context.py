@@ -28,6 +28,8 @@ class YueAppState(object):
         self.playlistChanged = gui.Signal()
         self.currentSongChanged = gui.Signal()
 
+        self.note_filesystem = "default"
+
     def listroots(self):
         return self.fileService.getRoots(self.auth_user)
 
@@ -185,7 +187,7 @@ class YueAppState(object):
         """
         try:
             notes = self.fileService.getUserNotes(
-                self.auth_user, "default", "public/notes")
+                self.auth_user, self.note_filesystem, "public/notes")
 
             for note in notes:
                 note['name'] = note['file_name'][:-4].replace("_", " ")
@@ -205,7 +207,7 @@ class YueAppState(object):
         each line is a separate list item
         """
 
-        stream = self.fileService.loadFile(self.auth_user, "default", filepath)
+        stream = self.fileService.loadFile(self.auth_user, self.note_filesystem, filepath)
 
         try:
             content = stream.read() \
@@ -226,9 +228,9 @@ class YueAppState(object):
         stream = self.fileService.encryptStream(
             self.auth_user, None, stream, "rb", "system")
 
-        self.fileService.saveFile(self.auth_user, "default", filepath,
+        self.fileService.saveFile(self.auth_user, self.note_filesystem, filepath,
             stream, encryption="system")
 
     def removeNote(self, filepath):
 
-        self.fileService.remove(self.auth_user, "default", filepath)
+        self.fileService.remove(self.auth_user, self.note_filesystem, filepath)

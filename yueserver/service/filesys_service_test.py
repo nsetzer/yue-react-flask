@@ -34,7 +34,7 @@ class FileServiceTestCase(unittest.TestCase):
 
     def test_001a_saveFile(self):
 
-        root = "default"
+        root = "mem"
         path = "test/test.txt"
 
         self.service.saveFile(self.app.USER, root, path, BytesIO(b"abc123"))
@@ -52,7 +52,7 @@ class FileServiceTestCase(unittest.TestCase):
     def test_001b_updateFile(self):
 
         # same test as 001a, but increment the version (upsert->update)
-        root = "default"
+        root = "mem"
         path = "test/test.txt"
 
         self.service.saveFile(self.app.USER, root, path, BytesIO(b"def456"))
@@ -70,7 +70,7 @@ class FileServiceTestCase(unittest.TestCase):
     def test_001c_index(self):
 
         # same test as 001a, but increment the version (upsert->update)
-        root = "default"
+        root = "mem"
         path = "test/test.txt"
 
         result = self.service.listIndex(self.app.USER, root, "", limit=10, offset=0)
@@ -81,7 +81,7 @@ class FileServiceTestCase(unittest.TestCase):
     def test_001d_deleteFiles(self):
 
         # same test as 001a, but increment the version (upsert->update)
-        root = "default"
+        root = "mem"
         path = "test/test.txt"
 
         result = self.service.remove(self.app.USER, root, path)
@@ -103,15 +103,15 @@ class FileServiceTestCase(unittest.TestCase):
 
     def test_003_user_notes(self):
 
-        root = "default"
+        root = "mem"
         path = "public/notes/test_note.txt"
         self.service.saveFile(self.app.USER, root, path, BytesIO(b"hello"))
 
-        root = "default"
+        root = "mem"
         path = "public/notes/subfolder/nope.txt"
         self.service.saveFile(self.app.USER, root, path, BytesIO(b"hello"))
 
-        root = "default"
+        root = "mem"
         path = "public/notes/nope.png"
         self.service.saveFile(self.app.USER, root, path, BytesIO(b"hello"))
 
