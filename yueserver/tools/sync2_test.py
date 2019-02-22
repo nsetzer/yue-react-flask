@@ -725,7 +725,7 @@ class SyncApplicationTestCase(unittest.TestCase):
         # upload a file, outside of the sync application context
         # a fetch will need to be run for the sync application
         # to know about the file
-        url = '/api/fs/default/path/test/upload.txt'
+        url = '/api/fs/mem/path/test/upload.txt'
         response = self.test_client.post(url, data=b"abc123")
         self.assertEqual(response.status_code, 200, response.status_code)
 
@@ -752,7 +752,7 @@ class SyncApplicationTestCase(unittest.TestCase):
         # upload a file, outside of the sync application context
         # fetch, then pull the file down
 
-        url = '/api/fs/default/path/test/upload.txt'
+        url = '/api/fs/mem/path/test/upload.txt'
         response = self.test_client.post(url, data=b"abc123")
         self.assertEqual(response.status_code, 200, response.status_code)
 

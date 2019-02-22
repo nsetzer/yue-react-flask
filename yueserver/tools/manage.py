@@ -24,7 +24,7 @@ from ..dao.db import db_remove, db_connect, db_init, \
     connection_string
 from ..dao.user import UserDao
 from ..dao.storage import StorageDao
-from ..dao.migrate import migratev1
+from ..dao.migrate import migrate_main
 from ..app import YueApp, generate_client
 from ..config import Config
 from ..resource.util import get_features
@@ -91,8 +91,8 @@ def migrate(args):
 
     print(args.database_url)
     db = db_connect(args.database_url)
-    migratev1(db)
-    db_update(db, db.tables, args.env_cfg_path)
+    migrate_main(db)
+    # db_update(db, db.tables, args.env_cfg_path)
 
 def routes(args):
     """List application endpoints"""

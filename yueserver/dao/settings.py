@@ -20,17 +20,18 @@ class SettingsDao(object):
         query = self.dbtables.ApplicationSchemaTable.select() \
             .where(self.dbtables.ApplicationSchemaTable.c.key == key)
         result = self.db.session.execute(query)
+
         return result.fetchone()
 
     def _insert(self, key, value):
-        query = insert(self.dbtables.ApplicationSchemaTable) \
+        query = self.dbtables.ApplicationSchemaTable.insert() \
             .values({"key": key, "value": value})
         self.db.session.execute(query)
 
     def _update(self, key, value):
-        query = update(self.dbtables.ApplicationSchemaTable) \
+        query = self.dbtables.ApplicationSchemaTable.update() \
             .values({"value": value}) \
-            .where(self.dbtables.ApplicationSchemaTable.key == key)
+            .where(self.dbtables.ApplicationSchemaTable.c.key == key)
         self.db.session.execute(query)
 
     def set(self, key, value, commit=True):

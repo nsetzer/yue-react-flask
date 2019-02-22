@@ -139,7 +139,7 @@ def FileSystemStorageTableV3(metadata):
         Column('permission', Integer, default=0o644),
         Column('version', Integer, default=0),
         Column('size', Integer, default=0),
-        Column('expired', Integer),
+        Column('expired', Integer, nullable=True),
 
         # encryption can be set to 'client', 'server', 'system'. or None
         # indicates the encryption mode

@@ -1,14 +1,16 @@
 
 import os
+import sys
 
 from sqlalchemy.schema import Table, Column, ForeignKey
 from sqlalchemy.types import Integer, String
 from sqlalchemy import and_, or_, not_, select, column, update, insert, delete
 
-from .tables.storage import FileSystemStorageTableV1
+from .tables.storage import FileSystemStorageTableV1, FileSystemStorageTableV2
 from .db import db_connect_impl, db_add_column, db_get_columns, db_iter_rows
 from .util import format_storage_path
 from .filesys.crypt import generate_secure_password
+from .settings import SettingsDao
 
 import logging
 
@@ -83,59 +85,47 @@ class _MigrateV1Context(object):
 
 class _MigrateV2Context(object):
     def __init__(self, dbv2):
-        super(_MigrateV1Context, self).__init__()
+        super(_MigrateV2Context, self).__init__()
         self.dbv2 = dbv2
 
-    def fs_storage_v1_to_v2(self, row):
+        query = self.dbv2.tables.FileSystemTable.select()
+        self.fs_items = list(self.dbv2.session.execute(query).fetchall())
+
+    def fs_storage_v2_to_v3(self, row):
+        """
+        adds filesystem id to a record
+        """
 
         pwd = os.getcwd()
 
-        # strip the filesystem root from the file_path
-        # the storage path contains the actual location of the resource
-        # while the file_path is the logical resource location the user
-        # will interact with.
-
-        # this use the first matching prefix assuming there are no
-        # overlaping prefixes in the environment
-
-        fs_items = list(self.dbv1.session.execute(
-            self.dbv1.tables.FileSystemTable.select()).fetchall())
-
-        fsname = None
-        for fs in fs_items:
+        fs_id = None
+        for fs in self.fs_items:
             fsname = format_storage_path(fs.path, row['user_id'], pwd)
             if row['storage_path'].startswith(fsname):
+                fs_id = fs.id
                 break
         else:
             raise Exception("unable to determine root for: %s" % file_path)
 
-        record = {
-            'user_id': row['user_id'],
-            'file_path': "/%s%s" % (fsname, file_path),
-            'storage_path': row['path'],
-            'permission': row['permission'],
-            'version': 1,
-            'size': row['size'],
-            'expired': None,
-            'encryption': None,
-            'public_password': None,
-            'public': None,
-            'mtime': row['mtime'],
-        }
-        return record
+        row = dict(row)
+        row['filesystem_id'] = fs_id
+
+        return row
 
     def migrate(self):
 
-        db = self.dbv1
+        db = self.dbv2
+
+        settingsDao = SettingsDao(db, db.tables)
+        settingsDao.set("db_version", str(db.tables.version))
 
         # create a connection for the old FileSystemStorageTable
         tbl = FileSystemStorageTableV2(db.metadata)
 
         for row in db_iter_rows(db, tbl):
-            updated_row = self.fs_storage_v1_to_v2(row)
-
-            db.session.execute(db.tables.FileSystemStorageTable.insert()
-                .values(updated_row))
+            updated_row = self.fs_storage_v2_to_v3(row)
+            st = db.tables.FileSystemStorageTable.insert().values(updated_row)
+            db.session.execute(st)
 
 def migratev1(dbv1):
     """
@@ -182,6 +172,8 @@ def migratev1(dbv1):
 
 def migratev2(dbv2):
 
+    dbv2.tables.FileSystemStorageTable.create(dbv2.engine)
+
     dbv2.session = dbv2.session()
     try:
         ctxt = _MigrateV2Context(dbv2)
@@ -194,3 +186,30 @@ def migratev2(dbv2):
         dbv2.session.close()
 
     return
+
+def migrate_main(db):
+
+    settingsDao = SettingsDao(db, db.tables)
+
+    try:
+        version = int(settingsDao.get("db_version"))
+    except Exception:
+        version = 0
+
+    actions = [
+        migratev1,
+        migratev2,
+    ]
+
+    if version >= len(actions):
+        sys.stdout.write("nothing to migrate. version is %d.\n" % version)
+        return
+
+    actions[version](db)
+
+    version = int(settingsDao.get("db_version"))
+    sys.stdout.write("database migrated: new version is %d.\n" % version)
+
+
+
+
