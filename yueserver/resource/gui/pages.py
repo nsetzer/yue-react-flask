@@ -1441,7 +1441,7 @@ class NotesPage(ContentPage):
             note = self.notes[index]
             if note.info['name'] == name:
                 index = 0
-                name = "%s (%d)" % (base, count)
+                name = "%s %d" % (base, count)
                 count += 1
             index += 1
         return name

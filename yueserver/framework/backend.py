@@ -452,7 +452,6 @@ class AppSessionManager(Thread):
             self.alive = False
             self.condvar_kill.notify_all()
 
-
 class AppClient(object):
     """docstring for AppClient"""
     def __init__(self, **kwargs):
@@ -650,6 +649,8 @@ class AppClient(object):
 
 class AppService(object):
 
+    MAX_SESSION_AGE = 10
+
     def __init__(self, factory, *args, **kwargs):
         super(AppService, self).__init__()
 
@@ -707,6 +708,22 @@ class AppService(object):
     def _get_instance(self, sessionId, create=True):
 
         with self.client_lock:
+
+            # -----
+            # Remove Expired Sessions when a new one is created
+            # TODO: this is not the best spot, since _get_instance
+            # is called frequently. but it is working for now
+            # and does not require another thread
+            # -----
+            sids = set()
+            for sid, client in self.clients.items():
+                if client.socket_timeout() > self.MAX_SESSION_AGE:
+                    sids.add(sid)
+            for sid in sids:
+                del self.clients[sid]
+                self._diag("removing session %s" % sid)
+            # -----
+
             if sessionId in self.clients:
                 return self.clients[sessionId]
 
@@ -746,6 +763,7 @@ class AppService(object):
 
         with client.update_lock:
             # render the HTML
+
             html = client.root.repr()
 
         f = io.StringIO()
@@ -861,7 +879,8 @@ class AppService(object):
         for sid, client in self.clients.items():
             clients[sid] = {
                 "remote_addr": client.remote_addr,
-                "nsockets": len(client.websockets)
+                "nsockets": len(client.websockets),
+                "age": client.socket_timeout()
             }
 
         obj = {
@@ -962,7 +981,8 @@ class GuiAppResource(WebResource):
         """
         if ext not in ("png", "ico"):
             return httpError(403, "Invalid Extension")
-        return send_from_directory(self.static_dir, "favicon." + ext)
+        return send_from_directory(self.static_dir,
+            "favicon." + ext, cache_timeout=-1)
 
     @get("/res/<path:path>")
     def static(self, path):
@@ -970,7 +990,7 @@ class GuiAppResource(WebResource):
         """
         # throws werkzeug.exceptions.NotFound
         # if the file does not exist
-        return send_from_directory(self.static_dir, path)
+        return send_from_directory(self.static_dir, path, cache_timeout=-1)
 
 
     # todo run this example in "threading mode"

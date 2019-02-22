@@ -37,6 +37,16 @@ def _send_header(self, key, value):
 BaseHTTPRequestHandler._send_header = BaseHTTPRequestHandler.send_header
 BaseHTTPRequestHandler.send_header = _send_header
 
+class _Flask(flask.Flask):
+    def get_send_file_max_age(self, path):
+        """
+        send_file and send_from_directory use this function to implement
+        a default behavior when the kwarg cache_timeout is set to None
+
+        path: a path to a file on the local file system
+        """
+        return super().get_send_file_max_age(path)
+
 class FlaskApp(object):
     """FlaskApp is a flask application wrapper
 
@@ -49,7 +59,7 @@ class FlaskApp(object):
         # sio is only configured if a websocket listener is defined
         self.sio = None
 
-        self.app = flask.Flask(self.__class__.__name__,
+        self.app = _Flask(self.__class__.__name__,
             static_folder=None)
             #static_folder=self.config.static_dir,
             #template_folder=self.config.build_dir)

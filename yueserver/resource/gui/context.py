@@ -219,6 +219,8 @@ class YueAppState(object):
 
         stream = io.BytesIO()
         stream.write(content.encode("utf-8"))
+        if not content.endswith("\n"):
+            stream.write(b"\n")
         stream.seek(0)
 
         stream = self.fileService.encryptStream(
