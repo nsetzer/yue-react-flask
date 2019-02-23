@@ -226,10 +226,8 @@ class FilesResource(WebResource):
         new_password = g.body.read().decode("utf-8").strip()
 
         if not password:
-            print(password)
             return httpError(400, "Invalid password 1")
         if not new_password:
-            print(new_password)
             return httpError(400, "Invalid password 2")
 
         self.filesys_service.changePassword(g.current_user,
@@ -292,10 +290,8 @@ class FilesResource(WebResource):
                 result = self.filesys_service.listSingleFile(g.current_user, root, path)
                 return jsonify(result=result)
             else:
-                storage_path = info.storage_path
-                _, name = self.filesys_service.fs.split(storage_path)
+                _, name = self.filesys_service.fs.split(info.file_path)
                 stream = self.filesys_service.fs.open(storage_path, "rb")
-                print("---", info.encryption, )
                 if info.encryption in (CryptMode.server, CryptMode.system):
                     if not password and info.encryption == CryptMode.server:
                         return httpError(400, "Invalid Password")

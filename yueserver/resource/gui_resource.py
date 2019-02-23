@@ -17,7 +17,7 @@ import datetime
 
 from flask import jsonify, g, request
 
-from yueserver.resource.util import files_generator
+from yueserver.resource.util import files_generator, files_generator_v2
 from yueserver.dao.library import Song, LibraryException
 from yueserver.dao.util import string_quote, server_health
 
@@ -396,6 +396,7 @@ class AudioGuiResource(GuiAppResource):
         return send_generator(go, name, file_size=size)
 
     @get("/api/gui/files/<root>/path/<path:path>")
+    @param("dl", type_=boolean, default=True)
     def get_file(self, root, path):
         """
 
@@ -403,11 +404,21 @@ class AudioGuiResource(GuiAppResource):
 
         sessionId = self.service.sessionIdFromHeaders(request.headers)
         client = self.service._get_instance(sessionId)
+        user = client.state.get_user()
 
-        abs_path = client.state.getFilePath(root, path)
-        _, name = self.fileService.fs.split(path)
-        go = files_generator(self.fileService.fs, path)
-        return send_generator(go, name, file_size=size)
+        info = client.state.fileInfo(root, path)
+
+        stream = self.fileService.loadFileFromInfo(user, info)
+        _, name = self.fileService.fs.split(info.file_path)
+
+        go = files_generator_v2(stream)
+        headers = {
+            "X-YUE-VERSION": info.version,
+            "X-YUE-PERMISSION": info.permission,
+            "X-YUE-MTIME": info.mtime,
+        }
+        return send_generator(go, name, file_size=info.size,
+            headers=headers, attachment=g.args.dl)
 
     @get("/public/<fileid>")
     @param("dl", type_=boolean, default=False)

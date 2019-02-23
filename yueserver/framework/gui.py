@@ -421,12 +421,12 @@ class Tag(object):
             tmp['style'] = ';'.join("%s:%s" % kv for kv in self.style.items())
             attrs = []
             for attr, value in tmp.items():
+
                 if value is None:
                     attrs.append(attr)
                 else:
                     attrs.append('%s="%s"' % (attr, value))
-            #self._repr_attributes = ' '.join('%s="%s"' % (k, v) if v is not None else k for k, v in
-            #                                    tmp.items())
+
             self._repr_attributes = ' '.join(attrs)
         if not self.ignore_update:
             if self.get_parent():
@@ -2990,8 +2990,8 @@ class AudioPlayer(Widget):
         """Called when audio finishs playback"""
         return ()
 
-    def set_source(self, audio):
-        self.attributes['src'] = audio
+    def set_source(self, url):
+        self.attributes['src'] = url
 
     def set_autoplay(self, autoplay):
         if autoplay:
@@ -3023,7 +3023,7 @@ class VideoPlayer(Widget):
         self.type = 'video'
         self.attributes['src'] = video
         self.attributes['preload'] = 'auto'
-        self.attributes['controls'] = None
+        self.attributes['controls'] = 'true'
         self.attributes['poster'] = poster
         self.set_autoplay(autoplay)
         self.set_loop(loop)
@@ -3033,6 +3033,9 @@ class VideoPlayer(Widget):
             self.attributes['autoplay'] = 'true'
         else:
             self.attributes.pop('autoplay', None)
+
+    def set_source(self, url):
+        self.attributes['src'] = url
 
     def set_loop(self, loop):
         """Sets the VideoPlayer to restart video when finished.

@@ -190,7 +190,6 @@ body>div {
 }
 div {
     background-color: white;
-    z-index: 0;
 }
 .ListView {
     border: none;

@@ -484,7 +484,6 @@ class StorageDao(object):
 
         return self.fs.join("/", rel_path)
 
-
     def absolutePath(self, user_id, role_id, root_name, rel_path):
         """ compose an absolute file path given a role and named directory base
 

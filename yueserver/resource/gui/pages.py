@@ -23,6 +23,7 @@ from ...framework import gui
 from ...framework.backend import InvalidRoute
 
 from ...dao.util import string_quote, format_bytes
+from ...dao.storage import CryptMode
 
 from .exception import AuthenticationError, LibraryException
 
@@ -243,7 +244,13 @@ class FileInfoWidget(gui.Widget):
         })
         del self.img_icon.style['margin']
 
-        self.lbl_path = gui.Label(file_info['name'], width="100%", height="100%")
+        self.lbl_path = gui.Label(file_info['name'],
+            width="100%", height="100%")
+        self.lbl_path.style.update({
+            "overflow": "hidden",
+            "white-space": "nowrap",
+            "text-overflow": "ellipsis",
+        })
 
         self.openDirectory = gui.Signal(object)
         self.openPreview = gui.Signal(object)
@@ -832,31 +839,113 @@ class PopPreview(gui.Widget):
         self.style.update({
             "display": "none",
             "position": "fixed",
-            "width": "50%",
+            "width": "90%",
             "top": "50%",
             "left": "50%",
-            "height": "80%",
             "transform": "translate(-50%, -50%)",
-            "background": "blue",
-            "z-index": "500",
+            "background": "rgb(240,230,230)",
+            "z-index": 100,
             "border": "solid"
         })
 
         self.vbox = gui.VBox(parent=self)
-        self.vbox.style['height'] = "80%"
+        self.vbox.style['background'] = "transparent"
+        self.vbox.style['height'] = "100%"
 
         self.btn0 = gui.Button("exit", width="2em", height="2em", parent=self.vbox)
         self.btn0.onclick.connect(lambda w: self.reject())
-        #del self.btn0.style['margin']
         self.btn0.style['margin'] = "1em"
         self.btn0.style['align-self'] = 'flex-end'
 
+        # #####################################################################
+        # preview text
         self.scrollbox = ScrollBox(None, parent=self.vbox)
+        self.scrollbox.style['height'] = "50vh"
+        self.scrollbox.style['display'] = "none"
         self.wpre = gui.Widget(_type="pre", parent=self.scrollbox)
+        self.wpre.style['padding-left'] = ".25em"
+        self.wpre.style['padding-right'] = ".25em"
+        self.wpre.style['margin-left'] = "2em"
+        self.wpre.style['margin-right'] = "2em"
+        self.wpre.style['border-left'] = "1px solid black"
+        self.wpre.style['border-right'] = "1px solid black"
+        del self.wpre.style['margin']
         self.code = gui.Widget(_type="code", parent=self.wpre)
 
-    def setTextContent(self, text, content_ext):
+        # #####################################################################
+        # preview media
+        self.div_image = gui.Widget(_type="div", parent=self.vbox)
+        self.div_image.style.update({
+            "width": "80%",
+            "margin-left": "5em",
+            "margin-right": "5em",
+            "margin-bottom": "1em",
+            "margin-top": "1em",
+            "background": "transparent",
+        })
+        del self.div_image.style['margin']
+
+        self.video_preview = gui.VideoPlayer("", parent=self.div_image)
+        self.video_preview.style.update({
+            "max-width": "100%",
+            "display": "none",
+        })
+        del self.video_preview.style['margin']
+
+        self.audio_preview = gui.AudioPlayer("", parent=self.div_image)
+        self.audio_preview.style.update({
+            "width": "100%",
+            "display": "none",
+        })
+        del self.audio_preview.style['margin']
+
+        self.image_preview = gui.Image("", parent=self.div_image)
+        self.image_preview.style.update({
+            "width": "auto",
+            "height": "auto",
+            "max-width": "100%",
+            "max-height": "70vh",
+            "margin-left": "auto",
+            "margin-right": "auto",
+            "display": "none",
+        })
+        del self.image_preview.style['margin']
+
+    def setTextContent(self, text):
+        self.scrollbox.style['display'] = 'block'
+        self.audio_preview.style['display'] = 'none'
+        self.video_preview.style['display'] = 'none'
+        self.image_preview.style['display'] = 'none'
+        print(text)
+
         self.code.add_child("content", text)
+
+    def setImageContent(self, url):
+
+        self.scrollbox.style['display'] = 'none'
+        self.audio_preview.style['display'] = 'none'
+        self.video_preview.style['display'] = 'none'
+        self.image_preview.style['display'] = 'block'
+
+        self.image_preview.set_image(url)
+
+    def setAudioContent(self, url):
+
+        self.scrollbox.style['display'] = 'none'
+        self.audio_preview.style['display'] = 'inline'
+        self.video_preview.style['display'] = 'none'
+        self.image_preview.style['display'] = 'none'
+
+        self.audio_preview.set_source(url)
+
+    def setVideoContent(self, url):
+
+        self.scrollbox.style['display'] = 'none'
+        self.audio_preview.style['display'] = 'none'
+        self.video_preview.style['display'] = 'inline'
+        self.image_preview.style['display'] = 'none'
+
+        self.video_preview.set_source(url)
 
     def reject(self):
         self.style['display'] = 'none'
@@ -1273,8 +1362,25 @@ class FileSystemPage(ContentPage):
 
     def onOpenPreview(self, file_info):
         path = os.path.join(self.path, file_info['name'])
-        self.menu.setTextContent(
-            self.context.renderContent(self.root, path), ".txt")
+
+        info = self.context.fileInfo(self.root, path)
+        print(file_info, info.file_path)
+
+        url = "/api/gui/files/%s/path%s?dl=0" % (self.root, info.file_path)
+        ext = file_info['name'].split('.')[-1].lower()
+
+        if info.encryption in (CryptMode.server, CryptMode.client):
+            content = "error: file is encrypted"
+        elif ext in ("jpg", "jpeg", "png", "gif"):
+            self.menu.setImageContent(url)
+        elif ext in ("ogg", "mp3"):
+            self.menu.setAudioContent(url)
+        elif ext in ("webm", "mp4"):
+            self.menu.setVideoContent(url)
+        else:
+            content = self.context.renderContent(info)
+            self.menu.setTextContent(content)
+
         self.menu.show()
 
     def onOpenParent(self):
@@ -2085,7 +2191,7 @@ class AppPage(gui.Page):
     def __init__(self, context, *args, **kwargs):
         super(AppPage, self).__init__(*args, **kwargs)
 
-        self.style.update({"height": "100%", "width": "100%"})
+        self.style.update({"height": "100%", "width": "100%", "z-index": "0"})
 
         self.context = context
 
@@ -2098,8 +2204,9 @@ class AppPage(gui.Page):
         self.hbox_main.style.update({"height": "100%", "width": "100%"})
 
         border_left = gui.Widget(parent=self.hbox_main)
-        border_left.attributes.update({"class": "col-left", "z-index": "-2"})
-        border_left.style.update({"background": Palette.S_DARK})
+        border_left.attributes.update({"class": "col-left"})
+        border_left.style.update({
+            "background": Palette.S_DARK, "z-index": "1"})
 
         self.page_main = None
         self.page_notfound = None
@@ -2108,14 +2215,18 @@ class AppPage(gui.Page):
 
         self.page_home = HomePage()
         self.page_home.attributes.update({"class": "col-main"})
-        self.page_home.style.update({"height": "100%", "display": "flex"})
+        self.page_home.style.update({
+            "height": "100%",
+            "display": "flex",
+            "z-index": "2"})
         self._openLoginPage = gui.Slot(self.openLoginPage)
         self.page_home.login.connect(self._openLoginPage)
         self.hbox_main.insert(1, self.page_home)
 
         border_right = gui.Widget(parent=self.hbox_main)
         border_right.attributes.update({"class": "col-right"})
-        border_right.style.update({"background": Palette.S_DARK})
+        border_right.style.update({
+            "background": Palette.S_DARK, "z-index": "1"})
 
         self.pages = [self.page_home]
 

@@ -58,12 +58,35 @@ class YueAppState(object):
 
         return path
 
-    def renderContent(self, root, path):
+    def fileInfo(self, root, path):
 
-        path = self.getFilePath(root, path)
+        path = self.fileService.storageDao.absoluteFilePath(
+            self.auth_user['id'], self.auth_user['role_id'], path)
 
-        with self.fileService.fs.open(path, "rb") as rb:
-            return rb.read().decode("utf-8")
+        fs_id = self.fileService.storageDao.getFilesystemId(
+            self.auth_user['id'], self.auth_user['role_id'], root)
+
+        info = self.fileService.storageDao.file_info(
+            self.auth_user['id'], fs_id, path)
+
+        return info
+
+    def renderContent(self, info):
+        """
+        use fileInfo to load information about a file
+
+        """
+
+        #if info.encryption in (CryptMode.none, CryptMode.system):
+
+        if info.size > 50 * 1024:
+            return "error: file too large to render"
+
+        with self.fileService.loadFileFromInfo(self.auth_user, info) as rb:
+            try:
+                return rb.read().decode("utf-8")
+            except UnicodeDecodeError as e:
+                return "error: file not a text file"
 
     def authenticate(self, username, password):
 
