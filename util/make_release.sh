@@ -4,6 +4,16 @@ githash=$(git rev-parse HEAD)
 branch=$(git rev-parse --abbrev-ref HEAD)
 mkdir -p dist
 
+cat <<EOF > manage.sh
+#!/bin/bash
+cd \$(dirname \$0)
+source yueserverenv/bin/activate
+YUE_PRIVATE_KEY=\$(cat ./crypt/rsa.pem)
+export YUE_PRIVATE_KEY
+echo python -m yueserver.tools.manage \$@
+python -m yueserver.tools.manage \$@
+EOF
+
 cat <<EOF > start.sh
 #!/bin/bash
 cd \$(dirname \$0)
@@ -46,6 +56,7 @@ tar -czv --exclude='*.pyc' --exclude='__pycache__' \
     start.sh start_debug.sh uninstall.sh | \
     cat util/installer.sh - > dist/yueserver-$version.tar.gz
 
+rm manage.sh
 rm start.sh
 rm start_debug.sh
 rm uninstall.sh

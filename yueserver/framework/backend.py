@@ -649,7 +649,7 @@ class AppClient(object):
 
 class AppService(object):
 
-    MAX_SESSION_AGE = 10
+    MAX_SESSION_AGE = 600
 
     def __init__(self, factory, *args, **kwargs):
         super(AppService, self).__init__()
