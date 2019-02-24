@@ -172,15 +172,9 @@ js_body_end = """
         };
 
         function uploadFileV2(elem, widgetID, urlbase) {
-            console.log(urlbase);
-            console.log(elem.files.length)
-
-            var myStringArray = ["Hello","World"];
             var arrayLength = elem.files.length;
             for (var i = 0; i < elem.files.length; i++) {
                 var file = elem.files[i];
-
-                console.log(file);
 
                 var filepath = urlbase + file.name;
                 var url = '/gui/upload';

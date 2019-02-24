@@ -242,6 +242,10 @@ class FileInfoWidget(gui.Widget):
         super(FileInfoWidget, self).__init__()
 
         self.file_info = file_info
+        self.style['padding-left'] = "2px"
+        self.style['padding-bottom'] = "2px"
+        self.style['padding-top'] = "2px"
+        self.style['padding-right'] = "1rem"
 
         self.hbox = gui.Widget(height="100%", width="100%", parent=self)
         self.hbox.style.update({
@@ -262,11 +266,10 @@ class FileInfoWidget(gui.Widget):
             icon_url = '/res/app/file.svg'
         self.img_icon = gui.Image(icon_url)
         self.img_icon.style.update({
-            "height": "32px",
-            "width": "32px",
-            "margin-left": "3%",
-            "margin-left": "3%",
-            "margin-right": "3%",
+            "height": "2em",
+            "width": "2em",
+            "margin-left": ".5em",
+            "margin-right": ".5em",
         })
         del self.img_icon.style['margin']
 
@@ -281,6 +284,29 @@ class FileInfoWidget(gui.Widget):
         self.openDirectory = gui.Signal(object)
         self.openPreview = gui.Signal(object)
 
+        self.div_lock = gui.Widget(_type="div")
+        self.div_lock.style.update({
+            "width": "1em",
+            "height": "2em",
+            "margin-left": ".5em",
+            "background": "#C0C0C0",
+            "border": "1px solid black"
+        })
+        del self.div_lock.style['margin']
+
+        enc_mode = 'none'
+        if 'encryption' in file_info:
+            enc_mode = file_info['encryption']
+            if file_info['encryption'] == CryptMode.system:
+                self.div_lock.style['background'] = "#9b111e"
+            elif file_info['encryption'] == CryptMode.server:
+                self.div_lock.style['background'] = "#0f52ba"
+            elif file_info['encryption'] == CryptMode.client:
+                self.div_lock.style['background'] = "#FFD700"
+        else:
+            self.div_lock.style['background'] = "transparent"
+
+        self.hbox.append(self.div_lock, "div_lock")
         self.hbox.append(self.img_icon, "img_icon")
         self.hbox.append(self.lbl_path, "lbl_title")
 
@@ -295,7 +321,8 @@ class FileInfoWidget(gui.Widget):
             })
             del btn.style['margin']
 
-        else:
+        elif enc_mode not in (CryptMode.client, CryptMode.server):
+            # TODO: support decryption of server encrypted files
 
             if url:
                 btn = gui.Button("", parent=self.hbox, image="/res/app/download.svg")
@@ -971,11 +998,23 @@ class PopPreview(gui.Widget):
         })
         del self.image_preview.style['margin']
 
+        self.document_preview = gui.Widget(_type="div", parent=self.div_image)
+        self.document_preview.style.update({
+            "width": "100%",
+            "height": "70vh",
+            "margin-left": "auto",
+            "margin-right": "auto",
+            "display": "none",
+        })
+        del self.image_preview.style['margin']
+        self.document_view = gui.DocumentView("", parent=self.document_preview)
+
     def setTextContent(self, text):
         self.scrollbox.style['display'] = 'block'
         self.audio_preview.style['display'] = 'none'
         self.video_preview.style['display'] = 'none'
         self.image_preview.style['display'] = 'none'
+        self.document_preview.style['display'] = 'none'
 
         self.code.add_child("content", text)
 
@@ -985,6 +1024,7 @@ class PopPreview(gui.Widget):
         self.audio_preview.style['display'] = 'none'
         self.video_preview.style['display'] = 'none'
         self.image_preview.style['display'] = 'block'
+        self.document_preview.style['display'] = 'none'
 
         self.image_preview.set_image(url)
 
@@ -994,6 +1034,7 @@ class PopPreview(gui.Widget):
         self.audio_preview.style['display'] = 'inline'
         self.video_preview.style['display'] = 'none'
         self.image_preview.style['display'] = 'none'
+        self.document_preview.style['display'] = 'none'
 
         self.audio_preview.set_source(url)
 
@@ -1003,8 +1044,19 @@ class PopPreview(gui.Widget):
         self.audio_preview.style['display'] = 'none'
         self.video_preview.style['display'] = 'inline'
         self.image_preview.style['display'] = 'none'
+        self.document_preview.style['display'] = 'none'
 
         self.video_preview.set_source(url)
+
+    def setDocumentContent(self, url, ext=None):
+
+        self.scrollbox.style['display'] = 'none'
+        self.audio_preview.style['display'] = 'none'
+        self.video_preview.style['display'] = 'none'
+        self.image_preview.style['display'] = 'none'
+        self.document_preview.style['display'] = 'block'
+
+        self.document_view.set_source(url, ext)
 
     def reject(self):
         self.style['display'] = 'none'
@@ -1461,7 +1513,6 @@ class FileSystemPage(ContentPage):
         path = os.path.join(self.path, file_info['name'])
 
         info = self.context.fileInfo(self.root, path)
-        print(file_info, info.file_path)
 
         url = "/api/gui/files/%s/path%s?dl=0" % (self.root, info.file_path)
         ext = file_info['name'].split('.')[-1].lower()
@@ -1475,6 +1526,8 @@ class FileSystemPage(ContentPage):
             self.menu.setAudioContent(url)
         elif ext in ("webm", "mp4"):
             self.menu.setVideoContent(url)
+        elif ext in ("pdf", "swf"):
+            self.menu.setDocumentContent(url, ext)
         else:
             content = self.context.renderContent(info)
             self.menu.setTextContent(content)

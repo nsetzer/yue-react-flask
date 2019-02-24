@@ -71,8 +71,8 @@ class AwsConfig(BaseConfig):
 class Config(ApplicationBaseConfig):
     """base class for application configurations"""
 
-    def __init__(self, data):
-        super(Config, self).__init__(data)
+    def __init__(self, path):
+        super(Config, self).__init__(path)
 
     def init(self, data):
         super(Config, self).init(data)

@@ -363,8 +363,10 @@ class BotoFileSystemImpl(AbstractFileSystem):
         obj = self.s3.Object(bucket_name, key)
         response = obj.delete()
         status_code = response['ResponseMetadata']['HTTPStatusCode']
-        if status_code == 204:  # no content
-            raise FileNotFoundError(path)
+        # TODO: revist status codes for boto3
+        # returning 204 on success, and for invalid key
+        #if status_code == 204:  # no content
+        #    raise FileNotFoundError(path)
 
     def _scandir_impl(self, bucket_name, key):
 

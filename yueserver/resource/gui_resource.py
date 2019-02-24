@@ -8,6 +8,8 @@ from ..framework.web_resource import WebResource, \
     get, post, put, delete, websocket, param, body, compressed, httpError, \
     int_range, int_min, send_generator, null_validator, boolean
 
+from ..dao.storage import StorageNotFoundException, CryptMode
+
 from .gui.pages import AppPage, Palette
 from .gui.exception import AuthenticationError, LibraryException
 
@@ -355,11 +357,17 @@ class DemoAppClient(AppClient):
         """
         root, path = filepath.split('/', 1)
 
+        # use system encryption by default
+
+        # TODO: how can I enable server encryption for uploads?
+        stream = self.state.fileService.encryptStream(self.state.auth_user,
+                None, stream, "r", CryptMode.system)
+
         # TODO: how to handle duplicates?
         #    + append index
         #    + overwrite (default)
         self.state.fileService.saveFile(self.state.auth_user,
-            root, path, stream)
+            root, path, stream, encryption=CryptMode.system)
 
     def healthcheck(self):
         return self.guiService.healthcheck(self.identifier)

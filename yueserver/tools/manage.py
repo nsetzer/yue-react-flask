@@ -4,7 +4,7 @@ A cli tool to manage the application database and query information about
 the application
 """
 import os, sys, argparse, json, logging
-
+from datetime import datetime
 """
 
 python -u -m yue.core.api2 D:/Dropbox/ConsolePlayer/yue.db > yue.json
@@ -25,6 +25,8 @@ from ..dao.db import db_remove, db_connect, db_init, \
 from ..dao.user import UserDao
 from ..dao.storage import StorageDao
 from ..dao.migrate import migrate_main
+from ..dao.filesys.filesys import FileSystem
+from ..dao.filesys.s3fs import BotoFileSystemImpl
 from ..app import YueApp, generate_client
 from ..config import Config
 from ..resource.util import get_features
@@ -176,6 +178,88 @@ def remove_user(args):
     user = dao.findUserByEmail(args.username)
 
     dao.removeUser(user['id'])
+
+def filesystem_list(args):
+
+    cfg = Config(args.app_cfg_path)
+
+    if cfg.aws.endpoint is not None:
+        s3fs = BotoFileSystemImpl(
+            cfg.aws.endpoint,
+            cfg.aws.region,
+            cfg.aws.access_key,
+            cfg.aws.secret_key)
+        FileSystem.register(BotoFileSystemImpl.scheme, s3fs)
+
+    fs = FileSystem()
+
+    for src in args.src:
+        if fs.isfile(src):
+            items = [fs.file_info(src)]
+        else:
+            print(src)
+            items = fs.scandir(src)
+
+        for item in items:
+            c = 'd' if item.isDir else 'f'
+            t = mtime = datetime.utcfromtimestamp(item.mtime)
+            print("%s %10d %s %s" % (c, item.size, t, item.name))
+        print("")
+
+def filesystem_copy(args):
+
+    cfg = Config(args.app_cfg_path)
+
+    if cfg.aws.endpoint is not None:
+        s3fs = BotoFileSystemImpl(
+            cfg.aws.endpoint,
+            cfg.aws.region,
+            cfg.aws.access_key,
+            cfg.aws.secret_key)
+        FileSystem.register(BotoFileSystemImpl.scheme, s3fs)
+
+    fs = FileSystem()
+
+    if len(args.src) == 1:
+        if args.dst.endswith("/"):
+            name = fs.split(args.src[0])[1]
+            args.dst = fs.join(args.dst, name)
+        dsts = [args.dst]
+    else:
+        if not args.dst.endswith("/"):
+            raise Exception("dst must be a directory (end with /)")
+        dsts = []
+        for src in args.src:
+            name = fs.split(args.src)[1]
+            dsts.append(fs.join(args.dst, name))
+
+    for src, dst in zip(args.src, dsts):
+        print(dst)
+        with fs.open(src, "rb") as rb:
+            with fs.open(dst, "wb") as wb:
+                for chunk in iter(lambda: rb.read(2048), b""):
+                    wb.write(chunk)
+
+def filesystem_remove(args):
+
+    cfg = Config(args.app_cfg_path)
+
+    if cfg.aws.endpoint is not None:
+        s3fs = BotoFileSystemImpl(
+            cfg.aws.endpoint,
+            cfg.aws.region,
+            cfg.aws.access_key,
+            cfg.aws.secret_key)
+        FileSystem.register(BotoFileSystemImpl.scheme, s3fs)
+
+    fs = FileSystem()
+
+    for src in args.src:
+        if not fs.isfile(src):
+            sys.stderr.write("not a file: %s\n" % src)
+            continue
+        print(src)
+        fs.remove(src)
 
 def health(args):
 
@@ -493,6 +577,35 @@ def main():
     parser_health = subparsers.add_parser('health',
         help='print health check information about the (postgres) database')
     parser_health.set_defaults(func=health)
+
+    ###########################################################################
+    # FILESYSTEM - perform file operations
+    # test that a profile has the correct permissions to access a file system
+    parser_fs = subparsers.add_parser('fs',
+        help='perform file copy between different file systems')
+    parser_fs.set_defaults(func=lambda args: parser_fs.print_help())
+
+    fssubparsers = parser_fs.add_subparsers()
+
+    parser_fs_copy = fssubparsers.add_parser('cp',
+        help='copy files')
+    parser_fs_copy.add_argument('src', type=str, nargs="+",
+        help='file(s) to copy')
+    parser_fs_copy.add_argument('dst', type=str,
+        help='copy destination')
+    parser_fs_copy.set_defaults(func=filesystem_copy)
+
+    parser_fs_list = fssubparsers.add_parser('ls',
+        help='list')
+    parser_fs_list.add_argument('src', type=str, nargs="+",
+        help='files or directories to list')
+    parser_fs_list.set_defaults(func=filesystem_list)
+
+    parser_fs_remove = fssubparsers.add_parser('rm',
+        help='remove files')
+    parser_fs_remove.add_argument('src', type=str, nargs="+",
+        help='file(s) to delete')
+    parser_fs_remove.set_defaults(func=filesystem_remove)
 
     ###########################################################################
     # TEST - user defined functions

@@ -590,6 +590,9 @@ class Widget(Tag, EventSource):
         if '_type' not in kwargs:
             kwargs['_type'] = 'div'
 
+        if 'type_' in kwargs:
+            raise Exception("found type_ in kwargs. did you mean _type?")
+
         super(Widget, self).__init__(**kwargs)
         EventSource.__init__(self, *args, **kwargs)
 
@@ -3056,3 +3059,21 @@ class VideoPlayer(Widget):
     def onended(self):
         """Called when the media has been played and reached the end."""
         return ()
+
+class DocumentView(Widget):
+    def __init__(self, src, *args, mime_type="application/pdf", **kwargs):
+        kwargs['_type'] = 'embed'
+        super(DocumentView, self).__init__(*args, **kwargs)
+        self.attributes['type'] = mime_type
+        self.attributes['width'] = "100%"
+        self.attributes['height'] = "100%"
+        self.attributes['src'] = src
+
+    def set_source(self, url, ext=None):
+        self.attributes['src'] = url
+
+        if ext == "pdf":
+            self.attributes['type'] = "application/pdf"
+        if ext == "swf":
+            self.attributes['type'] = "application/vnd.adobe.flash-movie"
+
