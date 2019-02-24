@@ -235,16 +235,36 @@ js_body_end = """
             xhr.send(fd);
         };
 
+        function downloadUrl(widgetID, url, fileName) {
+            var postData = new FormData();
+
+            // https://stackoverflow.com/questions/22724070/
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url);
+
+            xhr.responseType = 'blob';
+            xhr.onload = function (this_, event_) {
+                var blob = this_.target.response;
+
+                if (!blob || this_.target.status != 200) {
+                    var params={};
+                    params['status'] = this_.target.status;
+                    sendCallbackParam(widgetID, 'onfailure', params);
+                } else {
+                    saveBlob(blob, fileName);
+                    sendCallbackParam(widgetID, 'onsuccess', null);
+                }
+            }
+            xhr.send(postData);
+        }
+
         function downloadFile(widgetID, fileId, password) {
             var postData = new FormData();
 
             // https://stackoverflow.com/questions/22724070/
             var xhr = new XMLHttpRequest();
             xhr.open('GET', '/api/fs/public/' + fileId);
-            console.log(password)
-            console.log(!password)
-            console.log(password.length > 0)
-            console.log(!password && password.length > 0)
+
             if (password.length > 0) {
                 console.log("setting header");
                 xhr.setRequestHeader('X-YUE-PASSWORD', password);
@@ -252,10 +272,6 @@ js_body_end = """
             xhr.responseType = 'blob';
             xhr.onload = function (this_, event_) {
                 var blob = this_.target.response;
-
-
-                console.log(blob)
-                console.log(this_.target.status)
 
                 if (!blob || this_.target.status != 200) {
                     var params={};

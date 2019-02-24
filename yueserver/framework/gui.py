@@ -124,6 +124,10 @@ class ClassEventConnector(object):
         self.callback = callback
         self.userdata = userdata
 
+    def disconnect(self):
+        self.callback = None
+        self.userdata = None
+
     def __call__(self, *args, **kwargs):
         #here the event method gets called
         callback_params = self.event_method_bound(*args, **kwargs)
@@ -469,7 +473,7 @@ class Tag(object):
                 of Tag is a dict, each item's key is set as 'key' param
         """
         if type(value) in (list, tuple, dict):
-            if type(value)==dict:
+            if type(value) == dict:
                 for k in value.keys():
                     self.add_child(k, value[k])
                 return

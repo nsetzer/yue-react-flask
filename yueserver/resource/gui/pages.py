@@ -30,6 +30,32 @@ from .exception import AuthenticationError, LibraryException
 NAV_HEIGHT = "6em"
 NAVBAR_HEIGHT = "2em"
 
+class RhombusLabel(gui.Widget):
+
+    def __init__(self, text, *args, **kwargs):
+        kwargs['_type'] = 'div'
+        super(RhombusLabel, self).__init__(*args, **kwargs)
+
+        self.label = gui.Label(text)
+        self.add_child("content", self.label)
+
+        rhombus = {
+          "background": "#AAA",
+          "margin": "0px auto",
+          "border": "1px solid #000",
+          "display": "inline-block",
+          "padding-left": ".5em",
+          "padding-right": ".5em",
+          "width": "auto",
+          "height": "auto",
+          "transform": "skewX(-30deg)",
+          "cursor": "pointer",
+        }
+        self.style.update(rhombus)
+
+        self.label.style.update({"transform": "skewX(30deg)"})
+        self.label.style['margin'] = '0'
+
 class Palette(object):
 
     P_LIGHT     = "#3475B3"  # "#1455A3"  # "#0D5199"
@@ -212,7 +238,7 @@ class IconBarWidget(gui.Widget):
 
 class FileInfoWidget(gui.Widget):
     """docstring for FileInfoWidget"""
-    def __init__(self, file_info, *args, **kwargs):
+    def __init__(self, file_info, *args, url=None, **kwargs):
         super(FileInfoWidget, self).__init__()
 
         self.file_info = file_info
@@ -229,12 +255,12 @@ class FileInfoWidget(gui.Widget):
 
         if file_info['isDir']:
             if file_info['name'] == '..':
-                url = '/res/app/return.svg'
+                icon_url = '/res/app/return.svg'
             else:
-                url = '/res/app/folder.svg'
+                icon_url = '/res/app/folder.svg'
         else:
-            url = '/res/app/file.svg'
-        self.img_icon = gui.Image(url)
+            icon_url = '/res/app/file.svg'
+        self.img_icon = gui.Image(icon_url)
         self.img_icon.style.update({
             "height": "32px",
             "width": "32px",
@@ -259,22 +285,48 @@ class FileInfoWidget(gui.Widget):
         self.hbox.append(self.lbl_path, "lbl_title")
 
         if self.file_info['isDir']:
-            btn = gui.Button("open", parent=self.hbox)
+            btn = gui.Button("", parent=self.hbox, image="/res/app/open.svg")
             btn.onclick.connect(self._onOpenClicked)
             btn.style.update({
-                "width": "40px",
-                "margin-left": "3%",
-                "margin-right": "3%",
+                "width": "4em",
+                "margin-left": "1em",
+                "margin-right": "1em",
+                "background": "transparent"
             })
             del btn.style['margin']
 
         else:
-            btn = gui.Button("pre", parent=self.hbox)
+
+            if url:
+                btn = gui.Button("", parent=self.hbox, image="/res/app/download.svg")
+                btn.onclick.connect(self._onOpenPreviewClicked)
+                btn.style.update({
+                    "width": "4em",
+                    "margin-left": "1em",
+                    "margin-right": ".5em",
+                    "background": "transparent"
+                })
+                del btn.style['margin']
+
+                js = "downloadUrl('%s', '%s', '%s');" % (
+                    btn.identifier, url, self.file_info['name'])
+                btn.attributes['onclick'] = js
+
+                btn.onfailure = gui.ClassEventConnector(self, 'onfailure',
+                    lambda *args, **kwargs: tuple([kwargs.get('status', None)]))
+                btn.onfailure.connect(self.onFileDownloadFailure)
+
+                btn.onsuccess = gui.ClassEventConnector(self, 'onsuccess',
+                    lambda *args, **kwargs: tuple())
+                btn.onsuccess.connect(self.onFileDownloadSuccess)
+
+            btn = gui.Button("", parent=self.hbox, image="/res/app/preview.svg")
             btn.onclick.connect(self._onOpenPreviewClicked)
             btn.style.update({
-                "width": "40px",
-                "margin-left": "3%",
-                "margin-right": "3%",
+                "width": "4em",
+                "margin-left": "0",
+                "margin-right": "1em",
+                "background": "transparent"
             })
             del btn.style['margin']
 
@@ -285,6 +337,12 @@ class FileInfoWidget(gui.Widget):
     def _onOpenPreviewClicked(self, widget):
         if not self.file_info['isDir']:
             self.openPreview.emit(self.file_info)
+
+    def onFileDownloadSuccess(self, *args):
+        print("download success", args)
+
+    def onFileDownloadFailure(self, *args):
+        print("download success", args)
 
 class SmallNoteCardWidget(gui.Widget):
 
@@ -358,6 +416,8 @@ class SmallNoteCardWidget(gui.Widget):
         self.lst.empty()
 
         for line in summary:
+            if not line:
+                line = "\u00A0"
             lbl = gui.Label(line, width="80%")
             lbl.style.update({
                 "background": "transparent",
@@ -916,7 +976,6 @@ class PopPreview(gui.Widget):
         self.audio_preview.style['display'] = 'none'
         self.video_preview.style['display'] = 'none'
         self.image_preview.style['display'] = 'none'
-        print(text)
 
         self.code.add_child("content", text)
 
@@ -1252,6 +1311,16 @@ class FileSystemPage(ContentPage):
         #   (root, path) => name
         self.session_directories = {}
 
+        self.hbox_path = gui.Widget(parent=self)
+        self.hbox_path.style.update({
+            "padding-top": ".75em",
+            "padding-bottom": ".75em",
+            "padding-left": "1em",
+            "padding-right": "1em",
+        })
+        RhombusLabel("roots", parent=self.hbox_path)
+        RhombusLabel("default", parent=self.hbox_path)
+        RhombusLabel("secure", parent=self.hbox_path)
         self.lst = gui.WidgetList()
         self.append(self.lst)
 
@@ -1295,9 +1364,16 @@ class FileSystemPage(ContentPage):
         self.listdir()
 
     def listdir(self):
+        self.hbox_path.empty()
         self.lst.empty()
 
+        self.menu.reject()
+
         if self.root == "":
+
+            lbl = RhombusLabel("Home", parent=self.hbox_path)
+            lbl.style['background'] = "#CCF"
+            lbl.style['cursor'] = "#none"
 
             for name in self.context.listroots():
                 file_info = {'name': name, 'isDir': True, "size": 0}
@@ -1306,26 +1382,44 @@ class FileSystemPage(ContentPage):
                 self.lst.append(item)
         else:
 
+            if self.path:
+                urlbase = "%s/%s/" % (self.root, self.path)
+            else:
+                urlbase = "%s/" % (self.root)
+
             wdt = IconBarWidget()
-            wdt.addAction("/res/app/return.svg", self.onOpenParent)
             wdt.style.update({
                 "top": "0",
                 "position": "sticky",
                 "z-index": "1",
                 "border-bottom": "1px solid",
             })
+            wdt.addAction("/res/app/return.svg", self.onOpenParent)
 
-            if self.path:
-                urlbase = "%s/%s/" % (self.root, self.path)
-            else:
-                urlbase = "%s/" % (self.root)
-
-            btn = gui.UploadFileButton(urlbase, image="/res/app/file.svg")
+            btn = gui.UploadFileButton(urlbase, image="/res/app/upload.svg")
             btn.style.update({"width": "2em", "height": "2em"})
             btn.onsuccess.connect(self.onFileUploadSuccess)
             btn.onfailure.connect(self.onFileUploadFailure)
             wdt.addWidget(btn)
             self.lst.append(wdt)
+
+            lbl = RhombusLabel("Home", parent=self.hbox_path)
+            lbl.onclick.connect(lambda x: self.onNavigate("", ""))
+            lbl = RhombusLabel(self.root, parent=self.hbox_path)
+            lbl.onclick.connect(lambda x, r=self.root: self.onNavigate(r, ""))
+            components = self.path.split('/')
+            component_path = ""
+            for component in components:
+                if component:
+                    component_path += component
+                    lbl = RhombusLabel(component, parent=self.hbox_path)
+                    lbl.onclick.connect(
+                        lambda x, r=self.root, p=component_path:
+                            self.onNavigate(r, p))
+                    component_path += "/"
+            lbl.style['background'] = "#CCF"
+            lbl.style['cursor'] = "#none"
+            lbl.onclick.disconnect()
 
             session_dirs = self.session_directories.get(
                 (self.root, self.path), set())
@@ -1337,7 +1431,10 @@ class FileSystemPage(ContentPage):
                 if file_info['name'] in session_dirs:
                     session_dirs.remove(file_info['name'])
 
-                item = FileInfoWidget(file_info)
+                url = "/api/gui/files/%s/path/%s/%s?dl=1" % (
+                    self.root, self.path, file_info['name'])
+
+                item = FileInfoWidget(file_info, url=url)
                 item.openDirectory.connect(self._onOpenDirectory)
                 item.openPreview.connect(self._onOpenPreview)
                 self.lst.append(item)
@@ -1371,9 +1468,10 @@ class FileSystemPage(ContentPage):
 
         if info.encryption in (CryptMode.server, CryptMode.client):
             content = "error: file is encrypted"
+            self.menu.setTextContent(content)
         elif ext in ("jpg", "jpeg", "png", "gif"):
             self.menu.setImageContent(url)
-        elif ext in ("ogg", "mp3"):
+        elif ext in ("ogg", "mp3", "wav"):
             self.menu.setAudioContent(url)
         elif ext in ("webm", "mp4"):
             self.menu.setVideoContent(url)
@@ -1401,10 +1499,17 @@ class FileSystemPage(ContentPage):
 
     def onFileUploadSuccess(self, widget, filepath):
         print("success", filepath)
+        self.listdir()
 
     def onFileUploadFailure(self, widget, filepath):
-
         print("failed", filepath)
+
+    def onNavigate(self, root, path):
+
+        self.root = root
+        self.path = path
+        self.listdir()
+        self.location.emit(self.root, self.path)
 
 class SettingsPage(ContentPage):
     def __init__(self, context, *args, **kwargs):
