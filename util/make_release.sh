@@ -4,6 +4,28 @@ githash=$(git rev-parse HEAD)
 branch=$(git rev-parse --abbrev-ref HEAD)
 mkdir -p dist
 
+cat <<EOF > backupdb.sh
+#!/bin/bash
+# backup:
+# $0 $dbuser $bucket
+# restore:
+# cat backup/backup-\$(date "+%y-%m-%d-%H-%M-%S").gz.* | gunzip | sudo -u yueapp psql yueapp
+
+cd \$(dirname \$0)
+profile=\$1
+dbuser=\$2
+bucket=\$3
+source yueserverenv/bin/activate
+YUE_PRIVATE_KEY=\$(cat ./crypt/rsa.pem)
+export YUE_PRIVATE_KEY
+
+mkdir backup
+sudo -u \$dbuser pg_dump \$dbuser | gzip | split -d -b 512M - backup/backup-\$(date "+%y-%m-%d-%H-%M-%S").gz.
+python -m yueserver.tools.manage -p\$profile fs cp backup/* "s3://\$bucket/backups/\$(date "+%y-%m-%d")/"
+rm -rf backup
+
+EOF
+
 cat <<EOF > manage.sh
 #!/bin/bash
 cd \$(dirname \$0)
@@ -37,8 +59,12 @@ EOF
 
 cat <<EOF > uninstall.sh
 #!/bin/bash
+cd \$(dirname \$0)
 echo "uninstalling yueserver"
-rm -rf yueserver yueclient build wsgi.py requirements.txt
+rm -rf yueserver yueclient build
+rm wsgi.py requirements.txt
+rm start.sh start_debug.sh uninstall.sh
+rm manage.sh backupdb.sh
 EOF
 
 chmod +x start.sh
@@ -53,12 +79,13 @@ EOF
 
 tar -czv --exclude='*.pyc' --exclude='__pycache__' \
     config yueserver res wsgi.py requirements.txt setup.py \
-    start.sh start_debug.sh uninstall.sh | \
+    start.sh start_debug.sh uninstall.sh manage.sh backupdb.sh | \
     cat util/installer.sh - > dist/yueserver-$version.tar.gz
 
 rm manage.sh
 rm start.sh
 rm start_debug.sh
 rm uninstall.sh
+rm backupdb.sh
 
 echo "$version $branch $githash"
