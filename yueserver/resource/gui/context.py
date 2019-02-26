@@ -251,9 +251,9 @@ class YueAppState(object):
         stream = self.fileService.encryptStream(
             self.auth_user, None, stream, "rb", "system")
 
-        self.fileService.saveFile(self.auth_user, self.note_filesystem, filepath,
-            stream, encryption="system")
+        self.fileService.saveFile(self.auth_user, self.note_filesystem,
+            filepath, stream, encryption="system")
 
     def removeNote(self, filepath):
-
+        logging.info("deleteing note %s %s", self.note_filesystem, filepath)
         self.fileService.remove(self.auth_user, self.note_filesystem, filepath)

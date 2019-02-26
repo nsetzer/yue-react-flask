@@ -202,10 +202,8 @@ class IconBarWidget(gui.Widget):
     def __init__(self, *args, **kwargs):
         super(IconBarWidget, self).__init__()
 
-        self.hbox = gui.Widget(height="100%", width="100%", parent=self)
+        self.hbox = gui.HBox(height="100%", width="100%", parent=self)
         self.hbox.style['background'] = "transparent"
-
-        self.actions = []
 
     def addAction(self, icon_url, callback):
 
@@ -214,6 +212,9 @@ class IconBarWidget(gui.Widget):
         img = gui.Image(icon_url, parent=btn)
         img.style.update({"width": "100%", "height": "100%"})
         return self.addWidget(btn)
+
+    def addSpacer(self):
+        self.hbox.append(gui.Spacer())
 
     def addWidget(self, widget):
 
@@ -228,12 +229,10 @@ class IconBarWidget(gui.Widget):
         del widget.style['margin']
 
         self.hbox.append(widget)
-        self.actions.append(widget)
         return widget
 
     def _addWidget(self, widget):
         self.hbox.append(widget)
-        self.actions.append(widget)
         return widget
 
 class FileInfoWidget(gui.Widget):
@@ -395,13 +394,15 @@ class SmallNoteCardWidget(gui.Widget):
         })
         self.append(self.actionBar)
 
-        self.actionBar.addAction("/res/app/edit.svg", self._onEditClicked)
         self.lblTitle = gui.Label("", style={
             "display": "inline",
             "width": "100%",
             "margin": "auto"
         })
         self.actionBar.addWidget(self.lblTitle)
+        self.lblTitle.style.update({'flex-grow': '1', 'display': 'inline'})
+        self.actionBar.addAction("/res/app/discard.svg", self._onDeleteClicked)
+        self.actionBar.addAction("/res/app/edit.svg", self._onEditClicked)
 
         self.lst = gui.WidgetList()
         self.lst.style.update({
@@ -409,9 +410,13 @@ class SmallNoteCardWidget(gui.Widget):
         })
         self.append(self.lst)
 
+        self.delete = gui.Signal()
         self.edit = gui.Signal()
 
         self.setInfo(info)
+
+    def _onDeleteClicked(self):
+        self.delete.emit()
 
     def _onEditClicked(self):
         self.edit.emit()
@@ -1006,7 +1011,7 @@ class PopPreview(gui.Widget):
             "margin-right": "auto",
             "display": "none",
         })
-        del self.image_preview.style['margin']
+        del self.document_preview.style['margin']
         self.document_view = gui.DocumentView("", parent=self.document_preview)
 
     def setTextContent(self, text):
@@ -1066,6 +1071,54 @@ class PopPreview(gui.Widget):
 
     def show(self):
         self.style['display'] = 'block'
+
+class ChoicePopMenu(gui.Widget):
+    def __init__(self, *args, **kwargs):
+        super(ChoicePopMenu, self).__init__(*args, **kwargs)
+
+        self.style.update({
+            "display": "none",
+            "position": "fixed",
+            "width": "100vw",
+            "height": "100vh",
+            "top": "0",
+            "left": "0",
+            "background": "rgba(48, 48, 48, .7)",
+            "z-index": 95,
+        })
+
+        self.div_middle = gui.Widget(_type="div", parent=self)
+        self.div_middle.style.update({
+            "display": "table-cell",
+            "vertical-align": "middle",
+            "background": "transparent"
+        })
+        del self.div_middle.style['margin']
+
+        self.div_content = gui.Widget(_type="div", parent=self.div_middle)
+        self.div_content.style.update({
+            "width": "50vw",
+            "margin-left": "auto",
+            "margin-right": "auto",
+            "height": "20vh",
+        })
+        del self.div_content.style['margin']
+
+        # a click handler to catch clicks on the content body
+        self.div_content.onclick.connect(lambda *args: None)
+        # a click handler to catch clicks outside the pop window
+        self.onclick.connect(lambda *args: self.reject())
+
+    def reject(self):
+        self.style['display'] = 'none'
+
+    def accept(self, index):
+        self.style['display'] = 'none'
+
+    def show(self):
+        self.style['display'] = 'table'
+
+
 
 # ---------------------
 
@@ -1197,6 +1250,7 @@ class LibraryPage(ContentPage):
                 "z-index": "1",
                 "border-bottom": "1px solid",
             })
+            wdt.addSpacer()
             self.lst.append(wdt)
 
             for i, artist in enumerate(self.domain_info['artists']):
@@ -1214,6 +1268,7 @@ class LibraryPage(ContentPage):
                 "z-index": "1",
                 "border-bottom": "1px solid",
             })
+            wdt.addSpacer()
             self.lst.append(wdt)
 
             artist = self.domain_info['artists'][self.page_artist_index]['name']
@@ -1238,6 +1293,7 @@ class LibraryPage(ContentPage):
                 "z-index": "1",
                 "border-bottom": "1px solid",
             })
+            wdt.addSpacer()
             self.lst.append(wdt)
             wdt.addAction("/res/app/return.svg", lambda: self.onOpenElement(0))
 
@@ -1255,6 +1311,7 @@ class LibraryPage(ContentPage):
                 "z-index": "1",
                 "border-bottom": "1px solid",
             })
+            wdt.addSpacer()
             self.lst.append(wdt)
             wdt.addAction("/res/app/return.svg", lambda: self.onOpenElement(2))
             wdt.addAction("/res/app/shuffle.svg", lambda: self.onRandomPlay(self.page_query))
@@ -1276,6 +1333,7 @@ class LibraryPage(ContentPage):
                 "z-index": "1",
                 "border-bottom": "1px solid",
             })
+            wdt.addSpacer()
             self.lst.append(wdt)
             wdt.addAction("/res/app/return.svg", lambda: self.onOpenElement(3))
             wdt.addAction("/res/app/shuffle.svg", lambda: self.onRandomPlay(self.page_query))
@@ -1453,6 +1511,7 @@ class FileSystemPage(ContentPage):
             btn.onsuccess.connect(self.onFileUploadSuccess)
             btn.onfailure.connect(self.onFileUploadFailure)
             wdt.addWidget(btn)
+            wdt.addSpacer()
             self.lst.append(wdt)
 
             lbl = RhombusLabel("Home", parent=self.hbox_path)
@@ -1483,8 +1542,13 @@ class FileSystemPage(ContentPage):
                 if file_info['name'] in session_dirs:
                     session_dirs.remove(file_info['name'])
 
-                url = "/api/gui/files/%s/path/%s/%s?dl=1" % (
-                    self.root, self.path, file_info['name'])
+                urlbase = self.path
+                if urlbase:
+                    urlbase += "/"
+                urlbase += file_info['name']
+
+                url = "/api/gui/files/%s/path/%s?dl=1" % (
+                    self.root, urlbase)
 
                 item = FileInfoWidget(file_info, url=url)
                 item.openDirectory.connect(self._onOpenDirectory)
@@ -1627,6 +1691,7 @@ class NotesPage(ContentPage):
 
         self.actionBarMain.addAction("/res/app/create.svg",
             self.onCreateNote)
+        self.actionBarMain.addSpacer()
 
         self.actionBarEdit = IconBarWidget()
         self.actionBarEdit.style.update({
@@ -1646,6 +1711,12 @@ class NotesPage(ContentPage):
         self.textEdit.style.update({"height": "100%"})
         del self.textEdit.style['margin']
         # maxlength
+
+        self.menu_confirm_delete = gui.WarningMenu("Warning",
+            "Delete Note?", parent=self)
+        self.menu_confirm_delete.finished.connect(
+            gui.Slot(self.onAcceptDeleteNote))
+        self.index_delete_note = -1
 
         self._opened = False
 
@@ -1672,6 +1743,8 @@ class NotesPage(ContentPage):
                 self.lst.append(note)
                 note.edit.clear()
                 note.edit.connect(gui.Slot(lambda i=i: self.onEditNote(i)))
+                note.delete.clear()
+                note.delete.connect(gui.Slot(lambda i=i: self.onDeleteNote(i)))
             self.current_index = None
         else:
             self.lst.append(self.actionBarEdit)
@@ -1756,6 +1829,20 @@ class NotesPage(ContentPage):
     def onEditNote(self, index):
 
         self.showPage(index)
+
+    def onDeleteNote(self, index):
+        print("on delete")
+        self.menu_confirm_delete.show()
+        self.index_delete_note = index
+
+    def onAcceptDeleteNote(self, accepted):
+
+        if accepted and self.index_delete_note >= 0:
+            note = self.notes.pop(self.index_delete_note)
+            self.context.removeNote(note.info['file_path'])
+            self.showPage(None)
+
+            self.index_delete_note = -1
 
 class HomePage(gui.Page):
     """
@@ -2575,3 +2662,4 @@ class AppPage(gui.Page):
         for page in self.pages:
             page.set_visible(False)
         self.getLoginPage().set_visible(True)
+

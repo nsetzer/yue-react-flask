@@ -1000,7 +1000,7 @@ class GuiAppResource(WebResource):
         """
         # throws werkzeug.exceptions.NotFound
         # if the file does not exist
-        return send_from_directory(self.static_dir, path, cache_timeout=-1)
+        return send_from_directory(self.static_dir, path, cache_timeout=6000)
 
 
     # todo run this example in "threading mode"

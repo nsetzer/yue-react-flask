@@ -388,7 +388,7 @@ class Tag(object):
             if key.startswith("margin"):
                 _margins.add(key)
         if 'margin' in _margins and len(_margins) > 1:
-            logging.warning("%s: %s" % (self, _margins))
+            logging.warning("margin error: %s.%s: %s" % (self._parent.__class__.__name__, self, _margins))
 
         local_changed_widgets = {}
         innerHTML = ''
@@ -1124,6 +1124,13 @@ class GridBox(Widget):
         value = value.replace('pxpx', 'px')
         self.style['grid-row-gap'] = value
 
+class Spacer(Widget):
+    """ spacer grows to occupy space in a flex grid
+    use with HBox or VBox
+    """
+    def __init__(self, *args, **kwargs):
+        super(Spacer, self).__init__(*args, **kwargs)
+        self.style.update({'flex-grow': '1', 'display': 'inline'})
 class HBox(Widget):
     """The purpose of this widget is to automatically horizontally aligning
         the widgets that are appended to it.
@@ -3077,3 +3084,127 @@ class DocumentView(Widget):
         if ext == "swf":
             self.attributes['type'] = "application/vnd.adobe.flash-movie"
 
+class PopMenu(Widget):
+    """
+    A Popup Menu
+
+    This menu exposes a centralElement() div to be populated or
+    changed by the user. This div is centered horizontally and
+    vertically on the screen.
+
+    two roles are exposed by default: accept and reject
+
+    The menu itself is a  div spanning the entire viewable window
+    and is a semi-transparent grey. Clicking outside of the window
+    will automatically reject the menu.
+
+    Signals:
+        finished(bool): emitted on accept or reject
+    """
+    def __init__(self, *args, **kwargs):
+        super(PopMenu, self).__init__(*args, **kwargs)
+
+        self.style.update({
+            "display": "none",
+            "position": "fixed",
+            "width": "100vw",
+            "height": "100vh",
+            "top": "0",
+            "left": "0",
+            "background": "rgba(0, 0, 0, .7)",
+            "z-index": 95,
+        })
+
+        self._div_middle = Widget(_type="div", parent=self)
+        self._div_middle.style.update({
+            "display": "table-cell",
+            "vertical-align": "middle",
+            "background": "transparent"
+        })
+        del self._div_middle.style['margin']
+
+        self._div_content = Widget(_type="div", parent=self._div_middle)
+        self._div_content.style.update({
+            "max-width": "95vw",
+            "max-height": "95vh",
+            "margin-left": "auto",
+            "margin-right": "auto",
+        })
+        del self._div_content.style['margin']
+
+        # a click handler to catch clicks on the content body
+        self._div_content.onclick.connect(lambda *args: None)
+        # a click handler to catch clicks outside the pop window
+        self.onclick.connect(lambda *args: self.reject())
+
+        self.finished = Signal(bool)
+
+    def centralElement(self):
+        return self._div_content
+
+    def reject(self):
+        self.style['display'] = 'none'
+        self.finished.emit(False)
+
+    def accept(self):
+        self.style['display'] = 'none'
+        self.finished.emit(True)
+
+    def show(self):
+        self.style['display'] = 'table'
+
+class WarningMenu(PopMenu):
+
+    def __init__(self, title, message, *args, **kwargs):
+        super(WarningMenu, self).__init__(*args, **kwargs)
+        content = self.centralElement()
+        content.style.update({
+            "width": "auto",
+            "height": "auto",
+            "padding-top": ".5em",
+            "padding-bottom": ".5em",
+            "border": "1px solid black",
+            "border-radius": "1em"
+
+        })
+
+        self.lbl_title = Label(title, parent=content)
+        self.lbl_title.style.update({
+            "border-bottom": "1px solid black",
+            "padding-left": "1em",
+            "padding-right": "1em",
+        })
+
+        self.lbl_text = Label(message, parent=content)
+        self.lbl_text.style.update({
+            "padding": "1em",
+        })
+
+        self.hbox_actions = HBox(parent=content)
+        self.hbox_actions.style.update({
+            'align-items': 'right',
+            'background': 'transparent',
+            "padding-left": "1em",
+            "padding-right": "1em",
+        })
+
+        Spacer(parent=self.hbox_actions)
+
+        self.btn_accept = Button("OK", parent=self.hbox_actions)
+        self.btn_accept.onclick.connect(lambda *args: self.accept())
+        self.btn_accept.style.update({
+            "padding-left": "1em",
+            "padding-right": "1em",
+            "margin-right": "1em",
+
+        })
+        del self.btn_accept.style['margin']
+
+        self.btn_reject = Button("cancel", parent=self.hbox_actions)
+        self.btn_reject.onclick.connect(lambda *args: self.reject())
+        self.btn_reject.style.update({
+            "padding-left": "1em",
+            "padding-right": "1em",
+            "margin-right": "1em",
+        })
+        del self.btn_reject.style['margin']
