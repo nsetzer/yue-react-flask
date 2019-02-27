@@ -490,7 +490,7 @@ class AppView(gui.Widget):
 
 class ScrollBox(gui.Widget):
     """http://jsfiddle.net/sA5fD/8/"""
-    def __init__(self, child, *args, **kwargs):
+    def __init__(self, child, *args, vbar=True, hbar=False, **kwargs):
         super(ScrollBox, self).__init__(*args, **kwargs)
 
         self.content = gui.Widget()
@@ -510,8 +510,8 @@ class ScrollBox(gui.Widget):
             "right": "0",
             "bottom": "0",
             "left": "0",
-            "overflow-y": "scroll",
-            "overflow-x": "hidden",
+            "overflow-y": "scroll" if vbar else 'hidden',
+            "overflow-x": "scroll" if hbar else 'hidden',
         })
 
         self.content_scroll.attributes.update({
@@ -853,149 +853,110 @@ class AudioDisplay(gui.Widget):
     def onAudioState(self, widget, state):
         self.current_state = state
 
-class PopMenu(gui.Widget):
+class PopMenu(gui.PopMenu):
     """docstring for PopMenu"""
     def __init__(self, *args, **kwargs):
         super(PopMenu, self).__init__(*args, **kwargs)
 
-        self.style.update({
-            "display": "none",
-            "position": "fixed",
-            "width": "30%",
-            "top": "50%",
-            "left": "50%",
-            "transform": "translate(-50%, -50%)",
-            "background": "blue",
-            "z-index": "500",
-            "border": "solid"
+        content = self.centralElement()
+        content.style.update({
+            "width": "50vw",
+            "height": "auto",
+            "padding": "1em",
+            "border": "1px solid black",
+            "border-radius": "1em",
         })
-
-        # experiment with focs menu, failed?
-        #self.attributes['tabindex'] = "0"
-        #self.attributes['onclick'] = self.focus_js()
-
-        self.onblur.connect(self.onBlur)
-        self.onkeyup.connect(self.onKeyUp)
 
         self.opened = gui.Signal()
 
-        self.vbox = gui.VBox(parent=self)
-        self.vbox.style['background'] = "transparent"
-
-        self.btn0 = gui.Button("exit", width="2em", height="2em", parent=self.vbox)
-        self.btn0.onclick.connect(lambda w: self.reject())
-        #del self.btn0.style['margin']
-        self.btn0.style['margin'] = "1em"
-        self.btn0.style['align-self'] = 'flex-end'
-
-        self.buttons = []
         self.callbacks = []
 
     def addAction(self, text, callback):
 
-        btn = gui.Button(text, width="100%", parent=self.vbox)
-        index = len(self.buttons)
+        btn = gui.Button(text, width="100%", parent=self.centralElement())
+        btn.style.update({
+            "padding-left": "1em",
+            "padding-right": "1em",
+            "padding-bottom": "1em",
+            "padding-top": "0",
+        })
+        index = len(self.callbacks)
         btn.onclick.connect(lambda w: self.accept(index))
         del btn.style['margin']
         btn.style['margin-bottom'] = ".5em"
 
-        self.buttons.append(btn)
         self.callbacks.append(callback)
 
-    def onKeyUp(self, widget, key, ctrl, shift, alt):
-        if key == "Escape":
-            self.reject()
-
-    def onBlur(self, widget):
-
-        self.reject()
-
-    def reject(self):
-        self.style['display'] = 'none'
-
     def accept(self, index):
-        self.style['display'] = 'none'
         self.callbacks[index]()
+        super().accept()
 
-    def focus_js(self):
-        return "document.getElementById('%s').focus();" % self.identifier
-
-    def show(self):
-        self.style['display'] = 'block'
-
-class PopPreview(gui.Widget):
+class PopPreview(gui.PopMenu):
     """docstring for PopPreview"""
     def __init__(self, *args, **kwargs):
         super(PopPreview, self).__init__(*args, **kwargs)
 
-        self.style.update({
-            "display": "none",
-            "position": "fixed",
-            "width": "90%",
-            "top": "50%",
-            "left": "50%",
-            "transform": "translate(-50%, -50%)",
-            "background": "rgb(240,230,230)",
-            "z-index": 100,
-            "border": "solid"
+        content = self.centralElement()
+        content.style.update({
+            "width": "auto",
+            "height": "auto",
+            "background": "transparent",
         })
-
-        self.vbox = gui.VBox(parent=self)
-        self.vbox.style['background'] = "transparent"
-        self.vbox.style['height'] = "100%"
-
-        self.btn0 = gui.Button("exit", width="2em", height="2em", parent=self.vbox)
-        self.btn0.onclick.connect(lambda w: self.reject())
-        self.btn0.style['margin'] = "1em"
-        self.btn0.style['align-self'] = 'flex-end'
 
         # #####################################################################
         # preview text
-        self.scrollbox = ScrollBox(None, parent=self.vbox)
-        self.scrollbox.style['height'] = "50vh"
+
+        self.scrollbox = ScrollBox(None, vbar=True, hbar=True, parent=content)
+        self.scrollbox.style['height'] = "80vh"
         self.scrollbox.style['display'] = "none"
         self.wpre = gui.Widget(_type="pre", parent=self.scrollbox)
-        self.wpre.style['padding-left'] = ".25em"
-        self.wpre.style['padding-right'] = ".25em"
-        self.wpre.style['margin-left'] = "2em"
-        self.wpre.style['margin-right'] = "2em"
-        self.wpre.style['border-left'] = "1px solid black"
-        self.wpre.style['border-right'] = "1px solid black"
+        self.wpre.style.update({
+            'margin-left': "2em",
+            'margin-right': "2em",
+        })
         del self.wpre.style['margin']
         self.code = gui.Widget(_type="code", parent=self.wpre)
+        self.code.style.update({
+            'padding': "1em",
+            'margin': "1em",
+
+        })
 
         # #####################################################################
-        # preview media
-        self.div_image = gui.Widget(_type="div", parent=self.vbox)
-        self.div_image.style.update({
-            "width": "80%",
-            "margin-left": "5em",
-            "margin-right": "5em",
-            "margin-bottom": "1em",
-            "margin-top": "1em",
-            "background": "transparent",
-        })
-        del self.div_image.style['margin']
+        # preview video
 
-        self.video_preview = gui.VideoPlayer("", parent=self.div_image)
+        self.video_preview = gui.VideoPlayer("", parent=content)
         self.video_preview.style.update({
             "max-width": "100%",
             "display": "none",
         })
         del self.video_preview.style['margin']
 
-        self.audio_preview = gui.AudioPlayer("", parent=self.div_image)
+        # #####################################################################
+        # preview audio
+
+        self.div_audio = gui.Widget(_type='div', parent=content)
+        self.div_audio.style.update({
+            "width": "50vw",
+            "height": "1em",
+            "margin": "0 auto",
+            "background": "transparent",
+        })
+        self.audio_preview = gui.AudioPlayer("", parent=self.div_audio)
+        self.audio_preview.attributes.update({'align': 'center'})
         self.audio_preview.style.update({
             "width": "100%",
-            "display": "none",
         })
         del self.audio_preview.style['margin']
 
-        self.image_preview = gui.Image("", parent=self.div_image)
+        # #####################################################################
+        # preview text
+
+        self.image_preview = gui.Image("", parent=content)
         self.image_preview.style.update({
             "width": "auto",
             "height": "auto",
-            "max-width": "100%",
+            "max-width": "90vw",
             "max-height": "70vh",
             "margin-left": "auto",
             "margin-right": "auto",
@@ -1003,7 +964,10 @@ class PopPreview(gui.Widget):
         })
         del self.image_preview.style['margin']
 
-        self.document_preview = gui.Widget(_type="div", parent=self.div_image)
+        # #####################################################################
+        # preview documents
+
+        self.document_preview = gui.Widget(_type="div", parent=content)
         self.document_preview.style.update({
             "width": "100%",
             "height": "70vh",
@@ -1016,109 +980,61 @@ class PopPreview(gui.Widget):
 
     def setTextContent(self, text):
         self.scrollbox.style['display'] = 'block'
-        self.audio_preview.style['display'] = 'none'
+        self.div_audio.style['display'] = 'none'
         self.video_preview.style['display'] = 'none'
         self.image_preview.style['display'] = 'none'
         self.document_preview.style['display'] = 'none'
 
         self.code.add_child("content", text)
+        self._div_content.onclick.connect(lambda *args: None)
 
     def setImageContent(self, url):
 
         self.scrollbox.style['display'] = 'none'
-        self.audio_preview.style['display'] = 'none'
+        self.div_audio.style['display'] = 'none'
         self.video_preview.style['display'] = 'none'
         self.image_preview.style['display'] = 'block'
         self.document_preview.style['display'] = 'none'
 
         self.image_preview.set_image(url)
+        # this is basically a hack to handle centering images
+        # the content div is the full width of the screen.
+        # by default click are ignored for the content,
+        # but this extra handler allows for dismissing images.
+        self._div_content.onclick.connect(lambda *args: self.reject())
 
     def setAudioContent(self, url):
 
         self.scrollbox.style['display'] = 'none'
-        self.audio_preview.style['display'] = 'inline'
+        self.div_audio.style['display'] = 'block'
         self.video_preview.style['display'] = 'none'
         self.image_preview.style['display'] = 'none'
         self.document_preview.style['display'] = 'none'
 
         self.audio_preview.set_source(url)
+        self._div_content.onclick.connect(lambda *args: None)
 
     def setVideoContent(self, url):
 
         self.scrollbox.style['display'] = 'none'
-        self.audio_preview.style['display'] = 'none'
+        self.div_audio.style['display'] = 'none'
         self.video_preview.style['display'] = 'inline'
         self.image_preview.style['display'] = 'none'
         self.document_preview.style['display'] = 'none'
 
         self.video_preview.set_source(url)
+        self._div_content.onclick.connect(lambda *args: None)
 
     def setDocumentContent(self, url, ext=None):
 
         self.scrollbox.style['display'] = 'none'
-        self.audio_preview.style['display'] = 'none'
+        self.div_audio.style['display'] = 'none'
         self.video_preview.style['display'] = 'none'
         self.image_preview.style['display'] = 'none'
         self.document_preview.style['display'] = 'block'
 
         self.document_view.set_source(url, ext)
-
-    def reject(self):
-        self.style['display'] = 'none'
-
-    def accept(self, index):
-        self.style['display'] = 'none'
-
-    def show(self):
-        self.style['display'] = 'block'
-
-class ChoicePopMenu(gui.Widget):
-    def __init__(self, *args, **kwargs):
-        super(ChoicePopMenu, self).__init__(*args, **kwargs)
-
-        self.style.update({
-            "display": "none",
-            "position": "fixed",
-            "width": "100vw",
-            "height": "100vh",
-            "top": "0",
-            "left": "0",
-            "background": "rgba(48, 48, 48, .7)",
-            "z-index": 95,
-        })
-
-        self.div_middle = gui.Widget(_type="div", parent=self)
-        self.div_middle.style.update({
-            "display": "table-cell",
-            "vertical-align": "middle",
-            "background": "transparent"
-        })
-        del self.div_middle.style['margin']
-
-        self.div_content = gui.Widget(_type="div", parent=self.div_middle)
-        self.div_content.style.update({
-            "width": "50vw",
-            "margin-left": "auto",
-            "margin-right": "auto",
-            "height": "20vh",
-        })
-        del self.div_content.style['margin']
-
-        # a click handler to catch clicks on the content body
-        self.div_content.onclick.connect(lambda *args: None)
-        # a click handler to catch clicks outside the pop window
-        self.onclick.connect(lambda *args: self.reject())
-
-    def reject(self):
-        self.style['display'] = 'none'
-
-    def accept(self, index):
-        self.style['display'] = 'none'
-
-    def show(self):
-        self.style['display'] = 'table'
-
-
+        self._div_content.onclick.connect(lambda *args: None)
 
 # ---------------------
 
@@ -1268,14 +1184,12 @@ class LibraryPage(ContentPage):
                 "z-index": "1",
                 "border-bottom": "1px solid",
             })
-            wdt.addSpacer()
-            self.lst.append(wdt)
-
             artist = self.domain_info['artists'][self.page_artist_index]['name']
             query = "artist==%s" % string_quote(artist)
-
             wdt.addAction("/res/app/return.svg", lambda: self.onOpenElement(1))
             wdt.addAction("/res/app/shuffle.svg", lambda: self.onRandomPlay(query))
+            wdt.addSpacer()
+            self.lst.append(wdt)
 
             albums = self.domain_info['artists'][self.page_artist_index]['albums']
             self.page_albums = list(sorted(albums.items()))
@@ -1293,9 +1207,9 @@ class LibraryPage(ContentPage):
                 "z-index": "1",
                 "border-bottom": "1px solid",
             })
+            wdt.addAction("/res/app/return.svg", lambda: self.onOpenElement(0))
             wdt.addSpacer()
             self.lst.append(wdt)
-            wdt.addAction("/res/app/return.svg", lambda: self.onOpenElement(0))
 
             for i, genre in enumerate(self.domain_info['genres']):
                 item = TitleTextWidget('/res/app/genre.svg', genre['name'])
@@ -1311,10 +1225,10 @@ class LibraryPage(ContentPage):
                 "z-index": "1",
                 "border-bottom": "1px solid",
             })
-            wdt.addSpacer()
-            self.lst.append(wdt)
             wdt.addAction("/res/app/return.svg", lambda: self.onOpenElement(2))
             wdt.addAction("/res/app/shuffle.svg", lambda: self.onRandomPlay(self.page_query))
+            wdt.addSpacer()
+            self.lst.append(wdt)
 
             item = TitleTextWidget('/res/app/return.svg', "Random Play All")
             item.open.connect(gui.Slot(lambda: self.onRandomPlay(self.page_query)))
@@ -1333,10 +1247,10 @@ class LibraryPage(ContentPage):
                 "z-index": "1",
                 "border-bottom": "1px solid",
             })
-            wdt.addSpacer()
-            self.lst.append(wdt)
             wdt.addAction("/res/app/return.svg", lambda: self.onOpenElement(3))
             wdt.addAction("/res/app/shuffle.svg", lambda: self.onRandomPlay(self.page_query))
+            wdt.addSpacer()
+            self.lst.append(wdt)
 
             for song in self.context.search(self.page_query):
                 item = SongWidget(song, index=index)
@@ -1705,6 +1619,7 @@ class NotesPage(ContentPage):
             lambda: self.onCloseNote(True))
         self.actionBarEdit.addAction("/res/app/media_error.svg",
             lambda: self.onCloseNote(False))
+        self.actionBarEdit.addSpacer()
 
         self.textTitle = gui.TextInput(True)
         self.textEdit = gui.TextInput(False)

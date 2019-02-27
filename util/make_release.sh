@@ -89,3 +89,5 @@ rm uninstall.sh
 rm backupdb.sh
 
 echo "$version $branch $githash"
+
+git checkout yueserver/__init__.py
