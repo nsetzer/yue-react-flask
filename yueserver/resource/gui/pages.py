@@ -867,8 +867,6 @@ class PopMenu(gui.PopMenu):
             "border-radius": "1em",
         })
 
-        self.opened = gui.Signal()
-
         self.callbacks = []
 
     def addAction(self, text, callback):
@@ -937,7 +935,8 @@ class PopPreview(gui.PopMenu):
 
         self.div_audio = gui.Widget(_type='div', parent=content)
         self.div_audio.style.update({
-            "width": "50vw",
+            "min-width": "200px",
+            "max-width": "80vw",
             "height": "1em",
             "margin": "0 auto",
             "background": "transparent",
@@ -1036,6 +1035,89 @@ class PopPreview(gui.PopMenu):
         self.document_view.set_source(url, ext)
         self._div_content.onclick.connect(lambda *args: None)
 
+class TextInputMenu(gui.PopMenu):
+    BTN_ROLE_OK = 1
+
+    def __init__(self, title, message, hint='', input='text', btn_role=1, **kwargs):
+        super(TextInputMenu, self).__init__(**kwargs)
+        content = self.centralElement()
+        content.style.update({
+            "width": "75vw",
+            "max-width": "500px",
+            "height": "auto",
+            "padding-top": ".5em",
+            "padding-bottom": ".5em",
+            "border": "1px solid black",
+            "border-radius": "1em"
+
+        })
+
+        self.lbl_title = gui.Label(title, parent=content)
+        self.lbl_title.style.update({
+            "border-bottom": "1px solid black",
+            "padding-left": "1em",
+            "padding-right": "1em",
+        })
+
+        if message:
+            self.lbl_text = gui.Label(message, parent=content)
+            self.lbl_text.style.update({
+                "padding": "1em",
+            })
+
+        self.span_input = gui.Widget(_type='span', parent=content)
+        self.span_input.style.update({
+            "display": "block",
+            "padding": "1em",
+            "margin": "0 0 1em",
+        })
+        self.txt_input = gui.TextInput(input, parent=self.span_input)
+        self.txt_input.attributes['placeholder'] = hint
+        self.txt_input.attributes['autofocus'] = None
+        self.txt_input.style.update({
+            "width": "100%",
+            "border": "1px solid black",
+            "box-sizing": "border-box"
+        })
+
+        self.hbox_actions = gui.HBox(parent=content)
+        self.hbox_actions.style.update({
+            'align-items': 'right',
+            'background': 'transparent',
+            "padding-left": "1em",
+            "padding-right": "1em",
+        })
+
+        gui.Spacer(parent=self.hbox_actions)
+
+        self.btn_accept = gui.Button("OK", parent=self.hbox_actions)
+        self.btn_accept.onclick.connect(lambda *args: self.accept())
+        self.btn_accept.style.update({
+            "padding-left": "1em",
+            "padding-right": "1em",
+            "margin-right": "1em",
+
+        })
+        del self.btn_accept.style['margin']
+
+        self.btn_reject = gui.Button("cancel", parent=self.hbox_actions)
+        self.btn_reject.onclick.connect(lambda *args: self.reject())
+        self.btn_reject.style.update({
+            "padding-left": "1em",
+            "padding-right": "1em",
+            "margin-right": "1em",
+        })
+        del self.btn_reject.style['margin']
+
+    def show(self):
+        self.setText("")
+        super().show()
+
+    def setText(self, text):
+        return self.txt_input.set_value(text)
+
+    def text(self):
+        return self.txt_input.get_value()
 # ---------------------
 
 class ContentPage(gui.Page):
@@ -1352,8 +1434,13 @@ class FileSystemPage(ContentPage):
         self._onOpenPreview = gui.Slot(self.onOpenPreview)
         self._onOpenParent = gui.Slot(self.onOpenParent)
         self._onOpenRoot = gui.Slot(self.onOpenRoot)
+        self._onOpenRoot = gui.Slot(self.onOpenRoot)
+        self._onCreateFolderAccepted = gui.Slot(self.onCreateFolderAccepted)
 
         self.menu = PopPreview(parent=self)
+        self.menu_mkdir = TextInputMenu('Create Folder',
+            '', 'New Folder', parent=self)
+        self.menu_mkdir.accepted.connect(self._onCreateFolderAccepted)
 
         self.listdir()  # TODO: this is a bug, on show: listdir
 
@@ -1425,6 +1512,9 @@ class FileSystemPage(ContentPage):
             btn.onsuccess.connect(self.onFileUploadSuccess)
             btn.onfailure.connect(self.onFileUploadFailure)
             wdt.addWidget(btn)
+
+            wdt.addAction("/res/app/new_folder.svg",
+                self.onShowCreateFolderMenu)
             wdt.addSpacer()
             self.lst.append(wdt)
 
@@ -1525,6 +1615,36 @@ class FileSystemPage(ContentPage):
     def onOpenRoot(self, file_info):
         self.root = file_info['name']
         self.path = ""
+        self.listdir()
+        self.location.emit(self.root, self.path)
+
+    def onShowCreateFolderMenu(self):
+        self.menu_mkdir.show()
+        # use a timeout to select the element after it has been re-rendered
+        # TODO: can this script as part of a context aware widget somehow..
+        text = "setTimeout(function() {" \
+            "document.getElementById(\"%s\").focus();}, 250)" % (
+                self.menu_mkdir.txt_input.identifier)
+        self.context.execute.emit(text)
+        print(text)
+
+    def onCreateFolderAccepted(self):
+        """
+        a wierd side-effect of the current implementation is that
+        we can browse to any directory.
+
+        directories don't exist, only files, so browsing away
+        will just as easily 'delete' that record
+
+        TODO: optional: may want to persist the path in a tmp dict
+        for listdir to persist this path
+        """
+        text = self.menu_mkdir.text().strip()
+
+        if not text:
+            return
+
+        self.path = os.path.join(self.path, text)
         self.listdir()
         self.location.emit(self.root, self.path)
 

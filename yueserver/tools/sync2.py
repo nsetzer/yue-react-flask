@@ -1786,6 +1786,7 @@ def _parse_path_args(fs, remote_base, local_base, args_paths):
         relpath = posixpath.join(remote_base, relpath)
 
         name = fs.split(abspath)[1]
+        print(">", name, relpath, abspath)
         paths.append(DirEnt(name, relpath, abspath))
 
     paths.sort(key=lambda x: x.local_base)
@@ -1878,6 +1879,7 @@ def cli_status(args):
 
     first = True
     for dent in paths:
+        print(ctxt.remote_base, ctxt.local_base, dent)
 
         if not first:
             sys.stdout.write("\n")
@@ -2038,9 +2040,11 @@ def main():
         default=None)
 
     parser_init.add_argument('-b', '--local_base', dest="local_base",
-        default=os.getcwd())
+        default=os.getcwd(),
+        help="the directory to checkout to (pwd)")
     parser_init.add_argument('-r', '--remote_base', dest="remote_base",
-        default="")
+        default="",
+        help="the relative path-prefix to checkout ("")")
 
     parser_init.add_argument('hostname')
     parser_init.add_argument('root', nargs="?", default="default")

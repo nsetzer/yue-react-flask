@@ -3137,6 +3137,8 @@ class PopMenu(Widget):
         # a click handler to catch clicks outside the pop window
         self.onclick.connect(lambda *args: self.reject())
 
+        self.accepted = Signal()
+        self.rejected = Signal()
         self.finished = Signal(bool)
 
     def centralElement(self):
@@ -3145,10 +3147,12 @@ class PopMenu(Widget):
     def reject(self):
         self.style['display'] = 'none'
         self.finished.emit(False)
+        self.rejected.emit()
 
     def accept(self):
         self.style['display'] = 'none'
         self.finished.emit(True)
+        self.accepted.emit()
 
     def show(self):
         self.style['display'] = 'table'
