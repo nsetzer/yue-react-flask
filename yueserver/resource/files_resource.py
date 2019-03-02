@@ -291,7 +291,7 @@ class FilesResource(WebResource):
                 return jsonify(result=result)
             else:
                 _, name = self.filesys_service.fs.split(info.file_path)
-                stream = self.filesys_service.fs.open(storage_path, "rb")
+                stream = self.filesys_service.fs.open(info.storage_path, "rb")
                 if info.encryption in (CryptMode.server, CryptMode.system):
                     if not password and info.encryption == CryptMode.server:
                         return httpError(400, "Invalid Password")

@@ -282,6 +282,7 @@ class FileInfoWidget(gui.Widget):
 
         self.openDirectory = gui.Signal(object)
         self.openPreview = gui.Signal(object)
+        self.openMore = gui.Signal(object)
 
         self.div_lock = gui.Widget(_type="div")
         self.div_lock.style.update({
@@ -356,6 +357,16 @@ class FileInfoWidget(gui.Widget):
             })
             del btn.style['margin']
 
+            btn = gui.Button("", parent=self.hbox, image="/res/app/more.svg")
+            btn.onclick.connect(self._onMoreClicked)
+            btn.style.update({
+                "width": "4em",
+                "margin-left": "0",
+                "margin-right": "1em",
+                "background": "transparent"
+            })
+            del btn.style['margin']
+
     def _onOpenClicked(self, widget):
         if self.file_info['isDir']:
             self.openDirectory.emit(self.file_info)
@@ -363,6 +374,10 @@ class FileInfoWidget(gui.Widget):
     def _onOpenPreviewClicked(self, widget):
         if not self.file_info['isDir']:
             self.openPreview.emit(self.file_info)
+
+    def _onMoreClicked(self, widget):
+        if not self.file_info['isDir']:
+            self.openMore.emit(self.file_info)
 
     def onFileDownloadSuccess(self, *args):
         print("download success", args)
@@ -1434,10 +1449,16 @@ class FileSystemPage(ContentPage):
         self._onOpenPreview = gui.Slot(self.onOpenPreview)
         self._onOpenParent = gui.Slot(self.onOpenParent)
         self._onOpenRoot = gui.Slot(self.onOpenRoot)
-        self._onOpenRoot = gui.Slot(self.onOpenRoot)
         self._onCreateFolderAccepted = gui.Slot(self.onCreateFolderAccepted)
+        self._onShowMore = gui.Slot(self.onShowMore)
 
         self.menu = PopPreview(parent=self)
+
+        self.menu_more = PopMenu(parent=self)
+        self.menu_more.addAction("Download", lambda: None)
+        self.menu_more.addAction("Rename", lambda: None)
+        self.menu_more.addAction("Delete", lambda: None)
+
         self.menu_mkdir = TextInputMenu('Create Folder',
             '', 'New Folder', parent=self)
         self.menu_mkdir.accepted.connect(self._onCreateFolderAccepted)
@@ -1557,6 +1578,7 @@ class FileSystemPage(ContentPage):
                 item = FileInfoWidget(file_info, url=url)
                 item.openDirectory.connect(self._onOpenDirectory)
                 item.openPreview.connect(self._onOpenPreview)
+                item.openMore.connect(self._onShowMore)
                 self.lst.append(item)
 
             for name in session_dirs:
@@ -1617,6 +1639,10 @@ class FileSystemPage(ContentPage):
         self.path = ""
         self.listdir()
         self.location.emit(self.root, self.path)
+
+    def onShowMore(self, file_info):
+        print(file_info)
+        self.menu_more.show()
 
     def onShowCreateFolderMenu(self):
         self.menu_mkdir.show()

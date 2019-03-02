@@ -27,6 +27,15 @@ add threading model
 neither or these cases are handled by _check:
     remote directory, local file with same name
     local directory, remote file with same name
+
+implement `syn mv`
+    - accept two arguments, first is either a file or folder
+    - if the first is a folder, second must be a folder and not exist.
+    - if first is a folder, second must not exist
+      (but can be a folder and the path interpolated)
+    - when moving a folder compute the set of changes server side
+    - then perform a bulk update
+
 """
 import os, sys
 import argparse
@@ -996,6 +1005,7 @@ def _fetch(ctxt):
             except Exception as e:
                 logging.error("unable to fetch: %s" % e)
                 return
+
             if response.status_code != 200:
                 sys.stderr.write("fetch error...")
                 return
@@ -1014,6 +1024,11 @@ def _fetch(ctxt):
                     "remote_public": f['public'],
                     "remote_encryption": f['encryption'],
                 }
+
+                # support partial checkouts
+                if ctxt.remote_base:
+                    f['path'] = ctxt.fs.join(ctxt.remote_base, f['path'])
+
                 mode = ctxt.storageDao.upsert(f['path'], record, commit=False)
 
                 # indicate there are new files to pull
@@ -1043,6 +1058,7 @@ def _check(ctxt, remote_base, local_base):
     dirs = []
     files = []
     _dirs, _files = ctxt.storageDao.listdir(remote_base)
+
     # TODO: looks like memfs impl for exists is broken for dirs
     try:
         if not ctxt.fs.islocal(local_base) or ctxt.fs.exists(local_base):
@@ -1208,7 +1224,6 @@ def _check_file(ctxt, remote_path, local_path):
                 "encryption": item['remote_encryption'],
             }
 
-        print(lf, rf, af)
         ent = FileEnt(remote_path, local_path, lf, rf, af)
     else:
         # TODO: I could add extra context information,
@@ -1786,7 +1801,6 @@ def _parse_path_args(fs, remote_base, local_base, args_paths):
         relpath = posixpath.join(remote_base, relpath)
 
         name = fs.split(abspath)[1]
-        print(">", name, relpath, abspath)
         paths.append(DirEnt(name, relpath, abspath))
 
     paths.sort(key=lambda x: x.local_base)
@@ -1879,8 +1893,6 @@ def cli_status(args):
 
     first = True
     for dent in paths:
-        print(ctxt.remote_base, ctxt.local_base, dent)
-
         if not first:
             sys.stdout.write("\n")
 
