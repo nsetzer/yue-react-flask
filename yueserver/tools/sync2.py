@@ -43,6 +43,7 @@ import posixpath
 import logging
 import json
 import datetime, time
+import getpass
 from fnmatch import fnmatch
 
 import yueserver
@@ -87,6 +88,16 @@ def osname():
         if 'microsoft' in release:
             name = "nt"
     return name
+
+def get_pass(prompt="password: "):
+
+    if sys.stdin.isatty():
+        if os.environ.get('YUE_ECHO_PASSWORD', None):
+            return input(prompt)
+        else:
+            returngetpass.getpass(prompt)
+    else:
+        return sys.stdin.readline().rstrip('\n')
 
 def LocalStorageTable(metadata):
     """
@@ -301,7 +312,7 @@ class SyncContext(object):
 
     def getEncryptionServerPassword(self):
         if self.encryption_server_password is None:
-            self.encryption_server_password = input("server password: ")
+            self.encryption_server_password = get_pass("server password: ")
         return self.encryption_server_password
 
     def getEncryptionClientKey(self):
@@ -320,7 +331,7 @@ class SyncContext(object):
                     response.status_code)
             key = response.json()['result']['key']
 
-            password = input("client password: ")
+            password = get_pass("client password: ")
 
             self.encryption_client_key = decryptkey(password, key)
         return self.encryption_client_key
@@ -1070,13 +1081,6 @@ def _check(ctxt, remote_base, local_base):
 
     _names = {r.name: r for r in _records}
 
-    # neither or these cases are handled:
-    #   TODO: remote directory, local file with same name
-    #   TODO: local directory, remote file with same name
-    #    - automatic conflict state
-    #    - suggest rename local file or directory
-    #    - use a file entry or dir ent?
-    #
     for d in _dirs:
 
         if attr.match(d):
@@ -1086,7 +1090,6 @@ def _check(ctxt, remote_base, local_base):
         local_path = ctxt.fs.join(local_base, d)
         # check that the directory exists locally
         if d in _names:
-            # TODO os.scan would eliminate an extra stat call
             if _names[d].isDir:
                 state = FileState.SAME
             else:
@@ -1182,9 +1185,6 @@ def _check_file(ctxt, remote_path, local_path):
 
     """
 
-    # TODO: if there is a remote directory with the same name
-    # then this function fails to correctly display the status
-
     item = ctxt.storageDao.file_info(remote_path)
 
     try:
@@ -1236,8 +1236,37 @@ def _check_file(ctxt, remote_path, local_path):
 
     return ent
 
+def _parse_path_args(fs, remote_base, local_base, args_paths):
+
+    paths = []
+
+    for path in args_paths:
+        #if not fs.exists(path):
+        #    raise FileNotFoundError(path)
+        if not os.path.isabs(path):
+            abspath = os.path.normpath(os.path.join(os.getcwd(), path))
+        else:
+            abspath = path
+
+        if not abspath.startswith(local_base):
+            raise FileNotFoundError("path spec does not match")
+
+        relpath = os.path.relpath(path, local_base)
+        if relpath == ".":
+            relpath = ""
+        relpath = posixpath.join(remote_base, relpath)
+
+        name = fs.split(abspath)[1]
+        paths.append(DirEnt(name, relpath, abspath))
+
+    paths.sort(key=lambda x: x.local_base)
+
+    return paths
+
+###############################################################################
+# CLI implementations
+
 def _status_dir_impl(ctxt, remote_dir, local_dir, recursive):
-    # TODO: move recursive to the ctxt
 
     result = _check(ctxt, remote_dir, local_dir)
 
@@ -1497,81 +1526,81 @@ def _sync_impl(ctxt, paths, push=False, pull=False, force=False, recursive=False
             _sync_file(ctxt, dent.remote_base, dent.local_base,
                 push, pull, force)
 
-### def _sync_get_file(ctxt, rpath, lpath):
-###
-###     response = ctxt.client.files_get_path(ctxt.root, rpath, stream=True)
-###     rv = int(response.headers['X-YUE-VERSION'])
-###     rp = int(response.headers['X-YUE-PERMISSION'])
-###     rm = int(response.headers['X-YUE-MTIME'])
-###
-###     dpath = ctxt.fs.split(lpath)[0]
-###     if not ctxt.fs.exists(dpath):
-###         ctxt.fs.makedirs(dpath)
-###
-###     bytes_written = 0
-###     with ctxt.fs.open(lpath, "wb") as wb:
-###         for chunk in response.stream():
-###             bytes_written += len(chunk)
-###             wb.write(chunk)
-###
-### def _sync_put_file(ctxt, lpath, rpath):
-###
-###     record = ctxt.fs.file_info(local_path)
-###
-###     f = ProgressFileReaderWrapper(ctxt.fs, lpath, rpath)
-###     response = ctxt.client.files_upload(ctxt.root, rpath, f,
-###         mtime=record.mtime, permission=record.permission)
-###
-###     if response.status_code == 409:
-###         raise Exception("local database out of date. fetch first")
-###
-###     if response.status_code > 201:
-###         raise Exception(response.text)
+def _sync_get_file_impl(ctxt, rpath, lpath):
 
-###def _copy_impl(client, fs, src, dst):
-###    """
-###    copy from the remote server to a local path, or from a local path
-###    to a remote server.
-###
-###    src: either "server://${root}/${remote_path}" or a local file
-###    dst: either "server://${root}/${remote_path}" or a local file
-###
-###    both src and dst cannot be both remote or local paths
-###    """
-###
-###    tag = "server://"
-###    if src.startswith(tag):
-###        root, remote_path = src[len(tag):].split("/", 1)
-###
-###        if dst.startswith(tag):
-###            raise Exception("invalid path: %s" % dst)
-###
-###        response = client.files_get_path(root, remote_path, stream=True)
-###        with fs.open(dst, "wb") as wb:
-###            for chunk in response.stream():
-###                wb.write(chunk)
-###
-###    elif dst.startswith(tag):
-###        root, remote_path = dst[len(tag):].split("/", 1)
-###
-###        if src.startswith(tag) or not os.access(src, os.R_OK):
-###            raise Exception("invalid path: %s" % src)
-###
-###        info = fs.file_info(src)
-###
-###        f = ProgressFileReaderWrapper(fs, src, remote_path)
-###        response = client.files_upload(root, remote_path, f,
-###            mtime=info.mtime, permission=info.permission)
-###
-###    else:
-###        raise Exception("invalid source and destiniation path")
+    response = ctxt.client.files_get_path(ctxt.root, rpath, stream=True)
+    rv = int(response.headers['X-YUE-VERSION'])
+    rp = int(response.headers['X-YUE-PERMISSION'])
+    rm = int(response.headers['X-YUE-MTIME'])
 
-def _list_impl(client, root, path):
+    dpath = ctxt.fs.split(lpath)[0]
+    if not ctxt.fs.exists(dpath):
+        ctxt.fs.makedirs(dpath)
+
+    bytes_written = 0
+    with ctxt.fs.open(lpath, "wb") as wb:
+        for chunk in response.stream():
+            bytes_written += len(chunk)
+            wb.write(chunk)
+
+def _sync_put_file_impl(ctxt, lpath, rpath):
+
+    record = ctxt.fs.file_info(local_path)
+
+    f = ProgressFileReaderWrapper(ctxt.fs, lpath, rpath)
+    response = ctxt.client.files_upload(ctxt.root, rpath, f,
+        mtime=record.mtime, permission=record.permission)
+
+    if response.status_code == 409:
+        raise Exception("local database out of date. fetch first")
+
+    if response.status_code > 201:
+        raise Exception(response.text)
+
+def _copy_impl(ctxt, src, dst):
+    """
+    copy from the remote server to a local path, or from a local path
+    to a remote server.
+
+    src: either "server://${root}/${remote_path}" or a local file
+    dst: either "server://${root}/${remote_path}" or a local file
+
+    both src and dst cannot be both remote or local paths
+    """
+
+    tag = "server://"
+    if src.startswith(tag):
+        root, remote_path = src[len(tag):].split("/", 1)
+
+        if dst.startswith(tag):
+            raise Exception("invalid path: %s" % dst)
+
+        response = ctxt.client.files_get_path(root, remote_path, stream=True)
+        with ctxt.fs.open(dst, "wb") as wb:
+            for chunk in response.stream():
+                wb.write(chunk)
+
+    elif dst.startswith(tag):
+        root, remote_path = dst[len(tag):].split("/", 1)
+
+        if src.startswith(tag) or not os.access(src, os.R_OK):
+            raise Exception("invalid path: %s" % src)
+
+        info = ctxt.fs.file_info(src)
+
+        f = ProgressFileReaderWrapper(ctxt.fs, src, remote_path)
+        response = client.files_upload(root, remote_path, f,
+            mtime=info.mtime, permission=info.permission)
+
+    else:
+        raise Exception("invalid source and destiniation path")
+
+def _list_impl(ctxt, root, path):
     """
     list contents of a remote directory
     """
 
-    response = client.files_get_path(root, path, list=True)
+    response = ctxt.client.files_get_path(root, path, list=True)
 
     if response.status_code == 404:
         sys.stderr.write("not found: %s\n" % path)
@@ -1621,9 +1650,9 @@ def _setpass_impl(ctxt):
         sys.stdout.write(
                 "Do not forget this password. It cannot be recovered!\n\n")
 
-        svr_password = input('server password: ')
-        new_password = input('   new password: ')
-        chk_password = input('retype password: ')
+        svr_password = get_pass('server password: ')
+        new_password = get_pass('   new password: ')
+        chk_password = get_pass('retype password: ')
 
     elif response.status_code == 404:
         sys.stdout.write("Set the Password for Server Side Encryption\n")
@@ -1633,8 +1662,8 @@ def _setpass_impl(ctxt):
                 "Do not forget this password. It cannot be recovered!\n\n")
 
         svr_password = ""
-        new_password = input('server password: ')
-        chk_password = input('retype password: ')
+        new_password = get_pass('server password: ')
+        chk_password = get_pass('retype password: ')
         svr_password = new_password
 
     else:
@@ -1672,9 +1701,9 @@ def _setkey_impl(ctxt, workfactor):
         current_key = response.json()['result']['key']
         validatekey(current_key)
 
-        cnt_password = input('client password: ')
-        new_password = input('   new password: ')
-        chk_password = input('retype password: ')
+        cnt_password = get_pass('client password: ')
+        new_password = get_pass('   new password: ')
+        chk_password = get_pass('retype password: ')
 
         if new_password != chk_password:
             sys.stderr.write("password do not match!\n")
@@ -1698,8 +1727,8 @@ def _setkey_impl(ctxt, workfactor):
         sys.stdout.write(
             "Do not forget this password. It cannot be recovered!\n\n")
 
-        cnt_password = input('client password: ')
-        chk_password = input('retype password: ')
+        cnt_password = get_pass('client password: ')
+        chk_password = get_pass('retype password: ')
 
         if cnt_password != chk_password:
             sys.stderr.write("password do not match!\n")
@@ -1780,500 +1809,467 @@ def _getpublic_impl(ctxt, paths):
         else:
             sys.stderr.write("error: %s\n" % ent.remote_base)
 
-def _parse_path_args(fs, remote_base, local_base, args_paths):
+class CLI(object):
+    def __init__(self):
+        super(CLI, self).__init__()
 
-    paths = []
+    def register(self, parser):
+        pass
 
-    for path in args_paths:
-        #if not fs.exists(path):
-        #    raise FileNotFoundError(path)
-        if not os.path.isabs(path):
-            abspath = os.path.normpath(os.path.join(os.getcwd(), path))
-        else:
-            abspath = path
+    def execute(self, args):
+        pass
 
-        if not abspath.startswith(local_base):
-            raise FileNotFoundError("path spec does not match")
+class RootsCLI(CLI):
+    """
+    retrieve which buckets are available for a user
+    """
 
-        relpath = os.path.relpath(path, local_base)
-        if relpath == ".":
-            relpath = ""
-        relpath = posixpath.join(remote_base, relpath)
+    def register(self, parser):
+        subparser = parser.add_parser('roots', aliases=['buckets'],
+            help="list available buckets which can be accessed")
+        subparser.set_defaults(func=self.execute, cli=self)
 
-        name = fs.split(abspath)[1]
-        paths.append(DirEnt(name, relpath, abspath))
+        subparser.add_argument('-u', '--username',
+            default=None)
 
-    paths.sort(key=lambda x: x.local_base)
+        subparser.add_argument('-p', '--password',
+            default=None)
 
-    return paths
+        subparser.add_argument('hostname')
 
-def cli_roots(args):
+    def execute(self, args):
 
-    ctxt = get_ctxt(os.getcwd())
+        client = connect(args.hostname, args.username, args.password)
 
-    client = connect(args.hostname, args.username, args.password)
+        response = client.files_get_roots()
 
-    response = client.files_get_roots()
+        if response.status_code != 200:
+            raise Exception("unexpected error: %s" % response.status_code)
 
-    roots = response.json()['result']
+        roots = response.json()['result']
+        for root in roots:
+            sys.stdout.write("%s\n" % root)
 
-    for root in roots:
-        sys.stdout.write("%s\n" % root)
+class InitCLI():
+    def register(self, parser):
 
-def cli_init(args):
+        subparser = parser.add_parser('init',
+            help="initialize a directory")
+        subparser.set_defaults(func=self.execute, cli=self)
 
-    # get the user apikey before creating any resources,
-    # validate the user. use the apikey instead of a password
-    # to prevent storing the password on disk
+        subparser.add_argument('-u', '--username',
+            default=None)
 
-    client = connect(args.hostname, args.username, args.password)
-    try:
-        userinfo = client.user_get_user().json()['result']
-    except Exception as e:
-        logging.error("unable to validate user: %s" % e)
-        return
-    api_password = "APIKEY " + userinfo['apikey']
+        subparser.add_argument('-p', '--password',
+            default=None)
 
-    if len(os.listdir(args.local_base)):
-        sys.stderr.write("error: current directory is not empty\n")
-        return
+        subparser.add_argument('-b', '--local_base', dest="local_base",
+            default=os.getcwd(),
+            help="the directory to checkout to (pwd)")
 
-    # create a database
-    cfgdir = os.path.join(args.local_base, ".yue")
-    dbpath = os.path.abspath(os.path.join(cfgdir, "database.sqlite"))
-    userpath = os.path.abspath(os.path.join(cfgdir, "userdata.json"))
-    if not os.path.exists(cfgdir):
-        os.makedirs(cfgdir)
+        subparser.add_argument('-r', '--remote_base', dest="remote_base",
+            default="",
+            help="the relative path-prefix to checkout ("")")
 
-    dburl = "sqlite:///" + dbpath
-    db = db_connect(dburl)
-    db.create_all()
+        subparser.add_argument('hostname')
+        subparser.add_argument('root', nargs="?", default="default")
 
-    cm = CryptoManager()
+    def execute(self, args):
+        # get the user apikey before creating any resources,
+        # validate the user. use the apikey instead of a password
+        # to prevent storing the password on disk
 
-    private_key, public_key = cm.generate_key(cfgdir, "rsa", 2048)
+        client = connect(args.hostname, args.username, args.password)
+        try:
+            userinfo = client.user_get_user().json()['result']
+        except Exception as e:
+            logging.error("unable to validate user: %s" % e)
+            return
+        api_password = "APIKEY " + userinfo['apikey']
 
-    enc_password = cm.encrypt64(public_key, api_password.encode("utf-8"))
-    userdata = {
-        "username": args.username,
-        "password": enc_password,
-        "hostname": args.hostname,
-        "root": args.root,
-        "remote_base": args.remote_base,
-        "dburl": dburl,
-    }
+        if len(os.listdir(args.local_base)):
+            sys.stderr.write("error: current directory is not empty\n")
+            return
 
-    with open(userpath, "w") as wf:
-        json.dump(userdata, wf, indent=4, sort_keys=True)
+        # create a database
+        cfgdir = os.path.join(args.local_base, ".yue")
+        dbpath = os.path.abspath(os.path.join(cfgdir, "database.sqlite"))
+        userpath = os.path.abspath(os.path.join(cfgdir, "userdata.json"))
+        if not os.path.exists(cfgdir):
+            os.makedirs(cfgdir)
 
-    storageDao = LocalStorageDao(db, db.tables)
+        dburl = "sqlite:///" + dbpath
+        db = db_connect(dburl)
+        db.create_all()
 
-    fs = FileSystem()
+        cm = CryptoManager()
 
-    ctxt = SyncContext(client, storageDao, fs,
-        args.root, args.remote_base, args.local_base)
+        private_key, public_key = cm.generate_key(cfgdir, "rsa", 2048)
 
-    _fetch(ctxt)
+        enc_password = cm.encrypt64(public_key, api_password.encode("utf-8"))
+        userdata = {
+            "username": args.username,
+            "password": enc_password,
+            "hostname": args.hostname,
+            "root": args.root,
+            "remote_base": args.remote_base,
+            "dburl": dburl,
+        }
 
-def cli_fetch(args):
+        with open(userpath, "w") as wf:
+            json.dump(userdata, wf, indent=4, sort_keys=True)
 
-    ctxt = get_ctxt(os.getcwd())
+        storageDao = LocalStorageDao(db, db.tables)
 
-    _fetch(ctxt)
+        fs = FileSystem()
 
-def cli_status(args):
+        ctxt = SyncContext(client, storageDao, fs,
+            args.root, args.remote_base, args.local_base)
 
-    ctxt = get_ctxt(os.getcwd())
-    ctxt.verbose = args.verbose
-
-    # ---
-
-    paths = _parse_path_args(ctxt.fs,
-        ctxt.remote_base, ctxt.local_base, args.paths)
-
-    first = True
-    for dent in paths:
-        if not first:
-            sys.stdout.write("\n")
-
-        if ctxt.fs.isdir(dent.local_base):
-            if "" != dent.remote_base or len(paths) > 1:
-                sys.stdout.write("%s/\n" % dent.local_base)
-
-            _status_dir_impl(ctxt, dent.remote_base, dent.local_base,
-                args.recursion)
-        else:
-
-            _status_file_impl(ctxt, dent.remote_base, dent.local_base)
-
-        first = False
-    end = time.time()
-    return
-
-def cli_sync(args):
-
-    ctxt = get_ctxt(os.getcwd())
-
-    # todo: consider disabling delete on SYNC by default
-    #       leave on for push and pull
-
-    if args.update:
-        # TODO: consider a quite option, no logging
         _fetch(ctxt)
 
-    paths = _parse_path_args(ctxt.fs, ctxt.remote_base,
-        ctxt.local_base, args.paths)
+class FetchCLI(object):
 
-    _sync_impl(ctxt, paths, push=args.push, pull=args.pull,
-        force=args.force, recursive=args.recursion)
+    def register(self, parser):
+        subparser = parser.add_parser('fetch',
+            help="update the local database")
+        subparser.set_defaults(func=self.execute, cli=self)
 
-### def cli_get(args):
-###
-###     ctxt = get_ctxt(os.getcwd())
-###
-###     args.local_path = os.path.abspath(args.local_path)
-###
-###     _sync_get_file(ctxt, args.remote_path, args.local_path)
-###
-### def cli_put(args):
-###
-###     ctxt = get_ctxt(os.getcwd())
-###
-###     _sync_put_file(ctxt, args.local_path, args.remote_path)
+    def execute(self, args):
 
-def cli_info(args):
+        ctxt = get_ctxt(os.getcwd())
+
+        _fetch(ctxt)
+
+class StatusCLI(object):
+
+    def register(self, parser):
+
+        subparser = parser.add_parser('status', aliases=['st'],
+            help="check for changes")
+        subparser.set_defaults(func=self.execute, cli=self)
+
+        subparser.add_argument("-v", "--verbose", default=0,
+            action="count",
+            help="show detailed information")
+
+        subparser.add_argument("-r", "--recursion",
+            action="store_true",
+            help="check the status for sub directories")
+
+        subparser.add_argument("paths", nargs="*",
+            help="list of paths to check the status on")
+
+    def execute(self, args):
+
+        ctxt = get_ctxt(os.getcwd())
+        ctxt.verbose = args.verbose
+
+        # ---
+
+        paths = _parse_path_args(ctxt.fs,
+            ctxt.remote_base, ctxt.local_base, args.paths)
+
+        first = True
+        for dent in paths:
+            if not first:
+                sys.stdout.write("\n")
+
+            if ctxt.fs.isdir(dent.local_base):
+                if "" != dent.remote_base or len(paths) > 1:
+                    sys.stdout.write("%s/\n" % dent.local_base)
+
+                _status_dir_impl(ctxt, dent.remote_base, dent.local_base,
+                    args.recursion)
+            else:
+
+                _status_file_impl(ctxt, dent.remote_base, dent.local_base)
+
+            first = False
+        end = time.time()
+        return
+
+class SyncCLI(object):
+
+    def register(self, parser):
+
+        data = [
+            ('sync', True, True, "sync local and remote files"),
+            ('push', True, False, "push local changes to remote"),
+            ('pull', False, True, "pull remote changes")
+        ]
+        for name, push, pull, doc in data:
+
+            subparser = parser.add_parser(name, help=doc)
+            subparser.set_defaults(
+                func=self.execute, cli=self, push=push, pull=pull)
+
+            subparser.add_argument('-u', "--update",
+                action="store_true",
+                help="fetch prior to sync")
+
+            subparser.add_argument('-f', "--force",
+                action="store_true",
+                help="overwrite conflicts")
+
+            subparser.add_argument("-r", "--recursion",
+                action="store_true",
+                help="check the status for sub directories")
+
+            subparser.add_argument("paths", nargs="*",
+                help="list of paths to check the status on")
+
+    def execute(self, args):
+
+        ctxt = get_ctxt(os.getcwd())
+
+        # todo: consider disabling delete on SYNC by default
+        #       leave on for push and pull
+
+        if args.update:
+            # TODO: consider a quite option, no logging
+            _fetch(ctxt)
+
+        paths = _parse_path_args(ctxt.fs, ctxt.remote_base,
+            ctxt.local_base, args.paths)
+
+        _sync_impl(ctxt, paths, push=args.push, pull=args.pull,
+            force=args.force, recursive=args.recursion)
+
+class InfoCLI(object):
     """
     print file count and quota information
 
     verbose logging will print bytes instead of megabytes
     """
+    def register(self, parser):
 
-    ctxt = get_ctxt(os.getcwd())
+        subparser = parser.add_parser('info',
+            help="view user information")
+        subparser.add_argument("-v", "--verbose", default=0,
+            action="count",
+            help="show detailed information")
+        subparser.set_defaults(func=self.execute, cli=self)
 
-    response = ctxt.client.files_quota()
+    def execute(self, args):
 
-    obj = response.json()['result']
+        ctxt = get_ctxt(os.getcwd())
 
-    usage = obj['nbytes']
-    cap = obj['quota']
-    if args.verbose == 0:
-        cap = "%.1f MB" % (cap / 1024 / 1024)
-        usage = "%.1f MB" % (usage / 1024 / 1024)
+        response = ctxt.client.files_quota()
 
-    sys.stdout.write("file_count: %d\n" % obj['nfiles'])
-    sys.stdout.write("usage: %s\n" % usage)
-    sys.stdout.write("capacity: %s\n" % cap)
+        obj = response.json()['result']
 
-###def cli_copy(args):
-###
-###    ctxt = get_ctxt(os.getcwd())
-###
-###    _copy_impl(ctxt.client, ctxt.fs, args.src, args.dst)
+        usage = obj['nbytes']
+        cap = obj['quota']
+        if args.verbose == 0:
+            cap = "%.1f MB" % (cap / 1024 / 1024)
+            usage = "%.1f MB" % (usage / 1024 / 1024)
 
-def cli_list(args):
+        sys.stdout.write("file_count: %d\n" % obj['nfiles'])
+        sys.stdout.write("usage: %s\n" % usage)
+        sys.stdout.write("capacity: %s\n" % cap)
 
-    ctxt = get_ctxt(os.getcwd())
+class ListCLI(object):
 
-    root = args.root or ctxt.root
-    _list_impl(ctxt.client, root, args.path.strip("/"))
+    def register(self, parser):
 
-def cli_attr(args):
+        subparser = parser.add_parser('list', aliases=['ls'],
+            help="list contents of a remote directory")
+        subparser.set_defaults(func=self.execute, cli=self)
 
-    cwd = os.getcwd()
-    ctxt = get_ctxt(cwd)
+        subparser.add_argument("--root", default=None,
+            help="file system root to list")
 
-    _attr_impl(ctxt, args.path or cwd)
+        subparser.add_argument('path', nargs="?", default="",
+            help="relative remote path")
 
-def cli_setpass(args):
+    def execute(self, args):
 
-    cwd = os.getcwd()
-    ctxt = get_ctxt(cwd)
+        ctxt = get_ctxt(os.getcwd())
 
-    _setpass_impl(ctxt)
+        root = args.root or ctxt.root
+        _list_impl(ctxt, root, args.path.strip("/"))
 
-def cli_setkey(args):
+class AttrCLI(object):
 
-    cwd = os.getcwd()
-    ctxt = get_ctxt(cwd)
+    def register(self, parser):
 
-    _setkey_impl(ctxt, args.workfactor)
+        subparser = parser.add_parser('attr',
+            help="print directory attributes")
+        subparser.set_defaults(func=self.execute, cli=self)
 
-def cli_setpublic(args):
+        subparser.add_argument('path', nargs="?", default="",
+            help="local directory path")
 
-    cwd = os.getcwd()
-    ctxt = get_ctxt(cwd)
+    def execute(self, args):
+        cwd = os.getcwd()
+        ctxt = get_ctxt(cwd)
+        _attr_impl(ctxt, args.path or cwd)
 
-    paths = _parse_path_args(ctxt.fs,
-        ctxt.remote_base, ctxt.local_base, args.paths)
+class SetPassCLI(object):
 
-    _setpublic_impl(ctxt, paths, args.password, args.revoke)
+    def register(self, parser):
 
-def cli_getpublic(args):
+        subparser = parser.add_parser('setpass',
+            help="set or change encryption server password")
+        subparser.set_defaults(func=self.execute, cli=self)
 
-    cwd = os.getcwd()
-    ctxt = get_ctxt(cwd)
+    def execute(self, args):
 
-    paths = _parse_path_args(ctxt.fs,
-        ctxt.remote_base, ctxt.local_base, args.paths)
+        cwd = os.getcwd()
+        ctxt = get_ctxt(cwd)
 
-    _getpublic_impl(ctxt, paths)
+        _setpass_impl(ctxt)
+
+class SetKeyCLI(object):
+
+    def register(self, parser):
+
+        subparser = parser.add_parser('setkey',
+            help="set or change encryption client key")
+        subparser.set_defaults(func=self.execute, cli=self)
+
+        subparser.add_argument('-w', '--workfactor', type=int, default=12,
+            help="bcrypt workfactor")
+
+    def execute(self, args):
+
+        cwd = os.getcwd()
+        ctxt = get_ctxt(cwd)
+
+        _setkey_impl(ctxt, args.workfactor)
+
+class SetPublicCLI(object):
+
+    def register(self, parser):
+
+        subparser = parser.add_parser('setpublic',
+            help="set or revoke public access to a file")
+        subparser.set_defaults(func=self.execute, cli=self)
+
+        subparser.add_argument("--password", default=None, type=str,
+            help="use as a password for public access")
+
+        subparser.add_argument("--revoke", action='store_true',
+            help="revoke public access")
+
+        subparser.add_argument("paths", nargs="*",
+            help="paths to modify")
+
+    def execute(self, args):
+
+        cwd = os.getcwd()
+        ctxt = get_ctxt(cwd)
+
+        paths = _parse_path_args(ctxt.fs,
+            ctxt.remote_base, ctxt.local_base, args.paths)
+
+        _setpublic_impl(ctxt, paths, args.password, args.revoke)
+
+class GetPublicCLI(object):
+
+    def register(self, parser):
+
+        subparser = parser.add_parser('getpublic',
+            help="set or revoke public access to a file")
+        subparser.set_defaults(func=self.execute, cli=self)
+
+        subparser.add_argument("paths", nargs="*",
+            help="paths to get information for")
+
+    def execute(self, args):
+
+        cwd = os.getcwd()
+        ctxt = get_ctxt(cwd)
+
+        paths = _parse_path_args(ctxt.fs,
+            ctxt.remote_base, ctxt.local_base, args.paths)
+
+        _getpublic_impl(ctxt, paths)
+
+class GetCLI(object):
+
+    def register(self, parser):
+
+        subparser = parser.add_parser('get',
+            help="copy a remote file locally")
+        subparser.set_defaults(func=self.execute, cli=self)
+
+        subparser.add_argument("remote_path",
+            help="path to a remote file")
+
+        subparser.add_argument("local_path", default=None, nargs="?",
+            help="path to a local file")
+
+    def execute(self, args):
+        ctxt = get_ctxt(os.getcwd())
+
+        args.local_path = os.path.abspath(args.local_path)
+
+        _sync_get_file_impl(ctxt, args.remote_path, args.local_path)
+
+class PutCLI(object):
+
+    def register(self, parser):
+
+        subparser = parser.add_parser('put',
+            help="copy a local file to remote")
+        subparser.set_defaults(func=self.execute, cli=self)
+
+        subparser.add_argument("local_path",
+            help="path to a local file")
+
+        subparser.add_argument("remote_path",
+            help="path to a remote file")
+
+    def execute(self, args):
+        ctxt = get_ctxt(os.getcwd())
+
+        _sync_put_file_impl(ctxt, args.local_path, args.remote_path)
+
+class CopyCLI(object):
+
+    def register(self, parser):
+
+        subparser = parser.add_parser('copy', aliases=['cp'],
+            help="copy a file up or down")
+        subparser.set_defaults(func=self.execute, cli=self)
+
+        subparser.add_argument('src', help="source file to copy")
+        subparser.add_argument('dst', help="destination path")
+
+    def execute(self, args):
+        ctxt = get_ctxt(os.getcwd())
+
+        _copy_impl(ctxt, ctxt, args.src, args.dst)
+
+def _register_parsers(parser):
+
+    RootsCLI().register(subparsers)
+    InitCLI().register(subparsers)
+    FetchCLI().register(subparsers)
+    StatusCLI().register(subparsers)
+    SyncCLI().register(subparsers)
+    InfoCLI().register(subparsers)
+    FetchCLI().register(subparsers)
+    AttrCLI().register(subparsers)
+    SetPassCLI().register(subparsers)
+    SetKeyCLI().register(subparsers)
+    SetPublicCLI().register(subparsers)
+    GetPublicCLI().register(subparsers)
+
+    #GetCLI().register(subparsers)
+    #PutCLI().register(subparsers)
+    #CopyCLI().register(subparsers)
 
 def main():
 
-    parser = argparse.ArgumentParser(description='sync utility')
+    parser = argparse.ArgumentParser(
+        description='sync utility',
+        epilog="The environment variable YUE_ECHO_PASSWORD can be set"
+        " to echo passwords that are typed in.")
     subparsers = parser.add_subparsers()
-
-    ###########################################################################
-    # Roots
-
-    parser_roots = subparsers.add_parser('roots',
-        help="list available buckets which can be accessed")
-    parser_roots.set_defaults(func=cli_roots)
-
-    parser_roots.add_argument('-u', '--username',
-        default=None)
-
-    parser_roots.add_argument('-p', '--password',
-        default=None)
-
-    parser_roots.add_argument('hostname')
-
-    ###########################################################################
-    # Init
-
-    parser_init = subparsers.add_parser('init',
-        help="initialize a directory")
-    parser_init.set_defaults(func=cli_init)
-
-    parser_init.add_argument('-u', '--username',
-        default=None)
-
-    parser_init.add_argument('-p', '--password',
-        default=None)
-
-    parser_init.add_argument('-b', '--local_base', dest="local_base",
-        default=os.getcwd(),
-        help="the directory to checkout to (pwd)")
-    parser_init.add_argument('-r', '--remote_base', dest="remote_base",
-        default="",
-        help="the relative path-prefix to checkout ("")")
-
-    parser_init.add_argument('hostname')
-    parser_init.add_argument('root', nargs="?", default="default")
-
-    ###########################################################################
-    # Info
-
-    parser_info = subparsers.add_parser('info',
-        help="view user information")
-    parser_info.add_argument("-v", "--verbose", default=0,
-        action="count",
-        help="show detailed information")
-    parser_info.set_defaults(func=cli_info)
-
-    ###########################################################################
-    # Fetch
-
-    parser_fetch = subparsers.add_parser('fetch',
-        help="update the local database")
-    parser_fetch.set_defaults(func=cli_fetch)
-
-    ###########################################################################
-    # Status
-
-    parser_status = subparsers.add_parser('status', aliases=['st'],
-        help="check for changes")
-    parser_status.set_defaults(func=cli_status)
-
-    parser_status.add_argument("-v", "--verbose", default=0,
-        action="count",
-        help="show detailed information")
-
-    parser_status.add_argument("-r", "--recursion",
-        action="store_true",
-        help="check the status for sub directories")
-
-    parser_status.add_argument("paths", nargs="*",
-        help="list of paths to check the status on")
-
-    ###########################################################################
-    # Sync
-
-    parser_sync = subparsers.add_parser('sync',
-        help="sync local and remote files")
-    parser_sync.set_defaults(func=cli_sync)
-    parser_sync.set_defaults(push=True)
-    parser_sync.set_defaults(pull=True)
-
-    parser_sync.add_argument('-u', "--update",
-        action="store_true",
-        help="fetch prior to sync")
-
-    parser_sync.add_argument('-f', "--force",
-        action="store_true",
-        help="overwrite conflicts")
-
-    parser_sync.add_argument("-r", "--recursion",
-        action="store_true",
-        help="check the status for sub directories")
-
-    parser_sync.add_argument("paths", nargs="*",
-        help="list of paths to check the status on")
-
-    ### ###########################################################################
-    ### # Get
-    ###
-    ### parser_get = subparsers.add_parser('get',
-    ###     help="copy a remote file locally")
-    ### parser_get.set_defaults(func=cli_get)
-    ###
-    ### parser_get.add_argument("remote_path",
-    ###     help="path to a remote file")
-    ###
-    ### parser_get.add_argument("local_path", default=None, nargs="?",
-    ###     help="path to a local file")
-    ###
-    ### ###########################################################################
-    ### # Put
-    ###
-    ### parser_put = subparsers.add_parser('put',
-    ###     help="copy a local file to remote")
-    ### parser_put.set_defaults(func=cli_put)
-    ###
-    ### parser_put.add_argument("local_path",
-    ###     help="path to a local file")
-    ###
-    ### parser_put.add_argument("remote_path",
-    ###     help="path to a remote file")
-
-    ###########################################################################
-    # Pull
-
-    parser_pull = subparsers.add_parser('pull',
-        help="retrieve remote files")
-    parser_pull.set_defaults(func=cli_sync)
-    parser_pull.set_defaults(push=False)
-    parser_pull.set_defaults(pull=True)
-
-    parser_pull.add_argument('-u', "--update",
-        action="store_true",
-        help="fetch prior to sync")
-
-    parser_pull.add_argument('-f', "--force",
-        action="store_true",
-        help="overwrite conflicts")
-
-    parser_pull.add_argument("-r", "--recursion",
-        action="store_true",
-        help="check the status for sub directories")
-
-    parser_pull.add_argument("paths", nargs="*",
-        help="list of paths to check the status on")
-
-    ###########################################################################
-    # Push
-
-    parser_push = subparsers.add_parser('push',
-        help="push local files")
-    parser_push.set_defaults(func=cli_sync)
-    parser_push.set_defaults(push=True)
-    parser_push.set_defaults(pull=False)
-
-    parser_push.add_argument('-u', "--update",
-        action="store_true",
-        help="fetch prior to sync")
-
-    parser_push.add_argument('-f', "--force",
-        action="store_true",
-        help="overwrite conflicts")
-
-    parser_push.add_argument("-r", "--recursion",
-        action="store_true",
-        help="check the status for sub directories")
-
-    parser_push.add_argument("paths", nargs="*",
-        help="list of paths to check the status on")
-
-    ###########################################################################
-    # Copy
-
-    ### parser_copy = subparsers.add_parser('copy', aliases=['cp'],
-    ###     help="copy a file up or down")
-    ### parser_copy.set_defaults(func=cli_copy)
-    ###
-    ### parser_copy.add_argument('src', help="source file to copy")
-    ### parser_copy.add_argument('dst', help="destination path")
-
-    ###########################################################################
-    # List
-
-    parser_list = subparsers.add_parser('list', aliases=['ls'],
-        help="list contents of a remote directory")
-    parser_list.set_defaults(func=cli_list)
-
-    parser_list.add_argument("--root", default=None,
-        help="file system root to list")
-
-    parser_list.add_argument('path', nargs="?", default="",
-        help="relative remote path")
-
-    ###########################################################################
-    # Attr
-
-    parser_attr = subparsers.add_parser('attr',
-        help="print directory attributes")
-    parser_attr.set_defaults(func=cli_attr)
-
-    parser_attr.add_argument('path', nargs="?", default="",
-        help="local directory path")
-
-    ###########################################################################
-    # Set Encryption Server Password
-
-    parser_setpass = subparsers.add_parser('setpass',
-        help="set or change encryption server password")
-    parser_setpass.set_defaults(func=cli_setpass)
-
-    ###########################################################################
-    # Set Encryption Client Password
-
-    parser_setkey = subparsers.add_parser('setkey',
-        help="set or change encryption client key")
-    parser_setkey.set_defaults(func=cli_setkey)
-
-    parser_setkey.add_argument('-w', '--workfactor', type=int, default=12,
-        help="bcrypt workfactor")
-
-    ###########################################################################
-    # Set or Revoke public access
-
-    parser_setpublic = subparsers.add_parser('setpublic',
-        help="set or revoke public access to a file")
-
-    parser_setpublic.add_argument("--password", default=None, type=str,
-        help="use as a password for public access")
-
-    parser_setpublic.add_argument("--revoke", action='store_true',
-        help="revoke public access")
-
-    parser_setpublic.add_argument("paths", nargs="*",
-        help="paths to modify")
-
-    parser_setpublic.set_defaults(func=cli_setpublic)
-
-    ###########################################################################
-    #  Get public URL
-
-    parser_getpublic = subparsers.add_parser('getpublic',
-        help="set or revoke public access to a file")
-
-    parser_getpublic.add_argument("paths", nargs="*",
-        help="paths to get information for")
-
-    parser_getpublic.set_defaults(func=cli_getpublic)
-
-    ###########################################################################
-
+    _register_parsers(subparsers)
     args = parser.parse_args()
 
     if hasattr(args, "username"):
@@ -2283,7 +2279,7 @@ def main():
         if args.password is None and ':' in args.username:
             args.username, args.password = args.username.split(':', 1)
         elif args.password is None:
-            args.password = input("password:")
+            args.password = get_pass("password:")
 
     if hasattr(args, "paths"):
         if len(args.paths) == 0:
