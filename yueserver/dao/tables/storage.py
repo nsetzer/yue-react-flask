@@ -2,8 +2,10 @@
 
 from sqlalchemy.schema import Table, Column, ForeignKey, UniqueConstraint
 from sqlalchemy.types import Integer, String, Boolean
+from sqlalchemy.sql import func
+from sqlalchemy.sql import select
 
-from .util import generate_uuid, StringArrayType
+from .util import generate_uuid, StringArrayType, CreateView
 import time
 
 def FileSystemStorageTableV1(metadata):
@@ -154,7 +156,6 @@ def FileSystemStorageTableV3(metadata):
         UniqueConstraint('user_id', 'filesystem_id', 'file_path', name='uix_fs'),
     )
 
-
 def FileSystemTable(metadata):
     """ returns a table which maps a 'root' name to a file system location
     """
@@ -201,3 +202,29 @@ def FileSystemPermissionTable(metadata):
         Column('role_id', ForeignKey("user_role.id"), nullable=False),
         Column('file_id', ForeignKey("filesystem.id"), nullable=False),
     )
+
+def FileSystemUserUsageView(tables, metadata):
+
+    t1 = tables.FileSystemStorageTable
+    t2 = tables.FileSystemUserSupplementaryTable
+    query = select([
+            t1.c.user_id,
+            func.sum(t1.c.size).label('usage'),
+            t2.c.quota,
+    ]).select_from(t2) \
+        .where(t1.c.user_id == t2.c.user_id) \
+        .group_by(t1.c.user_id)
+
+    name = "v_filesystem_user_diskusage"
+    text = CreateView(name, query)
+    view = Table(name, metadata,
+        Column('user_id', String),
+        Column('usage', Integer),
+        Column('quota', Integer),
+    )
+
+    return view, text
+
+
+
+

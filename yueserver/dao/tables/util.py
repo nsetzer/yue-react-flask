@@ -4,8 +4,11 @@ Helper functions for defining database tables
 """
 import os, sys
 import json
+from sqlalchemy import Table
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.types import Integer, String, TypeDecorator
 from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.sql.expression import Executable, ClauseElement
 
 from sqlalchemy.dialects.sqlite.pysqlite import SQLiteDialect_pysqlite
 from sqlalchemy.dialects.postgresql import JSONB
@@ -76,4 +79,17 @@ class JsonType(TypeDecorator):
 
     def copy(self):
         return JsonType(self.impl.length)
+
+class CreateView(Executable, ClauseElement):
+    def __init__(self, name, select):
+        self.name = name
+        self.select = select
+
+@compiles(CreateView)
+def visit_create_view(element, compiler, **kw):
+    text = "CREATE VIEW IF NOT EXISTS %s AS %s" % (
+         element.name,
+         compiler.process(element.select, literal_binds=True)
+    )
+    return text
 

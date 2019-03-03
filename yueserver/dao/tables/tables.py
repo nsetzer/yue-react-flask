@@ -16,7 +16,8 @@ from .storage import FileSystemStorageTableV1, FileSystemStorageTableV2, \
                      FileSystemStorageTableV3, \
                      FileSystemTable, FileSystemPermissionTable, \
                      FileSystemUserSupplementaryTable, \
-                     FileSystemUserEncryptionTable
+                     FileSystemUserEncryptionTable, \
+                     FileSystemUserUsageView
 from .schema import ApplicationSchemaTable
 
 class BaseDatabaseTables(object):
@@ -121,6 +122,16 @@ class DatabaseTablesV2(BaseDatabaseTables):
             FileSystemUserSupplementaryTable(metadata)
         self.FileSystemUserEncryptionTable = \
             FileSystemUserEncryptionTable(metadata)
+
+        #self.FileSystemUserUsageView, text = \
+        #    FileSystemUserUsageView(self, metadata)
+        #self._views = [text]
+
+    def create_views(self, engine):
+
+        #for text in self._views:
+        #    engine.execute(text)
+        pass
 
 DatabaseTables = DatabaseTablesV2
 

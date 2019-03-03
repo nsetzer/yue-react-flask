@@ -98,6 +98,10 @@ class DatabaseConnection(object):
         return statement.compile(self.engine,
             compile_kwargs={'literal_binds': True})
 
+    def create_all(self):
+        self.metadata.create_all(self.engine)
+        self.tables.create_views(self.engine)
+
 def db_connect(url=None, readonly=False):
     """
     a reimplementation of the Flask-SqlAlchemy integration
@@ -123,7 +127,6 @@ def db_connect_impl(tables_class, url, readonly):
     if readonly:
         db.session.flush = _abort_flush
     db.tables = tables_class(db.metadata)
-    db.create_all = lambda: db.metadata.create_all(engine)
     db.delete_all = lambda: db.tables.drop(db.engine)
     db.disconnect = lambda: engine.dispose()
     db.delete = lambda table: db.session.execute(delete(table))
