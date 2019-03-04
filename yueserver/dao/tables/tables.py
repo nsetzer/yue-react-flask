@@ -32,6 +32,8 @@ class BaseDatabaseTables(object):
             if isinstance(item, Table):
                 item.drop(engine, checkfirst=True)
 
+    def create_views(self, engine):
+        pass
 class DatabaseTablesV0(BaseDatabaseTables):
     """define all tables required for the database"""
     version = 0

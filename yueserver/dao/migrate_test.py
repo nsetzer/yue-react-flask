@@ -8,7 +8,7 @@ import os, sys
 import unittest
 
 from .db import db_connect_impl, db_add_column, db_get_columns, db_iter_rows
-
+from .tables.tables import BaseDatabaseTables
 from sqlalchemy.schema import Table, Column, ForeignKey
 from sqlalchemy.types import Integer, String
 from sqlalchemy import MetaData, and_, or_, not_, select, column, \
@@ -34,7 +34,7 @@ def DomainTableV3(metadata):
         Column('version', Integer, nullable=False),
     )
 
-class DatabaseTablesV1(object):
+class DatabaseTablesV1(BaseDatabaseTables):
     """define all tables required for the database"""
     version = 1
 
@@ -43,7 +43,7 @@ class DatabaseTablesV1(object):
 
         self.DomainTable = DomainTableV1(metadata)
 
-class DatabaseTablesV2(object):
+class DatabaseTablesV2(BaseDatabaseTables):
     """define all tables required for the database"""
     version = 2
 
@@ -52,7 +52,7 @@ class DatabaseTablesV2(object):
 
         self.DomainTable = DomainTableV2(metadata)
 
-class DatabaseTablesV3(object):
+class DatabaseTablesV3(BaseDatabaseTables):
     """define all tables required for the database"""
     version = 3
 

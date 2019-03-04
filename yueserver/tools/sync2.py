@@ -95,7 +95,7 @@ def get_pass(prompt="password: "):
         if os.environ.get('YUE_ECHO_PASSWORD', None):
             return input(prompt)
         else:
-            returngetpass.getpass(prompt)
+            return getpass.getpass(prompt)
     else:
         return sys.stdin.readline().rstrip('\n')
 
@@ -496,10 +496,12 @@ class DirEnt(object):
         return self._name
 
     def __str__(self):
-        return "DirEnt<%s,%s>" % (self.remote_base, self._state)
+        return "<DirEnt(%s,%s,%s)>" % (
+            self.remote_base, self.local_base, self._state)
 
     def __repr__(self):
-        return "DirEnt<%s,%s>" % (self.remote_base, self._state)
+        return "<DirEnt(%s,%s,%s)>" % (
+            self.remote_base, self.local_base, self._state)
 
 class FileEnt(object):
     def __init__(self, remote_path, local_path, lf, rf, af):
@@ -1237,7 +1239,9 @@ def _check_file(ctxt, remote_path, local_path):
     return ent
 
 def _parse_path_args(fs, remote_base, local_base, args_paths):
-
+    """
+    returns a collection of DirEnt {name, relpath, abspath}
+    """
     paths = []
 
     for path in args_paths:
@@ -1277,42 +1281,36 @@ def _status_dir_impl(ctxt, remote_dir, local_dir, recursive):
         if isinstance(ent, DirEnt):
 
             state = ent.state()
-            sym = FileState.symbol(state, ctxt.verbose > 1)
-            path = ctxt.fs.relpath(ent.local_base, ctxt.current_local_base)
 
-            if ctxt.verbose:
-                sys.stdout.write("d%s %s %s/\n" % (sym, " " * 46, path))
-            else:
-                sys.stdout.write("d%s %s/\n" % (sym, path))
+            if not (state == FileState.SAME and ctxt.verbose == 0):
+
+                sym = FileState.symbol(state, ctxt.verbose > 2)
+                path = ctxt.fs.relpath(ent.local_base, ctxt.current_local_base)
+
+                if ctxt.verbose > 1:
+                    sys.stdout.write("d%s %s %s/\n" % (sym, " " * 46, path))
+                else:
+                    sys.stdout.write("d%s %s/\n" % (sym, path))
 
             if recursive:
                 rbase = posixpath.join(remote_dir, ent.name())
                 lbase = ctxt.fs.join(local_dir, ent.name())
                 _status_dir_impl(ctxt, rbase, lbase, recursive)
         else:
-            state = ent.state().split(':')[0]
-            sym = FileState.symbol(state, ctxt.verbose > 1)
-            path = ctxt.fs.relpath(ent.local_path, ctxt.current_local_base)
-            if ctxt.verbose:
-                sys.stdout.write("f%s %s %s\n" % (sym, ent.stat(), path))
-            else:
-                sys.stdout.write("f%s %s\n" % (sym, path))
-            # in testing, it can be useful to see lf/rf/af state
-            if ctxt.verbose > 2:
-                sys.stdout.write("%s\n" % ent.data())
+            _status_file_impl(ctxt, ent)
 
-def _status_file_impl(ctxt, relpath, abspath):
-
-    ent = _check_file(ctxt, relpath, abspath)
+def _status_file_impl(ctxt, ent):
     state = ent.state().split(':')[0]
-    sym = FileState.symbol(state)
+    if state == FileState.SAME and ctxt.verbose == 0:
+        return
+    sym = FileState.symbol(state, ctxt.verbose > 2)
     path = ctxt.fs.relpath(ent.local_path, ctxt.current_local_base)
-    if ctxt.verbose:
+    if ctxt.verbose > 1:
         sys.stdout.write("f%s %s %s\n" % (sym, ent.stat(), path))
     else:
         sys.stdout.write("f%s %s\n" % (sym, path))
     # in testing, it can be useful to see lf/rf/af state
-    if ctxt.verbose > 1:
+    if ctxt.verbose > 3:
         sys.stdout.write("%s\n" % ent.data())
 
 def _sync_file(ctxt, relpath, abspath, push=False, pull=False, force=False):
@@ -1625,6 +1623,73 @@ def _list_impl(ctxt, root, path):
             sys.stdout.write("%s %s %12d %s %s\n" % (
                 fvers, fdate, int(item['size']), fperm, item['name']))
 
+def _move_get_actions(ctxt, ents, dst):
+
+    _d_actions = []
+    _f_actions = []
+
+    if ctxt.fs.isdir(dst.local_base):
+        for ent in ents:
+            if not ent.remote_base:
+                sys.stderr.write("cannot move root directory\n")
+                continue
+            if not ctxt.fs.exists(ent.local_base):
+                sys.stderr.write("path spec not found: %s\n" % ent.local_base)
+                continue
+
+            _, name = ctxt.fs.split(ent.local_base)
+            item = (
+                ent,
+                DirEnt(name,
+                       ctxt.fs.join(dst.remote_base, name),
+                       ctxt.fs.join(dst.local_base, name))
+            )
+            if ctxt.fs.isdir(ent.local_base):
+                _d_actions.append(item)
+            elif ctxt.fs.isfile(ent.local_base):
+                _f_actions.append(item)
+
+    elif not ctxt.fs.exists(dst.local_base):
+
+        if len(ents) > 1:
+            sys.stderr.write("destination is a file\n")
+        else:
+            ent = ents[0]
+            _, name = ctxt.fs.split(ent.local_base)
+            item = (
+                ent,
+                DirEnt(name,
+                       dst.remote_base,
+                       dst.local_base)
+            )
+            _f_actions.append(item)
+
+    return _d_actions, _f_actions
+
+def _move_file_impl(ctxt, src, dst):
+    """
+    src: a DirEnt containing the remote and local path for an existing file
+    dst: a Dirent containing the remote and local path after a move operation
+    """
+    print("f", src, dst)
+
+def _move_dir_impl(ctxt, src, dst):
+    """
+    src: a DirEnt containing the remote and local path for an existing dir
+    dst: a Dirent containing the remote and local path after a move operation
+    """
+    print("d", src, dst)
+
+def _move_impl(ctxt, ents, dst):
+
+    _d_actions, _f_actions = _move_get_actions(ctxt, ents, dst)
+
+    for src, dst in _d_actions:
+        _move_dir_impl(ctxt, src, dst)
+
+    for src, dst in _f_actions:
+        _move_file_impl(ctxt, src, dst)
+
 def _attr_impl(ctxt, path):
 
     attr = ctxt.attr(path)
@@ -1723,7 +1788,7 @@ def _setkey_impl(ctxt, workfactor):
 
         sys.stdout.write("Set the Client Side Encryption Key\n")
         sys.stdout.write(
-            "Type the password twice to confirm setting the key\n\n")
+            "Type the password twice to confirm setting the key\n")
         sys.stdout.write(
             "Do not forget this password. It cannot be recovered!\n\n")
 
@@ -1942,6 +2007,9 @@ class FetchCLI(object):
         _fetch(ctxt)
 
 class StatusCLI(object):
+    """
+    status supports up to 4 levels of verbosity
+    """
 
     def register(self, parser):
 
@@ -1982,8 +2050,8 @@ class StatusCLI(object):
                 _status_dir_impl(ctxt, dent.remote_base, dent.local_base,
                     args.recursion)
             else:
-
-                _status_file_impl(ctxt, dent.remote_base, dent.local_base)
+                ent = _check_file(ctxt, dent.remote_base, dent.local_base)
+                _status_file_impl(ctxt, ent)
 
             first = False
         end = time.time()
@@ -2089,6 +2157,32 @@ class ListCLI(object):
 
         root = args.root or ctxt.root
         _list_impl(ctxt, root, args.path.strip("/"))
+
+class MoveCLI(object):
+
+    def register(self, parser):
+
+        subparser = parser.add_parser('move', aliases=['mv'],
+            help="move files or directories")
+        subparser.set_defaults(func=self.execute, cli=self)
+
+        subparser.add_argument('paths', nargs="+",
+            help="relative remote path")
+
+        subparser.add_argument('destination',
+            help="relative remote path")
+
+    def execute(self, args):
+
+        ctxt = get_ctxt(os.getcwd())
+
+        paths = _parse_path_args(ctxt.fs, ctxt.remote_base,
+            ctxt.local_base, args.paths)
+
+        destination = _parse_path_args(ctxt.fs, ctxt.remote_base,
+            ctxt.local_base, [args.destination])[0]
+
+        _move_impl(ctxt, paths, destination)
 
 class AttrCLI(object):
 
@@ -2245,22 +2339,23 @@ class CopyCLI(object):
 
 def _register_parsers(parser):
 
-    RootsCLI().register(subparsers)
-    InitCLI().register(subparsers)
-    FetchCLI().register(subparsers)
-    StatusCLI().register(subparsers)
-    SyncCLI().register(subparsers)
-    InfoCLI().register(subparsers)
-    FetchCLI().register(subparsers)
-    AttrCLI().register(subparsers)
-    SetPassCLI().register(subparsers)
-    SetKeyCLI().register(subparsers)
-    SetPublicCLI().register(subparsers)
-    GetPublicCLI().register(subparsers)
+    RootsCLI().register(parser)
+    InitCLI().register(parser)
+    FetchCLI().register(parser)
+    StatusCLI().register(parser)
+    SyncCLI().register(parser)
+    InfoCLI().register(parser)
+    ListCLI().register(parser)
+    MoveCLI().register(parser)
+    AttrCLI().register(parser)
+    SetPassCLI().register(parser)
+    SetKeyCLI().register(parser)
+    SetPublicCLI().register(parser)
+    GetPublicCLI().register(parser)
 
-    #GetCLI().register(subparsers)
-    #PutCLI().register(subparsers)
-    #CopyCLI().register(subparsers)
+    #GetCLI().register(parser)
+    #PutCLI().register(parser)
+    #CopyCLI().register(parser)
 
 def main():
 
