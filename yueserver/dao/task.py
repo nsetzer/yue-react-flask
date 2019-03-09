@@ -1,6 +1,8 @@
 
 # TODO: unit tests
-#       clean up old result sets after 60? seconds
+#       allow submitting jobs, with an id
+#       raise TaskAlreadyExistException
+#           e.g. duplicate transcode requests
 import time
 import logging
 from threading import Thread, Lock, Condition

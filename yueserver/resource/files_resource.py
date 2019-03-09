@@ -14,6 +14,7 @@ from ..dao.filesys.filesys import MemoryFileSystemImpl
 from ..dao.filesys.crypt import validatekey, FileDecryptorReader, decryptkey
 from ..service.exception import FileSysServiceException
 from ..dao.settings import Settings, SettingsDao
+from ..dao.image import ImageScale, scale_image_stream
 
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, body, header, compressed, param, httpError, \
@@ -39,6 +40,16 @@ def validate_key(body):
     text = body.read().decode('utf-8')
     return validatekey(text)
 
+def image_scale_type(name):
+
+    if name.lower() in ('null', 'none'):
+        return None
+
+    index = ImageScale.fromName(name)
+    if index == 0:
+        raise Exception("invalid: %s" % name)
+    return index
+
 class FilesResource(WebResource):
     """QueueResource
 
@@ -57,17 +68,19 @@ class FilesResource(WebResource):
     @requires_auth("filesystem_read")
     def get_path_root(self, root):
         password = g.headers.get('X-YUE-PASSWORD', None)
-        return self._list_path(root, "", password=password)
+        return self._list_path(root, "", password=password, preview=None)
 
     @get("<root>/path/<path:resPath>")
     @param("list", type_=boolean, default=False,
         doc="do not retrieve contents for files if true")
+    @param("preview", type_=image_scale_type, default=None,
+        doc="return a preview picture of the resource")
     @header("X-YUE-PASSWORD")
     @requires_auth("filesystem_read")
     def get_path(self, root, resPath):
         password = g.headers.get('X-YUE-PASSWORD', None)
         return self._list_path(root, resPath, g.args.list,
-            password=password)
+            password=password, preview=g.args.preview)
 
     @get("public/<fileId>")
     @param("dl", type_=boolean, default=True)
@@ -263,7 +276,7 @@ class FilesResource(WebResource):
         self.filesys_service.setUserClientKey(g.current_user, g.body)
         return jsonify(result="OK"), 200
 
-    def _list_path(self, root, path, list_=False, password=None):
+    def _list_path(self, root, path, list_=False, password=None, preview=None):
         # TODO: move this into the service layer
 
         # TODO: check for the header X-YUE-ENCRYPTION
@@ -289,6 +302,22 @@ class FilesResource(WebResource):
             if list_:
                 result = self.filesys_service.listSingleFile(g.current_user, root, path)
                 return jsonify(result=result)
+            if preview:
+                _, name = self.filesys_service.fs.split(info.file_path)
+                # todo: return a object containing size and path?
+                # table: file_id, preview_mode, preview_url, preview_size
+                url = self.filesys_service.previewFile(g.current_user,
+                    root, path, preview, password)
+                stream = self.filesys_service.fs.open(url, "rb")
+                if info.encryption in (CryptMode.server, CryptMode.system):
+                    if not password and info.encryption == CryptMode.server:
+                        return httpError(400, "Invalid Password")
+                    stream = self.filesys_service.decryptStream(g.current_user,
+                            password, stream, "r", info.encryption)
+                go = files_generator_v2(stream)
+                headers = {}
+                return send_generator(go, '%s.%s.png' % (name, preview),
+                    file_size=None, headers=headers)
             else:
                 _, name = self.filesys_service.fs.split(info.file_path)
                 stream = self.filesys_service.fs.open(info.storage_path, "rb")

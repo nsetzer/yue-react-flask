@@ -29,13 +29,13 @@ class TranscodeServiceTestCase(unittest.TestCase):
         # in one of the dimensions. regardless of the input the output
         # should have the expected dimensions
 
-        img = Image.new("RGB", (32, 32))
+        img = Image.new("RGB", (32, 32), (255, 0, 0))
         img.save(img1)
 
-        img = Image.new("RGB", (32, 16))
+        img = Image.new("RGB", (32, 16), (255, 0, 0))
         img.save(img2)
 
-        img = Image.new("RGB", (16, 32))
+        img = Image.new("RGB", (16, 32), (255, 0, 0))
         img.save(img3)
 
         cls.images = [img1, img2, img3]
@@ -77,7 +77,7 @@ class TranscodeServiceTestCase(unittest.TestCase):
         self.assertTrue(st.st_size > 0)
 
     def test_002a_resize_image_large(self):
-        tgt_path = "./test/blank-out.png"
+        tgt_path = "./test/blank-out1.png"
         scale = ImageScale.LARGE
         for src_path in self.images:
             w, h = self.service.scaleImage(src_path, tgt_path, scale)
@@ -85,7 +85,7 @@ class TranscodeServiceTestCase(unittest.TestCase):
             self.assertTrue(os.path.exists(tgt_path))
 
     def test_002b_resize_image_medium(self):
-        tgt_path = "./test/blank-out.png"
+        tgt_path = "./test/blank-out2.png"
         scale = ImageScale.MEDIUM
         for src_path in self.images:
             w, h = self.service.scaleImage(src_path, tgt_path, scale)
@@ -93,7 +93,7 @@ class TranscodeServiceTestCase(unittest.TestCase):
             self.assertTrue(os.path.exists(tgt_path))
 
     def test_002c_resize_image_small(self):
-        tgt_path = "./test/blank-out.png"
+        tgt_path = "./test/blank-out3.png"
         scale = ImageScale.SMALL
         for src_path in self.images:
             w, h = self.service.scaleImage(src_path, tgt_path, scale)
@@ -101,15 +101,15 @@ class TranscodeServiceTestCase(unittest.TestCase):
             self.assertTrue(os.path.exists(tgt_path))
 
     def test_002d_resize_image_landscape(self):
-        tgt_path = "./test/blank-out.png"
-        scale = ImageScale.LANDSCAPE
+        tgt_path = "./test/blank-out4.png"
+        scale = ImageScale.LANDSCAPE_MEDIUM
         for src_path in self.images:
             w, h = self.service.scaleImage(src_path, tgt_path, scale)
             self.assertEqual((w, h), ImageScale.size(scale))
             self.assertTrue(os.path.exists(tgt_path))
 
     def test_002e_resize_image_landscape_small(self):
-        tgt_path = "./test/blank-out.png"
+        tgt_path = "./test/blank-out5.png"
         scale = ImageScale.LANDSCAPE_SMALL
         for src_path in self.images:
             w, h = self.service.scaleImage(src_path, tgt_path, scale)
