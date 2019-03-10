@@ -358,6 +358,161 @@ class StorageTestCase(unittest.TestCase):
                 count += 1
         self.assertEqual(len(names), count)
 
+    def test_003a_preview(self):
+
+        user_id = self.USER['id']
+
+        path = "/preview"
+        data = dict(storage_path='mem://test/' + path,
+            preview_path="mem://test/img",
+            permission=0o644,
+            version=2,
+            size=1234,
+            expired=None,
+            mtime=1234567890,
+            encryption=None,
+            public_password=None,
+            public=None)
+        self.storageDao.insertFile(user_id, self.fs_default_id, path, data)
+
+        item = self.storageDao.selectFile(user_id, self.fs_default_id, path)
+
+        # no item should exist
+        pitem = self.storageDao.previewFind(user_id, item.id, 'thumb')
+        self.assertIsNone(pitem)
+
+        preview_path = "%s~thumb" % path
+        info = {
+            'width': 80,
+            'height': 60,
+            'size': 8096,
+            'path': preview_path
+        }
+        self.storageDao.previewInsert(
+            user_id, item.id, 'thumb', info)
+
+        # read back the preview item that was stored
+        pitem = self.storageDao.previewFind(user_id, item.id, 'thumb')
+        self.assertIsNotNone(pitem)
+        self.assertEqual(pitem.valid, 1)
+        self.assertEqual(pitem.width, 80)
+        self.assertEqual(pitem.height, 60)
+        self.assertEqual(pitem.size, 8096)
+
+        # invalidate
+        pitem = self.storageDao.previewInvalidate(user_id, item.id)
+        # valid should now be false
+        pitem = self.storageDao.previewFind(user_id, item.id, 'thumb')
+        self.assertIsNotNone(pitem)
+        self.assertEqual(pitem.valid, 0)
+        self.assertEqual(pitem.width, 80)
+        self.assertEqual(pitem.height, 60)
+        self.assertEqual(pitem.size, 8096)
+
+        # remove all items
+        pitem = self.storageDao.previewRemove(user_id, item.id)
+
+        # no item should exist
+        pitem = self.storageDao.previewFind(user_id, item.id, 'thumb')
+        self.assertIsNone(pitem)
+
+    def test_003b_preview_upsert(self):
+
+        user_id = self.USER['id']
+
+        path = "/preview2"
+        data = dict(storage_path='mem://test/' + path,
+            preview_path="mem://test/img",
+            permission=0o644,
+            version=2,
+            size=1234,
+            expired=None,
+            mtime=1234567890,
+            encryption=None,
+            public_password=None,
+            public=None)
+        self.storageDao.insertFile(user_id, self.fs_default_id, path, data)
+
+        item = self.storageDao.selectFile(user_id, self.fs_default_id, path)
+
+        # no item should exist
+        pitem = self.storageDao.previewFind(user_id, item.id, 'thumb')
+        self.assertIsNone(pitem)
+
+        preview_path = "%s~thumb" % path
+        info = {
+            'width': 80,
+            'height': 60,
+            'size': 8096,
+            'path': preview_path
+        }
+        self.storageDao.previewUpsert(
+            user_id, item.id, 'thumb', info)
+
+        # read back the preview item that was stored
+        pitem = self.storageDao.previewFind(user_id, item.id, 'thumb')
+        self.assertIsNotNone(pitem)
+        self.assertEqual(pitem.valid, 1)
+        self.assertEqual(pitem.width, 80)
+        self.assertEqual(pitem.height, 60)
+        self.assertEqual(pitem.size, 8096)
+        self.assertEqual(pitem.path, preview_path)
+
+        preview_path2 = "%s~thumb2" % path
+        info = {
+            'width': 40,
+            'height': 30,
+            'size': 4096,
+            'path': preview_path2
+        }
+        self.storageDao.previewUpsert(
+            user_id, item.id, 'thumb', info)
+
+        # read back the preview item that was stored
+        pitem = self.storageDao.previewFind(user_id, item.id, 'thumb')
+        self.assertIsNotNone(pitem)
+        self.assertEqual(pitem.valid, 1)
+        self.assertEqual(pitem.width, 40)
+        self.assertEqual(pitem.height, 30)
+        self.assertEqual(pitem.size, 4096)
+        self.assertEqual(pitem.path, preview_path2)
+
+    def test_003c_double_insert(self):
+
+        user_id = self.USER['id']
+
+        path = "/preview3"
+        data = dict(storage_path='mem://test/' + path,
+            preview_path="mem://test/img",
+            permission=0o644,
+            version=2,
+            size=1234,
+            expired=None,
+            mtime=1234567890,
+            encryption=None,
+            public_password=None,
+            public=None)
+        self.storageDao.insertFile(user_id, self.fs_default_id, path, data)
+
+        item = self.storageDao.selectFile(user_id, self.fs_default_id, path)
+
+        # no item should exist
+        pitem = self.storageDao.previewFind(user_id, item.id, 'thumb')
+        self.assertIsNone(pitem)
+
+        preview_path = "%s~thumb" % path
+        info = {
+            'width': 80,
+            'height': 60,
+            'size': 8096,
+            'path': preview_path
+        }
+        self.storageDao.previewInsert(
+            user_id, item.id, 'thumb', info)
+
+        with self.assertRaises(StorageException):
+            self.storageDao.previewInsert(
+                user_id, item.id, 'thumb', info)
 class Storage2TestCase(unittest.TestCase):
 
     db_name = "StorageTestCase"

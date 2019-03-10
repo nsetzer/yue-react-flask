@@ -94,12 +94,15 @@ def scale_image_stream(inputStream, outputStream, scale):
     # use case at present, this is a workaround until other use
     # cases are determined.
 
+    nBytes = 0
     with io.BytesIO() as bImg:
         img.save(bImg, format="png")
         bImg.seek(0)
-        outputStream.write(bImg.read())
+        for dat in iter(lambda: bImg.read(2048), b""):
+            nBytes += len(dat)
+            outputStream.write(dat)
 
-    return img.size
+    return img.size[0], img.size[1], nBytes
 
 def scale_image_file(fs, src_path, tgt_path, scale):
 

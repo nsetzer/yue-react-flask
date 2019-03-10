@@ -156,6 +156,31 @@ def FileSystemStorageTableV3(metadata):
         UniqueConstraint('user_id', 'filesystem_id', 'file_path', name='uix_fs'),
     )
 
+FileSystemStorageTableCurrentVersionName = 'filesystem_storage_v3'
+
+def FileSystemPreviewStorageTableV1(metadata):
+    """ returns a table which maps a 'root' name to a file system location
+    """
+    return Table('filesystem_preview_storage_v1', metadata,
+        Column('id', Integer, primary_key=True),
+        Column('user_id', ForeignKey("user.id"), nullable=False),
+        Column('file_id',
+            ForeignKey("%s.id" % FileSystemStorageTableCurrentVersionName),
+            nullable=False),
+        # resource url
+        Column('path', String, nullable=False),
+        # description of the image scale
+        Column('scale', String, nullable=False),
+        # 1 if up to date, 0 if it needs to be regenerated
+        Column('valid', Integer, nullable=False),
+        # dimensions of the image
+        Column('width', Integer, nullable=False),
+        Column('height', Integer, nullable=False),
+        # size of the file in bytes
+        Column('size', Integer, nullable=False),
+        UniqueConstraint('file_id', 'scale', name='uix_fs_preview'),
+    )
+
 def FileSystemTable(metadata):
     """ returns a table which maps a 'root' name to a file system location
     """

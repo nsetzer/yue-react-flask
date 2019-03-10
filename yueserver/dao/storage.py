@@ -763,4 +763,86 @@ class StorageDao(object):
         name = item.file_path.split(delimiter)[-1]
         return self._item2file(name, item)
 
+    def previewInsert(self, user_id, file_id, scale, info, commit=True):
+        data = dict(info)
 
+        data['user_id'] = user_id
+        data['file_id'] = file_id
+        data['scale'] = scale
+        data['valid'] = 1
+
+        query = self.dbtables.FileSystemPreviewStorageTable.insert() \
+            .values(data)
+
+        ex = None
+        try:
+            result = self.db.session.execute(query)
+
+            if commit:
+                self.db.session.commit()
+
+        except IntegrityError as e:
+            ex = StorageException("%s" % e.args[0])
+            ex.original = e
+
+        if ex is not None:
+            raise ex
+
+    def previewUpdate(self, preview_id, info, commit=True):
+
+        tab = self.dbtables.FileSystemPreviewStorageTable
+        query = tab.update() \
+            .values(info) \
+            .where(tab.c.id == preview_id)
+
+        self.db.session.execute(query)
+
+        if commit:
+            self.db.session.commit()
+
+    def previewUpsert(self, user_id, file_id, scale, info, commit=True):
+
+        item = self.previewFind(user_id, file_id, scale)
+
+        if item is None:
+            self.previewInsert(user_id, file_id, scale, info, commit)
+        else:
+            self.previewUpdate(item.id, info)
+
+    def previewFind(self, user_id, file_id, scale):
+
+        tab = self.dbtables.FileSystemPreviewStorageTable
+        query = tab.select().where(
+                and_(tab.c.user_id == user_id,
+                     tab.c.file_id == file_id,
+                     tab.c.scale == scale,
+                     ))
+        item = self.db.session.execute(query).fetchone()
+        return item
+
+    def previewInvalidate(self, user_id, file_id, commit=True):
+        """ invalidate all preview files for an entry """
+        tab = self.dbtables.FileSystemPreviewStorageTable
+
+        query = tab.update() \
+            .values({"valid": 0}) \
+            .where(and_(tab.c.user_id == user_id,
+                        tab.c.file_id == file_id))
+
+        self.db.session.execute(query)
+
+        if commit:
+            self.db.session.commit()
+
+    def previewRemove(self, user_id, file_id, commit=True):
+        """ remove all preview entries for a file """
+
+        tab = self.dbtables.FileSystemPreviewStorageTable
+        query = tab.delete() \
+            .where(and_(tab.c.user_id == user_id,
+                        tab.c.file_id == file_id))
+
+        self.db.session.execute(query)
+
+        if commit:
+            self.db.session.commit()

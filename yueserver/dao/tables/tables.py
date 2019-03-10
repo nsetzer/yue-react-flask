@@ -17,7 +17,8 @@ from .storage import FileSystemStorageTableV1, FileSystemStorageTableV2, \
                      FileSystemTable, FileSystemPermissionTable, \
                      FileSystemUserSupplementaryTable, \
                      FileSystemUserEncryptionTable, \
-                     FileSystemUserUsageView
+                     FileSystemUserUsageView, \
+                     FileSystemPreviewStorageTableV1
 from .schema import ApplicationSchemaTable
 
 class BaseDatabaseTables(object):
@@ -34,6 +35,7 @@ class BaseDatabaseTables(object):
 
     def create_views(self, engine):
         pass
+
 class DatabaseTablesV0(BaseDatabaseTables):
     """define all tables required for the database"""
     version = 0
@@ -135,7 +137,52 @@ class DatabaseTablesV2(BaseDatabaseTables):
         #    engine.execute(text)
         pass
 
-DatabaseTables = DatabaseTablesV2
+class DatabaseTablesV3(BaseDatabaseTables):
+    """define all tables required for the database"""
+    version = 3
+
+    def __init__(self, metadata):
+        super(DatabaseTablesV3, self).__init__()
+
+        self.ApplicationSchemaTable = ApplicationSchemaTable(metadata)
+
+        self.DomainTable = DomainTable(metadata)
+        self.RoleTable = RoleTable(metadata)
+        self.UserTable = UserTable(metadata)
+        self.GrantedDomainTable = GrantedDomainTable(metadata)
+        self.GrantedRoleTable = GrantedRoleTable(metadata)
+        self.FeatureTable = FeatureTable(metadata)
+        self.RoleFeatureTable = RoleFeatureTable(metadata)
+        self.UserSessionTable = UserSessionTable(metadata)
+        self.UserPreferencesTable = UserPreferencesTable(metadata)
+
+        self.SongDataTable = SongDataTable(metadata)
+        self.SongUserDataTable = SongUserDataTable(metadata)
+        self.SongQueueTable = SongQueueTable(metadata)
+        self.SongHistoryTable = SongHistoryTable(metadata)
+        self.SongPlaylistTable = SongPlaylistTable(metadata)
+
+        self.FileSystemStorageTable = FileSystemStorageTableV3(metadata)
+        self.FileSystemPreviewStorageTable = \
+            FileSystemPreviewStorageTableV1(metadata)
+        self.FileSystemTable = FileSystemTable(metadata)
+        self.FileSystemPermissionTable = FileSystemPermissionTable(metadata)
+        self.FileSystemUserSupplementaryTable = \
+            FileSystemUserSupplementaryTable(metadata)
+        self.FileSystemUserEncryptionTable = \
+            FileSystemUserEncryptionTable(metadata)
+
+        #self.FileSystemUserUsageView, text = \
+        #    FileSystemUserUsageView(self, metadata)
+        #self._views = [text]
+
+    def create_views(self, engine):
+
+        #for text in self._views:
+        #    engine.execute(text)
+        pass
+
+DatabaseTables = DatabaseTablesV3
 
 #all_tables= sorted([x for x in locals() if Base], key= x.version)
 # offset = current_version - all_tables[0].version
