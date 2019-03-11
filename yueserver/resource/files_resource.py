@@ -283,6 +283,7 @@ class FilesResource(WebResource):
         # it should contain the base64 encoded password for the user
         # use this to decrypt the file
 
+        print(list_, password, preview)
         fs = self.filesys_service.fs
 
         abs_path = self.filesys_service.getFilePath(g.current_user, root, path)
@@ -302,7 +303,7 @@ class FilesResource(WebResource):
             if list_:
                 result = self.filesys_service.listSingleFile(g.current_user, root, path)
                 return jsonify(result=result)
-            if preview:
+            elif preview:
                 _, name = self.filesys_service.fs.split(info.file_path)
                 # todo: return a object containing size and path?
                 # table: file_id, preview_mode, preview_url, preview_size

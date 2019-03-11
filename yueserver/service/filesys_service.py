@@ -358,6 +358,8 @@ class FileSysService(object):
         )
 
         self.storageDao.upsertFile(user['id'], fs_id, file_path, data)
+        # existing keyframes and thumbnails need to be recomputed
+        self.storageDao.previewInvalidate(user['id'], fs_id)
 
     def remove(self, user, fs_name, path):
 
@@ -374,6 +376,7 @@ class FileSysService(object):
         try:
             # TODO: either both succeed or neither...
             record = self.storageDao.file_info(user['id'], fs_id, file_path)
+            self._removePreviewFiles(user['id'], fs_id, file_path)
             self.storageDao.removeFile(user['id'], fs_id, file_path)
             result = self.fs.remove(record.storage_path)
             return result
@@ -521,36 +524,67 @@ class FileSysService(object):
         abs_path = self.getFilePath(user, fs_name, path)
         fs_id = self.storageDao.getFilesystemId(
             user['id'], user['role_id'], fs_name)
-        info = self.storageDao.file_info(user['id'], fs_id, abs_path)
-
-        inputStream = self.loadFileFromInfo(user, info, password)
-        # look for a preview file that already exists
-        # check a database table, not the file system
-        # if it exists return the table entry
+        fileItem = self.storageDao.file_info(user['id'], fs_id, abs_path)
 
         name = ImageScale.name(scale)
-        dst = "%s.%s.png" % (info.storage_path, name)
-        ext = info.file_path.split('.')[-1].lower()
 
-        if info.encryption in (CryptMode.server, CryptMode.client):
-            raise FileSysServiceException("file is encrypted")
-        elif ext in ("jpg", "jpeg", "png", "gif"):
-            logging.info("creating preview %s %s" % (name, dst))
-            outputStream = self.fs.open(dst, "wb")
-            if info.encryption is not None:
-                outputStream = self.encryptStream(user,
-                    password, outputStream, "w", info.encryption)
-            scale_image_stream(inputStream, outputStream, scale)
-        elif ext in ("ogg", "mp3", "wav"):
-            raise FileSysServiceException("not implemented")
-        elif ext in ("webm", "mp4"):
-            raise FileSysServiceException("not implemented")
-        elif ext in ("pdf", "swf"):
-            raise FileSysServiceException("not implemented")
+        previewItem = self.storageDao.previewFind(
+            user['id'], fileItem.file_id, name)
+
+        if previewItem is None or previewItem.valid == 0:
+            print("generate new thumb")
+
+            inputStream = self.loadFileFromInfo(user, fileItem, password)
+            # look for a preview file that already exists
+            # check a database table, not the file system
+            # if it exists return the table entry
+
+            dst = "%s.%s.png" % (fileItem.storage_path, name)
+            ext = fileItem.file_path.split('.')[-1].lower()
+
+            if fileItem.encryption in (CryptMode.server, CryptMode.client):
+                raise FileSysServiceException("file is encrypted")
+            elif ext in ("jpg", "jpeg", "png", "gif"):
+                logging.info("creating preview %s %s" % (name, dst))
+                outputStream = self.fs.open(dst, "wb")
+                if fileItem.encryption is not None:
+                    outputStream = self.encryptStream(user,
+                        password, outputStream, "w", fileItem.encryption)
+                w, h, s = scale_image_stream(inputStream, outputStream, scale)
+
+                info = {
+                    'width': w,
+                    'height': h,
+                    'size': s,
+                    'path': dst
+                }
+
+                self.storageDao.previewUpsert(
+                    user['id'], fileItem.file_id, name, info)
+
+            elif ext in ("ogg", "mp3", "wav"):
+                raise FileSysServiceException("not implemented")
+            elif ext in ("webm", "mp4"):
+                raise FileSysServiceException("not implemented")
+            elif ext in ("pdf", "swf"):
+                raise FileSysServiceException("not implemented")
+            else:
+                raise FileSysServiceException("not implemented")
+
+            # the resource path that is returned should be resource
+            # dependant. all audio files should have the same url
+            #
+            return dst
+
         else:
-            raise FileSysServiceException("not implemented")
+            print("return existing thumb")
+            return previewItem.path
 
-        # the resource path that is returned should be resource
-        # dependant. all audio files should have the same url
-        #
-        return dst
+    def _removePreviewFiles(self, user_id, fs_id, file_path):
+        # TODO: exception handling, eventual consistency
+        self.storageDao.previewInvalidate(user_id, fs_id)
+        fileItem = self.storageDao.file_info(user_id, fs_id, file_path)
+        file_id = fileItem.file_id
+        for item in self.storageDao.previewFind(user_id, file_id, None):
+            self.fs.remove(item.path)
+        self.storageDao.previewRemove(user_id, fs_id)

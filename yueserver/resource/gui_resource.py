@@ -23,6 +23,18 @@ from yueserver.resource.util import files_generator, files_generator_v2
 from yueserver.dao.library import Song, LibraryException
 from yueserver.dao.util import string_quote, server_health
 
+from ..dao.image import ImageScale
+
+def image_scale_type(name):
+
+    if name.lower() in ('null', 'none'):
+        return None
+
+    index = ImageScale.fromName(name)
+    if index == 0:
+        raise Exception("invalid: %s" % name)
+    return index
+
 class DemoAppClient(AppClient):
     def __init__(self, guiService, userService, audioService, fileService):
         res_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'res')
@@ -405,6 +417,8 @@ class AudioGuiResource(GuiAppResource):
 
     @get("/api/gui/files/<root>/path/<path:path>")
     @param("dl", type_=boolean, default=True)
+    @param("preview", type_=image_scale_type, default=None,
+        doc="return a preview picture of the resource")
     def get_file(self, root, path):
         """
 
@@ -416,17 +430,38 @@ class AudioGuiResource(GuiAppResource):
 
         info = client.state.fileInfo(root, path)
 
-        stream = self.fileService.loadFileFromInfo(user, info)
-        _, name = self.fileService.fs.split(info.file_path)
+        password = None # TODO: retreive from client per file encryption type
 
-        go = files_generator_v2(stream)
-        headers = {
-            "X-YUE-VERSION": info.version,
-            "X-YUE-PERMISSION": info.permission,
-            "X-YUE-MTIME": info.mtime,
-        }
-        return send_generator(go, name, file_size=info.size,
-            headers=headers, attachment=g.args.dl)
+        #---
+        if g.args.preview is not None:
+            _, name = self.fileService.fs.split(info.file_path)
+            url = self.fileService.previewFile(user,
+                root, path, g.args.preview, password)
+            stream = self.fileService.fs.open(url, "rb")
+            if info.encryption in (CryptMode.server, CryptMode.system):
+                if not password and info.encryption == CryptMode.server:
+                    return httpError(400, "Invalid Password")
+                stream = self.fileService.decryptStream(user,
+                        password, stream, "r", info.encryption)
+            go = files_generator_v2(stream)
+            headers = {}
+            return send_generator(go, '%s.%s.png' % (name, g.args.preview),
+                file_size=None, headers=headers, attachment=g.args.dl)
+
+        else:
+
+
+            stream = self.fileService.loadFileFromInfo(user, info)
+            _, name = self.fileService.fs.split(info.file_path)
+
+            go = files_generator_v2(stream)
+            headers = {
+                "X-YUE-VERSION": info.version,
+                "X-YUE-PERMISSION": info.permission,
+                "X-YUE-MTIME": info.mtime,
+            }
+            return send_generator(go, name, file_size=info.size,
+                headers=headers, attachment=g.args.dl)
 
     @get("/public/<fileid>")
     @param("dl", type_=boolean, default=False)

@@ -108,4 +108,4 @@ def scale_image_file(fs, src_path, tgt_path, scale):
 
     with fs.open(src_path, "rb") as rb:
         with fs.open(tgt_path, "wb") as wb:
-            return scale_image_b(rb, wb, scale)
+            return scale_image_stream(rb, wb, scale)

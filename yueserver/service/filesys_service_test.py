@@ -7,6 +7,7 @@ import time
 from ..dao.db import main_test
 from ..dao.library import Song
 from ..dao.storage import StorageNotFoundException
+from ..dao.image import ImageScale
 from ..app import TestApp
 
 from io import BytesIO
@@ -119,6 +120,29 @@ class FileServiceTestCase(unittest.TestCase):
 
         self.assertEqual(len(files), 1)
         self.assertEqual(files[0]['file_name'], 'test_note.txt')
+
+    def test_004_remove_file_and_previews(self):
+        """
+        removing a file should remove all meta data along with that file
+        """
+
+        root = "mem"
+        path = "test/test.png"
+
+        data = open("./res/icon.png", "rb")
+
+        self.service.saveFile(self.app.USER, root, path, data)
+        # generate a thumbnail and show it exists
+        url = self.service.previewFile(self.app.USER, root, path,
+            ImageScale.THUMB)
+        self.assertTrue(self.service.fs.exists(url))
+
+        # delete the file, and thumbnails
+        self.service.remove(self.app.USER, root, path)
+        self.assertFalse(self.service.fs.exists(url))
+
+
+
 
 if __name__ == '__main__':
     main_test(sys.argv, globals())

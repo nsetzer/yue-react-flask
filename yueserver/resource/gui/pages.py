@@ -237,7 +237,7 @@ class IconBarWidget(gui.Widget):
 
 class FileInfoWidget(gui.Widget):
     """docstring for FileInfoWidget"""
-    def __init__(self, file_info, *args, url=None, **kwargs):
+    def __init__(self, file_info, *args, url=None, preview_url=None, **kwargs):
         super(FileInfoWidget, self).__init__()
 
         self.file_info = file_info
@@ -262,11 +262,11 @@ class FileInfoWidget(gui.Widget):
             else:
                 icon_url = '/res/app/folder.svg'
         else:
-            icon_url = '/res/app/file.svg'
+            icon_url = preview_url or '/res/app/file.svg'
         self.img_icon = gui.Image(icon_url)
         self.img_icon.style.update({
-            "height": "2em",
-            "width": "2em",
+            "height": "60px",
+            "width": "80px",
             "margin-left": ".5em",
             "margin-right": ".5em",
         })
@@ -1575,7 +1575,14 @@ class FileSystemPage(ContentPage):
                 url = "/api/gui/files/%s/path/%s?dl=1" % (
                     self.root, urlbase)
 
-                item = FileInfoWidget(file_info, url=url)
+                ext = file_info['name'].split('.')[-1].lower()
+                preview_url = None
+                if ext in ("jpg", "jpeg", "png", "gif", 'bmp'):
+                    preview_url = "/api/gui/files/%s/path/%s?dl=0&preview=thumb" % (
+                        self.root, urlbase)
+
+                item = FileInfoWidget(file_info, url=url,
+                    preview_url=preview_url)
                 item.openDirectory.connect(self._onOpenDirectory)
                 item.openPreview.connect(self._onOpenPreview)
                 item.openMore.connect(self._onShowMore)
@@ -1610,7 +1617,7 @@ class FileSystemPage(ContentPage):
         if info.encryption in (CryptMode.server, CryptMode.client):
             content = "error: file is encrypted"
             self.menu.setTextContent(content)
-        elif ext in ("jpg", "jpeg", "png", "gif"):
+        elif ext in ("jpg", "jpeg", "png", "gif", 'bmp'):
             self.menu.setImageContent(url)
         elif ext in ("ogg", "mp3", "wav"):
             self.menu.setAudioContent(url)

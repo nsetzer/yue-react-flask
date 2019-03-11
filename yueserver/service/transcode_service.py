@@ -8,7 +8,7 @@ Image files can be processed using the pillow library.
 """
 import os, sys
 from ..dao.library import Song
-from ..dao.image import ImageScale
+from ..dao.image import ImageScale, scale_image_file
 from ..dao.filesys.filesys import FileSystem
 from ..dao.transcode import FFmpeg, _TranscodeFile
 from .exception import TranscodeServiceException
@@ -175,7 +175,8 @@ class TranscodeService(object):
         return tgtpath
 
     def scaleImage(self, src_path, tgt_path, scale):
-        return scale_image_file(src_path, tgt_path, scale)
+        w, h, _ = scale_image_file(self.fs, src_path, tgt_path, scale)
+        return w, h
 
     def getScaledAlbumArt(self, song, scale):
         """

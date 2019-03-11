@@ -271,6 +271,7 @@ class StorageDao(object):
         record.public = item['public']
         record.public_password = item['public_password']
         record.user_id = item['user_id']
+        record.file_id = item['id']
         return record
 
     def _item2record(self, item, path_prefix, delimiter):
@@ -812,13 +813,15 @@ class StorageDao(object):
     def previewFind(self, user_id, file_id, scale):
 
         tab = self.dbtables.FileSystemPreviewStorageTable
-        query = tab.select().where(
-                and_(tab.c.user_id == user_id,
-                     tab.c.file_id == file_id,
-                     tab.c.scale == scale,
-                     ))
-        item = self.db.session.execute(query).fetchone()
-        return item
+        where = and_(tab.c.user_id == user_id,
+                     tab.c.file_id == file_id)
+        if scale is not None:
+            where = and_(tab.c.scale == scale, where)
+        query = tab.select().where(where)
+        if scale is None:
+            return self.db.session.execute(query).fetchall()
+        else:
+            return self.db.session.execute(query).fetchone()
 
     def previewInvalidate(self, user_id, file_id, commit=True):
         """ invalidate all preview files for an entry """

@@ -332,6 +332,8 @@ class LibraryResourceTestCase(unittest.TestCase):
 
         song2 = self.app.audio_service.findSongById(self.app.USER, song_id)
 
+        print("\n\n\n****\n")
+        print(song2[Song.art_path])
         self.assertTrue(os.path.exists(song2[Song.art_path]))
         self.assertTrue(os.path.samefile("./test/blank.png",
             song2[Song.art_path]))
