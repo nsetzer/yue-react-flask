@@ -90,6 +90,7 @@ class TaskQueue(object):
         """
         size: the number of threads to start
         expire: auto delete task results older than N seconds
+                set to -1 to disable auto delete
         """
         super(TaskQueue, self).__init__()
 
@@ -127,7 +128,7 @@ class TaskQueue(object):
             e = time.time()
             for _tid in list(self._results.keys()):
                 _, _, t = self._results[_tid]
-                if (e - t) > self.expire:
+                if self.expire >= 0 and (e - t) > self.expire:
                     del self._results[_tid]
 
             self._tasks[tid] = (fn, args, kwargs)
