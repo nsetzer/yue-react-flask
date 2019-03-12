@@ -19,6 +19,7 @@ from ..dao.user import UserDao
 from ..dao.settings import Settings, SettingsDao
 from ..dao.image import ImageScale, scale_image_stream
 from .transcode_service import TranscodeService, ImageScale
+from ..dao.util import format_bytes
 
 from datetime import datetime
 
@@ -57,6 +58,12 @@ class FileSysService(object):
         self.settingsDao = SettingsDao(db, dbtables)
 
         self.fs = FileSystem()
+
+        # tuning parameter controlling how often the
+        # db is accessed during file upload
+        # 2**20 : 1 MB
+        # 2**26 : 64 MB
+        self.byte_threshold = 2**26
 
     @staticmethod
     def init(config, db, dbtables):
@@ -297,7 +304,6 @@ class FileSysService(object):
     def saveFile(self, user, fs_name, path, stream,
       mtime=None, version=0, permission=0, encryption=None):
 
-        # TODO: support an encryption mode (client / server / sytem / None)
         if self.fs.isabs(path):
             raise FileSysServiceException(path)
 
@@ -328,30 +334,17 @@ class FileSysService(object):
             # dao layer expects None, or a valid version
             version = None
 
-        # QUOTA upload strategy
-        # don't check the quota at the start.
-        # every N bytes (N= 50MB or 100MB) check the usage + transfered
-        # compared to the quota. if over, abandon upload delete file.
-        # on error return http 413 Request To Large
-        # note: parallel uploads can allow going over the quota
-        #       create a locked structure, a dictionary
-        #           user_id => storage_path => transfered bytes
-        #       update this structure then sum transfered bytes and
-        #       compare to the quota. and fail the current upload if need be
-        #       create a per user lock?
+        if mtime is None:
+            mtime = int(time.time())
 
         size = self._internalSave(user['id'], storage_path, stream, 2048)
 
         # if the file is wrapped by an encryptor, subtract the size
         # of the header information. This allows the user to stat
         # the file later on, and see the expected file size
-        # TODO: should this be conditioned off encryption mode?
-        # if isinstance(stream, FileEncryptorReader):
+
         if encryption is not None:
             size -= FileEncryptorReader.HEADER_SIZE
-
-        if mtime is None:
-            mtime = int(time.time())
 
         # todo: in the future, the logical file path, and the actual
         # storage path will be different for security reasons.
@@ -366,10 +359,22 @@ class FileSysService(object):
         )
 
         self.storageDao.upsertFile(user['id'], fs_id, file_path, data)
-        # existing keyframes and thumbnails need to be recomputed
+        # existing thumbnails need to be recomputed
         self.storageDao.previewInvalidate(user['id'], fs_id)
 
     def _internalSave(self, user_id, storage_path, inputStream, chunk_size):
+
+        # QUOTA upload strategy
+        # don't check the quota at the start.
+        # every N bytes (N= 50MB or 100MB) check the usage + transfered
+        # compared to the quota. if over, abandon upload delete file.
+        # on error return http 413 Request To Large
+        # note: parallel uploads can allow going over the quota
+        #       create a locked structure, a dictionary
+        #           user_id => storage_path => transfered bytes
+        #       update this structure then sum transfered bytes and
+        #       compare to the quota. and fail the current upload if need be
+        #       create a per user lock?
 
         uid = str(uuid.uuid4())
 
@@ -379,11 +384,9 @@ class FileSysService(object):
             #raise FileSysServiceException("quota exceeded", 413)
             print(usage, quota)
 
-        # tuning parameter controlling how often the db is accessed
-        self.byte_threshold = 4096
-        self.byte_index = 0
-
+        byte_index = 0
         size = 0
+
         try:
             with self.fs.open(storage_path, "wb") as outputStream:
                 for buf in iter(lambda: inputStream.read(chunk_size), b""):
@@ -391,22 +394,8 @@ class FileSysService(object):
                     outputStream.write(buf)
                     size += len(buf)
 
-                    index = size // self.byte_threshold
-                    print(index)
-                    if index > self.byte_index:
-                        self.storageDao.tempFileUpdate(user_id, uid, size)
-                        _, temp_usage = self.storageDao.tempFileUsage(user_id)
-                        _, usage, quota = self.storageDao.userDiskUsage(user_id)
-
-                        print("%s + %s > %s : %s" % (
-                            temp_usage, usage, quota,
-                            (temp_usage + usage) > quota))
-
-                        if (temp_usage + usage) > quota:
-                            # raise FileSysServiceException("quota exceeded", 413)
-                            pass
-
-                        self.byte_index = index
+                    byte_index = self._internalCheckQuota(
+                        user_id, size, byte_index, uid)
 
         except Exception as e:
             self.fs.remove(storage_path)
@@ -414,9 +403,34 @@ class FileSysService(object):
         finally:
             self.storageDao.tempFileRemove(user_id, uid)
 
-
-
         return size
+
+    def _internalCheckQuota(self, user_id, size, byte_index, uid):
+
+        # TODO: one minor bug related to upload and quota
+        # replacing a large file, with a smaller version could
+        # trip the quota, and delete the original
+        # its overwriting anyway, so any failed request would have
+        # meant data loss.
+
+        index = size // self.byte_threshold
+        if index > byte_index:
+            self.storageDao.tempFileUpdate(user_id, uid, size)
+            _, temp_usage = self.storageDao.tempFileUsage(user_id)
+            _, usage, quota = self.storageDao.userDiskUsage(user_id)
+
+            print("%s + %s = %s > %s : %s" % (
+                format_bytes(usage), format_bytes(temp_usage),
+                format_bytes(temp_usage + usage), format_bytes(quota),
+                (temp_usage + usage) > quota))
+
+            if (temp_usage + usage) > quota:
+                # raise FileSysServiceException("quota exceeded", 413)
+                pass
+
+            byte_index += 1
+
+        return byte_index
 
     def remove(self, user, fs_name, path):
 
