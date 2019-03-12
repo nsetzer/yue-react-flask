@@ -6,6 +6,7 @@ for creating a database connection.
 """
 from .user import UserDao
 from .settings import SettingsDao
+from .storage import StorageDao
 from .library import Song, LibraryDao
 from .tables.tables import DatabaseTables
 from .search import regexp
@@ -442,6 +443,7 @@ def db_init_main(db, dbtables, data):
     db.create_all()
 
     userDao = UserDao(db, dbtables)
+    storageDao = StorageDao(db, dbtables)
 
     # -------------------------------------------------------------------------
     # Settings
@@ -499,6 +501,9 @@ def db_init_main(db, dbtables, data):
                                      default_domain['id'],
                                      default_role['id'],
                                      hash=hash)
+
+        # todo: env should define default
+        storageDao.setUserDiskQuota(user_id, 0)
 
         # grant additional domains
         for name in domains:

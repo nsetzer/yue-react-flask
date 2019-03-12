@@ -159,7 +159,7 @@ def FileSystemStorageTableV3(metadata):
 FileSystemStorageTableCurrentVersionName = 'filesystem_storage_v3'
 
 def FileSystemPreviewStorageTableV1(metadata):
-    """ returns a table which maps a 'root' name to a file system location
+    """ returns a table for storing keyframes of user files
     """
     return Table('filesystem_preview_storage_v1', metadata,
         Column('id', Integer, primary_key=True),
@@ -167,7 +167,8 @@ def FileSystemPreviewStorageTableV1(metadata):
         Column('file_id',
             ForeignKey("%s.id" % FileSystemStorageTableCurrentVersionName),
             nullable=False),
-        # resource url
+        # resource file system and absolute url
+        Column('filesystem_id', ForeignKey("filesystem.id"), nullable=False),
         Column('path', String, nullable=False),
         # description of the image scale
         Column('scale', String, nullable=False),
@@ -179,6 +180,18 @@ def FileSystemPreviewStorageTableV1(metadata):
         # size of the file in bytes
         Column('size', Integer, nullable=False),
         UniqueConstraint('file_id', 'scale', name='uix_fs_preview'),
+    )
+
+def FileSystemTempFileTableV1(metadata):
+    """ returns a table for storing meta information about temp files
+
+    store the number of bytes in-flight for a file
+    refer to the file using a session specific unique id
+    """
+    return Table('filesystem_tempfile_v1', metadata,
+        Column('user_id', ForeignKey("user.id"), nullable=False),
+        Column('uid', String, unique=True, nullable=False),
+        Column('size', Integer, nullable=False),
     )
 
 def FileSystemTable(metadata):
@@ -234,6 +247,7 @@ def FileSystemUserUsageView(tables, metadata):
     t2 = tables.FileSystemUserSupplementaryTable
     query = select([
             t1.c.user_id,
+            func.count(t1.c.size).label('count'),
             func.sum(t1.c.size).label('usage'),
             t2.c.quota,
     ]).select_from(t2) \
@@ -242,13 +256,17 @@ def FileSystemUserUsageView(tables, metadata):
 
     name = "v_filesystem_user_diskusage"
     text = CreateView(name, query)
-    view = Table(name, metadata,
-        Column('user_id', String),
-        Column('usage', Integer),
-        Column('quota', Integer),
-    )
 
-    return view, text
+    def f(engine, obj):
+        engine.execute(text)
+        obj.FileSystemUserUsageView = Table(name, metadata,
+            Column('user_id', String),
+            Column('count', Integer),
+            Column('usage', Integer),
+            Column('quota', Integer),
+        )
+
+    return f
 
 
 

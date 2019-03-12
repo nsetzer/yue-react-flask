@@ -385,6 +385,7 @@ class StorageTestCase(unittest.TestCase):
         info = {
             'width': 80,
             'height': 60,
+            'filesystem_id': self.fs_default_id,
             'size': 8096,
             'path': preview_path
         }
@@ -443,6 +444,7 @@ class StorageTestCase(unittest.TestCase):
         info = {
             'width': 80,
             'height': 60,
+            'filesystem_id': self.fs_default_id,
             'size': 8096,
             'path': preview_path
         }
@@ -462,6 +464,7 @@ class StorageTestCase(unittest.TestCase):
         info = {
             'width': 40,
             'height': 30,
+            'filesystem_id': self.fs_default_id,
             'size': 4096,
             'path': preview_path2
         }
@@ -504,6 +507,7 @@ class StorageTestCase(unittest.TestCase):
         info = {
             'width': 80,
             'height': 60,
+            'filesystem_id': self.fs_default_id,
             'size': 8096,
             'path': preview_path
         }
@@ -513,6 +517,42 @@ class StorageTestCase(unittest.TestCase):
         with self.assertRaises(StorageException):
             self.storageDao.previewInsert(
                 user_id, item.id, 'thumb', info)
+
+    def test_004a_tempfile(self):
+        # add and remove two temp files
+        user_id = self.USER['id']
+
+        uid1 = 'abc'
+        uid2 = 'def'
+
+        count, total = self.storageDao.tempFileUsage(user_id)
+        self.assertEqual(count, 0)
+        self.assertEqual(total, 0)
+
+        self.storageDao.tempFileUpdate(user_id, uid1, 1024)
+
+        count, total = self.storageDao.tempFileUsage(user_id)
+        self.assertEqual(count, 1)
+        self.assertEqual(total, 1024)
+
+        self.storageDao.tempFileUpdate(user_id, uid2, 512)
+
+        count, total = self.storageDao.tempFileUsage(user_id)
+        self.assertEqual(count, 2)
+        self.assertEqual(total, 1536)
+
+        self.storageDao.tempFileRemove(user_id, uid1)
+
+        count, total = self.storageDao.tempFileUsage(user_id)
+        self.assertEqual(count, 1)
+        self.assertEqual(total, 512)
+
+        self.storageDao.tempFileRemove(user_id, uid2)
+
+        count, total = self.storageDao.tempFileUsage(user_id)
+        self.assertEqual(count, 0)
+        self.assertEqual(total, 0)
+
 class Storage2TestCase(unittest.TestCase):
 
     db_name = "StorageTestCase"
@@ -633,26 +673,30 @@ class Storage2TestCase(unittest.TestCase):
         """
         user_id = self.USER['id']
 
-        count, usage = self.storageDao.userDiskUsage(self.USER['id'])
+        # self.storageDao.setUserDiskQuota(self.USER['id'], 1024)
+        # with self.assertRaises(StorageException):
+        #    self.storageDao.userDiskUsage(self.USER['id'])
+
+        count, usage, _ = self.storageDao.userDiskUsage(self.USER['id'])
         self.assertEqual(0, count)
         self.assertEqual(0, usage)
 
         data = dict(storage_path="file:///file1.txt", size=1024)
         self.storageDao.insertFile(user_id, self.fs_default_id, "/file1.txt", data)
-        count, usage = self.storageDao.userDiskUsage(user_id)
+        count, usage, _ = self.storageDao.userDiskUsage(user_id)
         self.assertEqual(1, count)
         self.assertEqual(1024, usage)
 
         path = "file:///file2.txt"
         data = dict(storage_path="file:///file2.txt", size=512)
         self.storageDao.insertFile(user_id, self.fs_default_id, "/file2.txt", data)
-        count, usage = self.storageDao.userDiskUsage(user_id)
+        count, usage, _ = self.storageDao.userDiskUsage(user_id)
         self.assertEqual(2, count)
         self.assertEqual(1536, usage)
 
         path = "/file1.txt"
         self.storageDao.removeFile(user_id, self.fs_default_id, path)
-        count, usage = self.storageDao.userDiskUsage(user_id)
+        count, usage, _ = self.storageDao.userDiskUsage(user_id)
         self.assertEqual(1, count)
         self.assertEqual(512, usage)
 

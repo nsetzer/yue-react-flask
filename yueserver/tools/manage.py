@@ -159,6 +159,7 @@ def create_user(args):
 
     db = db_connect(args.database_url)
     dao = UserDao(db, db.tables)
+    storageDao = StorageDao(db, db.tables)
 
     domain = dao.findDomainByName(args.domain)
     role = dao.findRoleByName(args.role)
@@ -167,7 +168,10 @@ def create_user(args):
     if dao.findUserByEmail(args.username):
         raise Exception("already exists: " + args.username)
 
-    dao.createUser(args.username, args.password, domain['id'], role['id'])
+    user_id = dao.createUser(args.username, args.password, domain['id'], role['id'])
+    # todo set value from args
+    storageDao.setUserDiskQuota(user_id, 0)
+
     print(dao.findUserByEmail(args.username))
 
 def remove_user(args):
@@ -339,8 +343,7 @@ def get_user(args):
     if not isinstance(user['password'], str):
         user['password'] = user['password'].decode("utf-8")
 
-    file_count, total_bytes = storageDao.userDiskUsage(user['id'])
-    quota_bytes = storageDao.userDiskQuota(user['id'], user['role_id'])
+    file_count, total_bytes, quota_bytes = storageDao.userDiskUsage(user['id'])
 
     for key, value in sorted(user.items()):
         print("%-10s : %s" % (key, value))

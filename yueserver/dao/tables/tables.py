@@ -18,7 +18,8 @@ from .storage import FileSystemStorageTableV1, FileSystemStorageTableV2, \
                      FileSystemUserSupplementaryTable, \
                      FileSystemUserEncryptionTable, \
                      FileSystemUserUsageView, \
-                     FileSystemPreviewStorageTableV1
+                     FileSystemPreviewStorageTableV1, \
+                     FileSystemTempFileTableV1
 from .schema import ApplicationSchemaTable
 
 class BaseDatabaseTables(object):
@@ -165,6 +166,8 @@ class DatabaseTablesV3(BaseDatabaseTables):
         self.FileSystemStorageTable = FileSystemStorageTableV3(metadata)
         self.FileSystemPreviewStorageTable = \
             FileSystemPreviewStorageTableV1(metadata)
+        self.FileSystemTempFileTable = \
+            FileSystemTempFileTableV1(metadata)
         self.FileSystemTable = FileSystemTable(metadata)
         self.FileSystemPermissionTable = FileSystemPermissionTable(metadata)
         self.FileSystemUserSupplementaryTable = \
@@ -172,15 +175,15 @@ class DatabaseTablesV3(BaseDatabaseTables):
         self.FileSystemUserEncryptionTable = \
             FileSystemUserEncryptionTable(metadata)
 
-        #self.FileSystemUserUsageView, text = \
+        #self._views = [
         #    FileSystemUserUsageView(self, metadata)
-        #self._views = [text]
+        #]
 
     def create_views(self, engine):
 
-        #for text in self._views:
-        #    engine.execute(text)
-        pass
+        #for f in self._views:
+        #    f(engine, self)
+        return
 
 DatabaseTables = DatabaseTablesV3
 
@@ -189,3 +192,4 @@ DatabaseTables = DatabaseTablesV3
 # use all_Tables to migrate x to y
 
 # export the latest version of the schema
+

@@ -307,7 +307,14 @@ class FileInfoWidget(gui.Widget):
             self.div_lock.style['background'] = "transparent"
 
         self.hbox.append(self.div_lock, "div_lock")
-        self.hbox.append(self.img_icon, "img_icon")
+        div = gui.Widget(_type='div', style={
+            'margin': ".5em",
+            'height': '60px',
+            'width': '80px',
+        })
+        self.img_icon.style['margin'] = '0'
+        div.append(self.img_icon)
+        self.hbox.append(div, "img_icon")
         self.hbox.append(self.lbl_path, "lbl_title")
 
         if self.file_info['isDir']:

@@ -533,7 +533,16 @@ class StorageDao(object):
             .where(self.dbtables.FileSystemStorageTable.c.user_id == user_id)
         result = self.db.session.execute(query)
         _count, _sum = result.fetchone()
-        return _count, (_sum or 0)
+
+        _quota = self.userDiskQuota(user_id)
+
+        #view = self.dbtables.FileSystemUserUsageView
+        #query = view.select().where(view.c.user_id == user_id)
+        #item = self.db.session.execute(query).fetchone()
+        #if not item:
+        #    raise StorageException("Quota Not Set or no files")
+        #return item.count, (item.usage or 0), item.quota
+        return _count, (_sum or 0), _quota
 
     def setUserDiskQuota(self, user_id, quota, commit=True):
 
@@ -846,6 +855,50 @@ class StorageDao(object):
                         tab.c.file_id == file_id))
 
         self.db.session.execute(query)
+
+        if commit:
+            self.db.session.commit()
+
+    # the temp file table also for multi-host, multi-process, multi threaded
+    # user uploads. It allows for the disk usage to be tracked and quota
+    # rules to be enforced.
+
+    def tempFileUpdate(self, user_id, uid, size, commit=True):
+
+        tab = self.dbtables.FileSystemTempFileTable
+        item = self.db.session.execute(tab.select().where(
+            and_(tab.c.user_id == user_id, tab.c.uid == uid)
+        )).fetchone()
+
+        if item:
+            self.db.session.execute(tab.update().values({'size': size}).where(
+                and_(tab.c.user_id == user_id, tab.c.uid == uid)
+            ))
+        else:
+            self.db.session.execute(tab.insert().values({
+                'user_id': user_id,
+                'uid': uid,
+                'size': size
+            }))
+
+        if commit:
+            self.db.session.commit()
+
+    def tempFileUsage(self, user_id):
+        columns = [func.count(column("size")), func.sum(column("size"))]
+        query = select(columns) \
+            .select_from(self.dbtables.FileSystemTempFileTable) \
+            .where(self.dbtables.FileSystemTempFileTable.c.user_id == user_id)
+        result = self.db.session.execute(query)
+        _count, _sum = result.fetchone()
+        return _count, (_sum or 0)
+
+    def tempFileRemove(self, user_id, uid, commit=True):
+        tab = self.dbtables.FileSystemTempFileTable
+
+        self.db.session.execute(tab.delete().where(
+            and_(tab.c.user_id == user_id, tab.c.uid == uid)
+        ))
 
         if commit:
             self.db.session.commit()

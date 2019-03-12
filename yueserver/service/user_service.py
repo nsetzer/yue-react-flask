@@ -7,6 +7,7 @@ password.
 """
 
 from ..dao.user import UserDao
+from ..dao.storage import StorageDao
 from ..dao.library import LibraryDao
 from ..dao.queue import SongQueueDao
 
@@ -64,6 +65,7 @@ class UserService(object):
         self.dbtables = dbtables
 
         self.userDao = UserDao(db, dbtables)
+        self.storageDao = StorageDao(db, dbtables)
 
         # TODO: this needs to be populated by the application config
         self.secret = config.secret_key
@@ -91,6 +93,8 @@ class UserService(object):
                 domain['id'],
                 role['id']
             )
+        self.storageDao.setUserDiskQuota(user_id, 0)
+
         return user_id
 
     def getUserByPassword(self, email, password):

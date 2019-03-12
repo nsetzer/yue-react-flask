@@ -328,11 +328,19 @@ class FileSysService(object):
             # dao layer expects None, or a valid version
             version = None
 
-        size = 0
-        with self.fs.open(storage_path, "wb") as wb:
-            for buf in iter(lambda: stream.read(2048), b""):
-                wb.write(buf)
-                size += len(buf)
+        # QUOTA upload strategy
+        # don't check the quota at the start.
+        # every N bytes (N= 50MB or 100MB) check the usage + transfered
+        # compared to the quota. if over, abandon upload delete file.
+        # on error return http 413 Request To Large
+        # note: parallel uploads can allow going over the quota
+        #       create a locked structure, a dictionary
+        #           user_id => storage_path => transfered bytes
+        #       update this structure then sum transfered bytes and
+        #       compare to the quota. and fail the current upload if need be
+        #       create a per user lock?
+
+        size = self._internalSave(user['id'], storage_path, stream, 2048)
 
         # if the file is wrapped by an encryptor, subtract the size
         # of the header information. This allows the user to stat
@@ -360,6 +368,55 @@ class FileSysService(object):
         self.storageDao.upsertFile(user['id'], fs_id, file_path, data)
         # existing keyframes and thumbnails need to be recomputed
         self.storageDao.previewInvalidate(user['id'], fs_id)
+
+    def _internalSave(self, user_id, storage_path, inputStream, chunk_size):
+
+        uid = str(uuid.uuid4())
+
+        _, usage, quota = self.storageDao.userDiskUsage(user_id)
+
+        if usage > quota:
+            #raise FileSysServiceException("quota exceeded", 413)
+            print(usage, quota)
+
+        # tuning parameter controlling how often the db is accessed
+        self.byte_threshold = 4096
+        self.byte_index = 0
+
+        size = 0
+        try:
+            with self.fs.open(storage_path, "wb") as outputStream:
+                for buf in iter(lambda: inputStream.read(chunk_size), b""):
+
+                    outputStream.write(buf)
+                    size += len(buf)
+
+                    index = size // self.byte_threshold
+                    print(index)
+                    if index > self.byte_index:
+                        self.storageDao.tempFileUpdate(user_id, uid, size)
+                        _, temp_usage = self.storageDao.tempFileUsage(user_id)
+                        _, usage, quota = self.storageDao.userDiskUsage(user_id)
+
+                        print("%s + %s > %s : %s" % (
+                            temp_usage, usage, quota,
+                            (temp_usage + usage) > quota))
+
+                        if (temp_usage + usage) > quota:
+                            # raise FileSysServiceException("quota exceeded", 413)
+                            pass
+
+                        self.byte_index = index
+
+        except Exception as e:
+            self.fs.remove(storage_path)
+            raise e
+        finally:
+            self.storageDao.tempFileRemove(user_id, uid)
+
+
+
+        return size
 
     def remove(self, user, fs_name, path):
 
@@ -389,8 +446,7 @@ class FileSysService(object):
 
     def getUserQuota(self, user):
 
-        nfiles, nbytes = self.storageDao.userDiskUsage(user['id'])
-        quota = self.storageDao.userDiskQuota(user['id'])
+        nfiles, nbytes, quota = self.storageDao.userDiskUsage(user['id'])
 
         obj = {
             "nfiles": nfiles,
@@ -539,7 +595,12 @@ class FileSysService(object):
             # check a database table, not the file system
             # if it exists return the table entry
 
-            dst = "%s.%s.png" % (fileItem.storage_path, name)
+            # generate a new file path for the preview file.
+            # other than possibly a similar date, there is no relationship
+            # to the preview image file and source file found in the storage
+            # area. this may help to avoid revealing the type of
+            # an encrypted file
+            dst = self._getNewStoragePath(user, fs_name, path)
             ext = fileItem.file_path.split('.')[-1].lower()
 
             if fileItem.encryption in (CryptMode.server, CryptMode.client):
@@ -555,6 +616,7 @@ class FileSysService(object):
                 info = {
                     'width': w,
                     'height': h,
+                    'filesystem_id': fs_id,
                     'size': s,
                     'path': dst
                 }
