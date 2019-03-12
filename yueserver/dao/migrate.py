@@ -10,7 +10,8 @@ from .tables.storage import FileSystemStorageTableV1, FileSystemStorageTableV2
 from .db import db_connect_impl, db_add_column, db_get_columns, db_iter_rows
 from .util import format_storage_path
 from .filesys.crypt import generate_secure_password
-from .settings import SettingsDao
+from .settings import SettingsDao, Settings
+from .user import UserDao
 
 import logging
 
@@ -127,6 +128,39 @@ class _MigrateV2Context(object):
             st = db.tables.FileSystemStorageTable.insert().values(updated_row)
             db.session.execute(st)
 
+class _MigrateV3Context(object):
+    def __init__(self, dbv3):
+        super(_MigrateV3Context, self).__init__()
+        self.dbv3 = dbv3
+
+        query = self.dbv3.tables.FileSystemTable.select()
+        self.fs_items = list(self.dbv3.session.execute(query).fetchall())
+
+    def migrate(self):
+
+        db = self.dbv3
+
+        settingsDao = SettingsDao(db, db.tables)
+        settingsDao.set(Settings.db_version, str(db.tables.version))
+        default_user_quota = 2**30
+        settingsDao.set(Settings.default_user_quota, str(default_user_quota), commit=False)
+
+        userDao = UserDao(db, db.tables)
+
+        # set a default quota if one is not set
+        tab = db.tables.FileSystemUserSupplementaryTable
+        for domain in userDao.listDomains():
+            for user in userDao.listUsers(domain.id):
+                query = tab.select().where(tab.c.user_id == user['id'])
+                item = db.session.execute(query).fetchone()
+                if item is None:
+                    print("setting default quota for %s" % user['id'])
+                    statement = tab.insert().values({
+                        tab.c.user_id: user['id'],
+                        tab.c.quota: default_user_quota,
+                    })
+                    db.session.execute(statement)
+
 def migratev1(dbv1):
     """
     dbv1: a database connection, db.tables must implement v1
@@ -187,6 +221,30 @@ def migratev2(dbv2):
 
     return
 
+def migratev3(dbv3):
+
+    """
+    two tables were added
+    qutoa set for each user is now required
+    """
+
+    dbv3.session = dbv3.session()
+
+    try:
+        dbv3.tables.FileSystemPreviewStorageTable.create(dbv3.engine)
+        dbv3.tables.FileSystemTempFileTable.create(dbv3.engine)
+
+        ctxt = _MigrateV3Context(dbv3)
+        ctxt.migrate()
+        dbv3.session.commit()
+    except:
+        dbv3.session.rollback()
+        raise
+    finally:
+        dbv3.session.close()
+
+    return
+
 def migrate_main(db):
 
     settingsDao = SettingsDao(db, db.tables)
@@ -199,6 +257,7 @@ def migrate_main(db):
     actions = [
         migratev1,
         migratev2,
+        migratev3,
     ]
 
     if version >= len(actions):
