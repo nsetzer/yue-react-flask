@@ -703,8 +703,9 @@ class Storage2TestCase(unittest.TestCase):
     def test_006b_set_quota(self):
 
         # if not set at all for a user, return 0
-        quota = self.storageDao.userDiskQuota(self.USER['id'])
-        self.assertEqual(quota, 0)
+        # disables because there is now a default quota for all users
+        # quota = self.storageDao.userDiskQuota(self.USER['id'])
+        # self.assertEqual(quota, 0)
 
         # set the disk quota
         self.storageDao.setUserDiskQuota(self.USER['id'], 1024)

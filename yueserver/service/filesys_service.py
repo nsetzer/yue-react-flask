@@ -381,8 +381,7 @@ class FileSysService(object):
         _, usage, quota = self.storageDao.userDiskUsage(user_id)
 
         if usage > quota:
-            #raise FileSysServiceException("quota exceeded", 413)
-            print(usage, quota)
+            raise FileSysServiceException("quota exceeded", 413)
 
         byte_index = 0
         size = 0
@@ -396,6 +395,9 @@ class FileSysService(object):
 
                     byte_index = self._internalCheckQuota(
                         user_id, size, byte_index, uid)
+
+            self._internalCheckQuota(
+                user_id, size, -1, uid)
 
         except Exception as e:
             self.fs.remove(storage_path)
@@ -414,7 +416,7 @@ class FileSysService(object):
         # meant data loss.
 
         index = size // self.byte_threshold
-        if index > byte_index:
+        if byte_index ==-1 or index > byte_index:
             self.storageDao.tempFileUpdate(user_id, uid, size)
             _, temp_usage = self.storageDao.tempFileUsage(user_id)
             _, usage, quota = self.storageDao.userDiskUsage(user_id)
@@ -425,8 +427,7 @@ class FileSysService(object):
                 (temp_usage + usage) > quota))
 
             if (temp_usage + usage) > quota:
-                # raise FileSysServiceException("quota exceeded", 413)
-                pass
+                raise FileSysServiceException("quota exceeded", 413)
 
             byte_index += 1
 

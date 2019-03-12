@@ -8,6 +8,7 @@ from sqlalchemy.sql.expression import bindparam
 class Settings(object):
     db_version = "db_version"
     storage_system_key = "storage_system_key"
+    default_user_quota = "default_user_quota"
 
 class SettingsDao(object):
     """docstring for SettingsDao"""

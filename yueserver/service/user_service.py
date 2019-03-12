@@ -9,6 +9,7 @@ password.
 from ..dao.user import UserDao
 from ..dao.storage import StorageDao
 from ..dao.library import LibraryDao
+from ..dao.settings import SettingsDao, Settings
 from ..dao.queue import SongQueueDao
 
 from .exception import UserServiceException
@@ -66,6 +67,7 @@ class UserService(object):
 
         self.userDao = UserDao(db, dbtables)
         self.storageDao = StorageDao(db, dbtables)
+        self.settingsDao = SettingsDao(db, dbtables)
 
         # TODO: this needs to be populated by the application config
         self.secret = config.secret_key
@@ -93,7 +95,8 @@ class UserService(object):
                 domain['id'],
                 role['id']
             )
-        self.storageDao.setUserDiskQuota(user_id, 0)
+        default_user_quota = self.settingsDao.get(Settings.default_user_quota)
+        self.storageDao.setUserDiskQuota(user_id, default_user_quota)
 
         return user_id
 

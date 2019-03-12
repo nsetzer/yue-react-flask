@@ -27,6 +27,7 @@ from ..dao.storage import StorageDao
 from ..dao.migrate import migrate_main
 from ..dao.filesys.filesys import FileSystem
 from ..dao.filesys.s3fs import BotoFileSystemImpl
+from ..dao.settings import SettingsDao, Settings
 from ..app import YueApp, generate_client
 from ..config import Config
 from ..resource.util import get_features
@@ -160,6 +161,7 @@ def create_user(args):
     db = db_connect(args.database_url)
     dao = UserDao(db, db.tables)
     storageDao = StorageDao(db, db.tables)
+    settingsDao = SettingsDao(db, db.tables)
 
     domain = dao.findDomainByName(args.domain)
     role = dao.findRoleByName(args.role)
@@ -169,8 +171,9 @@ def create_user(args):
         raise Exception("already exists: " + args.username)
 
     user_id = dao.createUser(args.username, args.password, domain['id'], role['id'])
-    # todo set value from args
-    storageDao.setUserDiskQuota(user_id, 0)
+
+    default_user_quota = self.settingsDao.get(Settings.default_user_quota)
+    storageDao.setUserDiskQuota(user_id, default_user_quota)
 
     print(dao.findUserByEmail(args.username))
 

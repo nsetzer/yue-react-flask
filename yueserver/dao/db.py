@@ -5,7 +5,7 @@ using a YAML configuration file and utility functions
 for creating a database connection.
 """
 from .user import UserDao
-from .settings import SettingsDao
+from .settings import SettingsDao, Settings
 from .storage import StorageDao
 from .library import Song, LibraryDao
 from .tables.tables import DatabaseTables
@@ -449,8 +449,18 @@ def db_init_main(db, dbtables, data):
     # Settings
 
     settingsDao = SettingsDao(db, dbtables)
-    settingsDao.set("db_version", str(dbtables.version))
-    settingsDao.set("storage_system_key", generate_secure_password())
+    settingsDao.set(Settings.db_version, str(dbtables.version))
+    settingsDao.set(Settings.storage_system_key, generate_secure_password())
+
+    # todo: env should define default
+    # 2**20 - 1MB
+    # 2**26 - 64MB
+    # 2**30 - 1GB
+    # 2**30 - 1GB
+    # 2**33 - 8GB
+    # 2**35 - 32GB
+    default_user_quota = 2**30
+    settingsDao.set(Settings.default_user_quota, default_user_quota)
 
     # -------------------------------------------------------------------------
     # Features
@@ -502,8 +512,7 @@ def db_init_main(db, dbtables, data):
                                      default_role['id'],
                                      hash=hash)
 
-        # todo: env should define default
-        storageDao.setUserDiskQuota(user_id, 0)
+        storageDao.setUserDiskQuota(user_id, default_user_quota)
 
         # grant additional domains
         for name in domains:

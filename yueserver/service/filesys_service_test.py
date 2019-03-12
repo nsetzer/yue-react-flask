@@ -9,6 +9,7 @@ from ..dao.library import Song
 from ..dao.storage import StorageNotFoundException
 from ..dao.image import ImageScale
 from ..app import TestApp
+from .exception import FileSysServiceException, FileSysKeyNotFound
 
 from io import BytesIO
 from .transcode_service import ImageScale
@@ -141,6 +142,51 @@ class FileServiceTestCase(unittest.TestCase):
         self.service.remove(self.app.USER, root, path)
         self.assertFalse(self.service.fs.exists(url))
 
+    def test_005_remove_all_files(self):
+        # prepare for next test
+
+        for f in self.service.listIndex(self.app.USER, "mem", ""):
+            print(f)
+            self.service.remove(self.app.USER, "mem", f['path'])
+
+    def test_005a_quota(self):
+
+        user_id = self.app.USER['id']
+
+        dao = self.service.storageDao
+
+        # start with no files and 2KB quota
+        dao.setUserDiskQuota(user_id, 2**11)
+        count, usage, quota = dao.userDiskUsage(user_id)
+        self.assertEqual(count, 0)
+        self.assertEqual(usage, 0)
+        self.assertEqual(quota, 2048)
+
+        self.service.saveFile(self.app.USER, "mem", "a", BytesIO(b"0" * 1024))
+        self.service.saveFile(self.app.USER, "mem", "b", BytesIO(b"0" * 512))
+        print("\n\n***")
+
+        count, usage, quota = dao.userDiskUsage(user_id)
+        self.assertEqual(count, 2)
+        self.assertEqual(usage, 1536)
+        self.assertEqual(quota, 2048)
+
+        with self.assertRaises(FileSysServiceException):
+            self.service.saveFile(self.app.USER, "mem", "c", BytesIO(b"0" * 1024))
+
+        count, usage, quota = dao.userDiskUsage(user_id)
+        self.assertEqual(count, 2)
+        self.assertEqual(usage, 1536)
+        self.assertEqual(quota, 2048)
+
+        # lowering the quota below the current usage level
+        # will prevent additional writes
+        dao.setUserDiskQuota(user_id, 2**10)
+        with self.assertRaises(FileSysServiceException):
+            self.service.saveFile(self.app.USER, "mem", "c", BytesIO(b"0" * 1024))
+
+        # _internalSave(user_id, storage_path, inputStream, chunk_size)
+        # _internalCheckQuota(user_id, size, byte_index, uid)
 
 
 
