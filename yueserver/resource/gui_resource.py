@@ -17,7 +17,7 @@ from .gui.context import YueAppState
 
 import datetime
 
-from flask import jsonify, g, request
+from flask import jsonify, g, request, send_from_directory
 
 from yueserver.resource.util import files_generator, files_generator_v2
 from yueserver.dao.library import Song, LibraryException
@@ -449,7 +449,6 @@ class AudioGuiResource(GuiAppResource):
                 file_size=None, headers=headers, attachment=g.args.dl)
 
         else:
-
 
             stream = self.fileService.loadFileFromInfo(user, info)
             _, name = self.fileService.fs.split(info.file_path)

@@ -18,7 +18,7 @@ from ..dao.image import ImageScale, scale_image_stream
 
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, body, header, compressed, param, httpError, \
-    int_range, int_min, send_generator, null_validator, boolean
+    int_range, int_min, send_generator, null_validator, boolean, timed
 
 from .util import requires_auth, files_generator, files_generator_v2
 
@@ -66,6 +66,7 @@ class FilesResource(WebResource):
     @get("<root>/path/")
     @header("X-YUE-PASSWORD")
     @requires_auth("filesystem_read")
+    @timed(100)
     def get_path_root(self, root):
         password = g.headers.get('X-YUE-PASSWORD', None)
         return self._list_path(root, "", password=password, preview=None)
@@ -77,6 +78,7 @@ class FilesResource(WebResource):
         doc="return a preview picture of the resource")
     @header("X-YUE-PASSWORD")
     @requires_auth("filesystem_read")
+    @timed(100)
     def get_path(self, root, resPath):
         password = g.headers.get('X-YUE-PASSWORD', None)
         return self._list_path(root, resPath, g.args.list,
@@ -179,6 +181,7 @@ class FilesResource(WebResource):
     @header("X-YUE-PASSWORD")
     @body(null_validator, content_type="application/octet-stream")
     @requires_auth("filesystem_write")
+    @timed(100)
     def upload(self, root, resPath):
         """
         mtime: on a successful upload, set the modified time to mtime,
@@ -283,7 +286,6 @@ class FilesResource(WebResource):
         # it should contain the base64 encoded password for the user
         # use this to decrypt the file
 
-        print(list_, password, preview)
         fs = self.filesys_service.fs
 
         abs_path = self.filesys_service.getFilePath(g.current_user, root, path)

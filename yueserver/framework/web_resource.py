@@ -7,6 +7,7 @@ for creating a resource.
 """
 import os
 import sys
+import time
 from functools import wraps
 from flask import (after_this_request, request, g, jsonify,
     stream_with_context, Response, send_file as flask_send_file)
@@ -106,7 +107,16 @@ def _endpoint_mapper(f):
             except Exception as e:
                 logging.exception("unable to validate body")
                 return httpError(400, "unable to validate body")
-        return f(*args, **kwargs)
+
+        s = time.time()
+        return_value = f(*args, **kwargs)
+        e = time.time()
+        if hasattr(f, '_timeout'):
+            t = (e - s) * 1000
+            if t >= getattr(f, '_timeout'):
+                logging.warning("%s.%s ran for %.3fms", f.__module__,
+                    f.__wrapped__.__qualname__, t)
+        return return_value
 
     return wrapper
 
@@ -138,6 +148,12 @@ def websocket(event, namespace):
         f._namespace = namespace
         f._event = event
         return _websocket_wrapper(f)
+    return decorator
+
+def timed(timeout=100):
+    def decorator(f):
+        f._timeout = timeout
+        return f
     return decorator
 
 def get(path):

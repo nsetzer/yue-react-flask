@@ -22,6 +22,7 @@ import calendar
 import uuid
 import posixpath
 import base64
+import logging
 
 from functools import lru_cache
 from enum import Enum
@@ -196,6 +197,8 @@ class StorageDao(object):
             if commit:
                 self.db.session.commit()
 
+            return result.inserted_primary_key[0]
+
         except IntegrityError as e:
             ex = StorageException("%s" % e.args[0])
             ex.original = e
@@ -223,6 +226,8 @@ class StorageDao(object):
         if commit:
             self.db.session.commit()
 
+        return file_id
+
     def selectFile(self, user_id, fs_id, file_path):
 
         tab = self.dbtables.FileSystemStorageTable
@@ -240,9 +245,9 @@ class StorageDao(object):
         item = self.selectFile(user_id, fs_id, file_path)
 
         if item is None:
-            self.insertFile(user_id, fs_id, file_path, data, commit)
+            return self.insertFile(user_id, fs_id, file_path, data, commit)
         else:
-            self.updateFile(item.id, data, commit)
+            return self.updateFile(item.id, data, commit)
 
     def removeFile(self, user_id, fs_id, file_path, commit=True):
 

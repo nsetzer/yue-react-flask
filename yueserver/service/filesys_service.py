@@ -358,9 +358,10 @@ class FileSysService(object):
             encryption=encryption
         )
 
-        self.storageDao.upsertFile(user['id'], fs_id, file_path, data)
+        file_id = self.storageDao.upsertFile(
+            user['id'], fs_id, file_path, data)
         # existing thumbnails need to be recomputed
-        self.storageDao.previewInvalidate(user['id'], fs_id)
+        self.storageDao.previewInvalidate(user['id'], file_id)
 
     def _internalSave(self, user_id, storage_path, inputStream, chunk_size):
 
@@ -421,10 +422,10 @@ class FileSysService(object):
             _, temp_usage = self.storageDao.tempFileUsage(user_id)
             _, usage, quota = self.storageDao.userDiskUsage(user_id)
 
-            print("%s + %s = %s > %s : %s" % (
-                format_bytes(usage), format_bytes(temp_usage),
-                format_bytes(temp_usage + usage), format_bytes(quota),
-                (temp_usage + usage) > quota))
+            #print("%s + %s = %s > %s : %s" % (
+            #    format_bytes(usage), format_bytes(temp_usage),
+            #    format_bytes(temp_usage + usage), format_bytes(quota),
+            #    (temp_usage + usage) > quota))
 
             if (temp_usage + usage) > quota:
                 raise FileSysServiceException("quota exceeded", 413)
@@ -602,8 +603,7 @@ class FileSysService(object):
         previewItem = self.storageDao.previewFind(
             user['id'], fileItem.file_id, name)
 
-        if previewItem is None or previewItem.valid == 0:
-            print("generate new thumb")
+        if previewItem is None or previewItem.valid == 0 or not self.fs.exists(previewItem.path):
 
             inputStream = self.loadFileFromInfo(user, fileItem, password)
             # look for a preview file that already exists
@@ -622,22 +622,22 @@ class FileSysService(object):
                 raise FileSysServiceException("file is encrypted")
             elif ext in ("jpg", "jpeg", "png", "gif"):
                 logging.info("creating preview %s %s" % (name, dst))
-                outputStream = self.fs.open(dst, "wb")
-                if fileItem.encryption is not None:
-                    outputStream = self.encryptStream(user,
-                        password, outputStream, "w", fileItem.encryption)
-                w, h, s = scale_image_stream(inputStream, outputStream, scale)
+                with self.fs.open(dst, "wb") as outputStream:
+                    if fileItem.encryption is not None:
+                        outputStream = self.encryptStream(user,
+                            password, outputStream, "w", fileItem.encryption)
+                    w, h, s = scale_image_stream(inputStream, outputStream, scale)
 
-                info = {
-                    'width': w,
-                    'height': h,
-                    'filesystem_id': fs_id,
-                    'size': s,
-                    'path': dst
-                }
+                    info = {
+                        'width': w,
+                        'height': h,
+                        'filesystem_id': fs_id,
+                        'size': s,
+                        'path': dst
+                    }
 
-                self.storageDao.previewUpsert(
-                    user['id'], fileItem.file_id, name, info)
+                    self.storageDao.previewUpsert(
+                        user['id'], fileItem.file_id, name, info)
 
             elif ext in ("ogg", "mp3", "wav"):
                 raise FileSysServiceException("not implemented")
@@ -654,7 +654,6 @@ class FileSysService(object):
             return dst
 
         else:
-            print("return existing thumb")
             return previewItem.path
 
     def _removePreviewFiles(self, user_id, fs_id, file_path):

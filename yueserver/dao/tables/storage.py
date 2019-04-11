@@ -1,7 +1,7 @@
 
 
 from sqlalchemy.schema import Table, Column, ForeignKey, UniqueConstraint
-from sqlalchemy.types import Integer, String, Boolean
+from sqlalchemy.types import BigInteger, Integer, String, Boolean
 from sqlalchemy.sql import func
 from sqlalchemy.sql import select
 
@@ -210,7 +210,7 @@ def FileSystemUserSupplementaryTable(metadata):
         # quota is the maximum disk usage allowed by the user
         # if not set or 0, then there is no maximum
         # value is in bytes
-        Column('quota', Integer, nullable=False)
+        Column('quota', BigInteger, nullable=False)
     )
 
 def FileSystemUserEncryptionTable(metadata):

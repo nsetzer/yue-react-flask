@@ -355,6 +355,16 @@ def get_user(args):
     print("%-10s : %.3f MB" % ("#bytes", total_bytes / 1024 / 1024))
     print("%-10s : %.3f MB" % ("#quota", quota_bytes / 1024 / 1024))
 
+def set_user_quota(args):
+
+    db = db_connect(args.database_url)
+    storageDao = StorageDao(db, db.tables)
+    userDao = UserDao(db, db.tables)
+    user = userDao.findUserByEmail(args.username)
+
+    storageDao.setUserDiskQuota(user['id'], args.nbytes)
+    print("%-10s : %.3f MB" % ("#quota", args.nbytes / 1024 / 1024))
+
 def main():
 
     parser = argparse.ArgumentParser(description='database utility')
@@ -534,6 +544,20 @@ def main():
 
     parser_get_user.add_argument('username', type=str,
         help='the user to list')
+
+    ###########################################################################
+    # SET_USER_QUOTA - set the quota for the user
+
+    parser_get_user = subparsers.add_parser('set_user_quota',
+        help='set the quota for the user')
+
+    parser_get_user.set_defaults(func=set_user_quota)
+
+    parser_get_user.add_argument('username', type=str,
+        help='the user to list')
+
+    parser_get_user.add_argument('nbytes', type=int,
+        help='quota in bytes')
 
     ###########################################################################
     # CREATE_USER - create a user

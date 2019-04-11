@@ -120,6 +120,7 @@ class StorageTestCase(unittest.TestCase):
             encryption=None,
             public_password=None,
             public=None)
+
         self.storageDao.insertFile(user_id, self.fs_default_id, path, data)
 
         item = self.storageDao.selectFile(user_id, self.fs_default_id, path)
