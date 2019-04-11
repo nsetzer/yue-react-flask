@@ -61,7 +61,6 @@ class UserResource(WebResource):
 
     @post("token")
     def is_token_valid(self):
-        # TODO: is this endpoint still required?
 
         incoming = request.get_json()
 

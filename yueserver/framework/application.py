@@ -227,6 +227,7 @@ class FlaskApp(object):
         response.headers["Access-Control-Allow-Origin"] = self.config.cors.origin
         response.headers["Access-Control-Allow-Headers"] = self.config.cors.headers
         response.headers["Access-Control-Allow-Methods"] = self.config.cors.methods
+        response.headers["Access-Control-Allow-Credentials"] = 'true'
 
         return response
 

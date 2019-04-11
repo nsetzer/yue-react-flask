@@ -1,8 +1,8 @@
 encryption_mode: none
 server:
 
-  build: ./res
-  static: ./res
+  build: ./frontend/build
+  static: ./frontend/build/static
 
   host: 0.0.0.0
   port: 4200
@@ -11,7 +11,7 @@ server:
   secret_key: secret
 
   cors:
-    origins: "*"
+    origin: "http://localhost:3000"
 
   database:
     kind: "sqlite"
