@@ -582,12 +582,12 @@ class FileSysService(object):
                 if record.name.endswith('.txt'):
                     files.append({
                         "file_name": record.name,
+                        "title": record.name[:-4].replace("_", " "),
                         "file_path": "%s/%s" % (dir_path, record.name),
                         "size": record.size,
                         "mtime": record.mtime,
                         "encryption": record.encryption,
                     })
-        files.sort(key=lambda f: f['file_name'])
 
         return files
 

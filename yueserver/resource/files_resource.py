@@ -78,11 +78,12 @@ class FilesResource(WebResource):
         doc="return a preview picture of the resource")
     @header("X-YUE-PASSWORD")
     @requires_auth("filesystem_read")
+    @param("dl", type_=boolean, default=True)
     @timed(100)
     def get_path(self, root, resPath):
         password = g.headers.get('X-YUE-PASSWORD', None)
         return self._list_path(root, resPath, g.args.list,
-            password=password, preview=g.args.preview)
+            password=password, preview=g.args.preview, dl=g.args.dl)
 
     @get("public/<fileId>")
     @param("dl", type_=boolean, default=True)
@@ -207,7 +208,7 @@ class FilesResource(WebResource):
 
     @delete("<root>/path/<path:resPath>")
     @requires_auth("filesystem_delete")
-    def delete(self, root, resPath):
+    def remove_file(self, root, resPath):
 
         self.filesys_service.remove(g.current_user, root, resPath)
 
@@ -279,7 +280,63 @@ class FilesResource(WebResource):
         self.filesys_service.setUserClientKey(g.current_user, g.body)
         return jsonify(result="OK"), 200
 
-    def _list_path(self, root, path, list_=False, password=None, preview=None):
+    @get("notes")
+    @param("root", type_=str, default='default')
+    @param("base", type_=str, default='public/notes')
+    @requires_auth("filesystem_read")
+    def getUserNotes(self):
+        notes = self.filesys_service.getUserNotes(
+            g.current_user, g.args.root, dir_path=g.args.base)
+        # return note_id => note_info
+        payload = {note['file_name']: note for note in notes}
+        return jsonify(result=payload)
+
+    @get("notes/<note_id>")
+    @param("root", type_=str, default='default')
+    @param("base", type_=str, default='public/notes')
+    @header("X-YUE-PASSWORD")
+    @requires_auth("filesystem_read")
+    def getUserNoteContent(self, note_id):
+        password = g.headers.get('X-YUE-PASSWORD', None)
+        resPath = self.filesys_service.fs.join(g.args.base, note_id)
+        return self._list_path(g.args.root, resPath, False,
+            password=password, preview=None)
+
+    @post("notes/<note_id>")
+    @param("root", type_=str, default='default')
+    @param("base", type_=str, default='public/notes')
+    @param("crypt", type_=validate_mode, doc="encryption mode",
+        default='system')
+    @header("X-YUE-PASSWORD")
+    @body(null_validator, content_type='text/plain')
+    @requires_auth("filesystem_write")
+    def setUserNoteContent(self, note_id):
+        """convenience function wrapping file upload"""
+        resPath = self.filesys_service.fs.join(g.args.base, note_id)
+
+        stream = g.body
+        if g.args.crypt in (CryptMode.server, CryptMode.system):
+            password = g.headers.get('X-YUE-PASSWORD', None)
+            stream = self.filesys_service.encryptStream(g.current_user,
+                password, stream, "r", g.args.crypt)
+        self.filesys_service.saveFile(
+            g.current_user, g.args.root, resPath, stream,
+            encryption=g.args.crypt)
+
+        return jsonify(result="OK"), 200
+
+    @delete("notes/<note_id>")
+    @param("root", type_=str, default='default')
+    @param("base", type_=str, default='public/notes')
+    @requires_auth("filesystem_write")
+    def deleteUserNote(self, note_id):
+        """convenience function wrapping file delete"""
+        #resPath = self.filesys_service.fs.join(g.args.base, note_id)
+        #self.filesys_service.remove(g.current_user, g.args.root, resPath)
+        print("delete: " + note_id)
+        return jsonify(result="OK")
+
+    def _list_path(self, root, path, list_=False, password=None, preview=None, dl=True):
         # TODO: move this into the service layer
 
         # TODO: check for the header X-YUE-ENCRYPTION
@@ -320,7 +377,7 @@ class FilesResource(WebResource):
                 go = files_generator_v2(stream)
                 headers = {}
                 return send_generator(go, '%s.%s.png' % (name, preview),
-                    file_size=None, headers=headers)
+                    file_size=None, headers=headers, attachment=dl)
             else:
                 _, name = self.filesys_service.fs.split(info.file_path)
                 stream = self.filesys_service.fs.open(info.storage_path, "rb")
@@ -335,7 +392,7 @@ class FilesResource(WebResource):
                     "X-YUE-PERMISSION": info.permission,
                     "X-YUE-MTIME": info.mtime,
                 }
-                return send_generator(go, name, file_size=None, headers=headers)
+                return send_generator(go, name, file_size=None, headers=headers, attachment=dl)
 
         try:
             result = self.filesys_service.listDirectory(g.current_user, root, path)
@@ -348,3 +405,4 @@ class FilesResource(WebResource):
 
             return httpError(404, "not found: root: `%s` path: `%s`" % (
                 root, path))
+

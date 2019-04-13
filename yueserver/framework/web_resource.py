@@ -54,6 +54,17 @@ def httpError(code, message):
 
 def _endpoint_mapper(f):
 
+    if f.__name__ in globals():
+        # this causes a confusing error, for example:
+        #  @delete("/api/delete")
+        #  def delete(self):             <-------------------------------+
+        #      return "OK"                                               |
+        #  @delete("/api/delete2")   <-- this delete is now this method -+
+        #  def delete2(self):            and not the original imported
+        #      return "OK"               annotation
+        m = "Function name (%s) cannot be a web resource reserved word (%s)"
+        raise RuntimeError(m % (f.__qualname__, f.__name__))
+
     @wraps(f)
     def wrapper(*args, **kwargs):
         g.args = lambda: None

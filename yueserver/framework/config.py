@@ -84,7 +84,7 @@ class CORSConfig(BaseConfig):
         self.origin = self.get_key(base, 'cors', 'origin',
             default="*")
         self.headers = self.get_key(base, 'cors', 'headers',
-            default="Origin, X-Requested-With, Content-Type, Accept")
+            default="Origin, X-Requested-With, Content-Type, Accept, Authorization")
         self.methods = self.get_key(base, 'cors', 'methods',
             default="GET, POST, PUT, DELETE, OPTIONS")
 
