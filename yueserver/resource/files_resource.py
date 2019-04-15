@@ -192,7 +192,16 @@ class FilesResource(WebResource):
         error codes:
             409: file already exists and is a newer version
         """
-        stream = g.body
+
+        stream = None
+        # support multi part form uploads that
+        # have exactly one file in the payload
+        # TODO: should we fail otherwise for uploads with more than 1 file
+        if request.files and len(request.files) == 1:
+            for key in request.files.keys():
+                stream = request.files.get(key)
+        else:
+            stream = g.body
 
         if g.args.crypt in (CryptMode.server, CryptMode.system):
             password = g.headers.get('X-YUE-PASSWORD', None)

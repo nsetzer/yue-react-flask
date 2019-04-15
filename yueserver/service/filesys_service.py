@@ -658,9 +658,9 @@ class FileSysService(object):
 
     def _removePreviewFiles(self, user_id, fs_id, file_path):
         # TODO: exception handling, eventual consistency
-        self.storageDao.previewInvalidate(user_id, fs_id)
         fileItem = self.storageDao.file_info(user_id, fs_id, file_path)
         file_id = fileItem.file_id
+        self.storageDao.previewInvalidate(user_id, file_id)
         for item in self.storageDao.previewFind(user_id, file_id, None):
             self.fs.remove(item.path)
-        self.storageDao.previewRemove(user_id, fs_id)
+        self.storageDao.previewRemove(user_id, file_id)

@@ -1491,16 +1491,17 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
     elif FileState.CONFLICT_VERSION == state:
         pass
     elif FileState.DELETE_BOTH == state:
-        sys.stdout.write("delete     - %s\n" % ent.remote_path)
+        sys.stdout.write("delete both   - %s\n" % ent.remote_path)
         ctxt.storageDao.remove(ent.remote_path)
     elif FileState.DELETE_REMOTE == state and pull:
-        sys.stdout.write("delete     - %s\n" % ent.remote_path)
+        sys.stdout.write("delete local  - %s\n" % ent.remote_path)
         ctxt.fs.remove(ent.local_path)
         ctxt.storageDao.remove(ent.remote_path)
     elif FileState.DELETE_LOCAL == state and push:
-        sys.stdout.write("delete     - %s\n" % ent.remote_path)
-        ctxt.client.files_delete(ctxt.root, ent.remote_path)
-        ctxt.storageDao.remove(ent.remote_path)
+        sys.stdout.write("delete remote - %s\n" % ent.remote_path)
+        response = ctxt.client.files_remove_file(ctxt.root, ent.remote_path)
+        if (response.status_code == 200):
+            ctxt.storageDao.remove(ent.remote_path)
     else:
         sys.stdout.write("unknown %s\n" % ent.remote_path)
 
