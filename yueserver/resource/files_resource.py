@@ -372,11 +372,23 @@ class FilesResource(WebResource):
                 result = self.filesys_service.listSingleFile(g.current_user, root, path)
                 return jsonify(result=result)
             elif preview:
+
+                # cache control for preview files
+                # check the incoming request to see if the file has changed
+                ETag = "%s:%s" % (path, str(info.version))
+                if 'If-None-Match' in request.headers:
+                    if request.headers['If-None-Match'] == ETag:
+                        return b"", 304
+
                 _, name = self.filesys_service.fs.split(info.file_path)
                 # todo: return a object containing size and path?
                 # table: file_id, preview_mode, preview_url, preview_size
+                # TODO: investigate this method, previewFile
+                # it is causing a significant amount of request latency
+                # even when the preview already exists
                 url = self.filesys_service.previewFile(g.current_user,
                     root, path, preview, password)
+
                 stream = self.filesys_service.fs.open(url, "rb")
                 if info.encryption in (CryptMode.server, CryptMode.system):
                     if not password and info.encryption == CryptMode.server:
@@ -384,10 +396,19 @@ class FilesResource(WebResource):
                     stream = self.filesys_service.decryptStream(g.current_user,
                             password, stream, "r", info.encryption)
                 go = files_generator_v2(stream)
-                headers = {}
+                headers = {
+                    'Cache-Control': 'max-age=31536000',
+                    'ETag': ETag,
+                }
+
                 return send_generator(go, '%s.%s.png' % (name, preview),
                     file_size=None, headers=headers, attachment=dl)
             else:
+                ETag = "%s:%s" % (path, str(info.version))
+                if 'If-None-Match' in request.headers:
+                    if request.headers['If-None-Match'] == ETag:
+                        return b"", 304
+
                 _, name = self.filesys_service.fs.split(info.file_path)
                 stream = self.filesys_service.fs.open(info.storage_path, "rb")
                 if info.encryption in (CryptMode.server, CryptMode.system):
@@ -400,8 +421,11 @@ class FilesResource(WebResource):
                     "X-YUE-VERSION": info.version,
                     "X-YUE-PERMISSION": info.permission,
                     "X-YUE-MTIME": info.mtime,
+                    'Cache-Control': 'max-age=31536000',
+                    'ETag': ETag,
                 }
-                return send_generator(go, name, file_size=None, headers=headers, attachment=dl)
+                return send_generator(go, name,
+                    file_size=None, headers=headers, attachment=dl)
 
         try:
             result = self.filesys_service.listDirectory(g.current_user, root, path)
