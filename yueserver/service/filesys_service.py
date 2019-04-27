@@ -20,6 +20,7 @@ from ..dao.settings import Settings, SettingsDao
 from ..dao.image import ImageScale, scale_image_stream
 from .transcode_service import TranscodeService, ImageScale
 from ..dao.util import format_bytes
+from ..dao.transcode import FFmpeg
 
 from datetime import datetime
 
@@ -64,6 +65,13 @@ class FileSysService(object):
         # 2**20 : 1 MB
         # 2**26 : 64 MB
         self.byte_threshold = 2**26
+
+        path = config.transcode.audio.bin_path
+
+        if path and not os.path.exists(path):
+            raise FileNotFoundError(path)
+
+        self.transcoder = FFmpeg(path)
 
     @staticmethod
     def init(config, db, dbtables):
@@ -618,40 +626,63 @@ class FileSysService(object):
             dst = self._getNewStoragePath(user, fs_name, path)
             ext = fileItem.file_path.split('.')[-1].lower()
 
-            if fileItem.encryption in (CryptMode.server, CryptMode.client):
-                raise FileSysServiceException("file is encrypted")
-            elif ext in ("jpg", "jpeg", "png", "gif"):
-                logging.info("creating preview %s %s" % (name, dst))
-                with self.fs.open(dst, "wb") as outputStream:
-                    if fileItem.encryption is not None:
-                        outputStream = self.encryptStream(user,
-                            password, outputStream, "w", fileItem.encryption)
-                    w, h, s = scale_image_stream(inputStream, outputStream, scale)
+            try:
+                if fileItem.encryption in (CryptMode.server, CryptMode.client):
+                    raise FileSysServiceException("file is encrypted")
+                elif ext in ("jpg", "jpeg", "png", "gif", 'bmp'):
+                    logging.info("creating preview %s %s" % (name, dst))
+                    with self.fs.open(dst, "wb") as outputStream:
+                        if fileItem.encryption is not None:
+                            outputStream = self.encryptStream(user,
+                                password, outputStream, "w", fileItem.encryption)
+                        w, h, s = scale_image_stream(inputStream, outputStream, scale)
 
-                    info = {
-                        'width': w,
-                        'height': h,
-                        'filesystem_id': fs_id,
-                        'size': s,
-                        'path': dst
-                    }
+                        info = {
+                            'width': w,
+                            'height': h,
+                            'filesystem_id': fs_id,
+                            'size': s,
+                            'path': dst
+                        }
 
-                    self.storageDao.previewUpsert(
-                        user['id'], fileItem.file_id, name, info)
+                        self.storageDao.previewUpsert(
+                            user['id'], fileItem.file_id, name, info)
 
-            elif ext in ("ogg", "mp3", "wav"):
-                raise FileSysServiceException("not implemented")
-            elif ext in ("webm", "mp4"):
-                raise FileSysServiceException("not implemented")
-            elif ext in ("pdf", "swf"):
-                raise FileSysServiceException("not implemented")
-            else:
-                raise FileSysServiceException("not implemented")
+                elif ext in ("ogg", "mp3", "wav"):
+                    raise FileSysServiceException("not implemented")
+                elif ext in ("webm", "mp4"):
+                    logging.info("creating preview %s %s" % (name, dst))
+                    with self.fs.open(dst, "wb") as outputStream:
+                        if fileItem.encryption is not None:
+                            outputStream = self.encryptStream(user,
+                                password, outputStream, "w", fileItem.encryption)
+                        args = self.transcoder.get_thumb_args()
+                        w, h, s = self.transcoder.thumb(inputStream, outputStream, args, scale)
 
-            # the resource path that is returned should be resource
-            # dependant. all audio files should have the same url
-            #
-            return dst
+                        info = {
+                            'width': w,
+                            'height': h,
+                            'filesystem_id': fs_id,
+                            'size': s,
+                            'path': dst
+                        }
+
+                        self.storageDao.previewUpsert(
+                            user['id'], fileItem.file_id, name, info)
+
+                elif ext in ("pdf", "swf"):
+                    raise FileSysServiceException("not implemented")
+                else:
+                    raise FileSysServiceException("not implemented")
+
+                # the resource path that is returned should be resource
+                # dependant. all audio files should have the same url
+                #
+                return dst
+            except Exception as e:
+
+                logging.exception("Failed to generate preview for `%s`" % abs_path)
+                raise e
 
         else:
             return previewItem.path

@@ -36,6 +36,10 @@ implement `syn mv`
     - when moving a folder compute the set of changes server side
     - then perform a bulk update
 
+implement `syn rm`
+    --local : remove the local file, and db entry, but preserve remote
+    --remote : remove the remote file, and db entry, but preserve local
+
 """
 import os, sys
 import argparse

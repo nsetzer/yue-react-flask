@@ -6,6 +6,8 @@ import os
 import sys
 import logging
 
+from calendar import timegm
+import time
 from flask import jsonify, render_template, g, request, send_file
 
 from ..dao.library import Song, LibraryException
@@ -29,6 +31,19 @@ def song_validator(song):
             raise Exception("missing field: %s" % field)
 
     return song
+
+def song_id_list_validator(ids):
+
+    print(ids)
+
+    if not isinstance(ids, list):
+        raise Exception("expected a list of ids")
+
+    for element in ids:
+        if not isinstance(element, str):
+            raise Exception("expected a list of ids")
+
+    return ids
 
 def song_list_validator(songs):
 
@@ -262,6 +277,25 @@ class LibraryResource(WebResource):
 
         return jsonify(result="OK"), 200
 
+    @post("history/increment")
+    @body(song_id_list_validator)
+    @requires_auth("library_write_song")
+    def increment_playcount(self):
+        """
+        curl -u admin:admin --header "Content-Type: application/json" \
+              -X POST -d '["7065c940-3c6f-429f-bfd9-27cccc402447"]' \
+              http://localhost:4200/api/library/history/increment
+        """
+
+        timestamp = timegm(time.localtime(time.time()))
+
+        records = [{'song_id': sid, 'timestamp': timestamp} for sid in g.body]
+
+        print(records)
+        self.audio_service.updatePlayCount(g.current_user, records)
+
+        return jsonify(result="OK"), 200
+
     @get("history")
     @param("start", type_=datetime_validator, required=True)
     @param("end", type_=datetime_validator, required=True)
@@ -272,6 +306,22 @@ class LibraryResource(WebResource):
         """
         get song history between a date range
 
+        the start and end time can be an integer or ISO string.
+        """
+
+        offset = g.args.page * g.args.page_size
+
+        records = self.audio_service.getPlayHistory(
+            g.current_user, g.args.start, g.args.end,
+            offset=offset, limit=g.args.page_size)
+
+        return jsonify({
+            "result": records,
+            "page": g.args.page,
+            "page_size": g.args.page_size
+        })
+        """
+        get song history between a date range
         the start and end time can be an integer or ISO string.
         """
 
