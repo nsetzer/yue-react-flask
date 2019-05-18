@@ -264,6 +264,30 @@ class StorageDao(object):
         if commit:
             self.db.session.commit()
 
+    def moveFileLocation(self, user_id, fs_id, srcPath, dstPath, commit=True):
+        """
+        move a file, validating that:
+            - source exists
+            - destination is not a file or directory
+        """
+        fdst = None
+        try:
+            fdst = self.file_info(user_id, fs_id, dstPath)
+        except StorageNotFoundException as e:
+            pass
+
+        print(FileSystem()._mem())
+
+        if fdst:
+            raise StorageException("EEXISTS: %s" % dstPath)
+
+        fsrc = self.selectFile(user_id, fs_id, srcPath)
+
+        if not fsrc:
+            raise StorageException("NOT FOUND: %s" % srcPath)
+
+        self.updateFile(fsrc.id, {'file_path': dstPath}, commit)
+
     def _item2dir(self, name):
         return FileRecord(name, True, 0, 0)
 

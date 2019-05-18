@@ -285,6 +285,22 @@ class FileSysService(object):
 
         return stream
 
+    def publicFileInfo(self, fileId):
+        record = self.storageDao.publicFileInfo(fileId)
+
+        obj = {
+            "name": record.name,
+            "size": record.size,
+            "mtime": record.mtime,
+            "permission": record.permission,
+            "version": record.version,
+            "public": record.public,
+            "encryption": record.encryption
+        }
+
+        return obj
+
+
     def loadPublicFile(self, fileId, password=None):
 
         # validate that the given password is correct
@@ -371,6 +387,15 @@ class FileSysService(object):
         # existing thumbnails need to be recomputed
         self.storageDao.previewInvalidate(user['id'], file_id)
 
+        file_info = dict(
+            size=size,
+            mtime=mtime,
+            encryption=encryption,
+            permission=permission,
+        )
+
+        return file_info
+
     def _internalSave(self, user_id, storage_path, inputStream, chunk_size):
 
         # QUOTA upload strategy
@@ -414,6 +439,8 @@ class FileSysService(object):
         finally:
             self.storageDao.tempFileRemove(user_id, uid)
 
+            logging.info("removing temp file. size: %d", size)
+
         return size
 
     def _internalCheckQuota(self, user_id, size, byte_index, uid):
@@ -425,7 +452,7 @@ class FileSysService(object):
         # meant data loss.
 
         index = size // self.byte_threshold
-        if byte_index ==-1 or index > byte_index:
+        if byte_index == -1 or index > byte_index:
             self.storageDao.tempFileUpdate(user_id, uid, size)
             _, temp_usage = self.storageDao.tempFileUsage(user_id)
             _, usage, quota = self.storageDao.userDiskUsage(user_id)
@@ -467,6 +494,24 @@ class FileSysService(object):
             logging.exception("unable to delete: %s" % path)
 
         raise FileSysServiceException(path)
+
+    def moveFile(self, user, fs_name, srcPath, dstPath):
+        """
+        move a file from src to dst
+        dst cannot exist
+        dst cannot be a partial path of an existing file
+
+        if /abc/def/123 exists
+            /abc/def      -- invalid
+            /abc/de       -- valid
+            /abc/de/123   -- valid
+        """
+        fs_id = self.storageDao.getFilesystemId(
+            user['id'], user['role_id'], fs_name)
+
+        src = self.getFilePath(user, fs_name, srcPath.lstrip('/'))
+        dst = self.getFilePath(user, fs_name, dstPath.lstrip('/'))
+        return self.storageDao.moveFileLocation(user['id'], fs_id, src, dst)
 
     def getUserQuota(self, user):
 
@@ -681,7 +726,7 @@ class FileSysService(object):
                 return dst
             except Exception as e:
 
-                logging.exception("Failed to generate preview for `%s`" % abs_path)
+                logging.exception("Failed to generate preview for %s `%s`" % (fs_name, abs_path))
                 raise e
 
         else:

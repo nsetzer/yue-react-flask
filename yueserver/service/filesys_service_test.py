@@ -188,8 +188,6 @@ class FileServiceTestCase(unittest.TestCase):
         # _internalSave(user_id, storage_path, inputStream, chunk_size)
         # _internalCheckQuota(user_id, size, byte_index, uid)
 
-
-
 if __name__ == '__main__':
     main_test(sys.argv, globals())
 

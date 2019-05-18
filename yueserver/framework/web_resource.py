@@ -111,7 +111,10 @@ def _endpoint_mapper(f):
         if hasattr(f, "_body"):
             try:
                 type_, content_type = f._body
-                if content_type == 'application/json':
+                logging.info("body: %s %s %s", type_, content_type, request.headers['Content-Type'])
+                if request.headers['Content-Type'] == 'application/x-www-form-urlencoded':
+                    g.body = type_(BytesIO(request.get_data()))
+                elif content_type == 'application/json':
                     g.body = type_(request.get_json())
                 else:
                     g.body = type_(request.stream)

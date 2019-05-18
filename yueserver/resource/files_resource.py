@@ -50,6 +50,16 @@ def image_scale_type(name):
         raise Exception("invalid: %s" % name)
     return index
 
+def move_file_validator(body):
+
+    if request.headers['Content-Type'] != 'application/json':
+        raise Exception("Expected Content-Type application/json")
+    if 'src' not in body:
+        raise Exception("invalid json payload")
+    if 'dst' not in body:
+        raise Exception("invalid json payload")
+    return body
+
 class FilesResource(WebResource):
     """QueueResource
 
@@ -85,8 +95,23 @@ class FilesResource(WebResource):
         return self._list_path(root, resPath, g.args.list,
             password=password, preview=g.args.preview, dl=g.args.dl)
 
+    @get("public/<fileId>/<name>")
+    @param("dl", type_=boolean, default=True)
+    @param("info", type_=boolean, default=False)
+    @header("X-YUE-PASSWORD")
+    def get_public_named_file(self, fileId, name):
+        """
+        including a file name in the url is a browser hack to download
+        the file with the correct file name.
+        the name is not required for any other reason
+
+        it also allows for generating permanent links with meaningful urls
+        """
+        return self.get_public_file(fileId)
+
     @get("public/<fileId>")
     @param("dl", type_=boolean, default=True)
+    @param("info", type_=boolean, default=False)
     @header("X-YUE-PASSWORD")
     def get_public_file(self, fileId):
         """
@@ -99,12 +124,16 @@ class FilesResource(WebResource):
 
         try:
 
-            password = g.headers.get('X-YUE-PASSWORD', None)
-            info, stream = self.filesys_service.loadPublicFile(
-                fileId, password)
-            go = files_generator_v2(stream)
-            return send_generator(go, info.name,
-                file_size=info.size, attachment=g.args.dl)
+            if g.args.info:
+                info = self.filesys_service.publicFileInfo(fileId)
+                return jsonify(result={'file': info})
+            else:
+                password = g.headers.get('X-YUE-PASSWORD', None)
+                info, stream = self.filesys_service.loadPublicFile(
+                    fileId, password)
+                go = files_generator_v2(stream)
+                return send_generator(go, info.name,
+                    file_size=info.size, attachment=g.args.dl)
 
         except FileSysServiceException:
             return httpError(401, "invalid file id or password")
@@ -197,6 +226,7 @@ class FilesResource(WebResource):
         # support multi part form uploads that
         # have exactly one file in the payload
         # TODO: should we fail otherwise for uploads with more than 1 file
+
         if request.files and len(request.files) == 1:
             for key in request.files.keys():
                 stream = request.files.get(key)
@@ -208,12 +238,12 @@ class FilesResource(WebResource):
             stream = self.filesys_service.encryptStream(g.current_user,
                 password, stream, "r", g.args.crypt)
 
-        self.filesys_service.saveFile(
+        data = self.filesys_service.saveFile(
             g.current_user, root, resPath, stream,
             mtime=g.args.mtime, version=g.args.version,
             permission=g.args.permission, encryption=g.args.crypt)
 
-        return jsonify(result="OK"), 200
+        return jsonify(result="OK", file_info=data)
 
     @delete("<root>/path/<path:resPath>")
     @requires_auth("filesystem_delete")
@@ -222,6 +252,18 @@ class FilesResource(WebResource):
         self.filesys_service.remove(g.current_user, root, resPath)
 
         return jsonify(result="OK")
+
+    @post("<root>/move")
+    @body(move_file_validator)
+    @requires_auth("filesystem_write")
+    def move_file(self, root):
+        """ move or rename a file
+        """
+
+        self.filesys_service.moveFile(g.current_user,
+            root, g.body['src'], g.body['dst'])
+
+        return jsonify(result="OK"), 200
 
     @get("roots")
     @requires_auth("filesystem_read")
@@ -340,9 +382,8 @@ class FilesResource(WebResource):
     @requires_auth("filesystem_write")
     def deleteUserNote(self, note_id):
         """convenience function wrapping file delete"""
-        #resPath = self.filesys_service.fs.join(g.args.base, note_id)
-        #self.filesys_service.remove(g.current_user, g.args.root, resPath)
-        print("delete: " + note_id)
+        resPath = self.filesys_service.fs.join(g.args.base, note_id)
+        self.filesys_service.remove(g.current_user, g.args.root, resPath)
         return jsonify(result="OK")
 
     def _list_path(self, root, path, list_=False, password=None, preview=None, dl=True):

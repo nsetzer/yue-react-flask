@@ -169,6 +169,33 @@ class FilesResourceTestCase(unittest.TestCase):
             self.assertEqual(response.status_code, 200, response.status_code)
             self.assertFalse(fs.exists("mem://test/test"))
 
+    def test_move_file(self):
+        """ test move file
+
+        create an in-memory file, then use the file system end
+        point to delete it
+        """
+
+        file_path = "/test/move-src"
+        storage_path = "mem://test/move-src"
+        fs = FileSystem()
+        fs.open(storage_path, "wb").close()
+        self.storageDao.insertFile(self.USER['id'], self.fs_default_id,
+            file_path, dict(storage_path=storage_path))
+
+        username = "admin"
+        with self.app.login(username, username) as app:
+            url = '/api/fs/default/move'
+            src = '/test/move-src'
+            dst = '/test/move-dst'
+            self.assertTrue(fs.exists("mem://test/move-src"))
+            body = json.dumps({'src': src, 'dst': dst}).encode("utf-8")
+            response = app.post(url, data=body, headers={'Content-Type': 'application/json'})
+            self.assertEqual(response.status_code, 200, response.status_code)
+            # moving should not move the actual file
+            self.assertTrue(fs.exists("mem://test/move-src"))
+            # todo: test that the rename worked
+
     def test_get_index(self):
         username = "admin"
         with self.app.login(username, username) as app:
