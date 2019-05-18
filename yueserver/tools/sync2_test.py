@@ -331,10 +331,12 @@ class TestClient(object):
         response.status_code = 200
         return response
 
-    def files_delete(self, root, relpath):
+    def files_remove_file(self, root, relpath):
         path = "mem://remote/%s" % (relpath)
         self.fs.remove(path)
-
+        response = lambda: None
+        response.status_code = 200
+        return response
 class SyncTestCase(unittest.TestCase):
 
     # push / pull should ask how to resolve conflicts unless force is given

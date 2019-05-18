@@ -167,6 +167,8 @@ class TestApp(YueApp):
 
         self.app_cfg = {
             'server': {
+                'build': './frontend/build',
+                'static': './frontend/build/static',
                 'host': 'localhost',
                 'port': 4200,
                 'env': 'production',

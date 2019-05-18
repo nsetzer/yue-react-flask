@@ -61,7 +61,7 @@ class AppResourceTestCase(unittest.TestCase):
             result = app.get("/")
             self.assertEqual(result.status_code, 200)
             doc = result.data.decode("utf-8")
-            self.assertTrue(doc.startswith("<!DOCTYPE html>"))
+            self.assertTrue(doc.startswith("<!doctype html>"), doc[:50])
 
     def test_index_002(self):
         """ assert that the default endpoints return the application bundle"""
@@ -69,7 +69,7 @@ class AppResourceTestCase(unittest.TestCase):
             result = app.get("/undefined")
             self.assertEqual(result.status_code, 200)
             doc = result.data.decode("utf-8")
-            self.assertTrue(doc.startswith("<!DOCTYPE html>"))
+            self.assertTrue(doc.startswith("<!doctype html>"), doc[:50])
 
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(AppResourceTestCase)

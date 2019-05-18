@@ -54,6 +54,7 @@ class QueueResource(WebResource):
 
     @get("create")
     @param("query", default=None)
+    @param("limit", type_=int_range(1, 500), default=50)
     @requires_auth("user_write")
     def create_queue(self):
         """ create a new queue using a query, return the new song list """
@@ -61,12 +62,10 @@ class QueueResource(WebResource):
         if g.args.query is None:
             g.args.query = self.audio_service.defaultQuery(g.current_user)
 
-        # TODO: have role based limits on queue size
-        limit = 50
-
         songs = self.audio_service.search(g.current_user, g.args.query)
 
-        songs = binshuffle(songs, lambda x: x['artist'])[:limit]
+        # TODO: have role based limits on queue size
+        songs = binshuffle(songs, lambda x: x['artist'])[:g.args.limit]
 
         song_ids = [song['id'] for song in songs]
         self.audio_service.setQueue(g.current_user, song_ids)

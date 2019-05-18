@@ -1503,6 +1503,7 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
         ctxt.storageDao.remove(ent.remote_path)
     elif FileState.DELETE_LOCAL == state and push:
         sys.stdout.write("delete remote - %s\n" % ent.remote_path)
+        print(dir(ctxt.client))
         response = ctxt.client.files_remove_file(ctxt.root, ent.remote_path)
         if (response.status_code == 200):
             ctxt.storageDao.remove(ent.remote_path)
