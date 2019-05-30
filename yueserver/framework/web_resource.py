@@ -344,6 +344,66 @@ def send_generator(go, attachment_name, file_size=None, headers=None, attachment
 
     return response
 
+def streamjs(document, array_key, array_values):
+    """
+    stream a json array
+
+    used in conjunction with send_generator
+    """
+
+    s = "{"
+
+    first = True
+    for key, value in document.items():
+
+        if key == array_key:
+            continue;
+
+        if not first:
+            s += ",\"%s\":" % key
+        else:
+            s += "\"%s\":" % key
+
+        s += json.dumps(value, separators=(',', ':'))
+
+        first = False
+
+        if len(s) > 2048:
+            yield s.encode("utf-8")
+            s = ""
+
+    if not first:
+        s += ",\"%s\":[" % array_key
+    else:
+        s += "\"%s\":[" % array_key
+
+    yield s.encode("utf-8")
+
+    first = True
+    for value in array_values:
+        if not first:
+            s = "," + json.dumps(value, separators=(',', ':'))
+            yield s.encode("utf-8")
+        else:
+            s = json.dumps(value, separators=(',', ':'))
+            yield s.encode("utf-8")
+        first = False
+
+    s = "]}"
+    yield s.encode("utf-8")
+
+def send_js_generator(go, headers=None, attachment=True):
+
+    mimetype = 'application/json'
+
+    response = Response(go, mimetype=mimetype)
+
+    if headers is not None:
+        for key, val in headers.items():
+            response.headers.set(key, str(val))
+
+    return response
+
 class MetaWebResource(type):
     """
     A metaclass which registers decorated methods as REST endpoints
