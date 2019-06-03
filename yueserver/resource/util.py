@@ -162,6 +162,12 @@ def _requires_apikey_auth_impl(service, f, args, kwargs, features, token):
 
     return httpError(401, "failed to authenticate user")
 
+def requires_no_auth(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        return _handle_exceptions(f, args, kwargs)
+    return wrapper
+
 def requires_auth(features=None):
 
     if isinstance(features, str):
@@ -169,6 +175,7 @@ def requires_auth(features=None):
     __add_feature(features)
 
     def impl(f):
+        f._auth = True
         @wraps(f)
         def wrapper(resource, *args, **kwargs):
 

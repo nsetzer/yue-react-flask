@@ -7,9 +7,37 @@ import logging
 from flask import jsonify, render_template, g, request
 
 from ..framework.web_resource import WebResource, \
-    body, get, post, put, delete, httpError
+    body, returns, get, post, put, delete, httpError
 
-from .util import requires_auth
+from .util import requires_auth, requires_no_auth
+
+class LoginValidator(object):
+
+    def __init__(self):
+        super()
+        self.__name__ = self.__class__.__name__
+
+    def __call__(self, obj):
+        if 'email' not in obj:
+            return Exception("invalid request body")
+        if 'password' not in obj:
+            return Exception("invalid request body")
+        return obj
+
+    def name(self):
+        return "login"
+
+    def mimetype(self):
+        return "application/json"
+
+    def type(self):
+        return "object"
+
+    def model(self):
+        return {
+            "email": {"type": "string"},
+            "password": {"type": "string"},
+        }
 
 def login_validator(info):
     if 'email' not in info:
@@ -51,7 +79,9 @@ class UserResource(WebResource):
         return jsonify(result=info)
 
     @post("login")
-    @body(login_validator)
+    @requires_no_auth
+    @body(LoginValidator())
+    @returns([200, 401])
     def login_user(self):
 
         token = self.user_service.loginUser(

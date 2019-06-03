@@ -169,7 +169,7 @@ class UserService(object):
         user = self.getUserByPassword(email, password)
 
         if not user:
-            raise UserException("Unable to login user")
+            raise UserServiceException("Unable to login user", 401)
 
         return generate_token(self.secret, user, self.expiration)
 

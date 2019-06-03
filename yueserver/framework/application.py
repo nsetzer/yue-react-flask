@@ -79,6 +79,7 @@ class FlaskApp(object):
         self.app.after_request(self._add_cors_headers)
 
         self._registered_endpoints = []
+        self._registered_models = {}
         self._registered_websockets = []
         self._registered_resources = []
 
@@ -94,9 +95,9 @@ class FlaskApp(object):
 
         self._registered_resources.append(res)
 
-        for path, methods, name, func, params, headers, body in res.endpoints():
+        for path, methods, name, func, params, headers, body, returns, auth in res.endpoints():
             self.register(path, name, func,
-                params=params, headers=headers, body=body, methods=methods)
+                params=params, headers=headers, body=body, returns=returns, auth=auth, methods=methods)
 
         websockets = res.websockets()
         if len(websockets) > 0:
@@ -109,7 +110,7 @@ class FlaskApp(object):
 
                 self._registered_websockets.append((name, event, namespace, func))
 
-    def register(self, path, name, callback, params=None, headers=None, body=None, **options):
+    def register(self, path, name, callback, params=None, headers=None, body=None, returns=None, auth=False, **options):
         msg = ""
         try:
             self.app.add_url_rule(path, name, callback, **options)
@@ -117,7 +118,7 @@ class FlaskApp(object):
             body_name = None
             body_type = None
 
-            body = body or (None, None)
+            body = body or (None, None, None)
 
             if body[0] is not None:
                 body_name = body[0].__name__
@@ -145,9 +146,18 @@ class FlaskApp(object):
                 data['type'] = header.type.__name__
                 new_headers.append(Parameter(**data))
 
+            new_returns = returns
+
+            new_auth = auth
+
             endpoint = RegisteredEndpoint(path, name, callback.__doc__,
-                options['methods'], new_params, new_headers, new_body)
+                options['methods'], new_params, new_headers, new_body, new_returns, new_auth)
+
             self._registered_endpoints.append(endpoint)
+
+            if hasattr(body[0], 'model'):
+                for method in options['methods']:
+                    self._registered_models[(path, method)] = body[0]
 
             return
         except AssertionError as e:

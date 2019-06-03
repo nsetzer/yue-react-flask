@@ -200,6 +200,28 @@ class LocalStorageDao(object):
 
     def listdir(self, path_prefix="", limit=None, offset=None, delimiter='/'):
 
+        dirs = set()
+        files = []
+
+        for item in self.listdir_files(path_prefix, limit, offset, delimiter):
+            item = dict(item)
+            path = item['rel_path'][len(path_prefix):]
+
+            if delimiter in path:
+                name, _ = path.split(delimiter, 1)
+                dirs.add(name)
+            else:
+                item['rel_path'] = path
+                files.append(item)
+
+        return dirs, files
+
+    def listdir_files(self, path_prefix="", limit=None, offset=None, delimiter='/'):
+        """
+        returns all files, including files in subdirectory
+        for a given path_prefix
+        """
+
         FsTab = self.dbtables.LocalStorageTable
 
         if not path_prefix:
@@ -220,24 +242,13 @@ class LocalStorageDao(object):
         if offset is not None:
             query = query.offset(offset).order_by(asc(FsTab.c.rel_path))
 
-        dirs = set()
-        files = []
-
-        # todo replace fetchall with paging
-        for item in self.db.session.execute(query).fetchall():
-            item = dict(item)
-            path = item['rel_path'][len(path_prefix):]
-
-            if delimiter in path:
-                name, _ = path.split(delimiter, 1)
-                dirs.add(name)
-            else:
-                item['rel_path'] = path
-                files.append(item)
-
-        return dirs, files
+        return self.db.session.execute(query).fetchall()
 
     def isDir(self, path):
+        """
+        return true if a given remote oath represents a directory
+            that exists on the remote server
+        """
         FsTab = self.dbtables.LocalStorageTable
 
         if not path:
@@ -248,9 +259,7 @@ class LocalStorageDao(object):
 
         where = FsTab.c.rel_path.startswith(bindparam('path', path))
 
-        query = select(['*']) \
-            .select_from(FsTab) \
-            .where(where).limit(1)
+        query = FsTab.select().where(where).limit(1)
 
         result = self.db.session.execute(query)
         item = result.fetchone()
@@ -1631,6 +1640,14 @@ def _list_impl(ctxt, root, path):
 
 def _move_get_actions(ctxt, ents, dst):
 
+    """
+    determines what actions, if any, to take given a list
+    of paths and a target directory or file location
+
+    returns two lists of items to act upon
+        dir_actions: a list of directory paths to move
+        file_actions: a list of file paths to move
+    """
     _d_actions = []
     _f_actions = []
 
@@ -1695,6 +1712,49 @@ def _move_impl(ctxt, ents, dst):
 
     for src, dst in _f_actions:
         _move_file_impl(ctxt, src, dst)
+
+def _remove_impl(ctxt, ents, mode):
+    """
+    mode:
+        0: delete both local and remote
+        1: delete local file and local db entry
+           the resulting state is as if the file had
+           never been pulled before
+        2: delete remote file and local db entry
+           the resulting state is as if the file had
+           never been pushed before.
+    """
+
+    def rmf_local(ent):
+        print("remove local", ent)
+
+    def rmf_remote(ent):
+        print("remove remote", ent)
+
+    def rmf(ent):
+        print("remove", ent)
+
+    rm = [rmf, rmf_local, rmf_remote][mode]
+
+    while len(ents) > 0:
+        ent = ents.pop(0)
+
+        # recursion on directories is hard
+
+        if ctxt.storageDao.isDir(ent.remote_base):
+            for item in ctxt.storageDao.listdir_files(ent.remote_base):
+                ents.append(DirEnt(None, item.rel_path, ctxt.fs.join(ctxt.local_base, item.rel_path)))
+            # ent is a directory
+            print("dir", ent)
+        elif ctxt.storageDao.file_info(ent.remote_base):
+            # ent is a file and exist on remote
+            rm(ent)
+        elif ctxt.fs.exists(ent.local_base):
+            # ent is a file and exists locally
+            print("not tracked", ent)
+        else:
+            # ent does not exist locally
+            print("fail", ent)
 
 def _attr_impl(ctxt, path):
 
@@ -2190,6 +2250,33 @@ class MoveCLI(object):
 
         _move_impl(ctxt, paths, destination)
 
+class RemoveCLI(object):
+
+    def register(self, parser):
+
+        subparser = parser.add_parser('remove', aliases=['rm'],
+            help="move files or directories")
+        subparser.set_defaults(func=self.execute, cli=self)
+
+        group = subparser.add_mutually_exclusive_group()
+        group.add_argument('--local', action='store_true')
+        group.add_argument('--remote', action='store_true')
+
+        subparser.add_argument('paths', nargs="+",
+            help="relative remote path")
+
+    def execute(self, args):
+
+        ctxt = get_ctxt(os.getcwd())
+
+        paths = _parse_path_args(ctxt.fs, ctxt.remote_base,
+            ctxt.local_base, args.paths)
+
+        a = 1 if args.local else 0
+        b = 2 if args.remote else 0
+
+        _remove_impl(ctxt, paths, a|b)
+
 class AttrCLI(object):
 
     def register(self, parser):
@@ -2353,6 +2440,7 @@ def _register_parsers(parser):
     InfoCLI().register(parser)
     ListCLI().register(parser)
     MoveCLI().register(parser)
+    RemoveCLI().register(parser)
     AttrCLI().register(parser)
     SetPassCLI().register(parser)
     SetKeyCLI().register(parser)

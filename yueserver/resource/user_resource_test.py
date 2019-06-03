@@ -43,6 +43,32 @@ class UserResourceTestCase(unittest.TestCase):
 
             self.assertTrue(isok)
 
+    def test_login_baduser(self):
+
+        body = {
+            "email": "xxxxxx",
+            "password": "user000",
+        }
+
+        with self.app.test_client() as app:
+            result = app.post('/api/user/login',
+                             data=json.dumps(body),
+                             content_type='application/json')
+            self.assertEqual(result.status_code, 401)
+
+    def test_login_badpassword(self):
+
+        body = {
+            "email": "user000",
+            "password": "xxxxxx",
+        }
+
+        with self.app.test_client() as app:
+            result = app.post('/api/user/login',
+                             data=json.dumps(body),
+                             content_type='application/json')
+            self.assertEqual(result.status_code, 401)
+
     def test_get_user_by_token(self):
         """ show that a user can log in, and make requests
         """

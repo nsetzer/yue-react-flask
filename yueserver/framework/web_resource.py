@@ -24,7 +24,7 @@ import mimetypes
 from re import findall
 
 WebEndpoint = namedtuple('WebEndpoint',
-    ['path', 'methods', 'name', 'method', 'params', 'headers', 'body'])
+    ['path', 'methods', 'name', 'method', 'params', 'headers', 'body', 'returns', 'auth'])
 
 def validate(expr, value):
     if not expr:
@@ -225,6 +225,12 @@ def header(name, type_=str, default=None, required=False, doc=""):
 def body(type_, content_type="application/json"):
     def decorator(f):
         f._body = (type_, content_type)
+        return f
+    return decorator
+
+def returns(obj):
+    def decorator(f):
+        f._returns = obj
         return f
     return decorator
 
@@ -458,8 +464,16 @@ class MetaWebResource(type):
                 if hasattr(func, "_headers"):
                     _headers = func._headers
 
+                _returns = None
+                if hasattr(func, "_returns"):
+                    _returns = func._returns
+
+                _auth = False
+                if hasattr(func, "_auth"):
+                    _auth = func._auth
+
                 endpoint = WebEndpoint(path, methods, fname,
-                    func, _params, _headers, _body)
+                    func, _params, _headers, _body, _returns, _auth)
 
                 cls._class_endpoints.append(endpoint)
 
@@ -486,7 +500,7 @@ class WebResource(object, metaclass=MetaWebResource):
 
         endpoints = self.__endpoints[:]
 
-        for path, methods, name, func, _params, _headers, _body in self._class_endpoints:
+        for path, methods, name, func, _params, _headers, _body, _returns, _auth in self._class_endpoints:
             # get the instance of the method which is bound to self
             bound_method = getattr(self, func.__name__)
             if path == "":
@@ -495,7 +509,7 @@ class WebResource(object, metaclass=MetaWebResource):
                 path = (self.root + '/' + path).replace("//", "/")
 
             endpoints.append(WebEndpoint(path, methods, name,
-                bound_method, _params, _headers, _body))
+                bound_method, _params, _headers, _body, _returns, _auth))
 
         return endpoints
 
@@ -518,8 +532,10 @@ class WebResource(object, metaclass=MetaWebResource):
         _body = (None, None)
         _params = []
         _headers = []
+        _returns = None
+        _auth = False
         self.__endpoints.append(WebEndpoint(path, methods, name,
-            func, _params, _headers, _body))
+            func, _params, _headers, _body, _returns, _auth))
 
     def _start(self):
         """called just before the web listener is started"""
