@@ -176,6 +176,7 @@ def requires_auth(features=None):
 
     def impl(f):
         f._auth = True
+        f._scope = features
 
         @wraps(f)
         def wrapper(resource, *args, **kwargs):

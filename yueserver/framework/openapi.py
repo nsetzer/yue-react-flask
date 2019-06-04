@@ -176,9 +176,9 @@ def main():
 
             tag = endpoint.long_name.split('.')[0].replace("Resource", "")
 
-            desc.tags =[tag]
-            desc.summary = ""
-            desc.description = ""
+            desc.tags = [tag]
+            desc.summary = endpoint.long_name
+            desc.description = endpoint.doc or ""
             desc.parameters = []
             # http error code => {description, schema}
 
@@ -199,8 +199,6 @@ def main():
             sys.stderr.write("%-8s %s %s\n" % (method, 'FT'[endpoint.auth], path))
 
             for param in endpoint.params:
-                # TODO: param.default
-
                 _type = param.type
                 if hasattr(_type, 'schema'):
                     p = ApiParameter("query",
@@ -218,12 +216,12 @@ def main():
                 desc.parameters.append(p)
 
             for param in endpoint.headers:
-                # TODO: param.default
+                _type = param.type
                 if hasattr(_type, 'schema'):
-                    p = ApiParameter("query",
+                    p = ApiParameter("header",
                         name=param.name,
                         required=_type.getRequired(),
-                        description=param.getDescription())
+                        description=_type.getDescription())
                     p['schema'] = _type.schema()
                 else:
                     p = ApiParameter("header",
@@ -252,18 +250,25 @@ def main():
                                 del value['required']
                     elif obj['type'] == 'array':
                         obj['items'] = model.schema()
+                    elif obj['type'] == 'stream':
+                        obj['format'] = "binary"
+
+                    content = {}
+                    mimetype = model.mimetype()
+                    if isinstance(mimetype, str):
+                        mimetype = [mimetype]
+
+                    for m in mimetype:
+                        content[m] = {
+                            "schema": {
+                                "$ref": "#/components/schemas/" + model.name()
+                            }
+                        }
 
                     desc.requestBody = {
                         "description": "TODO",
                         "required": True,
-                        "content": {
-                            model.mimetype(): {
-                                "schema": {
-                                    "$ref": "#/components/schemas/" + model.name()
-                                }
-                            }
-                        }
-
+                        "content": content
                     }
 
             if path not in openapi['paths']:

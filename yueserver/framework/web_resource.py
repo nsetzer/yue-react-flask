@@ -4,6 +4,18 @@
 A Web Resource defines the mapping between a url endpoint and the function
 that will be executed. This file contains all of the python decorators
 for creating a resource.
+
+TODO:
+    allow registering an authentication strategy
+        e.g. resource.addAuthStrategy(strategy)
+        strategy := request => boolean
+
+    get/post/put/delete should wrap with an exception handler
+    allow registering aditional exception types and handlers
+        e.g. resource.registerException(FooException, FooHandler)
+        application.registerException would map the handler
+        to all registered resources
+
 """
 import os
 import sys
@@ -219,8 +231,11 @@ def param(name, type_=str, default=None, required=False, doc=""):
         return f
     return decorator
 
-def header(name, type_=str, default=None, required=False, doc=""):
+def header(name, type_=None, default=None, required=False, doc=""):
     """decorator which validates query parameters"""
+
+    if type_ is None:
+        type_ = String().required(required).description(doc).default(default)
 
     def decorator(f):
         if not hasattr(f, "_headers"):
@@ -557,6 +572,7 @@ class OpenApiParameter(object):
         super(OpenApiParameter, self).__init__()
         self.attrs = {"type": type_}
         self.__name__ = self.__class__.__name__
+        self._default = None
         self._required = False
         self._description = ""
 
@@ -564,10 +580,13 @@ class OpenApiParameter(object):
         raise NotImplementedError()
 
     def schema(self):
+        obj = dict(self.attrs)
+        if self._default is not None:
+            obj['default'] = self._default
         return self.attrs
 
     def default(self, value):
-        self.attrs['default'] = value
+        self._default = value
         return self
 
     def getDefault(self):
@@ -580,12 +599,12 @@ class OpenApiParameter(object):
     def getDescription(self):
         return self._description
 
-    def required(self):
-        self._required = True
+    def required(self, value=True):
+        self._required = value
         return self
 
-    def not_required(self):
-        self._required = False
+    def not_required(self, value=False):
+        self._required = value
         return self
 
     def getRequired(self):
@@ -746,3 +765,22 @@ class JsonValidator(object):
 
     def type(self):
         return "object"
+
+class BinaryValidator(object):
+
+    def __init__(self):
+        super()
+        self.__name__ = self.__class__.__name__
+
+    def __call__(self, obj):
+        return obj
+
+    def name(self):
+        return self.__class__.__name__.replace("Validator", "")
+
+    def mimetype(self):
+        return ['application/octet-stream',
+                'application/x-www-form-urlencoded']
+
+    def type(self):
+        return "string"

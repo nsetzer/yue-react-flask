@@ -16,19 +16,19 @@ from ..service.exception import FileSysServiceException
 from ..dao.settings import Settings, SettingsDao
 from ..dao.image import ImageScale, scale_image_stream
 
-from ..framework.web_resource import WebResource, \
+from ..framework.web_resource import WebResource, returns, \
     get, post, put, delete, body, header, compressed, param, httpError, \
-    int_range, int_min, send_generator, null_validator, boolean, timed
+    int_range, int_min, send_generator, null_validator, boolean, timed, \
+    OpenApiParameter, Integer, String, Boolean, \
+    JsonValidator, ArrayValidator, StringValidator, BinaryValidator
 
 from .util import requires_auth, requires_no_auth, \
     files_generator, files_generator_v2
 
-def validate_mode(s):
-    s = s.lower()
-    if s in [CryptMode.none, CryptMode.client,
-      CryptMode.server, CryptMode.system]:
-        return s
-    raise Exception("invalid encryption mode")
+validate_mode = String().enum((CryptMode.none, CryptMode.client,
+                               CryptMode.server, CryptMode.system)) \
+                        .default(None) \
+                        .description("encryption mode")
 
 def validate_key(body):
     """read the response body and decode the encryption key
@@ -206,20 +206,20 @@ class FilesResource(WebResource):
         })
 
     @post("<root>/path/<path:resPath>")
-    @param("mtime", type_=int, doc="set file modified time")
-    @param("permission", type_=int, doc="unix file permissions", default=0o644)
-    @param("version", type_=int, doc="file version", default=0)
-    @param("crypt", type_=validate_mode, doc="encryption mode",
-        default=None)
+    @param("mtime", type_=Integer().description("set file modified time"))
+    @param("permission", type_=Integer().default(0o644).description("unix file permissions"))
+    @param("version", type_=Integer().default(0).description("file version"))
+    @param("crypt", type_=validate_mode)
     @header("X-YUE-PASSWORD")
-    @body(null_validator, content_type="application/octet-stream")
+    @body(BinaryValidator(), content_type="application/octet-stream")
+    @returns([200, 400, 401, 409])
     @requires_auth("filesystem_write")
     @timed(100)
     def upload(self, root, resPath):
         """
         mtime: on a successful upload, set the modified time to mtime,
                unix epoch time in seconds
-        versiom: if greater than 1, validate version
+        version: if greater than 1, validate version
 
         error codes:
             409: file already exists and is a newer version
