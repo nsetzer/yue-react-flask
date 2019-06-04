@@ -14,7 +14,7 @@ from ..dao.exception import BackendException
 
 from ..service.exception import ServiceException
 
-from ..framework.web_resource import httpError
+from ..framework.web_resource import httpError, ArrayValidator
 
 class HttpException(Exception):
     """docstring for HttpException"""
@@ -243,19 +243,34 @@ def search_order_validator(s):
         return s
     raise Exception("Invalid column name")
 
-def uuid_validator(uuid_string):
-    try:
-        val = UUID(uuid_string, version=4)
-    except ValueError:
-        return False
+class UUIDValidator(object):
 
-    if str(val) != uuid_string:
-        raise Exception("Invalid uuid")
+    def __init__(self):
+        super()
+        self.__name__ = self.__class__.__name__
 
-    return uuid_string
+    def __call__(self, uuid_string):
+        try:
+            val = UUID(uuid_string, version=4)
+        except ValueError:
+            return False
 
-def uuid_list_validator(lst):
-    return [uuid_validator(s) for s in lst]
+        if str(val) != uuid_string:
+            raise Exception("Invalid uuid")
+
+        return uuid_string
+
+    def name(self):
+        return self.__class__.__name__.replace("Validator", "")
+
+    def mimetype(self):
+        return "application/json"
+
+    def type(self):
+        return "string"
+
+uuid_validator = UUIDValidator()
+uuid_list_validator = ArrayValidator(uuid_validator)
 
 def files_generator(fs, filepath, buffer_size=2048):
 

@@ -34,6 +34,7 @@ from ..resource.util import get_features
 from ..framework.client import cli_main
 from ..framework.application import FlaskAppClient
 from ..framework.crypto import CryptoManager
+from ..framework.openapi import OpenApi
 
 from pprint import pformat
 
@@ -365,6 +366,27 @@ def set_user_quota(args):
     storageDao.setUserDiskQuota(user['id'], args.nbytes)
     print("%-10s : %.3f MB" % ("#quota", args.nbytes / 1024 / 1024))
 
+def openapi_(args):
+
+    app = YueApp(Config.null())
+
+    openapi = OpenApi(app) \
+           .description("API for user, file, and library management") \
+           .license("MIT") \
+           .contact("https://github.com/nsetzer/yue-react-flask") \
+           .version("0.0.0") \
+           .title("yue-react-flask") \
+           .servers([
+                {"url": "https://yueapp.duckdns.org"},
+                {"url": "http://localhost:4200"}
+            ])
+
+    if args.out == '-':
+        print(openapi.jsons(indent=2, sort_keys=True))
+    else:
+        with open(args.out, "w") as wf:
+            wf.write(openapi.jsons(indent=2, sort_keys=True))
+
 def main():
 
     parser = argparse.ArgumentParser(description='database utility')
@@ -638,11 +660,25 @@ def main():
     parser_fs_remove.set_defaults(func=filesystem_remove)
 
     ###########################################################################
+    # OPENAPI - user defined functions
+
+    parser_openapi = subparsers.add_parser('openapi',
+        help='generate an openapi schema')
+    parser_openapi.set_defaults(func=openapi_)
+
+    parser_openapi.add_argument('out', type=str, default='-',
+                                help='write json to file (- stdout)')
+
+
+    ###########################################################################
     # TEST - user defined functions
 
     parser_test = subparsers.add_parser('test',
         help='used for random tests')
     parser_test.set_defaults(func=test_)
+
+    ###########################################################################
+    #
 
     args = parser.parse_args()
 

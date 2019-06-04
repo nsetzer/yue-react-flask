@@ -30,6 +30,32 @@ validate_mode = String().enum((CryptMode.none, CryptMode.client,
                         .default(None) \
                         .description("encryption mode")
 
+class EncryptionKeyValidator(object):
+
+    def __init__(self):
+        super()
+        self.__name__ = self.__class__.__name__
+
+    def __call__(self, body):
+        """read the response body and decode the encryption key
+        validate that the key is well formed
+        """
+        content = request.headers.get('content-type')
+        if content and content != "text/plain":
+            # must be not given, or text/plain
+            raise Exception("invalid content type")
+        text = body.read().decode('utf-8')
+        return validatekey(text)
+
+    def name(self):
+        return self.__class__.__name__.replace("Validator", "")
+
+    def mimetype(self):
+        return "text/plain"
+
+    def type(self):
+        return "string"
+
 def validate_key(body):
     """read the response body and decode the encryption key
     validate that the key is well formed
@@ -322,7 +348,7 @@ class FilesResource(WebResource):
 
     @put("user_key")
     @requires_auth("filesystem_write")
-    @body(validate_key, content_type="text/plain")
+    @body(EncryptionKeyValidator(), content_type="text/plain")
     def set_user_key(self):
         """
         set the 'client' encryption key

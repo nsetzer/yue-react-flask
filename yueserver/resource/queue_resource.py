@@ -14,7 +14,7 @@ from ..dao.shuffle import binshuffle
 
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, compressed, httpError, param, body, \
-    int_range, int_min
+    int_range, int_min, String, Integer
 
 from .util import requires_auth, search_order_validator, \
     uuid_validator, uuid_list_validator
@@ -53,8 +53,8 @@ class QueueResource(WebResource):
         return jsonify(result=songs)
 
     @get("create")
-    @param("query", default=None)
-    @param("limit", type_=int_range(1, 500), default=50)
+    @param("query", type_=String().default(None))
+    @param("limit", type_=Integer().min(1).max(500).default(50))
     @requires_auth("user_write")
     def create_queue(self):
         """ create a new queue using a query, return the new song list """

@@ -265,8 +265,11 @@ class FilesResourceTestCase(unittest.TestCase):
                 headers={'X-YUE-PASSWORD': 'password'},
                 query_string={'crypt': 'SERVER'})
             self.assertEqual(response.status_code, 200, response.status_code)
-            self.assertTrue(os.path.exists(path))
-            dat1_enc = open(path, "rb").read()
+            _path = list(fs._mem().keys())[0]
+            self.assertTrue(fs.exists(_path))
+            # TODO: depends on memfs internals ...
+            # dat1_enc = fs.open(path, "rb").read()
+            dat1_enc = fs._mem()[_path][0].read()
 
             # get the key used for encryption
             key = self.storageDao.getEncryptionKey(

@@ -125,8 +125,8 @@ def _endpoint_mapper(f):
         if hasattr(f, "_body"):
             try:
                 type_, content_type = f._body
-                logging.info("body: %s %s %s", type_, content_type, request.headers['Content-Type'])
-                if request.headers['Content-Type'] == 'application/x-www-form-urlencoded':
+                # logging.info("body: %s %s %s", type_, content_type, request.headers['Content-Type'])
+                if request.headers.get('Content-Type') == 'application/x-www-form-urlencoded':
                     g.body = type_(BytesIO(request.get_data()))
                 elif content_type == 'application/json':
                     g.body = type_(request.get_json())
@@ -575,6 +575,7 @@ class OpenApiParameter(object):
         self._default = None
         self._required = False
         self._description = ""
+        self._case_sensitive = False
 
     def __call__(self, obj):
         raise NotImplementedError()
@@ -583,14 +584,14 @@ class OpenApiParameter(object):
         obj = dict(self.attrs)
         if self._default is not None:
             obj['default'] = self._default
-        return self.attrs
+        return obj
 
     def default(self, value):
         self._default = value
         return self
 
     def getDefault(self):
-        return self.attrs['default'] if 'default' in self.attrs else None
+        return self._default
 
     def description(self, value):
         self._description = value
@@ -610,19 +611,31 @@ class OpenApiParameter(object):
     def getRequired(self):
         return self._required
 
-    def enum(self, value):
-        self.attrs['enum'] = value
+    def enum(self, value, case_sensitive=False):
+
+        self._case_sensitive = case_sensitive
+
+        if not self._case_sensitive:
+            self.attrs['enum'] = set([s.lower() for s in value])
+        else:
+            self.attrs['enum'] = set(value)
+
         return self
 
 class String(OpenApiParameter):
     def __init__(self):
         super(String, self).__init__("string")
 
+
     def __call__(self, value):
 
         v = str(value)
 
         if 'enum' in self.attrs:
+
+            if not self._case_sensitive:
+                v = v.lower()
+
             if v not in self.attrs['enum']:
                 raise Exception("invalid input. not in enum range")
 
@@ -783,4 +796,4 @@ class BinaryValidator(object):
                 'application/x-www-form-urlencoded']
 
     def type(self):
-        return "string"
+        return "stream"

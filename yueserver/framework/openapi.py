@@ -37,13 +37,6 @@ class Api(object):
     def jsons(self, **kwargs):
         return json.dumps(self, cls=ObjectEncoder, **kwargs)
 
-class ApiDocument(Api):
-    def __init__(self, **kwargs):
-        super(ApiDocument, self).__init__(**kwargs)
-
-    def json(self):
-        return self.attrs
-
 class ApiParameter(Api):
     def __init__(self, in_, **attrs):
         super(ApiParameter, self).__init__()
@@ -117,165 +110,211 @@ class ApiSecurityDefinitions(Api):
     def json(self):
         return {k: v.json() for (k, v) in self.attrs.items()}
 
-def _fmt_path(path):
+class OpenApi(Api):
+    def __init__(self, app):
+        super(OpenApi, self).__init__()
 
-    parameters = []
-    s = path.find('<')
-    e = path.find('>')
-    while s >= 0 and s < e:
-        name = path[s + 1:e].split(":")[-1]
-        path = path[:s] + ("{%s}" % name) + path[e + 1:]
+        self._generate(app)
 
-        p = ApiParameter("path", name=name, required=True)
-        p['schema'] = {'type': 'string'}
-        parameters.append(p)
+    def description(self, value):
+        self['info']['description'] = value
+        return self
 
-        s = path.find('<')
-        e = path.find('>')
+    def title(self, value):
+        self['info']['title'] = value
+        return self
 
-    return path, parameters
+    def version(self, value):
+        self['info']['version'] = value
+        return self
 
-def main():
+    def contact(self, url=None, email=None):
 
-    app = YueApp(Config.null())
+        if 'url':
+            self['info']['contact']['url'] = url
+        elif 'url' in self['info']['contact']:
+            del self['info']['contact']['url']
 
-    openapi = ApiDocument()
+        if 'email':
+            self['info']['contact']['email'] = email
+        elif 'email' in self['info']['contact']:
+            del self['info']['contact']['email']
 
-    openapi['openapi'] = '3.0.0'
-    openapi['info'] = {
-        'description': "todo",
-        'version': "0.0.0",
-        'title': "openapi Api",
-        'termsOfService': "http://openapi.io/terms/",
-        'contact': {"email": "nicksetzer@gmail.com"},
-        'license': {"name": "MIT"}
-    }
+        return self
 
-    openapi['servers'] = [
-        {"url": "https://yueapp.duckdns.org"},
-        {"url": "http://localhost:4200"}
-    ]
+    def license(self, name=None, url=None):
 
-    openapi['paths'] = {}
+        if 'url':
+            self['info']['license']['url'] = url
+        elif 'info' in self['info']['license']:
+            del self['info']['license']['url']
 
-    openapi['components'] = {}
-    openapi['components']['schemas'] = {}
-    openapi['components']['securitySchemes'] = {
-        "basicAuth": {"type": "http", "scheme": "basic"},
-        "tokenAuth": {"type": "apiKey", 'in': 'header', 'name': 'Authorization'},
-    }
+        if 'name':
+            self['info']['license']['name'] = name
+        elif 'name' in self['info']['license']:
+            del self['info']['license']['name']
 
-    for endpoint in app._registered_endpoints_v2:
-        for method in endpoint.methods:
+        return self
 
-            desc = ApiDescription()
-            path = endpoint.path
+    def servers(self, value):
+        self['servers'] = value
+        return self
 
-            if not path.startswith("/api"):
-                continue
+    def __str__(self):
+        return self.jsons()
 
-            tag = endpoint.long_name.split('.')[0].replace("Resource", "")
+    def _generate(self, app):
 
-            desc.tags = [tag]
-            desc.summary = endpoint.long_name
-            desc.description = endpoint.doc or ""
-            desc.parameters = []
-            # http error code => {description, schema}
+        openapi = self
 
-            if isinstance(endpoint.returns, list):
-                desc.responses = {}
-                for code in endpoint.returns:
-                    desc.responses[str(code)] = {"description": http.client.responses[code]}
-            else:
-                desc.responses = {"200": {"description": "OK"}}
+        openapi['openapi'] = '3.0.0'
 
-            _auth0 = {'basicAuth': []}
-            _auth1 = {'tokenAuth': []}
-            desc.security = [[], [_auth0, _auth1]][endpoint.auth]
-            desc.operationId = endpoint.long_name
+        openapi['paths'] = {}
 
-            path, desc.parameters = _fmt_path(path)
+        openapi['servers'] = {}
 
-            sys.stderr.write("%-8s %s %s\n" % (method, 'FT'[endpoint.auth], path))
+        openapi['components'] = {}
+        openapi['components']['schemas'] = {}
 
-            for param in endpoint.params:
-                _type = param.type
-                if hasattr(_type, 'schema'):
-                    p = ApiParameter("query",
-                        name=param.name,
-                        required=_type.getRequired(),
-                        description=_type.getDescription())
-                    p['schema'] = _type.schema()
+        openapi['info'] = {}
+        self['info']['contact'] = {}
+        self['info']['license'] = {}
+
+
+        # todo: generate security using registered security settings
+        # found inside the app
+        openapi['components']['securitySchemes'] = {
+            "basicAuth": {"type": "http", "scheme": "basic"},
+            "tokenAuth": {"type": "apiKey", 'in': 'header', 'name': 'Authorization'},
+        }
+        _auth0 = {'basicAuth': []}
+        _auth1 = {'tokenAuth': []}
+        _auth = [[], [_auth0, _auth1]]
+
+        for endpoint in app._registered_endpoints_v2:
+            for method in endpoint.methods:
+
+                desc = ApiDescription()
+                path = endpoint.path
+
+                if not path.startswith("/api"):
+                    continue
+
+                tag = endpoint.long_name.split('.')[0].replace("Resource", "")
+
+                desc.tags = [tag]
+                desc.summary = endpoint.long_name
+                desc.description = endpoint.doc or ""
+                desc.parameters = []
+                # http error code => {description, schema}
+
+                if isinstance(endpoint.returns, list):
+                    desc.responses = {}
+                    for code in endpoint.returns:
+                        desc.responses[str(code)] = {"description": http.client.responses[code]}
                 else:
-                    # old style validators
-                    p = ApiParameter("query",
-                        name=param.name,
-                        required=param.required,
-                        description=param.doc)
-                    p['schema'] = {'type': 'string'}
-                desc.parameters.append(p)
+                    desc.responses = {"200": {"description": "OK"}}
 
-            for param in endpoint.headers:
-                _type = param.type
-                if hasattr(_type, 'schema'):
-                    p = ApiParameter("header",
-                        name=param.name,
-                        required=_type.getRequired(),
-                        description=_type.getDescription())
-                    p['schema'] = _type.schema()
-                else:
-                    p = ApiParameter("header",
-                        name=param.name,
-                        required=param.required,
-                        description=param.doc)
-                    p['schema'] = {'type': 'string'}  # TODO TYPES
-                desc.parameters.append(p)
 
-            if method in ('POST', 'PUT'):
-                model = endpoint.body
-                if model and hasattr(model, 'mimetype'):
+                desc.security = _auth[endpoint.auth]
+                desc.operationId = endpoint.long_name
 
-                    obj = openapi['components']['schemas'][model.name()] = {
-                        "type": model.type()
-                    }
+                path, desc.parameters = self._fmt_path(path)
 
-                    if obj['type'] == 'object':
-                        obj["properties"] = model.model()
+                sys.stderr.write("%-8s %s %s\n" % (method, 'FT'[endpoint.auth], path))
 
-                        obj['required'] = []
-                        for key, value in obj["properties"].items():
-                            if 'required' in value:
-                                if value['required']:
-                                    obj['required'].append(key)
-                                del value['required']
-                    elif obj['type'] == 'array':
-                        obj['items'] = model.schema()
-                    elif obj['type'] == 'stream':
-                        obj['format'] = "binary"
+                for param in endpoint.params:
+                    _type = param.type
+                    if hasattr(_type, 'schema'):
+                        p = ApiParameter("query",
+                            name=param.name,
+                            required=_type.getRequired(),
+                            description=_type.getDescription())
+                        p['schema'] = _type.schema()
+                    else:
+                        # old style validators
+                        p = ApiParameter("query",
+                            name=param.name,
+                            required=param.required,
+                            description=param.doc)
+                        p['schema'] = {'type': 'string'}
+                    desc.parameters.append(p)
 
-                    content = {}
-                    mimetype = model.mimetype()
-                    if isinstance(mimetype, str):
-                        mimetype = [mimetype]
+                for param in endpoint.headers:
+                    _type = param.type
+                    if hasattr(_type, 'schema'):
+                        p = ApiParameter("header",
+                            name=param.name,
+                            required=_type.getRequired(),
+                            description=_type.getDescription())
+                        p['schema'] = _type.schema()
+                    else:
+                        p = ApiParameter("header",
+                            name=param.name,
+                            required=param.required,
+                            description=param.doc)
+                        p['schema'] = {'type': 'string'}  # TODO TYPES
+                    desc.parameters.append(p)
 
-                    for m in mimetype:
-                        content[m] = {
-                            "schema": {
-                                "$ref": "#/components/schemas/" + model.name()
-                            }
+                if method in ('POST', 'PUT'):
+                    model = endpoint.body
+                    if model and hasattr(model, 'mimetype'):
+
+                        obj = openapi['components']['schemas'][model.name()] = {
+                            "type": model.type()
                         }
 
-                    desc.requestBody = {
-                        "description": "TODO",
-                        "required": True,
-                        "content": content
-                    }
+                        if obj['type'] == 'object':
+                            obj["properties"] = model.model()
 
-            if path not in openapi['paths']:
-                openapi['paths'][path] = {}
-            openapi['paths'][path][method.lower()] = desc
+                            obj['required'] = []
+                            for key, value in obj["properties"].items():
+                                if 'required' in value:
+                                    if value['required']:
+                                        obj['required'].append(key)
+                                    del value['required']
+                        elif obj['type'] == 'array':
+                            obj['items'] = model.schema()
+                        elif obj['type'] == 'stream':
+                            obj['type'] = "string"
+                            obj['format'] = "binary"
 
-    print(openapi.jsons(indent=2))
+                        content = {}
+                        mimetype = model.mimetype()
+                        if isinstance(mimetype, str):
+                            mimetype = [mimetype]
 
-if __name__ == '__main__':
-    main()
+                        for m in mimetype:
+                            content[m] = {
+                                "schema": {
+                                    "$ref": "#/components/schemas/" + model.name()
+                                }
+                            }
+
+                        desc.requestBody = {
+                            "description": "TODO",
+                            "required": True,
+                            "content": content
+                        }
+
+                if path not in openapi['paths']:
+                    openapi['paths'][path] = {}
+                openapi['paths'][path][method.lower()] = desc
+
+    def _fmt_path(self, path):
+
+        parameters = []
+        s = path.find('<')
+        e = path.find('>')
+        while s >= 0 and s < e:
+            name = path[s + 1:e].split(":")[-1]
+            path = path[:s] + ("{%s}" % name) + path[e + 1:]
+
+            p = ApiParameter("path", name=name, required=True)
+            p['schema'] = {'type': 'string'}
+            parameters.append(p)
+
+            s = path.find('<')
+            e = path.find('>')
+
+        return path, parameters
