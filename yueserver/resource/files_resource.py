@@ -20,7 +20,8 @@ from ..framework.web_resource import WebResource, \
     get, post, put, delete, body, header, compressed, param, httpError, \
     int_range, int_min, send_generator, null_validator, boolean, timed
 
-from .util import requires_auth, files_generator, files_generator_v2
+from .util import requires_auth, requires_no_auth, \
+    files_generator, files_generator_v2
 
 def validate_mode(s):
     s = s.lower()
@@ -99,6 +100,7 @@ class FilesResource(WebResource):
     @param("dl", type_=boolean, default=True)
     @param("info", type_=boolean, default=False)
     @header("X-YUE-PASSWORD")
+    @requires_no_auth
     def get_public_named_file(self, fileId, name):
         """
         including a file name in the url is a browser hack to download
@@ -113,6 +115,7 @@ class FilesResource(WebResource):
     @param("dl", type_=boolean, default=True)
     @param("info", type_=boolean, default=False)
     @header("X-YUE-PASSWORD")
+    @requires_no_auth
     def get_public_file(self, fileId):
         """
         return a file that has a public access file identifier.

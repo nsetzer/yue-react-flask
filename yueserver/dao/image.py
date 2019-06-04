@@ -41,6 +41,10 @@ class ImageScale(object):
         return ImageScale._scales[scale][0]
 
     @staticmethod
+    def names():
+        return [scale[0] for scale in ImageScale._scales]
+
+    @staticmethod
     def fromName(name):
         for i, (n, _) in enumerate(ImageScale._scales):
             if name == n:

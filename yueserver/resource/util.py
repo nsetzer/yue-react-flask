@@ -176,6 +176,7 @@ def requires_auth(features=None):
 
     def impl(f):
         f._auth = True
+
         @wraps(f)
         def wrapper(resource, *args, **kwargs):
 
@@ -233,6 +234,10 @@ def datetime_validator(st):
 
 def search_order_validator(s):
     # todo: support multiple fields
+
+    if s.lower() == 'forest':
+        return [Song.artist_key, Song.album, Song.title]
+
     if s in Song.fields() or s.lower() == "random":
         return s
     raise Exception("Invalid column name")

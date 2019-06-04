@@ -7,56 +7,41 @@ import logging
 from flask import jsonify, render_template, g, request
 
 from ..framework.web_resource import WebResource, \
-    body, returns, get, post, put, delete, httpError
+    body, returns, get, post, put, delete, httpError, JsonValidator
 
 from .util import requires_auth, requires_no_auth
 
-class LoginValidator(object):
-
-    def __init__(self):
-        super()
-        self.__name__ = self.__class__.__name__
-
-    def __call__(self, obj):
-        if 'email' not in obj:
-            return Exception("invalid request body")
-        if 'password' not in obj:
-            return Exception("invalid request body")
-        return obj
-
-    def name(self):
-        return "login"
-
-    def mimetype(self):
-        return "application/json"
-
-    def type(self):
-        return "object"
+class UserLoginValidator(JsonValidator):
 
     def model(self):
         return {
-            "email": {"type": "string"},
-            "password": {"type": "string"},
+            "email": {"type": "string", "required": True},
+            "password": {"type": "string", "required": True},
         }
 
-def login_validator(info):
-    if 'email' not in info:
-        return Exception("invalid request body")
-    if 'password' not in info:
-        return Exception("invalid request body")
-    return info
+class UserTokenValidator(JsonValidator):
 
-def change_password_validator(info):
-    if 'password' not in info:
-        return Exception("invalid request body")
-    return info
+    def model(self):
+        return {
+            "token": {"type": "string", "required": True},
+        }
 
-def create_user_validator(info):
-    fields = ['email', 'password', 'domain', 'role']
-    for field in fields:
-        if field not in info:
-            return Exception("invalid request body")
-    return info
+class UserCreateValidator(JsonValidator):
+
+    def model(self):
+        return {
+            "email": {"type": "string", "required": True},
+            "password": {"type": "string", "required": True},
+            "domain": {"type": "string", "required": True},
+            "role": {"type": "string", "required": True},
+        }
+
+class UserPasswordValidator(JsonValidator):
+
+    def model(self):
+        return {
+            "password": {"type": "string", "required": True},
+        }
 
 class UserResource(WebResource):
     """UserResource
@@ -72,16 +57,10 @@ class UserResource(WebResource):
 
         self.user_service = user_service
 
-    @get("")
-    @requires_auth("user_read")
-    def get_user(self):
-        info = self.user_service.listUser(g.current_user['id'])
-        return jsonify(result=info)
-
     @post("login")
     @requires_no_auth
-    @body(LoginValidator())
-    @returns([200, 401])
+    @body(UserLoginValidator())
+    @returns([200, 400, 401])
     def login_user(self):
 
         token = self.user_service.loginUser(
@@ -90,6 +69,9 @@ class UserResource(WebResource):
         return jsonify(token=token)
 
     @post("token")
+    @requires_no_auth
+    @body(UserTokenValidator())
+    @returns([200, 400, 401])
     def is_token_valid(self):
 
         incoming = request.get_json()
@@ -104,10 +86,22 @@ class UserResource(WebResource):
         return jsonify(token_is_valid=is_valid,
                    reason=reason)
 
+    @get("")
+    @requires_auth("user_read")
+    @returns([200, 401])
+    def get_user(self):
+        info = self.user_service.listUser(g.current_user['id'])
+        return jsonify(result=info)
+
     @post("create")
     @requires_auth("user_create")
-    @body(create_user_validator)
+    @body(UserCreateValidator())
+    @returns([200, 400, 401, 404])
     def create_user(self):
+        """
+        TODO: return 404 if domain/role is not found
+        TODO: return 400 is user exists
+        """
         incoming = request.get_json()
 
         user_id = user = self.user_service.createUser(
@@ -121,7 +115,8 @@ class UserResource(WebResource):
 
     @put("password")
     @requires_auth("user_write")
-    @body(change_password_validator)
+    @body(UserPasswordValidator())
+    @returns([200, 401])
     def change_password(self):
 
         self.user_service.changeUserPassword(g.current_user,
@@ -131,6 +126,7 @@ class UserResource(WebResource):
 
     @get("list/domain/<domain>")
     @requires_auth("user_power")
+    @returns([200, 401])
     def list_users(self, domain):
         """
         list all users for a given domain
@@ -142,6 +138,7 @@ class UserResource(WebResource):
 
     @get("list/user/<userId>")
     @requires_auth("user_power")
+    @returns([200, 401])
     def list_user(self, userId):
 
         user_info = self.user_service.listUser(userId)

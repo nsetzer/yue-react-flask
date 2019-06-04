@@ -50,6 +50,8 @@ def boolean(s):
 def httpError(code, message):
     # TODO: this should be at loglevel debug
     logging.error("[%3d] %s" % (code, message))
+    logging.error("request: %s" % (request.url))
+    logging.error("request: %s" % dict(request.headers))
     return jsonify(error=message), code
 
 def _endpoint_mapper(f):
@@ -208,7 +210,12 @@ def param(name, type_=str, default=None, required=False, doc=""):
     def decorator(f):
         if not hasattr(f, "_params"):
             f._params = []
-        f._params.append(Parameter(name, type_, default, required, doc))
+
+        if isinstance(type_, OpenApiParameter):
+            f._params.append(Parameter(name, type_,
+                type_.getDefault(), type_.getRequired(), type_.getDescription()))
+        else:
+            f._params.append(Parameter(name, type_, default, required, doc))
         return f
     return decorator
 
@@ -544,3 +551,198 @@ class WebResource(object, metaclass=MetaWebResource):
     def _end(self):
         """called while tearing down the resource"""
         pass
+
+class OpenApiParameter(object):
+    def __init__(self, type_):
+        super(OpenApiParameter, self).__init__()
+        self.attrs = {"type": type_}
+        self.__name__ = self.__class__.__name__
+        self._required = False
+        self._description = ""
+
+    def __call__(self, obj):
+        raise NotImplementedError()
+
+    def schema(self):
+        return self.attrs
+
+    def default(self, value):
+        self.attrs['default'] = value
+        return self
+
+    def getDefault(self):
+        return self.attrs['default'] if 'default' in self.attrs else None
+
+    def description(self, value):
+        self._description = value
+        return self
+
+    def getDescription(self):
+        return self._description
+
+    def required(self):
+        self._required = True
+        return self
+
+    def not_required(self):
+        self._required = False
+        return self
+
+    def getRequired(self):
+        return self._required
+
+    def enum(self, value):
+        self.attrs['enum'] = value
+        return self
+
+class String(OpenApiParameter):
+    def __init__(self):
+        super(String, self).__init__("string")
+
+    def __call__(self, value):
+
+        v = str(value)
+
+        if 'enum' in self.attrs:
+            if v not in self.attrs['enum']:
+                raise Exception("invalid input. not in enum range")
+
+        return v
+
+class Boolean(OpenApiParameter):
+    def __init__(self):
+        super(Boolean, self).__init__("boolean")
+
+    def __call__(self, value):
+        s = value.lower()
+        if s == "true":
+            return True
+        if s == "false":
+            return False
+        try:
+            return int(s) != 0
+        except:
+            pass
+
+        raise Exception("Invalid input")
+
+class Integer(OpenApiParameter):
+    def __init__(self):
+        super(Integer, self).__init__("integer")
+
+    def __call__(self, value):
+
+        v = int(value)
+
+        if 'minimum' in self.attrs:
+            if v < self.attrs['minimum']:
+                raise Exception("invalid input. value >= %d" % self.attrs['minimum'])
+
+        if 'maximum' in self.attrs:
+            if v > self.attrs['maximum']:
+                raise Exception("invalid input. value <= %d" % self.attrs['maximum'])
+
+        if 'enum' in self.attrs:
+            if v not in self.attrs['enum']:
+                raise Exception("invalid input. not in enum range")
+
+        return v
+
+    def min(self, value):
+        self.attrs["minimum"] = value
+        return self
+
+    def max(self, value):
+        self.attrs["maximum"] = value
+        return self
+
+    def range(self, vmin, vmax):
+        self.attrs["minimum"] = vmin
+        self.attrs["maximum"] = vmax
+        return self
+
+
+class ArrayValidator(object):
+    def __init__(self, object):
+        super()
+        self.__name__ = self.__class__.__name__
+        self.object = object
+
+    def __call__(self, obj):
+
+        if not isinstance(obj, (tuple, list)):
+            raise Exception("invalid object")
+
+        for item in obj:
+            self.object(item)
+
+        return obj
+
+    def name(self):
+        return self.object.name() + self.__class__.__name__.replace("Validator", "")
+
+    def mimetype(self):
+        return "application/json"
+
+    def type(self):
+        return "array"
+
+    def schema(self):
+        obj = {
+            "type": self.object.type(),
+
+        }
+        if obj['type'] == 'object':
+            obj["properties"] = self.object.model()
+
+            obj['required'] = []
+            for key, value in obj["properties"].items():
+                if 'required' in value:
+                    if value['required']:
+                        obj['required'].append(key)
+                    del value['required']
+
+        return obj
+
+class StringValidator(object):
+    def __init__(self):
+        super()
+        self.__name__ = self.__class__.__name__
+
+    def __call__(self, obj):
+
+        if not isinstance(obj, str):
+            raise Exception("invalid object")
+
+        return obj
+
+    def name(self):
+        return self.__class__.__name__.replace("Validator", "")
+
+    def mimetype(self):
+        return "application/json"
+
+    def type(self):
+        return "string"
+
+class JsonValidator(object):
+
+    def __init__(self):
+        super()
+        self.__name__ = self.__class__.__name__
+
+    def __call__(self, obj):
+        model = self.model()
+        for key in model.keys():
+            if key not in obj and model[key].get('required', False):
+                raise Exception("invalid request body. missing: %s" % key)
+        return obj
+
+    def name(self):
+        return self.__class__.__name__.replace("Validator", "")
+
+    def mimetype(self):
+        return "application/json"
+
+    def type(self):
+        return "object"

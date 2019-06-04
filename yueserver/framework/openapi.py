@@ -115,7 +115,25 @@ class ApiSecurityDefinitions(Api):
     """docstring for ApiSecurityDefinitions"""
 
     def json(self):
-        return {k: v.json() for (k,v) in self.attrs.items()}
+        return {k: v.json() for (k, v) in self.attrs.items()}
+
+def _fmt_path(path):
+
+    parameters = []
+    s = path.find('<')
+    e = path.find('>')
+    while s >= 0 and s < e:
+        name = path[s + 1:e].split(":")[-1]
+        path = path[:s] + ("{%s}" % name) + path[e + 1:]
+
+        p = ApiParameter("path", name=name, required=True)
+        p['schema'] = {'type': 'string'}
+        parameters.append(p)
+
+        s = path.find('<')
+        e = path.find('>')
+
+    return path, parameters
 
 def main():
 
@@ -143,10 +161,11 @@ def main():
     openapi['components'] = {}
     openapi['components']['schemas'] = {}
     openapi['components']['securitySchemes'] = {
-        "basicAuth": {"type": "http", "scheme": "basic"}
+        "basicAuth": {"type": "http", "scheme": "basic"},
+        "tokenAuth": {"type": "apiKey", 'in': 'header', 'name': 'Authorization'},
     }
 
-    for endpoint in app._registered_endpoints:
+    for endpoint in app._registered_endpoints_v2:
         for method in endpoint.methods:
 
             desc = ApiDescription()
@@ -170,50 +189,69 @@ def main():
             else:
                 desc.responses = {"200": {"description": "OK"}}
 
-            desc.security = [[], [{'basicAuth': []}]][endpoint.auth]
-            desc.operationId=endpoint.long_name
+            _auth0 = {'basicAuth': []}
+            _auth1 = {'tokenAuth': []}
+            desc.security = [[], [_auth0, _auth1]][endpoint.auth]
+            desc.operationId = endpoint.long_name
 
-            s = path.find('<')
-            e = path.find('>')
-            while s >= 0 and s < e:
-                name = path[s+1:e].split(":")[-1]
-                path = path[:s] + ("{%s}" % name) + path[e+1:]
-
-                p = ApiParameter("path", name=name, required=True)
-                p['schema'] = {'type': 'string'} # TODO TYPES
-                desc.parameters.append(p)
-
-                s = path.find('<')
-                e = path.find('>')
+            path, desc.parameters = _fmt_path(path)
 
             sys.stderr.write("%-8s %s %s\n" % (method, 'FT'[endpoint.auth], path))
 
             for param in endpoint.params:
                 # TODO: param.default
-                p = ApiParameter("query",
-                    name=param.name,
-                    required=param.required,
-                    description=param.doc)
-                p['schema'] = {'type': 'string'} # TODO TYPES
+
+                _type = param.type
+                if hasattr(_type, 'schema'):
+                    p = ApiParameter("query",
+                        name=param.name,
+                        required=_type.getRequired(),
+                        description=_type.getDescription())
+                    p['schema'] = _type.schema()
+                else:
+                    # old style validators
+                    p = ApiParameter("query",
+                        name=param.name,
+                        required=param.required,
+                        description=param.doc)
+                    p['schema'] = {'type': 'string'}
                 desc.parameters.append(p)
 
-            for param in  endpoint.headers:
+            for param in endpoint.headers:
                 # TODO: param.default
-                p = ApiParameter("header",
-                    name=param.name,
-                    required=param.required,
-                    description=param.doc)
-                p['schema'] = {'type': 'string'} # TODO TYPES
+                if hasattr(_type, 'schema'):
+                    p = ApiParameter("query",
+                        name=param.name,
+                        required=_type.getRequired(),
+                        description=param.getDescription())
+                    p['schema'] = _type.schema()
+                else:
+                    p = ApiParameter("header",
+                        name=param.name,
+                        required=param.required,
+                        description=param.doc)
+                    p['schema'] = {'type': 'string'}  # TODO TYPES
                 desc.parameters.append(p)
 
             if method in ('POST', 'PUT'):
-                model = app._registered_models.get((endpoint.path, method), None)
-                if model and hasattr(model, 'model'):
+                model = endpoint.body
+                if model and hasattr(model, 'mimetype'):
 
-                    openapi['components']['schemas'][model.name()] = {
-                        "type": model.type(),
-                        "properties": model.model(),
+                    obj = openapi['components']['schemas'][model.name()] = {
+                        "type": model.type()
                     }
+
+                    if obj['type'] == 'object':
+                        obj["properties"] = model.model()
+
+                        obj['required'] = []
+                        for key, value in obj["properties"].items():
+                            if 'required' in value:
+                                if value['required']:
+                                    obj['required'].append(key)
+                                del value['required']
+                    elif obj['type'] == 'array':
+                        obj['items'] = model.schema()
 
                     desc.requestBody = {
                         "description": "TODO",

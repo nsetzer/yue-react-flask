@@ -15,94 +15,100 @@ from ..dao.util import pathCorrectCase
 
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, param, body, compressed, httpError, \
-    int_range, int_min, send_generator, null_validator
+    int_range, int_min, send_generator, null_validator, \
+    OpenApiParameter, Integer, String, Boolean, \
+    JsonValidator, ArrayValidator, StringValidator
 
-from .util import requires_auth, datetime_validator, search_order_validator, \
-    files_generator
+from .util import requires_auth, datetime_validator, files_generator
 
 from ..service.transcode_service import ImageScale
 
 from ..service.exception import AudioServiceException
 
-def song_validator(song):
+class SearchOrderType(String):
+    def __init__(self):
+        super(SearchOrderType, self).__init__()
+        items = list(Song.fields()) + ['forest', 'random', 'artist_key']
+        items.sort()
+        self.enum(items)
 
-    for field in [Song.artist, Song.album, Song.title]:
-        if field not in song:
-            raise Exception("missing field: %s" % field)
+    def __call__(self, value):
+        s = value.lower()
 
-    return song
+        if s == 'forest':
+            return [Song.artist_key, Song.album, Song.title]
 
-def song_id_list_validator(ids):
+        if s == 'random':
+            return s
 
-    print(ids)
+        return super().__call__(s)
 
-    if not isinstance(ids, list):
-        raise Exception("expected a list of ids")
+class NewSongValidator(JsonValidator):
 
-    for element in ids:
-        if not isinstance(element, str):
-            raise Exception("expected a list of ids")
+    def model(self):
 
-    return ids
+        model = {}
 
-def song_list_validator(songs):
+        for key in Song.textFields():
+            model[key] = {"type": "string"}
 
-    if isinstance(songs, dict):
-        raise Exception("invalid song list: dictionary not expected")
+        for key in Song.numberFields():
+            model[key] = {"type": "integer"}
 
-    for song in songs:
-        # every record must have a song id (to update), and
-        # at least one other field (that will be modified)
-        if Song.id not in song:
-            raise Exception("invalid song: missing id")
+        for key in Song.dateFields():
+            model[key] = {"type": "integer", "format": "date"}
 
-        if len(song) < 2:
-            raise Exception("invalid song: missing field to update")
+        for key in [Song.artist, Song.album, Song.title]:
+            model[key]["required"] = True
 
-    return songs
+        return model
 
-def song_audio_path_validator(info):
+class UpdateSongValidator(JsonValidator):
 
-    if 'root' not in info:
-        raise Exception("Invalid request body: missing root")
+    def model(self):
 
-    if 'path' not in info:
-        raise Exception("Invalid request body: missing path")
+        model = {}
 
-    return info
+        for key in Song.textFields():
+            model[key] = {"type": "string"}
 
-def image_scale_type(name):
+        for key in Song.numberFields():
+            model[key] = {"type": "integer"}
 
-    index = ImageScale.fromName(name)
-    if index == 0:
-        raise Exception("invalid: %s" % name)
-    return index
+        for key in Song.dateFields():
+            model[key] = {"type": "integer", "format": "date"}
 
-def audio_format(s):
-    if s not in ("raw", "ogg", "mp3", "default"):
-        raise Exception("Invalid audio format: %s" % s)
-    return s
+        for key in [Song.id]:
+            model[key]["required"] = True
 
-def audio_channels(s):
-    if s not in ("stereo", "mono", "default"):
-        raise Exception("Invalid audio channel layout: %s" % s)
-    return s
+        return model
 
-def audio_quality(s):
-    if s not in ("low", "medium", "high"):
-        raise Exception("Invalid audio quality: %s" % s)
-    return s
+class SongResourcePathValidator(JsonValidator):
 
-def parameter_bool(s):
-    s = s.lower()
-    if s == "true":
-        return True
-    if s == "false":
-        return False
-    v = int(s)  # may throw
-    if v == 0:
-        return False
-    return True
+    def model(self):
+
+        return {
+            "root": {"type": "string", "required": True},
+            "path": {"type": "string", "required": True}
+        }
+
+class ImageScaleType(OpenApiParameter):
+    def __init__(self):
+        super(ImageScaleType, self).__init__("string")
+        self.enum(ImageScale.names())
+
+    def __call__(self, value):
+
+        index = ImageScale.fromName(value)
+        if index == 0:
+            raise Exception("invalid: %s" % value)
+        return index
+
+audio_format = String().enum(("raw", "ogg", "mp3", "default"))
+
+audio_channels = String().enum(("stereo", "mono", "default"))
+
+audio_quality = String().enum(("low", "medium", "high"))
 
 class LibraryResource(WebResource):
     """LibraryResource
@@ -123,11 +129,11 @@ class LibraryResource(WebResource):
         self.filesys_service = filesys_service
 
     @get("")
-    @param("query", default=None)
-    @param("limit", type_=int_range(0, 500), default=50)
-    @param("page", type_=int_min(0), default=0)
-    @param("orderby", type_=search_order_validator, default=Song.artist)
-    @param("showBanished", type_=parameter_bool, default=False)
+    @param("query", type_=String().default(None))
+    @param("limit", type_=Integer().min(0).max(5000).default(50))
+    @param("page", type_=Integer().min(0).default(0))
+    @param("orderby", type_=SearchOrderType().default(Song.artist_key))
+    @param("showBanished", type_=Boolean().default(False))
     @requires_auth("library_read")
     @compressed
     def search_library(self):
@@ -147,7 +153,7 @@ class LibraryResource(WebResource):
         })
 
     @put("")
-    @body(song_list_validator)
+    @body(ArrayValidator(UpdateSongValidator()))
     @requires_auth("library_write")
     def update_song(self):
 
@@ -163,7 +169,7 @@ class LibraryResource(WebResource):
         return jsonify(result="OK"), 200
 
     @post("")
-    @body(song_validator)
+    @body(NewSongValidator())
     @requires_auth("library_write")
     def create_song(self):
 
@@ -235,7 +241,7 @@ class LibraryResource(WebResource):
         return send_generator(go, name, file_size=size)
 
     @post("<song_id>/audio")
-    @body(song_audio_path_validator)
+    @body(SongResourcePathValidator())
     @requires_auth("library_write_song")
     def set_song_audio(self, song_id):
 
@@ -245,7 +251,7 @@ class LibraryResource(WebResource):
         return jsonify(result="OK"), 200
 
     @get("<song_id>/art")
-    @param("scale", type_=image_scale_type, default=ImageScale.MEDIUM)
+    @param("scale", type_=ImageScaleType(), default=ImageScale.MEDIUM)
     @requires_auth("library_read_song")
     def get_song_art(self, song_id):
         """ get album art for a specific song
@@ -268,7 +274,7 @@ class LibraryResource(WebResource):
         return send_generator(go, record.name, file_size=record.size)
 
     @post("<song_id>/art")
-    @body(song_audio_path_validator)
+    @body(SongResourcePathValidator())
     @requires_auth("library_write_song")
     def set_song_art(self, song_id):
 
@@ -278,7 +284,7 @@ class LibraryResource(WebResource):
         return jsonify(result="OK"), 200
 
     @post("history/increment")
-    @body(song_id_list_validator)
+    @body(ArrayValidator(StringValidator()))
     @requires_auth("library_write_song")
     def increment_playcount(self):
         """

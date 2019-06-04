@@ -314,7 +314,7 @@ def _fetch_songs(client):
         }
         response = client.library_search_library(**params)
         if response.status_code != 200:
-            sys.stderr.write(response.text)
+            sys.stderr.write("%s\n" % response)
             sys.stderr.write("fetch songs error...\n")
             sys.exit(1)
 

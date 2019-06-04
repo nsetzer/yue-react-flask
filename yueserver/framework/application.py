@@ -79,7 +79,7 @@ class FlaskApp(object):
         self.app.after_request(self._add_cors_headers)
 
         self._registered_endpoints = []
-        self._registered_models = {}
+        self._registered_endpoints_v2 = []
         self._registered_websockets = []
         self._registered_resources = []
 
@@ -151,13 +151,14 @@ class FlaskApp(object):
             new_auth = auth
 
             endpoint = RegisteredEndpoint(path, name, callback.__doc__,
-                options['methods'], new_params, new_headers, new_body, new_returns, new_auth)
+                options['methods'], new_params, new_headers, new_body, None, None)
 
             self._registered_endpoints.append(endpoint)
 
-            if hasattr(body[0], 'model'):
-                for method in options['methods']:
-                    self._registered_models[(path, method)] = body[0]
+            # stepping stone towards a true openapi implementation
+            endpoint = RegisteredEndpoint(path, name, callback.__doc__,
+                options['methods'], params, headers, body[0], returns, auth)
+            self._registered_endpoints_v2.append(endpoint)
 
             return
         except AssertionError as e:
