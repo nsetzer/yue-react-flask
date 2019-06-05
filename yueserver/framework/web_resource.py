@@ -626,7 +626,6 @@ class String(OpenApiParameter):
     def __init__(self):
         super(String, self).__init__("string")
 
-
     def __call__(self, value):
 
         v = str(value)
