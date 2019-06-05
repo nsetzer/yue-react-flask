@@ -16,7 +16,7 @@ class UserLoginValidator(JsonValidator):
     def model(self):
         return {
             "email": {"type": "string", "required": True},
-            "password": {"type": "string", "required": True},
+            "password": {"type": "string", "format": "password", "required": True},
         }
 
 class UserTokenValidator(JsonValidator):
@@ -31,7 +31,7 @@ class UserCreateValidator(JsonValidator):
     def model(self):
         return {
             "email": {"type": "string", "required": True},
-            "password": {"type": "string", "required": True},
+            "password": {"type": "string", "format": "password", "required": True},
             "domain": {"type": "string", "required": True},
             "role": {"type": "string", "required": True},
         }
@@ -40,7 +40,7 @@ class UserPasswordValidator(JsonValidator):
 
     def model(self):
         return {
-            "password": {"type": "string", "required": True},
+            "password": {"type": "string", "format": "password", "required": True},
         }
 
 class UserResource(WebResource):

@@ -36,7 +36,7 @@ import mimetypes
 from re import findall
 
 WebEndpoint = namedtuple('WebEndpoint',
-    ['path', 'methods', 'name', 'method', 'params', 'headers', 'body', 'returns', 'auth'])
+    ['path', 'methods', 'name', 'method', 'params', 'headers', 'body', 'returns', 'auth', 'scope'])
 
 def validate(expr, value):
     if not expr:
@@ -494,8 +494,12 @@ class MetaWebResource(type):
                 if hasattr(func, "_auth"):
                     _auth = func._auth
 
+                _scope = []
+                if hasattr(func, '_scope'):
+                    _scope = func._scope
+
                 endpoint = WebEndpoint(path, methods, fname,
-                    func, _params, _headers, _body, _returns, _auth)
+                    func, _params, _headers, _body, _returns, _auth, _scope)
 
                 cls._class_endpoints.append(endpoint)
 
@@ -522,7 +526,7 @@ class WebResource(object, metaclass=MetaWebResource):
 
         endpoints = self.__endpoints[:]
 
-        for path, methods, name, func, _params, _headers, _body, _returns, _auth in self._class_endpoints:
+        for path, methods, name, func, _params, _headers, _body, _returns, _auth, _scope in self._class_endpoints:
             # get the instance of the method which is bound to self
             bound_method = getattr(self, func.__name__)
             if path == "":
@@ -531,7 +535,7 @@ class WebResource(object, metaclass=MetaWebResource):
                 path = (self.root + '/' + path).replace("//", "/")
 
             endpoints.append(WebEndpoint(path, methods, name,
-                bound_method, _params, _headers, _body, _returns, _auth))
+                bound_method, _params, _headers, _body, _returns, _auth, _scope))
 
         return endpoints
 
@@ -556,8 +560,9 @@ class WebResource(object, metaclass=MetaWebResource):
         _headers = []
         _returns = None
         _auth = False
+        _scope = False
         self.__endpoints.append(WebEndpoint(path, methods, name,
-            func, _params, _headers, _body, _returns, _auth))
+            func, _params, _headers, _body, _returns, _auth, _scope))
 
     def _start(self):
         """called just before the web listener is started"""
@@ -778,7 +783,7 @@ class JsonValidator(object):
     def type(self):
         return "object"
 
-class BinaryValidator(object):
+class BinaryStreamValidator(object):
 
     def __init__(self):
         super()
@@ -791,8 +796,9 @@ class BinaryValidator(object):
         return self.__class__.__name__.replace("Validator", "")
 
     def mimetype(self):
-        return ['application/octet-stream',
-                'application/x-www-form-urlencoded']
+        # TODO: support multiple mime types in the @body annotation
+        # 'application/x-www-form-urlencoded'
+        return 'application/octet-stream'
 
     def type(self):
         return "stream"

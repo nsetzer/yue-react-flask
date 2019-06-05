@@ -109,9 +109,6 @@ class OpenApi(object):
             "basicAuth": {"type": "http", "scheme": "basic"},
             "tokenAuth": {"type": "apiKey", 'in': 'header', 'name': 'Authorization'},
         }
-        _auth0 = {'basicAuth': []}
-        _auth1 = {'tokenAuth': []}
-        self._auth = [[], [_auth0, _auth1]]
 
         for endpoint in app._registered_endpoints_v2:
             for method in endpoint.methods:
@@ -135,7 +132,23 @@ class OpenApi(object):
 
         desc['tags'] = [tag]
         desc['summary'] = endpoint.long_name
-        desc['description'] = endpoint.doc or ""
+
+        # reformat the description
+        # trim whitespace at the start of the lines
+        d = endpoint.doc or ""
+        count = 0
+        for c in d:
+            if c == '\n':
+                count = 0
+            elif c == ' ':
+                count += 1
+            else:
+                break
+        if count > 1:
+            d = d.replace('\n' + ' ' * count, "\n")
+        d = d.strip()
+        desc['description'] = d
+
         desc['parameters'] = []
 
         if isinstance(endpoint.returns, list):
@@ -144,10 +157,36 @@ class OpenApi(object):
                 desc['responses'][str(code)] = {
                     "description": http.client.responses[code]
                 }
+        if isinstance(endpoint.returns, dict):
+            desc['responses'] = {}
+            for code, content in endpoint.returns.items():
+                obj = desc['responses'][str(code)] = {
+                    "description": http.client.responses[code]
+                }
+
+                if not isinstance(content, list):
+                    content = [content]
+
+                for model in content:
+                    if model is None:
+                        continue
+
+                    if 'content' not in obj:
+                        obj['content'] = {}
+
+                    reg_name = self._reg_model(model)
+
+                    obj['content'][model.mimetype()] = {
+                        'schema': {'$ref': reg_name},
+                    }
         else:
             desc['responses'] = {"200": {"description": "OK"}}
 
-        desc['security'] = self._auth[endpoint.auth]
+        _auth0 = {'basicAuth': endpoint.scope}
+        _auth1 = {'tokenAuth': endpoint.scope}
+        _auth = [[], [_auth0, _auth1]]
+
+        desc['security'] = _auth[endpoint.auth]
         desc['operationId'] = endpoint.long_name
 
         path, desc['parameters'] = self._fmt_path(path)
@@ -166,23 +205,7 @@ class OpenApi(object):
             model = endpoint.body
             if model and hasattr(model, 'mimetype'):
 
-                obj = self['components']['schemas'][model.name()] = {
-                    "type": model.type()
-                }
-
-                if obj['type'] == 'object':
-                    obj["properties"] = model.model()
-                    obj['required'] = []
-                    for key, value in obj["properties"].items():
-                        if 'required' in value:
-                            if value['required']:
-                                obj['required'].append(key)
-                            del value['required']
-                elif obj['type'] == 'array':
-                    obj['items'] = model.schema()
-                elif obj['type'] == 'stream':
-                    obj['type'] = "string"
-                    obj['format'] = "binary"
+                reg_name = self._reg_model(model)
 
                 content = {}
                 mimetype = model.mimetype()
@@ -192,7 +215,7 @@ class OpenApi(object):
                 for m in mimetype:
                     content[m] = {
                         "schema": {
-                            "$ref": "#/components/schemas/" + model.name()
+                            "$ref": reg_name
                         }
                     }
 
@@ -203,6 +226,31 @@ class OpenApi(object):
                 }
 
         return path, desc
+
+    def _reg_model(self, model):
+
+        obj = self['components']['schemas'][model.name()] = {
+            "type": model.type()
+        }
+
+        if obj['type'] == 'object':
+            obj["properties"] = model.model()
+            _required = []
+            for key, value in obj["properties"].items():
+                if 'required' in value:
+                    if value['required']:
+                        _required.append(key)
+                    del value['required']
+            if _required:
+                obj['required'] = _required
+        elif obj['type'] == 'array':
+            obj['items'] = model.schema()
+        elif obj['type'] == 'stream':
+            obj['type'] = "string"
+            obj['format'] = "binary"
+
+        return '#/components/schemas/' + model.name()
+
 
     def _fmt_parameter(self, kind, param):
         _type = param.type
@@ -229,14 +277,16 @@ class OpenApi(object):
         s = path.find('<')
         e = path.find('>')
         while s >= 0 and s < e:
-            name = path[s + 1:e].split(":")[-1]
+            parts = path[s + 1:e].split(":")
+            name = parts[-1]
             path = path[:s] + ("{%s}" % name) + path[e + 1:]
 
+            type_name = "path" if len(parts) > 1 else "string"
             p = {
                 "in": "path",
                 "name": name,
                 "required": True,
-                "description": "",
+                "description": "type: " + type_name,
                 "schema": {'type': 'string'}
             }
 

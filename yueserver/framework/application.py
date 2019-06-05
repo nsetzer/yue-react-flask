@@ -95,9 +95,9 @@ class FlaskApp(object):
 
         self._registered_resources.append(res)
 
-        for path, methods, name, func, params, headers, body, returns, auth in res.endpoints():
+        for path, methods, name, func, params, headers, body, returns, auth, scope in res.endpoints():
             self.register(path, name, func,
-                params=params, headers=headers, body=body, returns=returns, auth=auth, methods=methods)
+                params=params, headers=headers, body=body, returns=returns, auth=auth, scope=scope, methods=methods)
 
         websockets = res.websockets()
         if len(websockets) > 0:
@@ -110,7 +110,7 @@ class FlaskApp(object):
 
                 self._registered_websockets.append((name, event, namespace, func))
 
-    def register(self, path, name, callback, params=None, headers=None, body=None, returns=None, auth=False, **options):
+    def register(self, path, name, callback, params=None, headers=None, body=None, returns=None, auth=False, scope=None, **options):
         msg = ""
         try:
             self.app.add_url_rule(path, name, callback, **options)
@@ -146,18 +146,14 @@ class FlaskApp(object):
                 data['type'] = header.type.__name__
                 new_headers.append(Parameter(**data))
 
-            new_returns = returns
-
-            new_auth = auth
-
             endpoint = RegisteredEndpoint(path, name, callback.__doc__,
-                options['methods'], new_params, new_headers, new_body, None, None)
+                options['methods'], new_params, new_headers, new_body, None, None, None)
 
             self._registered_endpoints.append(endpoint)
 
             # stepping stone towards a true openapi implementation
             endpoint = RegisteredEndpoint(path, name, callback.__doc__,
-                options['methods'], params, headers, body[0], returns, auth)
+                options['methods'], params, headers, body[0], returns, auth, scope)
             self._registered_endpoints_v2.append(endpoint)
 
             return

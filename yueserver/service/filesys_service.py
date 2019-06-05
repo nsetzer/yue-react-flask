@@ -633,6 +633,9 @@ class FileSysService(object):
         for record in records:
             if not record.isDir:
                 if record.name.endswith('.txt'):
+                    # TODO: add the file id as a uid for the note
+                    #       allow renaming notes by uid
+                    #       add endpoint for creating note
                     files.append({
                         "file_name": record.name,
                         "title": record.name[:-4].replace("_", " "),

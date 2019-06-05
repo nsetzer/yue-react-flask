@@ -81,7 +81,7 @@ from .resource.app_resource import AppResource
 from .resource.user_resource import UserResource
 from .resource.library_resource import LibraryResource
 from .resource.queue_resource import QueueResource
-from .resource.files_resource import FilesResource
+from .resource.files_resource import FilesResource, NotesResource
 from .resource.gui_resource import AudioGuiResource
 
 class YueApp(FlaskApp):
@@ -122,6 +122,7 @@ class YueApp(FlaskApp):
         self.add_resource(QueueResource(self.user_service,
                                         self.audio_service))
         self.add_resource(FilesResource(self.user_service, self.filesys_service))
+        self.add_resource(NotesResource(self.user_service, self.filesys_service))
 
         self.app.teardown_request(self.teardown_request)
         self.app.before_request(self.before_request)

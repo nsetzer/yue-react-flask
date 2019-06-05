@@ -25,7 +25,7 @@ from collections import namedtuple
 ##
 # A tuple describing a RESTful endpoint
 RegisteredEndpoint = namedtuple('RegisteredEndpoint',
-    ['path', 'long_name', 'doc', 'methods', 'params', 'headers', 'body', 'returns', 'auth'])
+    ['path', 'long_name', 'doc', 'methods', 'params', 'headers', 'body', 'returns', 'auth', 'scope'])
 
 ##
 # A tuple describing a query parameter
