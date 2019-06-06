@@ -66,6 +66,12 @@ def httpError(code, message):
     logging.error("request: %s" % dict(request.headers))
     return jsonify(error=message), code
 
+class ParameterNamespace(object):
+    pass
+
+def _default_exception_handler(ex):
+    return httpError(500, "Unhandled Exception")
+
 def _endpoint_mapper(f):
 
     if f.__name__ in globals():
@@ -81,7 +87,18 @@ def _endpoint_mapper(f):
 
     @wraps(f)
     def wrapper(*args, **kwargs):
-        g.args = lambda: None
+        t0 = time.time()
+
+        # extract authentication tokens
+        if hasattr(f, '_security'):
+            for strategy in f._security:
+                if strategy():
+                    break
+            else:
+                return httpError(401, "no authentication")
+
+        # extract request query parameters
+        g.args = ParameterNamespace()
         if hasattr(f, "_params"):
             for param in f._params:
                 if param.required and param.name not in request.args:
@@ -101,6 +118,8 @@ def _endpoint_mapper(f):
                             param.name, request.args[param.name]))
 
                 setattr(g.args, param.name, value)
+
+        # extract request header parameters
         g.headers = dict()
         if hasattr(f, "_headers"):
             for header in f._headers:
@@ -122,11 +141,16 @@ def _endpoint_mapper(f):
 
                 g.headers[header.name] = value
 
+        # extract the request body
+        g.body = None
         if hasattr(f, "_body"):
             try:
                 type_, content_type = f._body
                 # logging.info("body: %s %s %s", type_, content_type, request.headers['Content-Type'])
-                if request.headers.get('Content-Type') == 'application/x-www-form-urlencoded':
+                content_type = request.headers.get('Content-Type')
+                # TODO: dispatch type_ based on the content type
+                #       allow a default type_ when mimetype is not available
+                if content_type == 'application/x-www-form-urlencoded':
                     g.body = type_(BytesIO(request.get_data()))
                 elif content_type == 'application/json':
                     g.body = type_(request.get_json())
@@ -136,14 +160,27 @@ def _endpoint_mapper(f):
                 logging.exception("unable to validate body")
                 return httpError(400, "unable to validate body")
 
-        s = time.time()
-        return_value = f(*args, **kwargs)
-        e = time.time()
+        # extract custom exception handlers for this method
+        g.handlers = {}
+        if hasattr(f, "_handlers"):
+            g.handlers = f._handlers
+
+        # execute the endpoint method
+        t1 = time.time()
+        try:
+            return_value = f(*args, **kwargs)
+        except BaseException as ex:
+            handler = g.handlers.get(ex.__class__.__name__,
+                _default_exception_handler)
+            return_value = handler(ex)
+
+        t2 = time.time()
         if hasattr(f, '_timeout'):
-            t = (e - s) * 1000
-            if t >= getattr(f, '_timeout'):
+            t = (t2 - t0) * 1000
+            if t >= f._timeout:
                 logging.warning("%s.%s ran for %.3fms", f.__module__,
                     f.__wrapped__.__qualname__, t)
+
         return return_value
 
     return wrapper
@@ -697,6 +734,34 @@ class Integer(OpenApiParameter):
         self.attrs["maximum"] = vmax
         return self
 
+class Validator(object):
+    def __init__(self, mimetype=None):
+        super(Validator, self).__init__()
+        self._mimetype = mimetype
+
+        # todo legacy endpoint support
+        self.__name__ = self.__class__.__name__
+
+    def name(self):
+        return self.__class__.__name__.replace("Validator", "")
+
+    def __call__(self, obj):
+        raise NotImplementedError()
+
+    def type(self):
+        """openapi data type
+
+        string|integer|object
+        """
+        raise NotImplementedError()
+
+    def mimetype(self):
+        """ """
+        return self._mimetype
+
+    def schema(self):
+        raise NotImplementedError()
+
 
 class ArrayValidator(object):
     def __init__(self, object):
@@ -740,32 +805,27 @@ class ArrayValidator(object):
 
         return obj
 
-class StringValidator(object):
-    def __init__(self):
-        super()
-        self.__name__ = self.__class__.__name__
+class StringValidator(Validator):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
     def __call__(self, obj):
 
+        if hasattr(obj, 'read'):
+            obj = obj.read().decode("utf-8").strip()
+
         if not isinstance(obj, str):
-            raise Exception("invalid object")
+            raise Exception("invalid object: %s %s" % (type(obj), content_type))
 
         return obj
-
-    def name(self):
-        return self.__class__.__name__.replace("Validator", "")
-
-    def mimetype(self):
-        return "application/json"
 
     def type(self):
         return "string"
 
-class JsonValidator(object):
+class JsonValidator(Validator):
 
-    def __init__(self):
-        super()
-        self.__name__ = self.__class__.__name__
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
     def __call__(self, obj):
         model = self.model()
@@ -783,21 +843,29 @@ class JsonValidator(object):
     def type(self):
         return "object"
 
-class BinaryStreamValidator(object):
+class BinaryStreamValidator(Validator):
 
-    def __init__(self):
-        super()
-        self.__name__ = self.__class__.__name__
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
     def __call__(self, obj):
         return obj
 
-    def name(self):
-        return self.__class__.__name__.replace("Validator", "")
+    def mimetype(self):
+        return ['application/octet-stream', 'application/x-www-form-urlencoded']
+
+    def type(self):
+        return "stream"
+
+class BinaryStreamResponseValidator(Validator):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def __call__(self, obj):
+        return obj
 
     def mimetype(self):
-        # TODO: support multiple mime types in the @body annotation
-        # 'application/x-www-form-urlencoded'
         return 'application/octet-stream'
 
     def type(self):

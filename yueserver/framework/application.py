@@ -121,7 +121,11 @@ class FlaskApp(object):
             body = body or (None, None, None)
 
             if body[0] is not None:
-                body_name = body[0].__name__
+
+                if isinstance(body[0], list):
+                    body_name = 'null'
+                else:
+                    body_name = body[0].__name__
 
                 # if we have a body, determine the default mimetype
                 if body[1] is not None:

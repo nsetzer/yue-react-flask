@@ -110,7 +110,7 @@ class OpenApi(object):
             "tokenAuth": {"type": "apiKey", 'in': 'header', 'name': 'Authorization'},
         }
 
-        for endpoint in app._registered_endpoints_v2:
+        for endpoint in sorted(app._registered_endpoints_v2, key=lambda e: e.path):
             for method in endpoint.methods:
 
                 if not endpoint.path.startswith("/api"):
@@ -176,9 +176,15 @@ class OpenApi(object):
 
                     reg_name = self._reg_model(model)
 
-                    obj['content'][model.mimetype()] = {
-                        'schema': {'$ref': reg_name},
-                    }
+                    mimetype = model.mimetype()
+
+                    if isinstance(mimetype, str):
+                        mimetype = [mimetype]
+
+                    for m in mimetype:
+                        obj['content'][m] = {
+                            'schema': {'$ref': reg_name},
+                        }
         else:
             desc['responses'] = {"200": {"description": "OK"}}
 
@@ -202,30 +208,41 @@ class OpenApi(object):
             desc['parameters'].append(p)
 
         if method in ('POST', 'PUT'):
-            model = endpoint.body
-            if model and hasattr(model, 'mimetype'):
+            items = endpoint.body
+            if not isinstance(items, list):
+                items = [items]
+            for model in items:
+                if model and hasattr(model, 'mimetype'):
+                    self._reg_body(desc, model)
+                else:
+                    sys.stderr.write("%s: oldstyle body\n" % endpoint.long_name)
 
-                reg_name = self._reg_model(model)
+        return path, desc
 
-                content = {}
-                mimetype = model.mimetype()
-                if isinstance(mimetype, str):
-                    mimetype = [mimetype]
+    def _reg_body(self, desc, model):
 
-                for m in mimetype:
-                    content[m] = {
-                        "schema": {
-                            "$ref": reg_name
-                        }
-                    }
+            reg_name = self._reg_model(model)
 
+            mimetype = model.mimetype()
+
+            if isinstance(mimetype, str):
+                mimetype = [mimetype]
+
+            content = {
+                "schema": {
+                    "$ref": reg_name
+                }
+            }
+
+            if 'requestBody' not in desc:
                 desc['requestBody'] = {
                     "description": "TODO",
                     "required": True,
-                    "content": content
+                    "content": {}
                 }
 
-        return path, desc
+            for m in mimetype:
+                desc['requestBody']['content'][m] = content
 
     def _reg_model(self, model):
 
@@ -251,7 +268,6 @@ class OpenApi(object):
 
         return '#/components/schemas/' + model.name()
 
-
     def _fmt_parameter(self, kind, param):
         _type = param.type
         if hasattr(_type, 'schema'):
@@ -263,6 +279,7 @@ class OpenApi(object):
                 "schema": _type.schema()
             }
         else:
+            sys.stderr.write("oldstyle parameter: %s\n" % param.name)
             return {
                 "in": kind,
                 "name": param.name,

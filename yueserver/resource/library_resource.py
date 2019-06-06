@@ -19,7 +19,8 @@ from ..framework.web_resource import WebResource, \
     OpenApiParameter, Integer, String, Boolean, \
     JsonValidator, ArrayValidator, StringValidator
 
-from .util import requires_auth, datetime_validator, files_generator
+from .util import requires_auth, datetime_validator, files_generator, \
+    ImageScaleType
 
 from ..service.transcode_service import ImageScale
 
@@ -92,17 +93,7 @@ class SongResourcePathValidator(JsonValidator):
             "path": {"type": "string", "required": True}
         }
 
-class ImageScaleType(OpenApiParameter):
-    def __init__(self):
-        super(ImageScaleType, self).__init__("string")
-        self.enum(ImageScale.names())
 
-    def __call__(self, value):
-
-        index = ImageScale.fromName(value)
-        if index == 0:
-            raise Exception("invalid: %s" % value)
-        return index
 
 audio_format = String().enum(("raw", "ogg", "mp3", "default"))
 
@@ -305,8 +296,8 @@ class LibraryResource(WebResource):
     @get("history")
     @param("start", type_=datetime_validator, required=True)
     @param("end", type_=datetime_validator, required=True)
-    @param("page", type_=int, default=0)
-    @param("page_size", type_=int, default=500)
+    @param("page", type_=Integer().default(0))
+    @param("page_size", type_=Integer().default(500))
     @requires_auth("user_read")
     def get_history(self):
         """

@@ -20,13 +20,15 @@ from ..framework.web_resource import WebResource, returns, \
     get, post, put, delete, body, header, compressed, param, httpError, \
     int_range, int_min, send_generator, null_validator, boolean, timed, \
     OpenApiParameter, Integer, String, Boolean, \
-    JsonValidator, ArrayValidator, StringValidator, BinaryStreamValidator
+    JsonValidator, ArrayValidator, StringValidator, BinaryStreamValidator, \
+    BinaryStreamResponseValidator
 
 from .util import requires_auth, requires_no_auth, \
-    files_generator, files_generator_v2
+    files_generator, files_generator_v2, ImageScaleType
 
 validate_mode = String().enum((CryptMode.none, CryptMode.client,
-                               CryptMode.server, CryptMode.system)) \
+                               CryptMode.server, CryptMode.system),
+                              case_sensitive=False) \
                         .default(None) \
                         .description("encryption mode")
 
@@ -78,16 +80,6 @@ def validate_key(body):
     text = body.read().decode('utf-8')
     return validatekey(text)
 
-def image_scale_type(name):
-
-    if name.lower() in ('null', 'none'):
-        return None
-
-    index = ImageScale.fromName(name)
-    if index == 0:
-        raise Exception("invalid: %s" % name)
-    return index
-
 class FilesResource(WebResource):
     """FilesResource
 
@@ -110,14 +102,14 @@ class FilesResource(WebResource):
         return self._list_path(root, "", password=password, preview=None)
 
     @get("<root>/path/<path:resPath>")
-    @param("list", type_=boolean, default=False,
-        doc="do not retrieve contents for files if true")
-    @param("preview", type_=image_scale_type, default=None,
-        doc="return a preview picture of the resource")
+    @param("list", type_=Boolean().default(False).description(
+        "do not retrieve contents for files if true"))
+    @param("preview", type_=ImageScaleType().description(
+        "return a preview picture of the resource"))
     @header("X-YUE-PASSWORD")
     @requires_auth("filesystem_read")
-    @param("dl", type_=boolean, default=True)
-    @returns({200: BinaryStreamValidator()})
+    @param("dl", type_=Boolean().default(True))
+    @returns({200: BinaryStreamResponseValidator()})
     @timed(100)
     def get_path(self, root, resPath):
         password = g.headers.get('X-YUE-PASSWORD', None)
@@ -233,13 +225,16 @@ class FilesResource(WebResource):
             "page_size": g.args.limit,
         })
 
+    # mimetype="application/octet-stream"
+    # mimetype='application/x-www-form-urlencoded'
     @post("<root>/path/<path:resPath>")
     @param("mtime", type_=Integer().description("set file modified time"))
     @param("permission", type_=Integer().default(0o644).description("unix file permissions"))
     @param("version", type_=Integer().default(0).description("file version"))
     @param("crypt", type_=validate_mode)
     @header("X-YUE-PASSWORD")
-    @body(BinaryStreamValidator(), content_type="application/octet-stream")
+    @body(BinaryStreamValidator(),
+          content_type="application/octet-stream")
     @returns([200, 400, 401, 409])
     @requires_auth("filesystem_write")
     @timed(100)
@@ -313,7 +308,7 @@ class FilesResource(WebResource):
     @put("change_password")
     @header("X-YUE-PASSWORD")
     @requires_auth("filesystem_write")
-    @body(null_validator, content_type="application/octet-stream")
+    @body(StringValidator(mimetype="application/octet-stream"), content_type="application/octet-stream")
     def change_password(self):
         """
         change the 'server' encryption key
@@ -323,7 +318,7 @@ class FilesResource(WebResource):
         """
 
         password = g.headers.get('X-YUE-PASSWORD', None)
-        new_password = g.body.read().decode("utf-8").strip()
+        new_password = g.body
 
         if not password:
             return httpError(400, "Invalid password 1")
@@ -362,8 +357,6 @@ class FilesResource(WebResource):
         """
         self.filesys_service.setUserClientKey(g.current_user, g.body)
         return jsonify(result="OK"), 200
-
-
 
     def _list_path(self, root, path, list_=False, password=None, preview=None, dl=True):
         # TODO: move this into the service layer
@@ -472,10 +465,9 @@ class NotesResource(WebResource):
         self.user_service = user_service
         self.filesys_service = filesys_service
 
-
     @get("notes")
-    @param("root", type_=str, default='default')
-    @param("base", type_=str, default='public/notes')
+    @param("root", type_=String().default("default"))
+    @param("base", type_=String().default('public/notes'))
     @requires_auth("filesystem_read")
     def get_user_notes(self):
         notes = self.filesys_service.getUserNotes(
@@ -543,8 +535,8 @@ class NotesResource(WebResource):
         return jsonify(result="OK"), 200
 
     @delete("notes/<note_id>")
-    @param("root", type_=str, default='default')
-    @param("base", type_=str, default='public/notes')
+    @param("root", type_=String().default("default"))
+    @param("base", type_=String().default('public/notes'))
     @requires_auth("filesystem_write")
     def delete_user_note(self, note_id):
         """convenience function wrapping file delete"""

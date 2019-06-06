@@ -14,7 +14,8 @@ from ..dao.exception import BackendException
 
 from ..service.exception import ServiceException
 
-from ..framework.web_resource import httpError, ArrayValidator
+from ..framework.web_resource import httpError, ArrayValidator, OpenApiParameter
+from ..service.transcode_service import ImageScale
 
 class HttpException(Exception):
     """docstring for HttpException"""
@@ -184,6 +185,7 @@ def requires_auth(features=None):
             args = list(args)
             args.insert(0, resource)
 
+            print("decodeing auth for wrapped function: %s" % f)
             service = resource.user_service
 
             # check the request parameters for auth tokens
@@ -220,18 +222,27 @@ def requires_auth(features=None):
         return wrapper
     return impl
 
-def datetime_validator(st):
-    t = 0
-    if st is not None:
-        try:
+class DateTimeType(OpenApiParameter):
+    def __init__(self):
+        super(DateTimeType, self).__init__("integer")
+
+        self.attrs["format"] = "date"
+
+    def __call__(self, value):
+
+        t = 0
+        if value is not None:
             try:
-                t = int(st)
-            except ValueError:
-                t = int(parse_iso_format(st).timestamp())
-            return t
-        except Exception as e:
-            logging.exception("unable to parse %s(%s) : %s" % (field, st, e))
-    raise Exception("Invalid datetime")
+                try:
+                    t = int(value)
+                except ValueError:
+                    t = int(parse_iso_format(value).timestamp())
+                return t
+            except Exception as e:
+                logging.exception("unable to parse (%r) : %s" % (value, e))
+        raise Exception("Invalid datetime")
+
+datetime_validator = DateTimeType()
 
 def search_order_validator(s):
     # todo: support multiple fields
@@ -289,3 +300,18 @@ def files_generator_v2(stream, buffer_size=2048):
             buf = stream.read(buffer_size)
     finally:
         stream.close()
+
+class ImageScaleType(OpenApiParameter):
+    def __init__(self):
+        super(ImageScaleType, self).__init__("string")
+        self.enum(ImageScale.names())
+
+    def __call__(self, value):
+
+        index = ImageScale.fromName(value)
+        if index == 0:
+            raise Exception("invalid: %s" % value)
+        return index
+
+
+
