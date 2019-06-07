@@ -163,11 +163,85 @@ def _requires_apikey_auth_impl(service, f, args, kwargs, features, token):
 
     return httpError(401, "failed to authenticate user")
 
+def SecurityBasic(resource, scope, request):
+
+    token = request.headers.get("Authorization")
+    print("*****", token)
+
+    if token is None or not token.startswith('Basic '):
+        return False
+
+    token = token.encode('utf-8', 'ignore')
+
+    try:
+        print("*****", token)
+        service = resource.user_service
+        g.current_user = service.getUserFromBasicToken(token, scope)
+
+        return True
+    except Exception as e:
+        pass
+
+    return False
+
+def SecurityToken(resource, scope, request):
+
+    token = request.headers.get("Authorization")
+
+    if token is None:
+        token = request.params.get('token', None)
+
+        if token is None:
+
+            return False
+
+    token = token.encode('utf-8', 'ignore')
+
+    try:
+        service = resource.user_service
+        g.current_user = service.getUserFromToken(token, scope)
+
+        return True
+    except Exception as e:
+        pass
+
+    return False
+
+def SecurityApiKey(resource, scope, request):
+
+    token = request.headers.get("Authorization")
+
+    if token is None or not token.startswith('APIKEY '):
+
+        token = request.params.get('apikey', None)
+
+        if token is None:
+
+            return False
+
+        token = 'APIKEY ' + token
+
+    token = token.encode('utf-8', 'ignore')
+
+    try:
+        service = resource.user_service
+        g.current_user = service.getUserFromApikey(token, scope)
+
+        return True
+    except Exception as e:
+        pass
+
+    return False
+
 def requires_no_auth(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        return _handle_exceptions(f, args, kwargs)
-    return wrapper
+    #@wraps(f)
+    #def wrapper(*args, **kwargs):
+    #    return _handle_exceptions(f, args, kwargs)
+    #return wrapper
+    f._auth = False
+    #f._scope = []
+    #f._security = []
+    return f
 
 def requires_auth(features=None):
 
@@ -178,48 +252,51 @@ def requires_auth(features=None):
     def impl(f):
         f._auth = True
         f._scope = features
+        f._security = [SecurityBasic, SecurityApiKey, SecurityToken]
 
-        @wraps(f)
-        def wrapper(resource, *args, **kwargs):
-
-            args = list(args)
-            args.insert(0, resource)
-
-            print("decodeing auth for wrapped function: %s" % f)
-            service = resource.user_service
-
-            # check the request parameters for auth tokens
-
-            token = request.args.get('token', None)
-            if token is not None:
-                bytes_token = (token).encode("utf-8")
-                return _requires_token_auth_impl(service, f, args, kwargs,
-                    features, bytes_token)
-
-            token = request.args.get('apikey', None)
-            if token is not None:
-                bytes_token = ("APIKEY " + token).encode("utf-8")
-                return _requires_apikey_auth_impl(service, f, args, kwargs,
-                    features, bytes_token)
-
-            # check therequest headers for auth tokens
-
-            try:
-                token = get_request_header(request, "Authorization")
-            except HttpException as e:
-                return httpError(401, str(e))
-
-            token = request.headers['Authorization']
-            bytes_token = token.encode('utf-8', 'ignore')
-            if token.startswith("Basic "):
-                return _requires_basic_auth_impl(service, f, args, kwargs,
-                    features, bytes_token)
-            elif token.startswith("APIKEY "):
-                return _requires_apikey_auth_impl(service, f, args, kwargs,
-                    features, bytes_token)
-            return _requires_token_auth_impl(service, f, args, kwargs,
-                features, bytes_token)
-        return wrapper
+        return f
+        ###@wraps(f)
+        ###def wrapper(resource, *args, **kwargs):
+        ###
+        ###    args = list(args)
+        ###    args.insert(0, resource)
+        ###
+        ###    print("decodeing auth for wrapped function: %s" % f)
+        ###    service = resource.user_service
+        ###
+        ###    # check the request parameters for auth tokens
+        ###
+        ###    token = request.args.get('token', None)
+        ###    if token is not None:
+        ###        bytes_token = (token).encode("utf-8")
+        ###        return _requires_token_auth_impl(service, f, args, kwargs,
+        ###            features, bytes_token)
+        ###
+        ###    token = request.args.get('apikey', None)
+        ###    if token is not None:
+        ###        bytes_token = ("APIKEY " + token).encode("utf-8")
+        ###        return _requires_apikey_auth_impl(service, f, args, kwargs,
+        ###            features, bytes_token)
+        ###
+        ###    # check therequest headers for auth tokens
+        ###
+        ###    try:
+        ###        token = get_request_header(request, "Authorization")
+        ###    except HttpException as e:
+        ###        return httpError(401, str(e))
+        ###
+        ###    token = request.headers['Authorization']
+        ###    bytes_token = token.encode('utf-8', 'ignore')
+        ###    if token.startswith("Basic "):
+        ###        return _requires_basic_auth_impl(service, f, args, kwargs,
+        ###            features, bytes_token)
+        ###    elif token.startswith("APIKEY "):
+        ###        return _requires_apikey_auth_impl(service, f, args, kwargs,
+        ###            features, bytes_token)
+        ###    return _requires_token_auth_impl(service, f, args, kwargs,
+        ###        features, bytes_token)
+        ###
+        ###return wrapper
     return impl
 
 class DateTimeType(OpenApiParameter):

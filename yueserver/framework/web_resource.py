@@ -20,6 +20,8 @@ TODO:
 import os
 import sys
 import time
+import traceback
+
 from functools import wraps
 from flask import (after_this_request, request, g, jsonify,
     stream_with_context, Response, send_file as flask_send_file)
@@ -64,12 +66,20 @@ def httpError(code, message):
     logging.error("[%3d] %s" % (code, message))
     logging.error("request: %s" % (request.url))
     logging.error("request: %s" % dict(request.headers))
+    # traceback.print_stack()
     return jsonify(error=message), code
 
 class ParameterNamespace(object):
     pass
 
+class RequestNamespace(object):
+     def __init__(self, params, headers):
+         super(RequestNamespace, self).__init__()
+         self.params = params
+         self.headers = headers
+
 def _default_exception_handler(ex):
+    logging.exception("unhandled exception")
     return httpError(500, "Unhandled Exception")
 
 def _endpoint_mapper(f):
@@ -89,12 +99,24 @@ def _endpoint_mapper(f):
     def wrapper(*args, **kwargs):
         t0 = time.time()
 
+        if len(args) == 0:
+            return httpError(500, "endpoint not registered correctly")
+        # first arg is always the web resource which
+        # registered the endpoint
+        resource = args[0]
+
+        scope = None
+        if hasattr(f, '_scope'):
+            scope = f._scope
+
         # extract authentication tokens
         if hasattr(f, '_security'):
             for strategy in f._security:
-                if strategy():
+                namespace = RequestNamespace(request.args, request.headers)
+                if strategy(resource, scope, namespace):
                     break
             else:
+                logging.error("all auth strategies failed")
                 return httpError(401, "no authentication")
 
         # extract request query parameters
@@ -170,6 +192,7 @@ def _endpoint_mapper(f):
         try:
             return_value = f(*args, **kwargs)
         except BaseException as ex:
+            print(ex.__class__.__name__)
             handler = g.handlers.get(ex.__class__.__name__,
                 _default_exception_handler)
             return_value = handler(ex)
