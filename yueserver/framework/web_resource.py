@@ -73,10 +73,10 @@ class ParameterNamespace(object):
     pass
 
 class RequestNamespace(object):
-     def __init__(self, params, headers):
-         super(RequestNamespace, self).__init__()
-         self.params = params
-         self.headers = headers
+    def __init__(self, params, headers):
+        super(RequestNamespace, self).__init__()
+        self.params = params
+        self.headers = headers
 
 def _default_exception_handler(ex):
     logging.exception("unhandled exception")
@@ -133,13 +133,16 @@ def _endpoint_mapper(f):
                         value = param.type(request.args[param.name])
                     else:
                         value = param.default
+
+                    setattr(g.args, param.name, value)
+
                 except Exception as e:
                     logging.exception("%s" % e)
                     return httpError(400,
                         "unable to validate query parameter: %s=%s" % (
                             param.name, request.args[param.name]))
 
-                setattr(g.args, param.name, value)
+
 
         # extract request header parameters
         g.headers = dict()
@@ -183,7 +186,7 @@ def _endpoint_mapper(f):
                 return httpError(400, "unable to validate body")
 
         # extract custom exception handlers for this method
-        g.handlers = {}
+        g.handlers = []
         if hasattr(f, "_handlers"):
             g.handlers = f._handlers
 
@@ -192,17 +195,20 @@ def _endpoint_mapper(f):
         try:
             return_value = f(*args, **kwargs)
         except BaseException as ex:
-            print(ex.__class__.__name__)
-            handler = g.handlers.get(ex.__class__.__name__,
-                _default_exception_handler)
-            return_value = handler(ex)
+
+            for handler in g.handlers:
+                if isinstance(ex, handler.type):
+                    return_value = handler.handle(ex)
+                    break
+            else:
+                return_value = _default_exception_handler(ex)
 
         t2 = time.time()
         if hasattr(f, '_timeout'):
             t = (t2 - t0) * 1000
             if t >= f._timeout:
                 logging.warning("%s.%s ran for %.3fms", f.__module__,
-                    f.__wrapped__.__qualname__, t)
+                    f.__qualname__, t)
 
         return return_value
 
@@ -276,7 +282,7 @@ def delete(path):
         return _endpoint_mapper(f)
     return decorator
 
-def param(name, type_=str, default=None, required=False, doc=""):
+def param(name, type_=str):
     """decorator which validates query parameters"""
 
     def decorator(f):
@@ -865,6 +871,34 @@ class JsonValidator(Validator):
 
     def type(self):
         return "object"
+
+class EmptyBodyValidator(Validator):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def __call__(self, obj):
+        return obj
+
+    def mimetype(self):
+        return []
+
+    def type(self):
+        return "stream"
+
+class TextStreamValidator(Validator):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def __call__(self, obj):
+        return obj
+
+    def mimetype(self):
+        return ['text/plain', 'application/octet-stream', 'application/x-www-form-urlencoded']
+
+    def type(self):
+        return "stream"
 
 class BinaryStreamValidator(Validator):
 

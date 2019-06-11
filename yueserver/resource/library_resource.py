@@ -19,7 +19,7 @@ from ..framework.web_resource import WebResource, \
     OpenApiParameter, Integer, String, Boolean, \
     JsonValidator, ArrayValidator, StringValidator
 
-from .util import requires_auth, datetime_validator, files_generator, \
+from .util import requires_auth, DateTimeType, files_generator, \
     ImageScaleType
 
 from ..service.transcode_service import ImageScale
@@ -93,13 +93,21 @@ class SongResourcePathValidator(JsonValidator):
             "path": {"type": "string", "required": True}
         }
 
+class SongHistoryValidator(JsonValidator):
+    def model(self):
+
+        return {
+            "timestamp": {"type": "integer", "format": "date", "required": True},
+            "song_id": {"type": "string", "required": True}
+        }
 
 
-audio_format = String().enum(("raw", "ogg", "mp3", "default"))
 
-audio_channels = String().enum(("stereo", "mono", "default"))
+audio_format = String().enum(("raw", "ogg", "mp3", "default")).default("default")
 
-audio_quality = String().enum(("low", "medium", "high"))
+audio_channels = String().enum(("stereo", "mono", "default")).default("stereo")
+
+audio_quality = String().enum(("low", "medium", "high")).default("medium")
 
 class LibraryResource(WebResource):
     """LibraryResource
@@ -193,12 +201,9 @@ class LibraryResource(WebResource):
         return jsonify(result=song)
 
     @get("<song_id>/audio")
-    @param("mode", type_=audio_format, default="default",
-        doc="one of raw|ogg|mp3|default")
-    @param("quality", type_=audio_quality, default="medium",
-        doc="one of low|medium|high")
-    @param("layout", type_=audio_channels, default="stereo",
-        doc="one of stereo|mono|default")
+    @param("mode", type_=audio_format)
+    @param("quality", type_=audio_quality)
+    @param("layout", type_=audio_channels)
     @requires_auth("library_read_song")
     def get_song_audio(self, song_id):
 
@@ -242,7 +247,7 @@ class LibraryResource(WebResource):
         return jsonify(result="OK"), 200
 
     @get("<song_id>/art")
-    @param("scale", type_=ImageScaleType(), default=ImageScale.MEDIUM)
+    @param("scale", type_=ImageScaleType().default(ImageScale.MEDIUM))
     @requires_auth("library_read_song")
     def get_song_art(self, song_id):
         """ get album art for a specific song
@@ -294,8 +299,8 @@ class LibraryResource(WebResource):
         return jsonify(result="OK"), 200
 
     @get("history")
-    @param("start", type_=datetime_validator, required=True)
-    @param("end", type_=datetime_validator, required=True)
+    @param("start", type_=DateTimeType().required(True))
+    @param("end", type_=DateTimeType().required(True))
     @param("page", type_=Integer().default(0))
     @param("page_size", type_=Integer().default(500))
     @requires_auth("user_read")
@@ -335,7 +340,7 @@ class LibraryResource(WebResource):
         })
 
     @post("history")
-    @body(null_validator)
+    @body(ArrayValidator(SongHistoryValidator()))
     @requires_auth("user_write")
     def update_history(self):
         """

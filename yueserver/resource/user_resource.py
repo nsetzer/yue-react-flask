@@ -74,14 +74,9 @@ class UserResource(WebResource):
     @returns([200, 400, 401])
     def is_token_valid(self):
 
-        incoming = request.get_json()
+        token = g.body["token"]
 
-        if not incoming:
-            return httpError(400, "invalid request body")
-        if 'token' not in incoming:
-            return httpError(400, "token not specified")
-
-        is_valid, reason = self.user_service.verifyToken(incoming["token"])
+        is_valid, reason = self.user_service.verifyToken(token)
 
         return jsonify(token_is_valid=is_valid,
                    reason=reason)

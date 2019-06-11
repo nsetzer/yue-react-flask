@@ -111,7 +111,7 @@ class OpenApi(object):
         }
 
         for endpoint in sorted(app._registered_endpoints_v2, key=lambda e: e.path):
-            for method in endpoint.methods:
+            for method in sorted(endpoint.methods):
 
                 if not endpoint.path.startswith("/api"):
                     continue
@@ -157,6 +157,7 @@ class OpenApi(object):
                 desc['responses'][str(code)] = {
                     "description": http.client.responses[code]
                 }
+
         if isinstance(endpoint.returns, dict):
             desc['responses'] = {}
             for code, content in endpoint.returns.items():
@@ -234,7 +235,7 @@ class OpenApi(object):
                 }
             }
 
-            if 'requestBody' not in desc:
+            if mimetype and 'requestBody' not in desc:
                 desc['requestBody'] = {
                     "description": "TODO",
                     "required": True,
@@ -313,3 +314,82 @@ class OpenApi(object):
             e = path.find('>')
 
         return path, parameters
+
+
+def curldoc(app, host):
+
+    for endpoint in sorted(app._registered_endpoints_v2, key=lambda e: e.path):
+        for method in sorted(endpoint.methods):
+
+            print("\n\n%s" % endpoint.long_name)
+            cmd = []
+
+            cmd.append("-X")
+            cmd.append(method)
+
+            params = []
+            for param in endpoint.params:
+                params.append("%s={%s}" % (param.name, param.name))
+
+            for param in endpoint.headers:
+                pass
+
+            mimeschema = {}
+            if method in ('POST', 'PUT'):
+
+                cmd.append("-H")
+                cmd.append("Content-Type='{Content-Type}'")
+                items = endpoint.body
+
+                if not isinstance(items, list):
+                    items = [items]
+
+                binary = False
+
+                for model in items:
+                    if model and hasattr(model, 'mimetype'):
+
+                        name = model.name()
+                        mimetype = model.mimetype()
+                        if isinstance(mimetype, str):
+                            mimetype = [mimetype]
+
+                        type = model.type()
+                        schema = {"type": type}
+                        if type == 'object':
+                            schema = model.model()
+
+                        if type == 'array':
+                            schema = [model.schema()]
+
+                        if type == 'stream':
+                            schema['type'] = "string"
+                            schema['format'] = "binary"
+                            binary = True
+
+                        for m in mimetype:
+                            mimeschema[m] = schema
+
+                if binary:
+                    cmd.append("--data-binary")
+                else:
+                    cmd.append("-d")
+
+                cmd.append("@'upload-file'")
+
+            url = "%s%s" % (host, endpoint.path)
+            if params:
+                url += '?' + '&'.join(params)
+
+            cmd.append("'%s'" % url)
+
+            print("curl %s" % (" ".join(cmd)))
+
+            for mimetype, schema in sorted(mimeschema.items()):
+                print("%s:" % mimetype)
+                s = json.dumps(schema, cls=ObjectEncoder, indent=2)
+                s = "    " + s.replace("\n", "\n    ")
+                print(s)
+
+
+

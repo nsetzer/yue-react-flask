@@ -21,16 +21,32 @@ from ..framework.web_resource import WebResource, returns, \
     int_range, int_min, send_generator, null_validator, boolean, timed, \
     OpenApiParameter, Integer, String, Boolean, \
     JsonValidator, ArrayValidator, StringValidator, BinaryStreamValidator, \
-    BinaryStreamResponseValidator
+    BinaryStreamResponseValidator, TextStreamValidator, EmptyBodyValidator
 
 from .util import requires_auth, requires_no_auth, \
     files_generator, files_generator_v2, ImageScaleType
 
-validate_mode = String().enum((CryptMode.none, CryptMode.client,
-                               CryptMode.server, CryptMode.system),
-                              case_sensitive=False) \
-                        .default(None) \
-                        .description("encryption mode")
+validate_mode = String() \
+                    .enum((CryptMode.none, CryptMode.client,
+                           CryptMode.server, CryptMode.system),
+                          case_sensitive=False) \
+                    .default(None) \
+                    .description("encryption mode")
+
+validate_mode_client = String() \
+                    .enum((CryptMode.none, CryptMode.client,
+                           CryptMode.server, CryptMode.system),
+                          case_sensitive=False) \
+                    .default(CryptMode.client) \
+                    .description("encryption mode")
+
+validate_mode_system = String() \
+                    .enum((CryptMode.none, CryptMode.client,
+                           CryptMode.server, CryptMode.system),
+                          case_sensitive=False) \
+                    .default(CryptMode.system) \
+                    .description("encryption mode")
+
 
 class EncryptionKeyValidator(object):
 
@@ -166,6 +182,7 @@ class FilesResource(WebResource):
     @put("public/<root>/path/<path:resPath>")
     @header("X-YUE-PASSWORD")
     @param("revoke", type_=Boolean().default(False))
+    @body(EmptyBodyValidator())
     @requires_auth("filesystem_write")
     def make_public(self, root, resPath):
         """
@@ -331,7 +348,7 @@ class FilesResource(WebResource):
         return jsonify(result="OK"), 200
 
     @get("user_key")
-    @param("mode", type_=validate_mode, default=CryptMode.client)
+    @param("mode", type_=validate_mode_client)
     @requires_auth("filesystem_write")
     def user_key(self):
         """
@@ -481,6 +498,7 @@ class NotesResource(WebResource):
     @param("base", type_=String().default('public/notes'))
     @param("title", type_=String().required())
     @header("X-YUE-PASSWORD")
+    @body(TextStreamValidator(), content_type='text/plain')
     @requires_auth("filesystem_write")
     def create_user_note(self):
 
@@ -514,10 +532,9 @@ class NotesResource(WebResource):
     @post("notes/<note_id>")
     @param("root", type_=String().default("default"))
     @param("base", type_=String().default('public/notes'))
-    @param("crypt", type_=validate_mode, doc="encryption mode",
-        default='system')
+    @param("crypt", type_=validate_mode_system)
     @header("X-YUE-PASSWORD")
-    @body(null_validator, content_type='text/plain')
+    @body(TextStreamValidator(), content_type='text/plain')
     @requires_auth("filesystem_write")
     def set_user_note_content(self, note_id):
         """convenience function wrapping file upload"""

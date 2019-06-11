@@ -82,7 +82,6 @@ from .resource.user_resource import UserResource
 from .resource.library_resource import LibraryResource
 from .resource.queue_resource import QueueResource
 from .resource.files_resource import FilesResource, NotesResource
-from .resource.gui_resource import AudioGuiResource
 
 class YueApp(FlaskApp):
     """docstring for YueApp"""

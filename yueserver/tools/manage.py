@@ -34,7 +34,7 @@ from ..resource.util import get_features
 from ..framework.client import cli_main
 from ..framework.application import FlaskAppClient
 from ..framework.crypto import CryptoManager
-from ..framework.openapi import OpenApi
+from ..framework.openapi import OpenApi, curldoc
 
 from pprint import pformat
 
@@ -369,6 +369,10 @@ def set_user_quota(args):
 def openapi_(args):
 
     app = YueApp(Config.null())
+
+    #curldoc(app, "http://localhost:4200")
+
+    #return
 
     openapi = OpenApi(app) \
            .description("API for user, file, and library management") \
