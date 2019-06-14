@@ -7,7 +7,10 @@ import logging
 from flask import jsonify, render_template, g, request
 
 from ..framework.web_resource import WebResource, \
-    body, returns, get, post, put, delete, httpError, JsonValidator
+    body, returns, get, post, put, delete, httpError, JsonValidator, \
+    send_generator
+
+from ..framework.openapi import curldoc
 
 from .util import requires_auth, requires_no_auth
 
@@ -52,9 +55,10 @@ class UserResource(WebResource):
         user_create - user can create new users
         user_power  - user can retrieve information on other users
     """
-    def __init__(self, user_service):
+    def __init__(self, app, user_service):
         super(UserResource, self).__init__("/api/user")
 
+        self.app = app
         self.user_service = user_service
 
     @post("login")
@@ -139,3 +143,13 @@ class UserResource(WebResource):
         user_info = self.user_service.listUser(userId)
 
         return jsonify(result=user_info)
+
+
+    @get('/api/doc')
+    @requires_auth()
+    def doc(self):
+
+        go = curldoc(self.app, 'https://localhost:4200')
+        return send_generator(go, 'doc.txt', attachment=False)
+
+

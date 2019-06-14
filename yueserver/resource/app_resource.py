@@ -5,13 +5,14 @@ A resource for serving the application bundle
 import os
 import logging
 
-from flask import jsonify, render_template, g, request, send_file, send_from_directory
+from flask import jsonify, render_template, g, request, \
+    send_file, send_from_directory
 
 from ..dao.library import Song
 from ..dao.util import parse_iso_format, pathCorrectCase, server_health
 
 from ..framework.web_resource import WebResource, \
-    get, post, put, delete, compressed, httpError
+    get, post, put, delete, compressed, httpError, send_generator
 
 from .util import requires_auth
 
@@ -75,4 +76,3 @@ class AppResource(WebResource):
         """
         base = os.path.join(os.getcwd(), ".well-known")
         return send_from_directory(base, path)
-

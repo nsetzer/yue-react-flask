@@ -119,7 +119,7 @@ def SecurityBasic(resource, scope, request):
 
         return True
     except Exception as e:
-        pass
+        logging.exception("Basic Authentication Failed")
 
     return False
 

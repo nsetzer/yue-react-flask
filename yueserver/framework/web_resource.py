@@ -173,11 +173,12 @@ def _endpoint_mapper(f):
                 type_, content_type = f._body
                 # logging.info("body: %s %s %s", type_, content_type, request.headers['Content-Type'])
                 content_type = request.headers.get('Content-Type')
+                accept = content_type.split(';')
                 # TODO: dispatch type_ based on the content type
                 #       allow a default type_ when mimetype is not available
-                if content_type == 'application/x-www-form-urlencoded':
+                if 'application/x-www-form-urlencoded' in accept:
                     g.body = type_(BytesIO(request.get_data()))
-                elif content_type == 'application/json':
+                elif 'application/json' in accept:
                     g.body = type_(request.get_json())
                 else:
                     g.body = type_(request.stream)
@@ -790,7 +791,6 @@ class Validator(object):
 
     def schema(self):
         raise NotImplementedError()
-
 
 class ArrayValidator(object):
     def __init__(self, object):

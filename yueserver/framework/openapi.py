@@ -2,9 +2,6 @@
 
 import sys
 
-from yueserver.app import YueApp, generate_client
-from yueserver.config import Config
-
 import json
 import http
 
@@ -319,10 +316,18 @@ class OpenApi(object):
 def curldoc(app, host):
 
     for endpoint in sorted(app._registered_endpoints_v2, key=lambda e: e.path):
+
+        if not endpoint.path.startswith('/api'):
+            continue
+
         for method in sorted(endpoint.methods):
 
-            print("\n\n%s" % endpoint.long_name)
+            yield "\n\n%s\n%s\n\n" % ('-' * 80, endpoint.long_name)
             cmd = []
+
+            if endpoint.auth:
+                cmd.append("-u")
+                cmd.append("username:password")
 
             cmd.append("-X")
             cmd.append(method)
@@ -337,7 +342,7 @@ def curldoc(app, host):
             mimeschema = {}
             if method in ('POST', 'PUT'):
 
-                cmd.append("-H")
+                cmd.append("\\\n  -H")
                 cmd.append("Content-Type='{Content-Type}'")
                 items = endpoint.body
 
@@ -371,25 +376,30 @@ def curldoc(app, host):
                             mimeschema[m] = schema
 
                 if binary:
-                    cmd.append("--data-binary")
+                    cmd.append("\\\n  --data-binary")
                 else:
-                    cmd.append("-d")
+                    cmd.append("\\\n  -d")
 
-                cmd.append("@'upload-file'")
+                cmd.append("'@{path}'")
 
             url = "%s%s" % (host, endpoint.path)
             if params:
                 url += '?' + '&'.join(params)
 
-            cmd.append("'%s'" % url)
+            cmd.append("\\\n  '%s'" % url)
 
-            print("curl %s" % (" ".join(cmd)))
+            yield "curl %s\n" % (" ".join(cmd))
+
+            if len(mimeschema) > 0:
+                yield "\nContent-Type:\n"
 
             for mimetype, schema in sorted(mimeschema.items()):
-                print("%s:" % mimetype)
+                yield "\n  %s:\n" % mimetype
                 s = json.dumps(schema, cls=ObjectEncoder, indent=2)
                 s = "    " + s.replace("\n", "\n    ")
-                print(s)
+                yield "%s\n" % s
+
+    yield("\n\n")
 
 
 

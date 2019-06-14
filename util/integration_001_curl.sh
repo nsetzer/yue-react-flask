@@ -22,6 +22,21 @@ function assert_fexists() {
     [ -e "$1" ] && echo "found: $1" || die "not found: $1"
 }
 
+#############################################################
+# create a new application database
+# start the server and wait for it to be ready to
+# accept connections
+python -m yueserver.tools.manage -p development create
+python -m yueserver.app -pdevelopment 2>server.err 1>server.log &
+APP_PID=$!
+trap "kill $APP_PID" SIGINT SIGTERM EXIT
+echo "waiting for server to start"
+sleep 3
+
+
+#############################################################
+# test setup
+
 api_txt_1="api/fs/default/path/curl/test1.txt"
 
 api_form_1="api/fs/default/path/curl/test1.form"
@@ -79,9 +94,9 @@ curl -v -u "$AUTH" "$HOST/$api_bin_2" -o "$out_bin_3"
 assert_fequal "${bin_file}" "${out_bin_3}"
 
 if cat "$out_bin_3.upload" | grep system; then
-    echo "remote file is encrypted"
+    echo "remote file is encrypted...success"
 else
-    die "remote file not encrypted"
+    die "remote file not encrypted...failure"
 fi
 
 #############################################################
