@@ -764,6 +764,46 @@ class Integer(OpenApiParameter):
         self.attrs["maximum"] = vmax
         return self
 
+class URI(String):
+
+    def __call__(self, s):
+
+        # https://en.wikipedia.org/wiki/Hostname
+
+        org = s
+
+        if s.startswith("http://"):
+            s = s.replace("http://", "")
+
+        elif s.startswith("https://"):
+            s = s.replace("https://", "")
+
+        if ':' in s:
+
+            s, p = s.split(':', 1)
+
+            try:
+                port = int(p)
+            except Exception as e:
+                port = 0
+
+            if port <= 0 or port > 65536:
+                raise Exception("Invalid URI 1")
+
+        if len(s.strip()) == 0:
+            return ""
+
+        # check that the hostname componenet is a dotted
+        # sequence of alphanumeric characters
+        if len(s) > 253:
+            raise Exception("Invalid URI 2")
+
+        for part in s.split('.'):
+            if len(s) > 63 or not part.isalnum():
+                raise Exception("Invalid URI 3")
+
+        return org
+
 class Validator(object):
     def __init__(self, mimetype=None):
         super(Validator, self).__init__()

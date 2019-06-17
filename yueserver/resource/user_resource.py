@@ -8,11 +8,12 @@ from flask import jsonify, render_template, g, request
 
 from ..framework.web_resource import WebResource, \
     body, returns, get, post, put, delete, httpError, JsonValidator, \
-    send_generator
+    send_generator, param, URI
 
 from ..framework.openapi import curldoc
 
 from .util import requires_auth, requires_no_auth
+
 
 class UserLoginValidator(JsonValidator):
 
@@ -144,12 +145,22 @@ class UserResource(WebResource):
 
         return jsonify(result=user_info)
 
-
     @get('/api/doc')
+    @param("hostname", type_=URI().default(""))
     @requires_auth()
     def doc(self):
+        """ construct curl documentation for endpoints
 
-        go = curldoc(self.app, 'https://localhost:4200')
+        hostname: the hostname to use in examples
+            if an empty string, the request url will be used
+        """
+
+        # production builds will send an empty string
+        # extract the scheme (http, https), hostname, and possibly port
+        # from the request
+        if not g.args.hostname:
+            g.args.hostname = request.url_root.rstrip('/')
+        go = curldoc(self.app, g.args.hostname)
         return send_generator(go, 'doc.txt', attachment=False)
 
 

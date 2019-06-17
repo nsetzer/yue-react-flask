@@ -193,16 +193,16 @@ class OpenApi(object):
         desc['security'] = _auth[endpoint.auth]
         desc['operationId'] = endpoint.long_name
 
-        path, desc['parameters'] = self._fmt_path(path)
+        path, desc['parameters'] = extract_path_parameters(path)
 
         sys.stderr.write("%-8s %s %s\n" % (method, 'FT'[endpoint.auth], path))
 
         for param in endpoint.params:
-            p = self._fmt_parameter("query", param)
+            p = extract_parameter("query", param)
             desc['parameters'].append(p)
 
         for param in endpoint.headers:
-            p = self._fmt_parameter("header", param)
+            p = extract_parameter("header", param)
             desc['parameters'].append(p)
 
         if method in ('POST', 'PUT'):
@@ -266,27 +266,30 @@ class OpenApi(object):
 
         return '#/components/schemas/' + model.name()
 
-    def _fmt_parameter(self, kind, param):
-        _type = param.type
-        if hasattr(_type, 'schema'):
-            return {
-                "in": kind,
-                "name": param.name,
-                "required": _type.getRequired(),
-                "description": _type.getDescription(),
-                "schema": _type.schema()
-            }
-        else:
-            sys.stderr.write("oldstyle parameter: %s\n" % param.name)
-            return {
-                "in": kind,
-                "name": param.name,
-                "required": param.required,
-                "description": param.doc,
-                "schema": {'type': 'string'}
-            }
+def extract_parameter(kind, param):
+    _type = param.type
+    if hasattr(_type, 'schema'):
 
-    def _fmt_path(self, path):
+        return {
+            "in": kind,
+            "name": param.name,
+            "required": _type.getRequired(),
+            "description": _type.getDescription(),
+            "schema": _type.schema()
+        }
+
+    else:
+        sys.stderr.write("oldstyle parameter: %s\n" % param.name)
+        return {
+            "in": kind,
+            "name": param.name,
+            "required": param.required,
+            "description": param.doc,
+            "schema": {'type': 'string'}
+        }
+
+
+def extract_path_parameters(path):
 
         parameters = []
         s = path.find('<')
@@ -312,6 +315,20 @@ class OpenApi(object):
 
         return path, parameters
 
+def fmtary(tab, width, prefix, suffix, sep, content):
+
+    s = tab + prefix
+
+    for item in content:
+        if len(s) + len(item) + len(sep) > width:
+            yield s + "\n"
+            s = tab
+
+        s += str(item) + sep
+
+    s += suffix
+
+    yield s + "\n"
 
 def curldoc(app, host):
 
@@ -332,12 +349,19 @@ def curldoc(app, host):
             cmd.append("-X")
             cmd.append(method)
 
+            path, param_p_defs = extract_path_parameters(endpoint.path)
+
             params = []
+            param_q_defs = []
             for param in endpoint.params:
                 params.append("%s={%s}" % (param.name, param.name))
+                param_q_defs.append(extract_parameter('query', param))
 
+            param_h_defs = []
             for param in endpoint.headers:
-                pass
+                cmd.append('\\\n  -H')
+                cmd.append('%s=\'{%s}\'' % (param.name, param.name))
+                param_h_defs.append(extract_parameter('header', param))
 
             mimeschema = {}
             if method in ('POST', 'PUT'):
@@ -382,13 +406,34 @@ def curldoc(app, host):
 
                 cmd.append("'@{path}'")
 
-            url = "%s%s" % (host, endpoint.path)
+            url = "%s%s" % (host, path)
             if params:
                 url += '?' + '&'.join(params)
 
             cmd.append("\\\n  '%s'" % url)
 
             yield "curl %s\n" % (" ".join(cmd))
+
+            for title, defs in [
+              ("Path Parameters", param_p_defs),
+              ("Query Parameters", param_q_defs),
+              ("Header Parameters", param_h_defs)]:
+
+                if len(defs):
+                    yield "\n%s:\n" % title
+                    for p in defs:
+
+                        print(p)
+                        if 'enum' in p['schema']:
+                            _type = 'enum'
+                        else:
+                            _type = p['schema']['type']
+
+                        yield("  %s - %s\n" % (p['name'], _type))
+
+                        if 'enum' in p['schema']:
+                            yield from fmtary("    ", 70,
+                                "{", "}", ", ", sorted(p['schema']['enum']))
 
             if len(mimeschema) > 0:
                 yield "\nContent-Type:\n"
