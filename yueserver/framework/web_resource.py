@@ -128,8 +128,11 @@ def _endpoint_mapper(f):
                         "required query parameter `%s` not found" % param.name)
 
                 # validate the query parameter and add it to the request args
+
                 try:
-                    if param.name in request.args:
+                    if param.repeated:
+                        value = [param.type(v) for v in request.args.getlist(param.name)]
+                    elif param.name in request.args:
                         value = param.type(request.args[param.name])
                     else:
                         value = param.default
@@ -292,9 +295,13 @@ def param(name, type_=str):
 
         if isinstance(type_, OpenApiParameter):
             f._params.append(Parameter(name, type_,
-                type_.getDefault(), type_.getRequired(), type_.getDescription()))
+                type_.getDefault(),
+                type_.getRequired(),
+                type_.getRepeated(),
+                type_.getDescription()))
         else:
-            f._params.append(Parameter(name, type_, default, required, doc))
+            # f._params.append(Parameter(name, type_, default, False, False, doc))
+            raise TypeError("%s" % type_)
         return f
     return decorator
 
@@ -307,7 +314,7 @@ def header(name, type_=None, default=None, required=False, doc=""):
     def decorator(f):
         if not hasattr(f, "_headers"):
             f._headers = []
-        f._headers.append(Parameter(name, type_, default, required, doc))
+        f._headers.append(Parameter(name, type_, default, required, False, doc))
         return f
     return decorator
 
@@ -648,14 +655,20 @@ class OpenApiParameter(object):
         self._required = False
         self._description = ""
         self._case_sensitive = False
+        self._repeated = False
 
     def __call__(self, obj):
         raise NotImplementedError()
 
     def schema(self):
         obj = dict(self.attrs)
+
+        if self._repeated:
+            obj['type'] = 'array'
+            obj['items'] = {'type': self.attrs['type']}
+
         if self._default is not None:
-            obj['default'] = self._default
+          obj['default'] = self._default
         return obj
 
     def default(self, value):
@@ -682,6 +695,16 @@ class OpenApiParameter(object):
 
     def getRequired(self):
         return self._required
+
+    def repeated(self, value=True):
+        """
+        the query parameter can be given multiple times
+        """
+        self._repeated = value
+        return self
+
+    def getRepeated(self):
+        return self._repeated
 
     def enum(self, value, case_sensitive=False):
 

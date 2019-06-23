@@ -268,6 +268,7 @@ class OpenApi(object):
 
 def extract_parameter(kind, param):
     _type = param.type
+
     if hasattr(_type, 'schema'):
 
         return {
@@ -318,13 +319,19 @@ def extract_path_parameters(path):
 def fmtary(tab, width, prefix, suffix, sep, content):
 
     s = tab + prefix
-
+    first = True
     for item in content:
         if len(s) + len(item) + len(sep) > width:
-            yield s + "\n"
+            yield s + sep + "\n "
+            first = True
             s = tab
 
-        s += str(item) + sep
+        if first:
+            first = False
+        else:
+            s += sep
+
+        s += str(item)
 
     s += suffix
 
@@ -354,7 +361,7 @@ def curldoc(app, host):
             params = []
             param_q_defs = []
             for param in endpoint.params:
-                params.append("%s={%s}" % (param.name, param.name))
+                params.append("'\\\n    '%s={%s}" % (param.name, param.name))
                 param_q_defs.append(extract_parameter('query', param))
 
             param_h_defs = []
@@ -422,8 +429,6 @@ def curldoc(app, host):
                 if len(defs):
                     yield "\n%s:\n" % title
                     for p in defs:
-
-                        print(p)
                         if 'enum' in p['schema']:
                             _type = 'enum'
                         else:

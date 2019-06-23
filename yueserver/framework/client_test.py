@@ -15,7 +15,7 @@ from .client import (split_auth, AuthenticatedRestClient,
 test_endpoints = [
     RegisteredEndpoint("/api/get_json", "TestResource.get_json",
         "test doc", ['GET'],
-        [Parameter("align", str, "left", False, "")], [], (None, None), None, None, None),
+        [Parameter("align", str, "left", False, False, "")], [], (None, None), None, None, None),
     RegisteredEndpoint("/api/put_json", "TestResource.put_json",
         "test doc", ['PUT'], [], [], ('json', 'application/json'), None, None, None),
     RegisteredEndpoint("/api/post_json", "TestResource.post_json",
@@ -27,7 +27,7 @@ test_endpoints = [
     # same as get_json, with a required query parameter
     RegisteredEndpoint("/api/get_json_2", "TestResource.get_json_2",
         "test doc", ['GET'],
-        [Parameter("align", str, "left", True, "")], [], (None, None), None, None, None),
+        [Parameter("align", str, "left", True, False, "")], [], (None, None), None, None, None),
 
     RegisteredEndpoint("/api/user/<user>", "TestResource.get_user",
         "test doc", ['GET'], [], [], (None, None), None, None, None),

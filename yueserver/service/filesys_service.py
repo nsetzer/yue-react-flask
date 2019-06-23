@@ -300,7 +300,6 @@ class FileSysService(object):
 
         return obj
 
-
     def loadPublicFile(self, fileId, password=None):
 
         # validate that the given password is correct
@@ -512,6 +511,32 @@ class FileSysService(object):
         src = self.getFilePath(user, fs_name, srcPath.lstrip('/'))
         dst = self.getFilePath(user, fs_name, dstPath.lstrip('/'))
         return self.storageDao.moveFileLocation(user['id'], fs_id, src, dst)
+
+    def search(self, user, fs_name, fs_path, name_parts, limit=None, offset=None):
+        """
+        fs_name: the file system root to search
+        fs_path: path prefix or None
+        name_parts: a list of file names or partial file names to search for
+        """
+
+        fs_id = self.storageDao.getFilesystemId(
+            user['id'], user['role_id'], fs_name)
+
+        records = self.storageDao.searchByFileName(
+            user['id'], fs_id, name_parts, limit, offset)
+
+        files = []
+        for record in records:
+            files.append({"name": record.name,
+                          "file_path": record.file_path[1:],
+                          "size": record.size,
+                          "mtime": record.mtime,
+                          "permission": record.permission,
+                          "version": record.version,
+                          "public": record.public,
+                          "encryption": record.encryption})
+
+        return files
 
     def getUserQuota(self, user):
 

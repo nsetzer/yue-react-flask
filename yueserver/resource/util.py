@@ -142,7 +142,7 @@ def SecurityToken(resource, scope, request):
 
         return True
     except Exception as e:
-        pass
+        logging.exception("token error: %s" % e)
 
     return False
 
@@ -179,7 +179,9 @@ def requires_no_auth(f):
 
 def requires_auth(features=None):
 
-    if isinstance(features, str):
+    if features is None:
+        features = []
+    elif isinstance(features, str):
         features = [features]
     __add_feature(features)
 

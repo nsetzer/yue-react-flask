@@ -309,6 +309,22 @@ class FilesResource(WebResource):
 
         return jsonify(result="OK"), 200
 
+    @get("<root>/search")
+    @param("path", type_=String().default(None))
+    @param("terms", type_=String().default("").repeated())
+    @param("limit", type_=Integer().min(0).max(2500).default(50))
+    @param("page", type_=Integer().min(0).default(0))
+    @requires_auth("filesystem_read")
+    def search(self, root):
+
+        limit = g.args.limit
+        offset = g.args.limit * g.args.page
+
+        records = self.filesys_service.search(
+            g.current_user, root, g.args.path, g.args.terms, limit, offset)
+
+        return jsonify(result={'files': records})
+
     @get("roots")
     @requires_auth("filesystem_read")
     def get_roots(self):

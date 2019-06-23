@@ -260,7 +260,7 @@ class UserService(object):
 
     def _validate_features(self, user_data, features=None):
 
-        if features is not None:
+        if features is not None and features:
             if not self._validate_user_feature(user_data, features[0]):
                 raise UserException(
                     "failed to authenticate user %s with feature %s" % (

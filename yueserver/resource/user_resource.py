@@ -159,7 +159,12 @@ class UserResource(WebResource):
         # extract the scheme (http, https), hostname, and possibly port
         # from the request
         if not g.args.hostname:
-            g.args.hostname = request.url_root.rstrip('/')
+            g.args.hostname = request.url_root
+            # nginx may add a comma separated set of hostnames
+            if ',' in g.args.hostname:
+                g.args.hostname = g.args.hostname.split(',')[0]
+
+        g.args.hostname = g.args.hostname.rstrip('/')
         go = curldoc(self.app, g.args.hostname)
         return send_generator(go, 'doc.txt', attachment=False)
 

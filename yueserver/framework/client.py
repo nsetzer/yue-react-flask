@@ -30,7 +30,7 @@ RegisteredEndpoint = namedtuple('RegisteredEndpoint',
 ##
 # A tuple describing a query parameter
 Parameter = namedtuple('Parameter',
-    ['name', 'type', 'default', 'required', 'doc'])
+    ['name', 'type', 'default', 'required', 'repeated', 'doc'])
 
 def split_auth(authas):
     """ parse a string into authorization parts
