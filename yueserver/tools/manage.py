@@ -644,7 +644,7 @@ def main():
     fssubparsers = parser_fs.add_subparsers()
 
     parser_fs_copy = fssubparsers.add_parser('cp',
-        help='copy files')
+        help='copy files e.g. s3://bucket/key or ./path/to/file')
     parser_fs_copy.add_argument('src', type=str, nargs="+",
         help='file(s) to copy')
     parser_fs_copy.add_argument('dst', type=str,

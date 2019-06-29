@@ -14,7 +14,7 @@ from ..dao.exception import BackendException
 
 from ..service.exception import ServiceException
 
-from ..framework.web_resource import httpError, ArrayValidator, OpenApiParameter
+from ..framework.web_resource import httpError, ArrayOpenApiBody, OpenApiParameter
 from ..service.transcode_service import ImageScale
 
 class HttpException(Exception):
@@ -224,7 +224,7 @@ def search_order_validator(s):
         return s
     raise Exception("Invalid column name")
 
-class UUIDValidator(object):
+class UUIDOpenApiBody(object):
 
     def __init__(self):
         super()
@@ -242,7 +242,7 @@ class UUIDValidator(object):
         return uuid_string
 
     def name(self):
-        return self.__class__.__name__.replace("Validator", "")
+        return self.__class__.__name__.replace("OpenApiBody", "")
 
     def mimetype(self):
         return "application/json"
@@ -250,8 +250,8 @@ class UUIDValidator(object):
     def type(self):
         return "string"
 
-uuid_validator = UUIDValidator()
-uuid_list_validator = ArrayValidator(uuid_validator)
+uuid_validator = UUIDOpenApiBody()
+uuid_list_validator = ArrayOpenApiBody(uuid_validator)
 
 def files_generator(fs, filepath, buffer_size=2048):
 

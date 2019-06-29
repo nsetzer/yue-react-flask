@@ -17,7 +17,7 @@ from ..framework.web_resource import WebResource, \
     get, post, put, delete, param, body, compressed, httpError, \
     int_range, int_min, send_generator, null_validator, \
     OpenApiParameter, Integer, String, Boolean, \
-    JsonValidator, ArrayValidator, StringValidator
+    JsonOpenApiBody, ArrayOpenApiBody, StringOpenApiBody
 
 from .util import requires_auth, DateTimeType, files_generator, \
     ImageScaleType
@@ -44,7 +44,7 @@ class SearchOrderType(String):
 
         return super().__call__(s)
 
-class NewSongValidator(JsonValidator):
+class NewSongOpenApiBody(JsonOpenApiBody):
 
     def model(self):
 
@@ -64,7 +64,7 @@ class NewSongValidator(JsonValidator):
 
         return model
 
-class UpdateSongValidator(JsonValidator):
+class UpdateSongOpenApiBody(JsonOpenApiBody):
 
     def model(self):
 
@@ -84,7 +84,7 @@ class UpdateSongValidator(JsonValidator):
 
         return model
 
-class SongResourcePathValidator(JsonValidator):
+class SongResourcePathOpenApiBody(JsonOpenApiBody):
 
     def model(self):
 
@@ -93,7 +93,7 @@ class SongResourcePathValidator(JsonValidator):
             "path": {"type": "string", "required": True}
         }
 
-class SongHistoryValidator(JsonValidator):
+class SongHistoryOpenApiBody(JsonOpenApiBody):
     def model(self):
 
         return {
@@ -152,7 +152,7 @@ class LibraryResource(WebResource):
         })
 
     @put("")
-    @body(ArrayValidator(UpdateSongValidator()))
+    @body(ArrayOpenApiBody(UpdateSongOpenApiBody()))
     @requires_auth("library_write")
     def update_song(self):
 
@@ -168,7 +168,7 @@ class LibraryResource(WebResource):
         return jsonify(result="OK"), 200
 
     @post("")
-    @body(NewSongValidator())
+    @body(NewSongOpenApiBody())
     @requires_auth("library_write")
     def create_song(self):
 
@@ -237,7 +237,7 @@ class LibraryResource(WebResource):
         return send_generator(go, name, file_size=size)
 
     @post("<song_id>/audio")
-    @body(SongResourcePathValidator())
+    @body(SongResourcePathOpenApiBody())
     @requires_auth("library_write_song")
     def set_song_audio(self, song_id):
 
@@ -270,7 +270,7 @@ class LibraryResource(WebResource):
         return send_generator(go, record.name, file_size=record.size)
 
     @post("<song_id>/art")
-    @body(SongResourcePathValidator())
+    @body(SongResourcePathOpenApiBody())
     @requires_auth("library_write_song")
     def set_song_art(self, song_id):
 
@@ -280,7 +280,7 @@ class LibraryResource(WebResource):
         return jsonify(result="OK"), 200
 
     @post("history/increment")
-    @body(ArrayValidator(StringValidator()))
+    @body(ArrayOpenApiBody(StringOpenApiBody()))
     @requires_auth("library_write_song")
     def increment_playcount(self):
         """
@@ -340,7 +340,7 @@ class LibraryResource(WebResource):
         })
 
     @post("history")
-    @body(ArrayValidator(SongHistoryValidator()))
+    @body(ArrayOpenApiBody(SongHistoryOpenApiBody()))
     @requires_auth("user_write")
     def update_history(self):
         """

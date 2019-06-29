@@ -14,7 +14,7 @@ from ..dao.shuffle import binshuffle
 
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, compressed, httpError, param, body, \
-    int_range, int_min, String, Integer, EmptyBodyValidator
+    int_range, int_min, String, Integer, EmptyBodyOpenApiBody
 
 from .util import requires_auth, search_order_validator, \
     uuid_validator, uuid_list_validator
@@ -79,7 +79,7 @@ class QueueResource(WebResource):
         return jsonify(result=qstr)
 
     @post("query")
-    @body(EmptyBodyValidator())
+    @body(EmptyBodyOpenApiBody())
     @requires_auth("user_write")
     def set_default_queue(self):
 

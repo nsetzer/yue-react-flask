@@ -7,7 +7,7 @@ import logging
 from flask import jsonify, render_template, g, request
 
 from ..framework.web_resource import WebResource, \
-    body, returns, get, post, put, delete, httpError, JsonValidator, \
+    body, returns, get, post, put, delete, httpError, JsonOpenApiBody, \
     send_generator, param, URI
 
 from ..framework.openapi import curldoc
@@ -15,7 +15,7 @@ from ..framework.openapi import curldoc
 from .util import requires_auth, requires_no_auth
 
 
-class UserLoginValidator(JsonValidator):
+class UserLoginOpenApiBody(JsonOpenApiBody):
 
     def model(self):
         return {
@@ -23,14 +23,14 @@ class UserLoginValidator(JsonValidator):
             "password": {"type": "string", "format": "password", "required": True},
         }
 
-class UserTokenValidator(JsonValidator):
+class UserTokenOpenApiBody(JsonOpenApiBody):
 
     def model(self):
         return {
             "token": {"type": "string", "required": True},
         }
 
-class UserCreateValidator(JsonValidator):
+class UserCreateOpenApiBody(JsonOpenApiBody):
 
     def model(self):
         return {
@@ -40,7 +40,7 @@ class UserCreateValidator(JsonValidator):
             "role": {"type": "string", "required": True},
         }
 
-class UserPasswordValidator(JsonValidator):
+class UserPasswordOpenApiBody(JsonOpenApiBody):
 
     def model(self):
         return {
@@ -64,7 +64,7 @@ class UserResource(WebResource):
 
     @post("login")
     @requires_no_auth
-    @body(UserLoginValidator())
+    @body(UserLoginOpenApiBody())
     @returns([200, 400, 401])
     def login_user(self):
 
@@ -75,7 +75,7 @@ class UserResource(WebResource):
 
     @post("token")
     @requires_no_auth
-    @body(UserTokenValidator())
+    @body(UserTokenOpenApiBody())
     @returns([200, 400, 401])
     def is_token_valid(self):
 
@@ -95,7 +95,7 @@ class UserResource(WebResource):
 
     @post("create")
     @requires_auth("user_create")
-    @body(UserCreateValidator())
+    @body(UserCreateOpenApiBody())
     @returns([200, 400, 401, 404])
     def create_user(self):
         """
@@ -115,7 +115,7 @@ class UserResource(WebResource):
 
     @put("password")
     @requires_auth("user_write")
-    @body(UserPasswordValidator())
+    @body(UserPasswordOpenApiBody())
     @returns([200, 401])
     def change_password(self):
 

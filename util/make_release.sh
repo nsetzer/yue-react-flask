@@ -7,9 +7,13 @@ mkdir -p dist
 cat <<EOF > backupdb.sh
 #!/bin/bash
 # backup:
-# $0 $dbuser $bucket
+# $0 $profile $dbuser $bucket
 # restore:
 # cat backup/backup-\$(date "+%y-%m-%d-%H-%M-%S").gz.* | gunzip | sudo -u yueapp psql yueapp
+
+if [ "$#" -ne 3 ];
+    echo "$0 profile dbuser bucket"
+fi
 
 cd \$(dirname \$0)
 profile=\$1

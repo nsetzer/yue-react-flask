@@ -1,0 +1,3 @@
+[submodule "react-native-web"]
+	path = react-native-web
+	url = https://github.com/nsetzer/react-native-web.git

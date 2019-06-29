@@ -795,11 +795,13 @@ class URI(String):
 
         org = s
 
-        if s.startswith("http://"):
-            s = s.replace("http://", "")
+        for prefix in ("http://", "https://"):
+            if s.startswith(prefix):
+                s = s[len(prefix):]
+                break
 
-        elif s.startswith("https://"):
-            s = s.replace("https://", "")
+        if '/' in s:
+            s, path = s.split('/', 1)
 
         if ':' in s:
 
@@ -811,32 +813,32 @@ class URI(String):
                 port = 0
 
             if port <= 0 or port > 65536:
-                raise Exception("Invalid URI 1")
+                raise Exception("Invalid URI: port out of range")
 
         if len(s.strip()) == 0:
             return ""
 
-        # check that the hostname componenet is a dotted
+        # check that the hostname component is a dotted
         # sequence of alphanumeric characters
         if len(s) > 253:
-            raise Exception("Invalid URI 2")
+            raise Exception("Invalid URI: hostname too long")
 
         for part in s.split('.'):
             if len(s) > 63 or not part.isalnum():
-                raise Exception("Invalid URI 3")
+                raise Exception("Invalid URI: component part too long")
 
         return org
 
-class Validator(object):
+class OpenApiBody(object):
     def __init__(self, mimetype=None):
-        super(Validator, self).__init__()
+        super(OpenApiBody, self).__init__()
         self._mimetype = mimetype
 
         # todo legacy endpoint support
         self.__name__ = self.__class__.__name__
 
     def name(self):
-        return self.__class__.__name__.replace("Validator", "")
+        return self.__class__.__name__.replace("OpenApiBody", "")
 
     def __call__(self, obj):
         raise NotImplementedError()
@@ -855,7 +857,7 @@ class Validator(object):
     def schema(self):
         raise NotImplementedError()
 
-class ArrayValidator(object):
+class ArrayOpenApiBody(OpenApiBody):
     def __init__(self, object):
         super()
         self.__name__ = self.__class__.__name__
@@ -872,7 +874,7 @@ class ArrayValidator(object):
         return obj
 
     def name(self):
-        return self.object.name() + self.__class__.__name__.replace("Validator", "")
+        return self.object.name() + self.__class__.__name__.replace("OpenApiBody", "")
 
     def mimetype(self):
         return "application/json"
@@ -897,7 +899,7 @@ class ArrayValidator(object):
 
         return obj
 
-class StringValidator(Validator):
+class StringOpenApiBody(OpenApiBody):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -914,7 +916,7 @@ class StringValidator(Validator):
     def type(self):
         return "string"
 
-class JsonValidator(Validator):
+class JsonOpenApiBody(OpenApiBody):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -927,7 +929,7 @@ class JsonValidator(Validator):
         return obj
 
     def name(self):
-        return self.__class__.__name__.replace("Validator", "")
+        return self.__class__.__name__.replace("OpenApiBody", "")
 
     def mimetype(self):
         return "application/json"
@@ -935,7 +937,7 @@ class JsonValidator(Validator):
     def type(self):
         return "object"
 
-class EmptyBodyValidator(Validator):
+class EmptyBodyOpenApiBody(OpenApiBody):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -949,7 +951,7 @@ class EmptyBodyValidator(Validator):
     def type(self):
         return "stream"
 
-class TextStreamValidator(Validator):
+class TextStreamOpenApiBody(OpenApiBody):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -963,7 +965,7 @@ class TextStreamValidator(Validator):
     def type(self):
         return "stream"
 
-class BinaryStreamValidator(Validator):
+class BinaryStreamOpenApiBody(OpenApiBody):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -977,7 +979,7 @@ class BinaryStreamValidator(Validator):
     def type(self):
         return "stream"
 
-class BinaryStreamResponseValidator(Validator):
+class BinaryStreamResponseOpenApiBody(OpenApiBody):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

@@ -20,8 +20,8 @@ from ..framework.web_resource import WebResource, returns, \
     get, post, put, delete, body, header, compressed, param, httpError, \
     int_range, int_min, send_generator, null_validator, boolean, timed, \
     OpenApiParameter, Integer, String, Boolean, \
-    JsonValidator, ArrayValidator, StringValidator, BinaryStreamValidator, \
-    BinaryStreamResponseValidator, TextStreamValidator, EmptyBodyValidator
+    JsonOpenApiBody, ArrayOpenApiBody, StringOpenApiBody, BinaryStreamOpenApiBody, \
+    BinaryStreamResponseOpenApiBody, TextStreamOpenApiBody, EmptyBodyOpenApiBody
 
 from .util import requires_auth, requires_no_auth, \
     files_generator, files_generator_v2, ImageScaleType
@@ -48,7 +48,7 @@ validate_mode_system = String() \
                     .description("encryption mode")
 
 
-class EncryptionKeyValidator(object):
+class EncryptionKeyOpenApiBody(object):
 
     def __init__(self):
         super()
@@ -66,7 +66,7 @@ class EncryptionKeyValidator(object):
         return validatekey(text)
 
     def name(self):
-        return self.__class__.__name__.replace("Validator", "")
+        return self.__class__.__name__.replace("OpenApiBody", "")
 
     def mimetype(self):
         return "text/plain"
@@ -74,7 +74,7 @@ class EncryptionKeyValidator(object):
     def type(self):
         return "string"
 
-class MoveFileValidator(JsonValidator):
+class MoveFileOpenApiBody(JsonOpenApiBody):
 
     def model(self):
 
@@ -125,7 +125,7 @@ class FilesResource(WebResource):
     @header("X-YUE-PASSWORD")
     @requires_auth("filesystem_read")
     @param("dl", type_=Boolean().default(True))
-    @returns({200: BinaryStreamResponseValidator()})
+    @returns({200: BinaryStreamResponseOpenApiBody()})
     @timed(100)
     def get_path(self, root, resPath):
         password = g.headers.get('X-YUE-PASSWORD', None)
@@ -182,7 +182,7 @@ class FilesResource(WebResource):
     @put("public/<root>/path/<path:resPath>")
     @header("X-YUE-PASSWORD")
     @param("revoke", type_=Boolean().default(False))
-    @body(EmptyBodyValidator())
+    @body(EmptyBodyOpenApiBody())
     @requires_auth("filesystem_write")
     def make_public(self, root, resPath):
         """
@@ -250,7 +250,7 @@ class FilesResource(WebResource):
     @param("version", type_=Integer().default(0).description("file version"))
     @param("crypt", type_=validate_mode)
     @header("X-YUE-PASSWORD")
-    @body(BinaryStreamValidator(),
+    @body(BinaryStreamOpenApiBody(),
           content_type="application/octet-stream")
     @returns([200, 400, 401, 409])
     @requires_auth("filesystem_write")
@@ -297,7 +297,7 @@ class FilesResource(WebResource):
         return jsonify(result="OK")
 
     @post("<root>/move")
-    @body(MoveFileValidator())
+    @body(MoveFileOpenApiBody())
     @requires_auth("filesystem_write")
     def move_file(self, root):
         """
@@ -341,7 +341,7 @@ class FilesResource(WebResource):
     @put("change_password")
     @header("X-YUE-PASSWORD")
     @requires_auth("filesystem_write")
-    @body(StringValidator(mimetype="application/octet-stream"), content_type="application/octet-stream")
+    @body(StringOpenApiBody(mimetype="application/octet-stream"), content_type="application/octet-stream")
     def change_password(self):
         """
         change the 'server' encryption key
@@ -379,7 +379,7 @@ class FilesResource(WebResource):
 
     @put("user_key")
     @requires_auth("filesystem_write")
-    @body(EncryptionKeyValidator(), content_type="text/plain")
+    @body(EncryptionKeyOpenApiBody(), content_type="text/plain")
     def set_user_key(self):
         """
         set the 'client' encryption key
@@ -514,7 +514,7 @@ class NotesResource(WebResource):
     @param("base", type_=String().default('public/notes'))
     @param("title", type_=String().required())
     @header("X-YUE-PASSWORD")
-    @body(TextStreamValidator(), content_type='text/plain')
+    @body(TextStreamOpenApiBody(), content_type='text/plain')
     @requires_auth("filesystem_write")
     def create_user_note(self):
 
@@ -550,7 +550,7 @@ class NotesResource(WebResource):
     @param("base", type_=String().default('public/notes'))
     @param("crypt", type_=validate_mode_system)
     @header("X-YUE-PASSWORD")
-    @body(TextStreamValidator(), content_type='text/plain')
+    @body(TextStreamOpenApiBody(), content_type='text/plain')
     @requires_auth("filesystem_write")
     def set_user_note_content(self, note_id):
         """convenience function wrapping file upload"""
