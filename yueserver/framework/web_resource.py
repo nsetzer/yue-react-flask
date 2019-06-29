@@ -176,15 +176,35 @@ def _endpoint_mapper(f):
                 type_, content_type = f._body
                 # logging.info("body: %s %s %s", type_, content_type, request.headers['Content-Type'])
                 content_type = request.headers.get('Content-Type')
-                accept = content_type.split(';')
+                content_type = content_type.split(';')
                 # TODO: dispatch type_ based on the content type
                 #       allow a default type_ when mimetype is not available
-                if 'application/x-www-form-urlencoded' in accept:
-                    g.body = type_(BytesIO(request.get_data()))
-                elif 'application/json' in accept:
+                print(type_.mimetype(), content_type)
+                print(type_.mimetype(), content_type)
+
+                mimetypes = type_.mimetype()
+                if isinstance(mimetypes, str):
+                    mimetypes = [mimetypes]
+
+                req_is_json = 'application/json' in content_type
+                req_requires_json = 'application/json' in mimetypes
+
+                if req_is_json and req_requires_json:
+                    # only decode request as json if we are given json
+                    # and the request method is expecting json
                     g.body = type_(request.get_json())
                 else:
-                    g.body = type_(request.stream)
+                    # support for curl/form encoded data
+                    if 'application/x-www-form-urlencoded' in content_type:
+                        # as of python 3.4 BytesIO defers a data copy
+                        # until the data is mutated
+                        data_stream = BytesIO(request.get_data())
+                    else:
+                        # support streaming uploads
+                        data_stream = request.stream
+
+                    g.body = type_(data_stream)
+
             except Exception as e:
                 logging.exception("unable to validate body")
                 return httpError(400, "unable to validate body")
