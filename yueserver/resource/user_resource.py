@@ -8,7 +8,7 @@ from flask import jsonify, render_template, g, request
 
 from ..framework.web_resource import WebResource, \
     body, returns, get, post, put, delete, httpError, JsonOpenApiBody, \
-    send_generator, param, URI
+    send_generator, param, URI, Integer
 
 from ..framework.openapi import curldoc
 
@@ -46,6 +46,18 @@ class UserPasswordOpenApiBody(JsonOpenApiBody):
         return {
             "password": {"type": "string", "format": "password", "required": True},
         }
+
+class UUIDTokenOpenApiBody(JsonOpenApiBody):
+
+    def model(self):
+
+        model = {
+            "result": {
+                "X-TOKEN": {"type": "string"}
+            }
+        }
+
+        return model
 
 class UserResource(WebResource):
     """UserResource
@@ -92,6 +104,15 @@ class UserResource(WebResource):
     def get_user(self):
         info = self.user_service.listUser(g.current_user['id'])
         return jsonify(result=info)
+
+    @get("token")
+    @param("expiry", type_=Integer().default(2 * 60 * 60))
+    @requires_auth("user_read")
+    @returns({200: UUIDTokenOpenApiBody()})
+    def get_uuid_token(self):
+        token = self.user_service.generateUUIDToken(
+            g.current_user, g.args.expiry)
+        return jsonify(result={"X-TOKEN": token})
 
     @post("create")
     @requires_auth("user_create")

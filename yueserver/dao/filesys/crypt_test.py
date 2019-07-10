@@ -1,13 +1,17 @@
 
 import unittest
 import io
+import uuid
+import time
+import base64
 
 from .crypt import \
     FileEncryptorWriter, FileEncryptorReader, \
     FileDecryptorWriter, FileDecryptorReader, \
     cryptkey, decryptkey, recryptkey, validatekey, \
     new_stream_cipher, get_stream_cipher, \
-    KEY_LENGTH, KEY_LENGTH_PARTS
+    KEY_LENGTH, KEY_LENGTH_PARTS, \
+    uuid_token_generate, uuid_token_verify
 
 class CryptTestCase(unittest.TestCase):
 
@@ -217,6 +221,66 @@ class CryptTestCase(unittest.TestCase):
             key[1] = '$2b$' + key[1][4:]
             key = ':'.join(key)
             validatekey(key + '0')
+
+    def test_uuidtok_1(self):
+
+        key = b"\x00" * 16
+        now = int(time.time())
+        uuid_str = str(uuid.uuid4())
+        token = uuid_token_generate(key, uuid_str, now=now)
+        uuid_out = uuid_token_verify(key, token)
+
+        self.assertEqual(uuid_str, uuid_out)
+
+    def test_uuidtok_2_expires(self):
+
+        # a token generated 4 weeks ago with  a 2 week expiry should
+        # fail to validate
+        key = b"\x00" * 16
+        now = int(time.time()) - 4 * 7 * 24 * 60 * 60
+        uuid_str = str(uuid.uuid4())
+        token = uuid_token_generate(key, uuid_str, now=now)
+
+        with self.assertRaises(ValueError):
+            uuid_out = uuid_token_verify(key, token)
+
+    def test_uuidtok_3_version(self):
+
+        # a token generated 4 weeks ago with  a 2 week expiry should
+        # fail to validate
+        key = b"\x00" * 16
+        now = int(time.time())
+        uuid_str = str(uuid.uuid4())
+        token = uuid_token_generate(key, uuid_str, now=now)
+
+        with self.assertRaises(ValueError) as e:
+            # modify the encrypted data
+            data = base64.b64decode(token.encode("ascii") + b'==', b'-+')
+            data = b'2' + data[1:]
+            token = base64.b64encode(data, b'-+').decode("ascii").rstrip('==')
+            uuid_out = uuid_token_verify(key, token)
+
+        self.assertEqual(str(e.exception), 'Invalid token version')
+
+    def test_uuidtok_4_mac(self):
+
+        # a token generated 4 weeks ago with  a 2 week expiry should
+        # fail to validate
+        key = b"\x00" * 16
+        now = int(time.time())
+        uuid_str = str(uuid.uuid4())
+        token = uuid_token_generate(key, uuid_str, now=now)
+
+        with self.assertRaises(ValueError) as e:
+            # modify the encrypted data
+            data = base64.b64decode(token.encode("ascii") + b'==', b'-+')
+            data = data[:5] + data[5:].upper()
+            token = base64.b64encode(data, b'-+').decode("ascii").rstrip('==')
+            uuid_out = uuid_token_verify(key, token)
+
+        self.assertEqual(str(e.exception), 'MAC check failed')
+
+
 
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(CryptTestCase)

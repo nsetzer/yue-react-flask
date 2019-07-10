@@ -172,6 +172,23 @@ def SecurityApiKey(resource, scope, request):
 
     return False
 
+def SecurityUUIDToken(resource, scope, request):
+
+    token = request.headers.get("X-TOKEN")
+
+    if token is None:
+        return False
+
+    try:
+        service = resource.user_service
+        g.current_user = service.getUserFromUUIDToken(token, scope)
+
+        return True
+    except Exception as e:
+        pass
+
+    return False
+
 def requires_no_auth(f):
     f._auth = False
     f._handlers = _handlers
@@ -188,7 +205,12 @@ def requires_auth(features=None):
     def impl(f):
         f._auth = True
         f._scope = features
-        f._security = [SecurityBasic, SecurityApiKey, SecurityToken]
+        f._security = [
+            SecurityBasic,
+            SecurityApiKey,
+            SecurityToken,
+            SecurityUUIDToken
+        ]
         f._handlers = _handlers
 
         return f

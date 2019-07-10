@@ -233,6 +233,43 @@ class UserResourceTestCase(unittest.TestCase):
             self.assertTrue('roles' in domain_info)
             self.assertTrue('users' in domain_info)
 
+    def test_uuid_token_login(self):
+        """ show that a user can log in, and make requests
+        """
+        two_weeks = 2 * 7 * 24 * 60 * 60
+        token = self.app.user_service.generateUUIDToken(self.app.USER, two_weeks)
+        headers = {"X-TOKEN": token}
+
+        with self.app.test_client() as app:
+            result = app.get('/api/user',
+                             headers=headers)
+            self.assertEqual(result.status_code, 200, result)
+            data = json.loads(result.data.decode("utf-8"))
+
+            self.assertTrue("result" in data)
+
+            user_info = data['result']
+
+            self.assertTrue('email' in user_info)
+            #an apikey is needed by non-clients
+            self.assertTrue('apikey' in user_info)
+            print(user_info)
+            # self.assertEqual(user_info['email'], username)
+
+    def test_uuid_token_create(self):
+        """ show that a user can log in, and make requests
+        """
+        username = "user000"
+        token = self.app.user_service.loginUser(username, username)
+        headers = {"Authorization": token}
+
+        with self.app.test_client() as app:
+            result = app.get('/api/user/token',
+                             headers=headers)
+            self.assertEqual(result.status_code, 200, result)
+            data = json.loads(result.data.decode("utf-8"))
+
+            self.assertTrue('X-TOKEN' in data['result'])
 
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(UserResourceTestCase)
