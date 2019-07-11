@@ -25,7 +25,7 @@ class BaseConfig(object):
             for k in keys:
                 p = p[k]
             return p
-        except:
+        except Exception:
             if not required:
                 return default
 

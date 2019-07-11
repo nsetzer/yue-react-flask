@@ -174,11 +174,12 @@ def _endpoint_mapper(f):
                 type_, content_type = f._body
                 # logging.info("body: %s %s %s", type_, content_type, request.headers['Content-Type'])
                 content_type = request.headers.get('Content-Type')
-                content_type = content_type.split(';')
+                if content_type:
+                    content_type = content_type.split(';')
+                else:
+                    content_type = []
                 # TODO: dispatch type_ based on the content type
                 #       allow a default type_ when mimetype is not available
-                print(type_.mimetype(), content_type)
-                print(type_.mimetype(), content_type)
 
                 mimetypes = type_.mimetype()
                 if isinstance(mimetypes, str):

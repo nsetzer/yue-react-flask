@@ -47,7 +47,7 @@ class UserPasswordOpenApiBody(JsonOpenApiBody):
             "password": {"type": "string", "format": "password", "required": True},
         }
 
-class UUIDTokenOpenApiBody(JsonOpenApiBody):
+class TokenOpenApiBody(JsonOpenApiBody):
 
     def model(self):
 
@@ -108,7 +108,7 @@ class UserResource(WebResource):
     @get("token")
     @param("expiry", type_=Integer().default(2 * 60 * 60))
     @requires_auth("user_read")
-    @returns({200: UUIDTokenOpenApiBody()})
+    @returns({200: TokenOpenApiBody()})
     def get_uuid_token(self):
         token = self.user_service.generateUUIDToken(
             g.current_user, g.args.expiry)

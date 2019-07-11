@@ -1,10 +1,10 @@
 
 This guide will walk through the installation process of the web app
 on Ubuntu 18.04. Including installing a flask server using gunicorn,
-NginX, and PostgreSQL. Let's Encrypt will be used for generating SLL
+NginX, and PostgreSQL. Let's Encrypt will be used for generating SSL
 certificates
 
-This guide is based on the following two articals:
+This guide is based on the following articals:
 
 * [Digital Ocean Initial Setup](https://www.digitalocean.com/community/tutorials/initial-server-setup-with-ubuntu-18-04)
 * [Serve Flask Apps with Digital Ocean](https://www.digitalocean.com/community/tutorials/how-to-serve-flask-applications-with-gunicorn-and-nginx-on-ubuntu-18-04)
@@ -27,7 +27,6 @@ sudo usermod -aG yueapp adminuser
 ```
 
  > Note: you may need to update ~/.ssh/authorized_keys for the new admin user.
-
 
 
 ### Basic Installation
@@ -113,7 +112,7 @@ chmod 600 crypt/rsa{.pem,.pub}
 ```
 
 ```bash
-$ ls -la ./crypt
+$ ls -la /opt/yueserver/crypt
 drwxr-xr-x 2 root root 4096 Sep 16 09:49 .
 -rw------- 1 root root 1674 Sep 16 09:50 rsa.pem
 -rw------- 1 root root  450 Sep 16 09:50 rsa.pub
