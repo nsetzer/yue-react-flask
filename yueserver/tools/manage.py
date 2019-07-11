@@ -370,26 +370,27 @@ def openapi_(args):
 
     app = YueApp(Config.null())
 
-    #curldoc(app, "http://localhost:4200")
-
-    #return
-
     openapi = OpenApi(app) \
-           .description("API for user, file, and library management") \
-           .license("MIT") \
-           .contact("https://github.com/nsetzer/yue-react-flask") \
-           .version("0.0.0") \
-           .title("yue-react-flask") \
-           .servers([
-                {"url": "https://yueapp.duckdns.org"},
-                {"url": "http://localhost:4200"}
-            ])
+        .description("API for user, file, and library management") \
+        .license("MIT") \
+        .contact("https://github.com/nsetzer/yue-react-flask") \
+        .version("0.0.0") \
+        .title("yue-react-flask") \
+        .servers([
+            {"url": "https://yueapp.duckdns.org"},
+            {"url": "http://localhost:4200"}
+        ])
+
+    if args.curl:
+        text = ''.join(curldoc(app, "http://localhost:4200"))
+    else:
+        text = openapi.jsons(indent=2, sort_keys=True)
 
     if args.out == '-':
-        print(openapi.jsons(indent=2, sort_keys=True))
+        sys.stdout.write(text)
     else:
         with open(args.out, "w") as wf:
-            wf.write(openapi.jsons(indent=2, sort_keys=True))
+            wf.write(text)
 
 def main():
 
@@ -669,6 +670,9 @@ def main():
     parser_openapi = subparsers.add_parser('openapi',
         help='generate an openapi schema')
     parser_openapi.set_defaults(func=openapi_)
+
+    parser_openapi.add_argument('--curl', action='store_true',
+                                help='generate curl documentation')
 
     parser_openapi.add_argument('out', type=str, default='-',
                                 help='write json to file (- stdout)')

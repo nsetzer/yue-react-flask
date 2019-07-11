@@ -429,12 +429,27 @@ def curldoc(app, host):
                 if len(defs):
                     yield "\n%s:\n" % title
                     for p in defs:
+                        _default = None
                         if 'enum' in p['schema']:
                             _type = 'enum'
                         else:
                             _type = p['schema']['type']
+                            _default = p['schema'].get('default', None)
 
-                        yield("  %s - %s\n" % (p['name'], _type))
+                        m = "  %s - %s" % (p['name'], _type)
+
+                        if _default:
+                            m += " (%s)" % _default
+
+                        if p['required']:
+                            m += " required"
+
+                        if p['description']:
+                            pad = "\n    "
+                            d = p['description'].replace("\n", pad)
+                            m += pad + d
+
+                        yield(m + "\n")
 
                         if 'enum' in p['schema']:
                             yield from fmtary("    ", 70,
