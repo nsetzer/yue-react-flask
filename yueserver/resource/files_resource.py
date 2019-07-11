@@ -47,7 +47,6 @@ validate_mode_system = String() \
                     .default(CryptMode.system) \
                     .description("encryption mode")
 
-
 class EncryptionKeyOpenApiBody(object):
 
     def __init__(self):
@@ -96,6 +95,99 @@ def validate_key(body):
     text = body.read().decode('utf-8')
     return validatekey(text)
 
+def _list_path(service, root, path, list_=False, password=None, preview=None, dl=True):
+    # TODO: move this into the service layer
+    #       the argument against is it still depends on some flask features
+
+    # TODO: check for the header X-YUE-ENCRYPTION
+    # it should contain the base64 encoded password for the user
+    # use this to decrypt the file
+
+    abs_path = service.getFilePath(g.current_user, root, path)
+
+    isFile = False
+    try:
+        fs_id = service.storageDao.getFilesystemId(
+            g.current_user['id'], g.current_user['role_id'], root)
+        info = service.storageDao.file_info(
+            g.current_user['id'], fs_id, abs_path)
+        isFile = not info.isDir
+    except StorageNotFoundException as e:
+        pass
+
+    if isFile:
+
+        if list_:
+            result = service.listSingleFile(g.current_user, root, path)
+            return jsonify(result=result)
+        elif preview:
+
+            # cache control for preview files
+            # check the incoming request to see if the file has changed
+            ETag = "%s:%s" % (path, str(info.version))
+            if 'If-None-Match' in request.headers:
+                if request.headers['If-None-Match'] == ETag:
+                    return b"", 304
+
+            _, name = service.fs.split(info.file_path)
+            # todo: return a object containing size and path?
+            # table: file_id, preview_mode, preview_url, preview_size
+            # TODO: investigate this method, previewFile
+            # it is causing a significant amount of request latency
+            # even when the preview already exists
+            url = service.previewFile(g.current_user,
+                root, path, preview, password)
+
+            stream = service.fs.open(url, "rb")
+            if info.encryption in (CryptMode.server, CryptMode.system):
+                if not password and info.encryption == CryptMode.server:
+                    return httpError(400, "Invalid Password")
+                stream = service.decryptStream(g.current_user,
+                        password, stream, "r", info.encryption)
+            go = files_generator_v2(stream)
+            headers = {
+                'Cache-Control': 'max-age=31536000',
+                'ETag': ETag,
+            }
+
+            return send_generator(go, '%s.%s.png' % (name, preview),
+                file_size=None, headers=headers, attachment=dl)
+        else:
+            ETag = "%s:%s" % (path, str(info.version))
+            if 'If-None-Match' in request.headers:
+                if request.headers['If-None-Match'] == ETag:
+                    return b"", 304
+
+            _, name = service.fs.split(info.file_path)
+            stream = service.fs.open(info.storage_path, "rb")
+            if info.encryption in (CryptMode.server, CryptMode.system):
+                if not password and info.encryption == CryptMode.server:
+                    return httpError(400, "Invalid Password")
+                stream = service.decryptStream(g.current_user,
+                    password, stream, "r", info.encryption)
+            go = files_generator_v2(stream)
+            headers = {
+                "X-YUE-VERSION": info.version,
+                "X-YUE-PERMISSION": info.permission,
+                "X-YUE-MTIME": info.mtime,
+                'Cache-Control': 'max-age=31536000',
+                'ETag': ETag,
+            }
+            return send_generator(go, name,
+                file_size=None, headers=headers, attachment=dl)
+
+    try:
+        result = service.listDirectory(g.current_user, root, path)
+        return jsonify(result=result)
+    except StorageNotFoundException as e:
+        if path == "":
+            return jsonify(result={"name": root,
+                "path": "", "parent": "",
+                "files": [], "directories": []})
+
+        return httpError(404, "not found: root: `%s` path: `%s`" % (
+            root, path))
+
 class FilesResource(WebResource):
     """FilesResource
 
@@ -115,7 +207,7 @@ class FilesResource(WebResource):
     @timed(100)
     def get_path_root(self, root):
         password = g.headers.get('X-YUE-PASSWORD', None)
-        return self._list_path(root, "", password=password, preview=None)
+        return _list_path(self.filesys_service, root, "", password=password, preview=None)
 
     @get("<root>/path/<path:resPath>")
     @param("list", type_=Boolean().default(False).description(
@@ -129,7 +221,7 @@ class FilesResource(WebResource):
     @timed(100)
     def get_path(self, root, resPath):
         password = g.headers.get('X-YUE-PASSWORD', None)
-        return self._list_path(root, resPath, g.args.list,
+        return _list_path(self.filesys_service, root, resPath, g.args.list,
             password=password, preview=g.args.preview, dl=g.args.dl)
 
     @get("public/<fileId>/<name>")
@@ -391,99 +483,7 @@ class FilesResource(WebResource):
         self.filesys_service.setUserClientKey(g.current_user, g.body)
         return jsonify(result="OK"), 200
 
-    def _list_path(self, root, path, list_=False, password=None, preview=None, dl=True):
-        # TODO: move this into the service layer
 
-        # TODO: check for the header X-YUE-ENCRYPTION
-        # it should contain the base64 encoded password for the user
-        # use this to decrypt the file
-
-        fs = self.filesys_service.fs
-
-        abs_path = self.filesys_service.getFilePath(g.current_user, root, path)
-
-        isFile = False
-        try:
-            fs_id = self.filesys_service.storageDao.getFilesystemId(
-                g.current_user['id'], g.current_user['role_id'], root)
-            info = self.filesys_service.storageDao.file_info(
-                g.current_user['id'], fs_id, abs_path)
-            isFile = not info.isDir
-        except StorageNotFoundException as e:
-            pass
-
-        if isFile:
-
-            if list_:
-                result = self.filesys_service.listSingleFile(g.current_user, root, path)
-                return jsonify(result=result)
-            elif preview:
-
-                # cache control for preview files
-                # check the incoming request to see if the file has changed
-                ETag = "%s:%s" % (path, str(info.version))
-                if 'If-None-Match' in request.headers:
-                    if request.headers['If-None-Match'] == ETag:
-                        return b"", 304
-
-                _, name = self.filesys_service.fs.split(info.file_path)
-                # todo: return a object containing size and path?
-                # table: file_id, preview_mode, preview_url, preview_size
-                # TODO: investigate this method, previewFile
-                # it is causing a significant amount of request latency
-                # even when the preview already exists
-                url = self.filesys_service.previewFile(g.current_user,
-                    root, path, preview, password)
-
-                stream = self.filesys_service.fs.open(url, "rb")
-                if info.encryption in (CryptMode.server, CryptMode.system):
-                    if not password and info.encryption == CryptMode.server:
-                        return httpError(400, "Invalid Password")
-                    stream = self.filesys_service.decryptStream(g.current_user,
-                            password, stream, "r", info.encryption)
-                go = files_generator_v2(stream)
-                headers = {
-                    'Cache-Control': 'max-age=31536000',
-                    'ETag': ETag,
-                }
-
-                return send_generator(go, '%s.%s.png' % (name, preview),
-                    file_size=None, headers=headers, attachment=dl)
-            else:
-                ETag = "%s:%s" % (path, str(info.version))
-                if 'If-None-Match' in request.headers:
-                    if request.headers['If-None-Match'] == ETag:
-                        return b"", 304
-
-                _, name = self.filesys_service.fs.split(info.file_path)
-                stream = self.filesys_service.fs.open(info.storage_path, "rb")
-                if info.encryption in (CryptMode.server, CryptMode.system):
-                    if not password and info.encryption == CryptMode.server:
-                        return httpError(400, "Invalid Password")
-                    stream = self.filesys_service.decryptStream(g.current_user,
-                        password, stream, "r", info.encryption)
-                go = files_generator_v2(stream)
-                headers = {
-                    "X-YUE-VERSION": info.version,
-                    "X-YUE-PERMISSION": info.permission,
-                    "X-YUE-MTIME": info.mtime,
-                    'Cache-Control': 'max-age=31536000',
-                    'ETag': ETag,
-                }
-                return send_generator(go, name,
-                    file_size=None, headers=headers, attachment=dl)
-
-        try:
-            result = self.filesys_service.listDirectory(g.current_user, root, path)
-            return jsonify(result=result)
-        except StorageNotFoundException as e:
-            if path == "":
-                return jsonify(result={"name": root,
-                    "path": "", "parent": "",
-                    "files": [], "directories": []})
-
-            return httpError(404, "not found: root: `%s` path: `%s`" % (
-                root, path))
 
 class NotesResource(WebResource):
     """NotesResource
@@ -542,8 +542,9 @@ class NotesResource(WebResource):
     def get_user_note_content(self, note_id):
         password = g.headers.get('X-YUE-PASSWORD', None)
         resPath = self.filesys_service.fs.join(g.args.base, note_id)
-        return self._list_path(g.args.root, resPath, False,
-            password=password, preview=None)
+        return _list_path(self.filesys_service, g.args.root, resPath,
+            False, password=password, preview=None)
+
 
     @post("notes/<note_id>")
     @param("root", type_=String().default("default"))

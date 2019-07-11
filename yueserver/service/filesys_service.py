@@ -335,27 +335,36 @@ class FileSysService(object):
 
         os_root = '/'
 
-        storage_path = self._getNewStoragePath(user, fs_name, path)
         file_path = self.getFilePath(user, fs_name, path)
-
-        dirpath, _ = self.fs.split(storage_path)
-        self.fs.makedirs(dirpath)
 
         # the sync tool depends on an up-to-date local database
         # when uploading, the client knows what the next version of a file
         # will be. If the expected version is lower than reality (because
         # fetch needs to be run) reject the file. running a fetch
         # will likely reveal this file is in a conflict state
-        if version > 0:
-            try:
-                info = self.storageDao.file_info(user['id'], fs_id, file_path)
-                if info.version >= version:
-                    raise FileSysServiceException("invalid version", 409)
-            except StorageNotFoundException as e:
-                pass
+
+        info = None
+        storage_path = None
+
+        try:
+            info = self.storageDao.file_info(user['id'], fs_id, file_path)
+            storage_path = info.storage_path
+        except StorageNotFoundException as e:
+            pass
+
+        if info is not None and version > 0:
+            if info.version >= version:
+                raise FileSysServiceException("invalid version", 409)
+            version = info.version
         else:
             # dao layer expects None, or a valid version
             version = None
+
+        if storage_path is None:
+            storage_path = self._getNewStoragePath(user, fs_name, path)
+            dirpath, _ = self.fs.split(storage_path)
+            self.fs.makedirs(dirpath)
+            logging.warning("creating new storage path: %s", storage_path)
 
         if mtime is None:
             mtime = int(time.time())
@@ -529,6 +538,7 @@ class FileSysService(object):
         for record in records:
             files.append({"name": record.name,
                           "file_path": record.file_path[1:],
+                          "file_path": record.file_path[1:],
                           "size": record.size,
                           "mtime": record.mtime,
                           "permission": record.permission,
@@ -652,23 +662,28 @@ class FileSysService(object):
             abs_path += "/"
         fs_id = self.storageDao.getFilesystemId(
             user['id'], user['role_id'], fs_name)
-        records = self.storageDao.listdir(user['id'], fs_id, abs_path)
 
-        files = []
-        for record in records:
-            if not record.isDir:
-                if record.name.endswith('.txt'):
-                    # TODO: add the file id as a uid for the note
-                    #       allow renaming notes by uid
-                    #       add endpoint for creating note
-                    files.append({
-                        "file_name": record.name,
-                        "title": record.name[:-4].replace("_", " "),
-                        "file_path": "%s/%s" % (dir_path, record.name),
-                        "size": record.size,
-                        "mtime": record.mtime,
-                        "encryption": record.encryption,
-                    })
+        try:
+            records = self.storageDao.listdir(user['id'], fs_id, abs_path)
+
+            files = []
+            for record in records:
+                if not record.isDir:
+                    if record.name.endswith('.txt'):
+                        # TODO: add the file id as a uid for the note
+                        #       allow renaming notes by uid
+                        #       add endpoint for creating note
+                        files.append({
+                            "file_name": record.name,
+                            "title": record.name[:-4].replace("_", " "),
+                            "file_path": "%s/%s" % (dir_path, record.name),
+                            "size": record.size,
+                            "mtime": record.mtime,
+                            "encryption": record.encryption,
+                        })
+
+        except StorageNotFoundException as e:
+            return []
 
         return files
 

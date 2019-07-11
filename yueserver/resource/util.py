@@ -6,6 +6,7 @@ import logging
 from functools import wraps
 from flask import after_this_request, request, jsonify, g
 import traceback
+import time
 from uuid import UUID
 
 from ..dao.util import parse_iso_format
@@ -32,8 +33,10 @@ class _FileNotFoundError(object):
         reason = "File Not Found Error: "
 
         if hasattr(g, 'current_user') and g.current_user is not None:
-            reason = "Unhandled Exception (current user: %s): " % \
+            reason = "File Not Found (current user: %s): " % \
                 g.current_user['email']
+
+        logging.exception(reason)
 
         return httpError(404, reason + str(ex))
 
@@ -46,8 +49,10 @@ class _BackendException(object):
         reason = "Unhandled Backend Exception: "
 
         if hasattr(g, 'current_user') and g.current_user is not None:
-            reason = "Unhandled Exception (current user: %s): " % \
+            reason = "Unhandled Backend Exception (current user: %s): " % \
                 g.current_user['email']
+
+        logging.exception(reason)
 
         return httpError(ex.HTTP_STATUS, reason + str(ex))
 
@@ -60,8 +65,10 @@ class _ServiceException(object):
         reason = "Unhandled Service Exception: "
 
         if hasattr(g, 'current_user') and g.current_user is not None:
-            reason = "Unhandled Exception (current user: %s): " % \
+            reason = "Unhandled Service Exception (current user: %s): " % \
                 g.current_user['email']
+
+        logging.exception(reason)
 
         return httpError(ex.HTTP_STATUS, reason + str(ex))
 
@@ -285,13 +292,26 @@ def files_generator(fs, filepath, buffer_size=2048):
 
 def files_generator_v2(stream, buffer_size=2048):
 
+    count = 0
+    success = False
+    start = time.time()
     try:
         buf = stream.read(buffer_size)
         while buf:
+            count += len(buf)
             yield buf
             buf = stream.read(buffer_size)
+        success = True
+    except BaseException:
+        logging.exception("exception while streaming data")
+        raise
     finally:
+        duration = (time.time() - start)
         stream.close()
+        if success:
+            logging.info("successfully transfered stream (%d bytes in %.3f seconds)", count, duration)
+        else:
+            logging.error("failed to transfered stream (%d bytes in %.3f seconds)", count, duration)
 
 class ImageScaleType(OpenApiParameter):
     def __init__(self):

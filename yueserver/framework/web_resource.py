@@ -145,8 +145,6 @@ def _endpoint_mapper(f):
                         "unable to validate query parameter: %s=%s" % (
                             param.name, request.args[param.name]))
 
-
-
         # extract request header parameters
         g.headers = dict()
         if hasattr(f, "_headers"):

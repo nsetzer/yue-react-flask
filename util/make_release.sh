@@ -48,7 +48,7 @@ gunicorn=/opt/yueserver/yueserverenv/bin/gunicorn
 user=\$(stat -c '%U' wsgi.py)
 YUE_PRIVATE_KEY=\$(cat ./crypt/rsa.pem)
 export YUE_PRIVATE_KEY
-exec sudo -E -u "\$user" "\$gunicorn" -p"\${1:-production}" -w 2 --bind unix:yueserver.sock wsgi:app
+exec sudo -E -u "\$user" "\$gunicorn" -t 240 -p"\${1:-production}" -w 2 --bind unix:yueserver.sock wsgi:app
 EOF
 
 cat <<EOF > start_debug.sh
