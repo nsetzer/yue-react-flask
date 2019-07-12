@@ -1610,7 +1610,7 @@ def _copy_impl(ctxt, src, dst):
     else:
         raise Exception("invalid source and destiniation path")
 
-def _list_impl(ctxt, root, path):
+def _list_impl(ctxt, root, path, verbose=False):
     """
     list contents of a remote directory
     """
@@ -1628,17 +1628,23 @@ def _list_impl(ctxt, root, path):
         data = response.json()['result']
 
         for dirname in sorted(data['directories']):
-            sys.stdout.write("%s%s/\n" % (" " * (41), dirname))
+            if verbose:
+                sys.stdout.write("%s%s/\n" % (" " * (41), dirname))
+            else:
+                sys.stdout.write("%s/\n" % dirname)
 
         for item in sorted(data['files'], key=lambda item: item['name']):
 
-            fvers = "%3d" % item['version']
-            fperm = oct(item.get('permission', 0))[2:].zfill(3)
-            ftime = time.localtime(item['mtime'])
-            fdate = time.strftime('%Y-%m-%d %H:%M:%S', ftime)
+            if verbose:
+                fvers = "%3d" % item['version']
+                fperm = oct(item.get('permission', 0))[2:].zfill(3)
+                ftime = time.localtime(item['mtime'])
+                fdate = time.strftime('%Y-%m-%d %H:%M:%S', ftime)
 
-            sys.stdout.write("%s %s %12d %s %s\n" % (
-                fvers, fdate, int(item['size']), fperm, item['name']))
+                sys.stdout.write("%s %s %12d %s %s\n" % (
+                    fvers, fdate, int(item['size']), fperm, item['name']))
+            else:
+                sys.stdout.write("%s\n" % (item['name']))
 
 def _move_get_actions(ctxt, ents, dst):
 
@@ -2259,6 +2265,9 @@ class ListCLI(object):
             help="list contents of a remote directory")
         subparser.set_defaults(func=self.execute, cli=self)
 
+        subparser.add_argument("-v", "--verbose", action='store_true',
+            help="show detailed file information")
+
         subparser.add_argument("--root", default=None,
             help="file system root to list")
 
@@ -2270,7 +2279,7 @@ class ListCLI(object):
         ctxt = get_ctxt(os.getcwd())
 
         root = args.root or ctxt.root
-        _list_impl(ctxt, root, args.path.strip("/"))
+        _list_impl(ctxt, root, args.path.strip("/"), args.verbose)
 
 class MoveCLI(object):
 
