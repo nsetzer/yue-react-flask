@@ -193,10 +193,12 @@ class LocalStorageDao(object):
         query = delete(self.dbtables.LocalStorageTable) \
             .where(self.dbtables.LocalStorageTable.c.rel_path == rel_path)
 
-        self.db.session.execute(query)
+        result = self.db.session.execute(query)
 
         if commit:
             self.db.session.commit()
+
+        return result.rowcount > 0
 
     def listdir(self, path_prefix="", limit=None, offset=None, delimiter='/'):
 
@@ -1608,7 +1610,7 @@ def _copy_impl(ctxt, src, dst):
     else:
         raise Exception("invalid source and destiniation path")
 
-def _list_impl(ctxt, root, path):
+def _list_impl(ctxt, root, path, verbose=False):
     """
     list contents of a remote directory
     """
@@ -1626,17 +1628,23 @@ def _list_impl(ctxt, root, path):
         data = response.json()['result']
 
         for dirname in sorted(data['directories']):
-            sys.stdout.write("%s%s/\n" % (" " * (41), dirname))
+            if verbose:
+                sys.stdout.write("%s%s/\n" % (" " * (41), dirname))
+            else:
+                sys.stdout.write("%s/\n" % dirname)
 
         for item in sorted(data['files'], key=lambda item: item['name']):
 
-            fvers = "%3d" % item['version']
-            fperm = oct(item.get('permission', 0))[2:].zfill(3)
-            ftime = time.localtime(item['mtime'])
-            fdate = time.strftime('%Y-%m-%d %H:%M:%S', ftime)
+            if verbose:
+                fvers = "%3d" % item['version']
+                fperm = oct(item.get('permission', 0))[2:].zfill(3)
+                ftime = time.localtime(item['mtime'])
+                fdate = time.strftime('%Y-%m-%d %H:%M:%S', ftime)
 
-            sys.stdout.write("%s %s %12d %s %s\n" % (
-                fvers, fdate, int(item['size']), fperm, item['name']))
+                sys.stdout.write("%s %s %12d %s %s\n" % (
+                    fvers, fdate, int(item['size']), fperm, item['name']))
+            else:
+                sys.stdout.write("%s\n" % (item['name']))
 
 def _move_get_actions(ctxt, ents, dst):
 
@@ -1713,28 +1721,66 @@ def _move_impl(ctxt, ents, dst):
     for src, dst in _f_actions:
         _move_file_impl(ctxt, src, dst)
 
-def _remove_impl(ctxt, ents, mode):
+def _remove_impl_local(ctxt, ent):
+    """remove db entry and local file"""
+    s1 = ctxt.storageDao.remove(ent.remote_base)
+
+    if os.path.exists(ent.local_base):
+        ctxt.fs.remove(ent.local_base)
+        s3 = True
+    else:
+        s3 = False
+
+    return s1 and s3
+
+def _remove_impl_remote(ctxt, ent):
+    """remove db entry and remote file"""
+
+    s1 = ctxt.storageDao.remove(ent.remote_base)
+
+    response = ctxt.client.files_remove_file(ctxt.root, ent.remote_base)
+    s2 = response.status_code == 200
+
+    return s1 and s2
+
+def _remove_impl_both(ctxt, ent):
+    """remove db entry, local file, and remote file"""
+
+    s1 = ctxt.storageDao.remove(ent.remote_base)
+
+    response = ctxt.client.files_remove_file(ctxt.root, ent.remote_base)
+    s2 = response.status_code == 200
+    if not s2:
+        print("%s: %s" % (response.status_code, response.text.strip()))
+
+    if os.path.exists(ent.local_base):
+        ctxt.fs.remove(ent.local_base)
+        s3 = True
+    else:
+        s3 = False
+
+    return s1 and s2 and s3
+
+def _remove_impl(ctxt, ents, local, remote):
     """
     mode:
-        0: delete both local and remote
-        1: delete local file and local db entry
+           delete both local and remote
+    local: delete local file and local db entry
            the resulting state is as if the file had
            never been pulled before
-        2: delete remote file and local db entry
+    remote:delete remote file and local db entry
            the resulting state is as if the file had
            never been pushed before.
     """
 
-    def rmf_local(ent):
-        print("remove local", ent)
-
-    def rmf_remote(ent):
-        print("remove remote", ent)
-
-    def rmf(ent):
-        print("remove", ent)
-
-    rm = [rmf, rmf_local, rmf_remote][mode]
+    if local and remote:
+        raise ValueError()
+    elif local:
+        rm = _remove_impl_local
+    elif remote:
+        rm = _remove_impl_remote
+    else:
+        rm = _remove_impl_both
 
     while len(ents) > 0:
         ent = ents.pop(0)
@@ -1743,12 +1789,17 @@ def _remove_impl(ctxt, ents, mode):
 
         if ctxt.storageDao.isDir(ent.remote_base):
             for item in ctxt.storageDao.listdir_files(ent.remote_base):
-                ents.append(DirEnt(None, item.rel_path, ctxt.fs.join(ctxt.local_base, item.rel_path)))
+                abs_path = ctxt.fs.join(ctxt.local_base, item.rel_path)
+                ents.append(DirEnt(None, item.rel_path, abs_path))
             # ent is a directory
-            print("dir", ent)
+            print("dir not implemented", ent)
         elif ctxt.storageDao.file_info(ent.remote_base):
-            # ent is a file and exist on remote
-            rm(ent)
+            # ent is a file and exists on remote
+            if rm(ctxt, ent):
+                print(ent.remote_base)
+            else:
+                print("error removing: %s" % ent.remote_base)
+
         elif ctxt.fs.exists(ent.local_base):
             # ent is a file and exists locally
             print("not tracked", ent)
@@ -2002,6 +2053,9 @@ class InitCLI():
             default="",
             help="the relative path-prefix to checkout ("")")
 
+        subparser.add_argument('-f', '--force', action='store_true',
+            help="initialize even if the directory is not empty")
+
         subparser.add_argument('hostname')
         subparser.add_argument('root', nargs="?", default="default")
 
@@ -2018,7 +2072,7 @@ class InitCLI():
             return
         api_password = "APIKEY " + userinfo['apikey']
 
-        if len(os.listdir(args.local_base)):
+        if len(os.listdir(args.local_base)) and not args.force:
             sys.stderr.write("error: current directory is not empty\n")
             return
 
@@ -2211,6 +2265,9 @@ class ListCLI(object):
             help="list contents of a remote directory")
         subparser.set_defaults(func=self.execute, cli=self)
 
+        subparser.add_argument("-v", "--verbose", action='store_true',
+            help="show detailed file information")
+
         subparser.add_argument("--root", default=None,
             help="file system root to list")
 
@@ -2222,7 +2279,7 @@ class ListCLI(object):
         ctxt = get_ctxt(os.getcwd())
 
         root = args.root or ctxt.root
-        _list_impl(ctxt, root, args.path.strip("/"))
+        _list_impl(ctxt, root, args.path.strip("/"), args.verbose)
 
 class MoveCLI(object):
 
@@ -2272,10 +2329,8 @@ class RemoveCLI(object):
         paths = _parse_path_args(ctxt.fs, ctxt.remote_base,
             ctxt.local_base, args.paths)
 
-        a = 1 if args.local else 0
-        b = 2 if args.remote else 0
 
-        _remove_impl(ctxt, paths, a|b)
+        _remove_impl(ctxt, paths, args.local, args.remote)
 
 class AttrCLI(object):
 
