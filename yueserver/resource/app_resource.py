@@ -6,7 +6,7 @@ import os
 import logging
 
 from flask import jsonify, render_template, g, request, \
-    send_file, send_from_directory
+    send_file, send_from_directory, Response, make_response
 
 from ..dao.library import Song
 from ..dao.util import parse_iso_format, pathCorrectCase, server_health
@@ -42,14 +42,52 @@ class AppResource(WebResource):
         # of returning the bundle
         if path.startswith("api/"):
             return httpError(400, "unknown path")
-        path = os.path.join(self.config.build_dir, 'index.html')
-        return open(path).read()
 
+        if path.startswith("precache-manifest") and path.endswith(".js"):
+            # return service worker script, but do not cache
+            # the script name changes on every build
+            name = path
+            response = make_response(send_from_directory(self.config.build_dir, name))
+            response.headers['Cache-Control'] = 'max-age=0'
+            return response
+        else:
+            name = "index.html"
+            return send_from_directory(self.config.build_dir, name)
+
+
+    # TODO: create @compressed_if(ContentType)
+    # allow compression for a white list of file extensions / content types
+    # only compress text files
     @get("/static/<path:path>")
+    @compressed
     def static(self, path):
         """ retrieve static files
         """
-        return send_from_directory(self.config.static_dir, path)
+        response = make_response(send_from_directory(
+            self.config.static_dir, path))
+        response.headers['Cache-Control'] = 'max-age=31536000'
+        return response
+
+    @get("/robots.txt")
+    def robots(self):
+        robots = "User-agent: *\nDisallow: /\n"
+        return Response(robots, mimetype='text/plain')
+
+    @get("/manifest.json")
+    def manifest(self):
+        keys = {
+            "manifest_version": 2,
+            "version": "0.0.0",
+            "name": "yueapp",
+        }
+        return jsonify(**keys)
+
+    @get("/service-worker.js")
+    def service_worker(self):
+        response = make_response(send_from_directory(
+            self.config.build_dir, "service-worker.js"))
+        response.headers['Cache-Control'] = 'max-age=0'
+        return response
 
     @get("/health")
     def health(self):

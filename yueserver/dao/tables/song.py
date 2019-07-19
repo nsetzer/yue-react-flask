@@ -82,6 +82,10 @@ def SongUserDataTable(metadata):
         Column('user_id', ForeignKey("user.id")),
         # text
         Column('comment', String, default=""),
+        # TODO: add tag column to user song data
+        # just like a genre, a user defined list of tags
+        # Column('tags', String, default=""),
+        # Alternative: 1 to many table, (user id, song id, tag)
         # number
         Column('rating', Integer, default=0),
         Column('play_count', Integer, default=0),
