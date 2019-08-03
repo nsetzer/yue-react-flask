@@ -70,7 +70,10 @@ from sqlalchemy import and_, or_, not_, select, column, \
     update, insert, delete, asc, desc
 from sqlalchemy.sql.expression import bindparam
 
-class SyncUserException(Exception):
+class SyncException(Exception):
+    pass
+
+class SyncUserException(SyncException):
     pass
 
 def osname():
@@ -342,7 +345,7 @@ class SyncContext(object):
             if response.status_code == 404:
                 raise SyncUserException("client key not set")
             if response.status_code != 200:
-                raise Exception("Unable to retreive key: %s" %
+                raise SyncException("Unable to retreive key: %s" %
                     response.status_code)
             key = response.json()['result']['key']
 
@@ -350,6 +353,12 @@ class SyncContext(object):
 
             self.encryption_client_key = decryptkey(password, key)
         return self.encryption_client_key
+
+    def normPath(self, path):
+        """return (abspath, relpath)"""
+        return _norm_path(
+            self.fs, self.remote_base, self.local_base,
+            path)
 
 class RecordBuilder(object):
     """docstring for RecordBuilder"""
@@ -535,7 +544,10 @@ class FileEnt(object):
         return "FileEnt<%s,%s>" % (self.remote_path, self.local_path)
 
     def name(self):
-        return posixpath.split(self.remote_path)[1]
+        if self.remote_path is not None:
+            return posixpath.split(self.remote_path)[1]
+        else:
+            return os.path.split(self.local_path)[1]
 
     def _samefile(self, af, bf):
         b = af['mtime'] == bf['mtime'] and af['size'] == bf['size']
@@ -601,11 +613,18 @@ class FileEnt(object):
         afe = self.af is not None
 
         # 0: error
+        # Note: one way to get into the error state is to:
+        #  in ctxt A: push files to remote
+        #  in ctxt B: fetch
+        #  in ctxt A: delete those files
+        #  in ctxt B: fetch
+        # ctxt B now has files with local version = 0
+        # that also do no exist on remote or locally
         if lfnull and rfnull and afnull:
             return FileState.ERROR
 
         # 1 : push
-        if lfnull and rfnull and afe:
+        elif lfnull and rfnull and afe:
             return FileState.PUSH + ":1"
 
         # 2 : pull
@@ -751,7 +770,7 @@ class DirAttr(object):
                 self.settings['encryption_mode'] = _mode1('encryption_mode')
                 modes = {'none', 'client', 'server', 'system'}
                 if self.settings['encryption_mode'] not in modes:
-                    raise Exception(
+                    raise SyncException(
                         "invalid encryption mode: %s" %
                         self.settings['encryption_mode'])
 
@@ -759,7 +778,7 @@ class DirAttr(object):
                 self.settings['public'] = _bool('public')
 
             else:
-                raise Exception("unkown setting: %s" % keyname)
+                raise SyncException("unkown setting: %s" % keyname)
 
         self.blacklist_patterns = self.blacklist_patterns | patterns
 
@@ -817,7 +836,7 @@ class DirAttr(object):
             parent, name = os.path.split(directory)
             if parent == directory:
 
-                raise Exception(parent)
+                raise SyncException(parent)
             attr = DirAttr.openDir(local_root, parent)
             attr = attr.update(settings, patterns)
 
@@ -976,7 +995,7 @@ def get_cfg(directory):
 
     cfgdir = os.path.join(directory, '.yue')
     if not os.path.exists(cfgdir):
-        raise Exception("not found: %s" % cfgdir)
+        raise SyncException("not found: %s" % cfgdir)
 
     pemkey_path = os.path.join(cfgdir, 'rsa.pem')
     with open(pemkey_path, "rb") as rb:
@@ -990,7 +1009,7 @@ def get_cfg(directory):
     userdata['password'] = cm.decrypt64(pemkey,
         userdata['password']).decode("utf-8")
 
-    userdata['cfgdir'] = directory
+    userdata['cfgdir'] = cfgdir
     userdata['local_base'] = directory
     userdata['current_local_base'] = cwd
     userdata['current_remote_base'] = posixpath.join(userdata['remote_base'], relpath)
@@ -1081,6 +1100,9 @@ def _check(ctxt, remote_base, local_base):
     if remote_base and not remote_base.endswith("/"):
         remote_base += "/"
 
+    if '\\' in remote_base:
+        print("warning: %s" % remote_base)
+
     attr = ctxt.attr(local_base)
 
     dirs = []
@@ -1131,6 +1153,7 @@ def _check(ctxt, remote_base, local_base):
             else:
                 del _names[name]
 
+        # local database info
         if f['local_version'] == 0:
             lf = None
         else:
@@ -1141,6 +1164,7 @@ def _check(ctxt, remote_base, local_base):
                 "permission": f['local_permission'],
             }
 
+        # remote database info
         if f['remote_version'] == 0:
             rf = None
         else:
@@ -1153,6 +1177,7 @@ def _check(ctxt, remote_base, local_base):
                 "encryption": f['remote_encryption'],
             }
 
+        # local (Actual) file info
         try:
             record = ctxt.fs.file_info(local_path)
 
@@ -1213,6 +1238,8 @@ def _check_file(ctxt, remote_path, local_path):
             "mtime": record.mtime,
             "permission": record.permission,
         }
+    except OSError:
+        af = None
     except FileNotFoundError:
         af = None
 
@@ -1253,6 +1280,26 @@ def _check_file(ctxt, remote_path, local_path):
 
     return ent
 
+def _norm_path(fs, remote_base, local_base, path):
+
+    if not os.path.isabs(path):
+        abspath = os.path.normpath(os.path.join(os.getcwd(), path))
+    else:
+        abspath = path
+
+    if not abspath.startswith(local_base):
+        raise FileNotFoundError("path spec does not match")
+
+    relpath = os.path.relpath(path, local_base)
+    if relpath == ".":
+        relpath = ""
+
+    if osname() == 'nt':
+        relpath = relpath.replace("\\", "/")
+    relpath = posixpath.join(remote_base, relpath)
+
+    return abspath, relpath
+
 def _parse_path_args(fs, remote_base, local_base, args_paths):
     """
     returns a collection of DirEnt {name, relpath, abspath}
@@ -1262,19 +1309,7 @@ def _parse_path_args(fs, remote_base, local_base, args_paths):
     for path in args_paths:
         #if not fs.exists(path):
         #    raise FileNotFoundError(path)
-        if not os.path.isabs(path):
-            abspath = os.path.normpath(os.path.join(os.getcwd(), path))
-        else:
-            abspath = path
-
-        if not abspath.startswith(local_base):
-            raise FileNotFoundError("path spec does not match")
-
-        relpath = os.path.relpath(path, local_base)
-        if relpath == ".":
-            relpath = ""
-        relpath = posixpath.join(remote_base, relpath)
-
+        abspath, relpath = _norm_path(fs, remote_base, local_base, path)
         name = fs.split(abspath)[1]
         paths.append(DirEnt(name, relpath, abspath))
 
@@ -1383,7 +1418,7 @@ def _sync_file_push(ctxt, attr, ent):
         raise SyncUserException("local database out of date. fetch first")
 
     if response.status_code != 200 and response.status_code != 201:
-        raise Exception("unexpected error: %s" % response.status_code)
+        raise SyncException("unexpected error: %s" % response.status_code)
 
     record = RecordBuilder().local(**ent.af).remote(**ent.af).build()
     record['remote_encryption'] = crypt
@@ -1422,7 +1457,7 @@ def _sync_file_pull(ctxt, attr, ent):
         logging.error("error %d for file %s/%s" % (
             response.status_code, ctxt.root, ent.remote_path))
 
-        raise Exception("error %d for file %s/%s" % (
+        raise SyncException("error %d for file %s/%s" % (
             response.status_code, ctxt.root, ent.remote_path))
 
     rv = int(response.headers.get('X-YUE-VERSION', "0"))
@@ -1434,7 +1469,7 @@ def _sync_file_pull(ctxt, attr, ent):
        ent.rf['mtime'] != rm:
         logging.error("error fetching metadata for %s/%s" % (
             ctxt.root, ent.remote_path))
-        raise Exception("local database out of date. fetch first")
+        raise SyncException("local database out of date. fetch first")
 
     dpath = ctxt.fs.split(ent.local_path)[0]
     if not ctxt.fs.exists(dpath):
@@ -1498,7 +1533,8 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
         _sync_file_pull(ctxt, attr, ent)
 
     elif FileState.ERROR == state:
-        sys.stdout.write("error %s\n" % ent.remote_path)
+        sys.stdout.write("delete error %s\n" % ent.remote_path)
+        ctxt.storageDao.remove(ent.remote_path)
     elif FileState.CONFLICT_MODIFIED == state:
         pass
     elif FileState.CONFLICT_CREATED == state:
@@ -1567,10 +1603,10 @@ def _sync_put_file_impl(ctxt, lpath, rpath):
         mtime=record.mtime, permission=record.permission)
 
     if response.status_code == 409:
-        raise Exception("local database out of date. fetch first")
+        raise SyncException("local database out of date. fetch first")
 
     if response.status_code > 201:
-        raise Exception(response.text)
+        raise SyncException(response.text)
 
 def _copy_impl(ctxt, src, dst):
     """
@@ -1588,7 +1624,7 @@ def _copy_impl(ctxt, src, dst):
         root, remote_path = src[len(tag):].split("/", 1)
 
         if dst.startswith(tag):
-            raise Exception("invalid path: %s" % dst)
+            raise SyncException("invalid path: %s" % dst)
 
         response = ctxt.client.files_get_path(root, remote_path, stream=True)
         with ctxt.fs.open(dst, "wb") as wb:
@@ -1599,7 +1635,7 @@ def _copy_impl(ctxt, src, dst):
         root, remote_path = dst[len(tag):].split("/", 1)
 
         if src.startswith(tag) or not os.access(src, os.R_OK):
-            raise Exception("invalid path: %s" % src)
+            raise SyncException("invalid path: %s" % src)
 
         info = ctxt.fs.file_info(src)
 
@@ -1608,7 +1644,7 @@ def _copy_impl(ctxt, src, dst):
             mtime=info.mtime, permission=info.permission)
 
     else:
-        raise Exception("invalid source and destiniation path")
+        raise SyncException("invalid source and destiniation path")
 
 def _list_impl(ctxt, root, path, verbose=False):
     """
@@ -1622,7 +1658,7 @@ def _list_impl(ctxt, root, path, verbose=False):
         sys.exit(1)
 
     elif response.headers['content-type'] != "application/json":
-        raise Exception("Server responded with unexpected type: %s" %
+        raise SyncException("Server responded with unexpected type: %s" %
             response.headers['content-type'])
     else:
         data = response.json()['result']
@@ -2026,7 +2062,7 @@ class RootsCLI(CLI):
         response = client.files_get_roots()
 
         if response.status_code != 200:
-            raise Exception("unexpected error: %s" % response.status_code)
+            raise SyncException("unexpected error: %s" % response.status_code)
 
         roots = response.json()['result']
         for root in roots:

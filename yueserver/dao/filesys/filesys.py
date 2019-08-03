@@ -65,13 +65,14 @@ class LocalFileSystemImpl(AbstractFileSystem):
         os.utime(path, (mtime, mtime))
 
     def file_info(self, path):
-        st = os.stat(path)
+
+        _, name = self.split(path)
+
+        st = os.stat(path)  # throws OSError
 
         size = st.st_size
         permission = st.st_mode & 0o777
         mtime = int(st.st_mtime)
-
-        _, name = self.split(path)
 
         if not (st.st_mode & S_IRGRP):
             raise FileNotFoundError(path)
