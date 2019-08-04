@@ -309,7 +309,7 @@ class LocalStorageDao(object):
         return self.db.session.execute(query)
 
 class SyncContext(object):
-    """docstring for SyncContext"""
+
     def __init__(self, client, storageDao, fs, root, remote_base, local_base, verbose=0):
         super(SyncContext, self).__init__()
         self.client = client
@@ -359,6 +359,21 @@ class SyncContext(object):
         return _norm_path(
             self.fs, self.remote_base, self.local_base,
             path)
+
+    def clone(self):
+
+        db = db_connect(self.storageDao.db.url)
+
+        storageDao = LocalStorageDao(db, db.tables)
+
+        return SyncContext(self.client, storageDao, self.fs,
+            self.root, self.remote_base, self.local_base, self.verbose)
+
+    def close(self):
+
+        self.storageDao.db.conn.close()
+        self.storageDao.db.session.close()
+        self.storageDao.db.engine.dispose()
 
 class RecordBuilder(object):
     """docstring for RecordBuilder"""
@@ -968,6 +983,7 @@ def db_connect(connection_string):
     db.conn.connection.create_function('REGEXP', 2, regexp)
     db.create_all = lambda: db.metadata.create_all(engine)
     db.delete = lambda table: db.session.execute(delete(table))
+    db.url = connection_string
 
     path = connection_string[len("sqlite:///"):]
     if path and not os.access(path, os.W_OK):
@@ -1036,8 +1052,11 @@ def get_ctxt(directory):
 
     return ctxt
 
-def _fetch(ctxt):
+def _fetch_iter(ctxt):
 
+    # TODO: fetch can be sped up by increasing the limit
+    #       possibly use a dynamic limit to keep request time
+    #       under 5 seconds
     page = 0
     limit = 500
 
@@ -1051,17 +1070,19 @@ def _fetch(ctxt):
                     ctxt.root, ctxt.remote_base, **params)
             except Exception as e:
                 logging.error("unable to fetch: %s" % e)
-                return
+                break
 
             if response.status_code != 200:
-                sys.stderr.write("fetch error...")
-                return
+                sys.stderr.write("fetch error [%d] %s" % (
+                    response.status_code, response.text))
+                break
 
             try:
                 files = response.json()['result']
             except Exception as e:
                 logging.exception(response.text)
                 raise e
+
             for f in files:
                 record = {
                     "remote_size": f['size'],
@@ -1078,6 +1099,12 @@ def _fetch(ctxt):
 
                 mode = ctxt.storageDao.upsert(f['path'], record, commit=False)
 
+                # important: yield at a point in time when
+                # not calling next on the generator would not
+                # case data loss
+
+                yield (f['path'], record, mode)
+
                 # indicate there are new files to pull
                 if mode == 'insert':
                     sys.stdout.write("+ %s\n" % f['path'])
@@ -1088,12 +1115,19 @@ def _fetch(ctxt):
 
         # indicate that there are files to delete on pull
         for item in ctxt.storageDao.markedForDelete():
+            yield (item['rel_path'], None, delete)
             sys.stdout.write("- %s\n" % item['rel_path'])
+
     except Exception as e:
         logging.exception(e)
         ctxt.storageDao.db.session.rollback()
     else:
         ctxt.storageDao.db.session.commit()
+
+def _fetch(ctxt):
+
+    for _ in _fetch_iter(ctxt):
+        pass
 
 def _check(ctxt, remote_base, local_base):
 
@@ -1363,15 +1397,12 @@ def _status_file_impl(ctxt, ent):
     if ctxt.verbose > 3:
         sys.stdout.write("%s\n" % ent.data())
 
-def _sync_file(ctxt, relpath, abspath, push=False, pull=False, force=False):
-
-    ent = _check_file(ctxt, relpath, abspath)
-
-    if ent.af is None and ent.rf is None and ent.lf is None:
-        sys.stderr.write("not found: %s\n" % ent.remote_path)
-        return
-
-    _sync_file_impl(ctxt, ent, push, pull, force)
+class SyncResult(object):
+    def __init__(self, ent, state, message):
+        super(SyncResult, self).__init__()
+        self.ent = ent
+        self.state = state
+        self.message = message
 
 def _sync_file_push(ctxt, attr, ent):
 
@@ -1500,13 +1531,14 @@ def _sync_file_pull(ctxt, attr, ent):
 def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
 
     state = ent.state().split(':')[0]
-    sym = FileState.symbol(state)
 
     attr = ctxt.attr(ent.local_directory())
 
+    message = None
+
     if attr.match(ent.name()):
         if not force:
-            return
+            return SyncResult(ent, state, "force not enabled")
 
     if FileState.SAME == state:
         pass
@@ -1517,7 +1549,8 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
          (FileState.CONFLICT_VERSION == state and not pull and push):
 
         if FileState.PUSH != state and not force:
-            sys.stdout.write("%s is in a conflict state.\n" % ent.remote_path)
+            message = "%s is in a conflict state.\n" % ent.remote_path
+            sys.stdout.write(message)
 
         _sync_file_push(ctxt, attr, ent)
 
@@ -1528,35 +1561,78 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
          (FileState.CONFLICT_VERSION == state and pull and not push):
 
         if FileState.PULL != state and not force:
-            sys.stdout.write("%s is in a conflict state.\n" % ent.remote_path)
+            message = "%s is in a conflict state.\n" % ent.remote_path
+            sys.stdout.write(message)
 
         _sync_file_pull(ctxt, attr, ent)
 
     elif FileState.ERROR == state:
-        sys.stdout.write("delete error %s\n" % ent.remote_path)
+        message = "delete error %s\n" % ent.remote_path
+        sys.stdout.write(message)
         ctxt.storageDao.remove(ent.remote_path)
     elif FileState.CONFLICT_MODIFIED == state:
-        pass
+        message = "conflict modified - %s\n" % ent.remote_path
+        sys.stdout.write(message)
     elif FileState.CONFLICT_CREATED == state:
-        pass
+        message = "conflict created - %s\n" % ent.remote_path
+        sys.stdout.write(message)
     elif FileState.CONFLICT_VERSION == state:
-        pass
+        message = "conflict version - %s\n" % ent.remote_path
+        sys.stdout.write(message)
     elif FileState.DELETE_BOTH == state:
-        sys.stdout.write("delete both   - %s\n" % ent.remote_path)
+        message = "delete both   - %s\n" % ent.remote_path
+        sys.stdout.write(message)
         ctxt.storageDao.remove(ent.remote_path)
     elif FileState.DELETE_REMOTE == state and pull:
-        sys.stdout.write("delete local  - %s\n" % ent.remote_path)
+        message = "delete local  - %s\n" % ent.remote_path
         ctxt.fs.remove(ent.local_path)
         ctxt.storageDao.remove(ent.remote_path)
     elif FileState.DELETE_LOCAL == state and push:
-        sys.stdout.write("delete remote - %s\n" % ent.remote_path)
-        print(dir(ctxt.client))
+        message = "delete remote - %s\n" % ent.remote_path
+        sys.stdout.write(message)
         response = ctxt.client.files_remove_file(ctxt.root, ent.remote_path)
         if (response.status_code == 200):
             ctxt.storageDao.remove(ent.remote_path)
     else:
-        sys.stdout.write("unknown %s\n" % ent.remote_path)
+        message = "unknown %s\n" % ent.remote_path
+        sys.stdout.write(message)
 
+    return SyncResult(ent, state, message)
+
+def _sync_impl_iter(ctxt, paths, push=False, pull=False, force=False, recursive=False):
+    """ An iterator for syncing directories
+
+    yields a file entry followed by a boolean after syncing completes
+    i.e.
+        g = _sync_file_impl(...)
+        fent = next(g)
+        success = next(g)
+    """
+    paths = list(paths)
+    while len(paths) > 0:
+        dent = paths.pop(0)
+
+        if (ctxt.storageDao.isDir(dent.remote_base)) or (
+           ctxt.fs.exists(dent.local_base) and ctxt.fs.isdir(dent.local_base)):
+
+            result = _check(ctxt, dent.remote_base, dent.local_base)
+
+            for fent in result.files:
+                yield fent
+                result = _sync_file_impl(ctxt, fent, push, pull, force)
+                yield result
+
+            if recursive:
+                paths.extend(result.dirs)
+
+        else:
+            fent = _check_file(ctxt, dent.remote_base, dent.local_base)
+            yield fent
+
+            result = _sync_file_impl(ctxt, fent, push, pull, force)
+            yield result
+
+# TODO: deprecate this one
 def _sync_impl(ctxt, paths, push=False, pull=False, force=False, recursive=False):
 
     for dent in paths:
@@ -1574,8 +1650,9 @@ def _sync_impl(ctxt, paths, push=False, pull=False, force=False, recursive=False
                     force, recursive)
 
         else:
-            _sync_file(ctxt, dent.remote_base, dent.local_base,
-                push, pull, force)
+
+            fent = _check_file(ctxt, dent.remote_base, dent.local_base)
+            _sync_file_impl(ctxt, fent, push, pull, force)
 
 def _sync_get_file_impl(ctxt, rpath, lpath):
 

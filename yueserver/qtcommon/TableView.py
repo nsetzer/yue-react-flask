@@ -899,6 +899,9 @@ class AbstractTableView(QTableView):
         model = self.model()
         return [model.data(index, RowValueIndexRole) for index in row_indices]
 
+    def getSelectionCount(self):
+        return len(self.selectionModel().selectedRows())
+
     def getSelection(self):
 
         row_indices = self.selectionModel().selectedRows()
