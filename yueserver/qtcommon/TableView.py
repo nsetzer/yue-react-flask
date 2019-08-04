@@ -159,6 +159,9 @@ class ImageDelegate(StyledItemDelegate):
 
         image = index.data(Qt.DisplayRole)
 
+        if image is None:
+            return
+
         if not isinstance(image,(QImage,)):
             painter.drawText(option.rect,0,"Error:"+str(image))
             return
@@ -688,6 +691,7 @@ class AbstractTableView(QTableView):
         self.MouseReleaseRight.connect(self.onMouseReleaseRight)
         self.MouseReleaseMiddle.connect(self.onMouseReleaseMiddle)
         self.horizontalHeader().sectionClicked.connect(self.onHeaderClicked)
+
     def selectionChanged(self, *args):
         super().selectionChanged(*args)
         self.selectionChangedEvent.emit()
@@ -778,6 +782,10 @@ class AbstractTableView(QTableView):
 
     def setNewData(self,data):
         self.baseModel().setNewData(data)
+
+        # todo: revist this, may not always change
+        self.selectionChangedEvent.emit()
+
     def data(self, row_index):
         """ get row data at index, used in conjunction with transforms """
         # note: this uncovers an interesting implementation bug with

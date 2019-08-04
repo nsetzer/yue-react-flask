@@ -13,9 +13,11 @@ from PyQt5.QtGui import *
 from yueserver.dao.filesys.filesys import FileSystem
 from yueserver.qtcommon.TableView import (
     TableError, TableModel, TableView, RowValueRole, ImageDelegate,
-    SortProxyModel, RowSortValueRole
+    SortProxyModel, RowSortValueRole, ListView
 )
 from yueserver.qtcommon.exceptions import installExceptionHook
+from yueserver.qtcommon import resource
+from yueserver.framework.config import BaseConfig, yload, ydump
 
 from yueserver.tools import sync2
 
@@ -95,6 +97,58 @@ def _dummy_sync_iter(ctxt, paths, push, pull, force, recursive):
 
         QThread.msleep(250)
 
+class SyncConfig(BaseConfig):
+    def __init__(self, path):
+        super(SyncConfig, self).__init__()
+
+        self._cfg_path = path
+
+        self.init(yload(path))
+
+    def init(self, data):
+
+        self.favorites = self.get_key(data, "favorites", default=[])
+        if not self.favorites:
+            self.favorites = self._getFavoritesDefault()
+
+    def save(self):
+
+        obj = {
+            "favorites": self.favorites,
+        }
+
+        ydump(self._cfg_path, obj)
+
+    def _getFavoritesDefault(self):
+
+        def b(s, n, p, i="Folder"):
+            return {"section": s, "name": n, "path": p, "icon": i}
+
+        if sys.platform == 'darwin':
+            return [
+                b("system", "Root", "/", "Computer"),
+                b("system", "Home", "~"),
+                b("system", "Desktop", "~/Desktop", "Desktop"),
+                b("system", "Documents", "~/Documents"),
+                b("system", "Downloads", "~/Downloads"),
+                b("system", "Music", "~/Music"),
+            ]
+        elif os.name == 'nt':
+            return [
+                b("system", "Home", "~"),
+                b("system", "Desktop", "~/Desktop", "Desktop"),
+                b("system", "Documents", "~/Documents"),
+                b("system", "Downloads", "~/Downloads"),
+            ]
+        else:
+            return [
+                b("system", "Root", "/"),
+                b("system", "Home", "~"),
+                b("system", "Desktop", "~/Desktop", "Desktop"),
+                b("system", "Documents", "~/Documents"),
+                b("system", "Downloads", "~/Downloads"),
+            ]
+
 class SyncUiContext(QObject):
 
     # 3 signals to capture the start of a directory change,
@@ -140,6 +194,10 @@ class SyncUiContext(QObject):
             else:
                 content = self._load_default(directory)
 
+            # useful for color testing
+            #for state in sync2.FileState.states():
+            #    content.append(sync2.DirEnt(state, state, state, state))
+
             self._active_context = ctxt
             self._dir_contents = content
             self._location = directory
@@ -161,7 +219,6 @@ class SyncUiContext(QObject):
         result = sync2._check(ctxt, relpath, abspath)
 
         _dir_contents = result.dirs + result.files
-        print("loaded via check")
         return _dir_contents
 
     def _load_default(self, directory):
@@ -336,6 +393,53 @@ class Pane(QWidget):
     def addWidget(self,widget):
         self.vbox.addWidget(widget)
 
+class ImageView(QLabel):
+
+    def __init__(self, parent=None):
+        super(ImageView, self).__init__(parent)
+
+        self.dialog = None
+
+        self.image = None
+        self.pixmap = None
+
+        self.setFixedHeight(128)
+        self.setHidden(True)
+
+        self.image_extensions = [".png", ".jpg"]
+
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        self.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
+
+    def setPath(self, path):
+
+        if path is None:
+            self.setHidden(True)
+            return
+
+        try:
+            _, ext = os.path.splitext(path)
+            if ext.lower() in self.image_extensions:
+                image = QImage(path)
+                self.setImage(image)
+                return
+        except Exception as e:
+            print("failed to set image: %s" % e)
+        self.setHidden(True)
+
+    def setImage(self, image):
+        self.image = image
+        if image.width() > self.width() or \
+           image.height() > self.height():
+            self.pixmap = QPixmap.fromImage(image).scaled(
+                self.size(),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation)
+        else:
+            self.pixmap = QPixmap.fromImage(image)
+        super().setPixmap(self.pixmap)
+        self.setHidden(False)
+
 class FileContentSortProxyModel(SortProxyModel):
     """
     A sort proxy model that is aware of the file content
@@ -371,10 +475,13 @@ class FileContextMenu(QMenu):
 
         self.ctxt = ctxt
 
+        ents = [row[0] for row in selection]
+
         if len(selection) == 1:
             ent = selection[0][0]
             menu = self.addMenu("Open")
             act = menu.addAction("Native", lambda: self._action_open_native(ent))
+            act = menu.addAction("as Text")
             act = menu.addAction("as Image")
             act = menu.addAction("as Video")
             act = menu.addAction("as PDF")
@@ -387,13 +494,13 @@ class FileContextMenu(QMenu):
         if self.ctxt.hasActiveContext():
 
             menu = self.addMenu("Sync")
-            act = menu.addAction("Push")
-            act = menu.addAction("Pull")
-            act = menu.addAction("Sync")
+            act = menu.addAction("Sync", lambda: self._action_sync(ents))
+            act = menu.addAction("Push", lambda: self._action_push(ents))
+            act = menu.addAction("Pull", lambda: self._action_pull(ents))
             self.addSeparator()
 
-
-        act = self.addAction("Refresh", lambda : self.ctxt.reload())
+        ico = self.style().standardIcon(QStyle.SP_BrowserReload)
+        act = self.addAction(ico, "Refresh", lambda : self.ctxt.reload())
 
         act = self.addAction("Cut")
         act = self.addAction("Copy")
@@ -418,6 +525,35 @@ class FileContextMenu(QMenu):
         else:
             openNative(ent.local_path)
 
+    def _action_sync_impl(self, ents, push, pull):
+
+        # convert mix of FileEnt and DirEnt into just DirEnt
+
+        paths = []
+        for ent in ents:
+            if isinstance(ent, sync2.DirEnt):
+                paths.append(ent)
+            else:
+                print(ent)
+                paths.append(sync2.DirEnt(None, ent.remote_path, ent.local_path))
+
+        optdialog = SyncOptionsDialog(self)
+        if optdialog.exec_() == QDialog.Accepted:
+            opts = optdialog.options()
+            dialog = SyncProgressDialog(self.ctxt)
+            dialog.initiateSync(paths, push, pull, **opts)
+            dialog.exec_()
+            self.ctxt.reload()
+
+    def _action_sync(self, ents):
+        self._action_sync_impl(ents, True, True)
+
+    def _action_push(self, ents):
+        self._action_sync_impl(ents, True, False)
+
+    def _action_pull(self, ents):
+        self._action_sync_impl(ents, False, True)
+
 class FileTableView(TableView):
 
     locationChanged = pyqtSignal(str, int, int)  # dir, dcount, fcount
@@ -434,7 +570,6 @@ class FileTableView(TableView):
         model = self.baseModel()
 
         idx = model.addColumn(2,"icon",editable=False)
-        self.setColumnWidth(idx, 500)
         self.setDelegate(idx, ImageDelegate(self))
         model.getColumn(idx).setDisplayName("")
         model.getColumn(idx).setSortTransform(lambda data, row: os.path.splitext(data[row][3])[-1])
@@ -484,6 +619,7 @@ class FileTableView(TableView):
 
         self.setSortingEnabled(True)
 
+        self.ctxt.locationChanging.connect(self.onLocationChanging)
         self.ctxt.locationChanged.connect(self.onLocationChanged)
 
         self.selectionChangedEvent.connect(self.onSelectionChanged)
@@ -541,7 +677,14 @@ class FileTableView(TableView):
             return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(dt))
         return ""
 
+    def onLocationChanging(self):
+
+        self.setEnabled(False)
+        self.setNewData([])
+
     def onLocationChanged(self, directory):
+
+        self.setEnabled(True)
 
         data = []
         # todo change record to FileEnt..
@@ -648,48 +791,108 @@ class FileTableView(TableView):
 
         row = index.data(RowValueRole)
         ent = row[0]
-        state = row[1]
+        state = row[1].split(":")[0]
 
         if not self.ctxt.hasActiveContext():
             return
 
         if state == sync2.FileState.SAME:
             return None
+
         elif state == sync2.FileState.PUSH:
             return QColor(32, 200, 32, 32)
 
         elif state == sync2.FileState.PULL:
-            return QColor(32, 200, 32, 32)
+            return QColor(32, 32, 200, 32)
 
         elif state == sync2.FileState.CONFLICT_MODIFIED:
-            return QColor(200, 200, 32, 32)
+            return QColor(255, 170, 0, 32)
 
         elif state == sync2.FileState.CONFLICT_CREATED:
-            return QColor(200, 200, 32, 32)
+            return QColor(255, 170, 0, 32)
 
         elif state == sync2.FileState.CONFLICT_VERSION:
-            return QColor(200, 200, 32, 32)
+            return QColor(255, 170, 0, 32)
+
+        elif state == sync2.FileState.CONFLICT_TYPE:
+            return QColor(255, 170, 0, 32)
 
         elif state == sync2.FileState.DELETE_BOTH:
-            return QColor(200, 32, 32, 32)
+            return QColor(255, 50, 0, 32)
 
         elif state == sync2.FileState.DELETE_REMOTE:
-            return QColor(200, 32, 32, 32)
+            return QColor(255, 50, 0, 32)
 
         elif state == sync2.FileState.DELETE_LOCAL:
-            return QColor(200, 32, 32, 32)
+            return QColor(255, 50, 0, 32)
 
         if state == sync2.FileState.ERROR:
-            return QColor(255, 0, 0, 32)
+            return QColor(255, 0, 0, 64)
 
         return None
 
-class LocationTableView(TableView):
-    """docstring for FileTableView"""
+class FavoritesDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
-        super(LocationTableView, self).__init__(parent)
-        model = self.baseModel()
-        model.addColumn(0,"location",editable=False)
+        super(FavoritesDelegate, self).__init__(parent)
+
+    def paint(self, painter, option, index):
+
+        opt = QStyleOptionViewItem(option);
+
+        opt.font.setBold(self.isBold(index));
+
+        super().paint(painter, opt, index);
+
+    def isBold(self, index):
+        # each row for this table contains a bool indicating
+        # if the row should be bold
+        row = index.data(RowValueRole)
+        return row[-1]
+
+class FavoritesListView(TableView):
+
+    pushDirectory = pyqtSignal(str)
+    toggleHiddenSection = pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        super(FavoritesListView, self).__init__(parent)
+
+        self.setLastColumnExpanding(True)
+
+        self.setWordWrap(False)
+        self.setVerticalHeaderVisible(False)
+        self.setHorizontalHeaderVisible(False)
+
+        idx = self.baseModel().addColumn(0, "icon")
+        self.setDelegate(idx, ImageDelegate(self))
+        idx = self.baseModel().addColumn(1, "favorites")
+        self.setDelegate(idx, FavoritesDelegate(self))
+
+        self.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+
+    def setVisible(self, b):
+        super().setVisible(b)
+
+        idx = self.baseModel().getColumnIndexByName("icon")
+        self.setColumnWidth(idx, 32)
+
+    def onMouseDoubleClick(self,index):
+        data = index.data(RowValueRole)
+        path = data[2]
+        if path is not None:
+            path = os.path.expanduser(path)
+            self.pushDirectory.emit(path)
+        else:
+            self.toggleHiddenSection.emit(data[1])
+
+    def onMouseReleaseRight(self,event):
+        pass
+
+    def onMouseReleaseMiddle(self,event):
+        pass
+
+    def onHeaderClicked(self,idx):
+        pass
 
 class LocationView(QWidget):
     """docstring for LocationView"""
@@ -705,12 +908,16 @@ class LocationView(QWidget):
         self.edit_location = QLineEdit(self)
 
         self.btn_back = QToolButton(self)
-        self.btn_back.setIcon(self.style().standardIcon(QStyle.SP_ArrowBack))
+        self.btn_back.setIcon(self.style().standardIcon(QStyle.SP_FileDialogBack))
         self.btn_back.setAutoRaise(True)
 
         self.btn_up = QToolButton(self)
-        self.btn_up.setIcon(self.style().standardIcon(QStyle.SP_ArrowUp))
+        self.btn_up.setIcon(self.style().standardIcon(QStyle.SP_FileDialogToParent))
         self.btn_up.setAutoRaise(True)
+
+        self.btn_refresh = QToolButton(self)
+        self.btn_refresh.setIcon(self.style().standardIcon(QStyle.SP_BrowserReload))
+        self.btn_refresh.setAutoRaise(True)
 
         self.btn_open = QToolButton(self)
         self.btn_open.setIcon(self.style().standardIcon(QStyle.SP_ArrowForward))
@@ -718,6 +925,7 @@ class LocationView(QWidget):
 
         self.hbox1.addWidget(self.btn_back)
         self.hbox1.addWidget(self.btn_up)
+        self.hbox1.addWidget(self.btn_refresh)
         self.hbox1.addWidget(self.edit_location)
         self.hbox1.addWidget(self.btn_open)
 
@@ -737,6 +945,7 @@ class LocationView(QWidget):
 
         self.btn_back.clicked.connect(self.onBackButtonPressed)
         self.btn_up.clicked.connect(self.onUpButtonPressed)
+        self.btn_refresh.clicked.connect(self.onRefreshButtonPressed)
         self.btn_open.clicked.connect(self.onOpenButtonPressed)
         self.btn_fetch.clicked.connect(self.onFetchButtonPressed)
         self.btn_sync.clicked.connect(self.onSyncButtonPressed)
@@ -750,6 +959,9 @@ class LocationView(QWidget):
 
     def onUpButtonPressed(self):
         self.ctxt.pushParentDirectory()
+
+    def onRefreshButtonPressed(self):
+        self.ctxt.reload()
 
     def onOpenButtonPressed(self):
         directory = self.edit_location.text().strip()
@@ -769,46 +981,27 @@ class LocationView(QWidget):
         dialog.exec_()
         self.ctxt.reload()
 
+    def _onSyncButtonPressedImpl(self, push, pull):
+
+        dent = self._getEnt()
+
+        optdialog = SyncOptionsDialog(self)
+        if optdialog.exec_() == QDialog.Accepted:
+            opts = optdialog.options()
+            dialog = SyncProgressDialog(self.ctxt)
+            dialog.initiateSync([dent], push, pull, **opts)
+            dialog.exec_()
+            self.ctxt.reload()
+
     def onSyncButtonPressed(self):
-
-        ent = self._getEnt()
-        #result = sync2._check(self.ctxt.activeContext(), ent.remote_base, ent.local_base)
-        #paths = result.dirs + [sync2.DirEnt(None, f.remote_path, f.local_path) for f  in result.files]
-        push = True
-        pull = True
-        force = False
-        recursive = False
-
-        dialog = SyncProgressDialog(self.ctxt)
-        dialog.initiateSync([ent], push, pull, force, recursive)
-        dialog.exec_()
-        self.ctxt.reload()
+        self._onSyncButtonPressedImpl(True, True)
 
     def onPushButtonPressed(self):
+        self._onSyncButtonPressedImpl(True, False)
 
-        ent = self._getEnt()
-        push = True
-        pull = False
-        force = False
-        recursive = False
-
-        dialog = SyncProgressDialog(self.ctxt)
-        dialog.initiateSync([ent], push, pull, force, recursive)
-        dialog.exec_()
-        self.ctxt.reload()
 
     def onPullButtonPressed(self):
-
-        ent = self._getEnt()
-        push = False
-        pull = True
-        force = False
-        recursive = False
-
-        dialog = SyncProgressDialog(self.ctxt)
-        dialog.initiateSync([ent], push, pull, force, recursive)
-        dialog.exec_()
-        self.ctxt.reload()
+        self._onSyncButtonPressedImpl(False, True)
 
     def onLocationChanged(self, directory):
 
@@ -933,6 +1126,16 @@ class SyncProgressThread(QThread):
             self.push, self.pull, self.force, self.recursive
         )
 
+        if self.push and self.pull:
+            mode = "sync"
+        elif self.push:
+            mode = "push"
+        else:
+            mode = "pull"
+
+        self.sendStatus("mode: %s\nforce: %s\nrecursive: %s" % (
+            mode, self.force, self.recursive))
+
         while True:
 
             try:
@@ -985,6 +1188,45 @@ class SyncProgressThread(QThread):
             self.fileStatus.emit(self._results)
             self._results = []
 
+class SyncOptionsDialog(QDialog):
+
+    def __init__(self, parent=None):
+        super(SyncOptionsDialog, self).__init__(parent)
+
+        self.vbox = QVBoxLayout(self)
+
+        self.chk_force = QCheckBox("Force", self)
+        self.chk_recursive = QCheckBox("Recursive", self)
+
+        self.btn_sync = QPushButton("Sync", self)
+        self.btn_cancel = QPushButton("Cancel", self)
+
+        self.hbox = QHBoxLayout()
+        self.hbox.addStretch(1)
+        self.hbox.addWidget(self.btn_sync)
+        self.hbox.addWidget(self.btn_cancel)
+
+        self.vbox.addWidget(self.chk_force)
+        self.vbox.addWidget(self.chk_recursive)
+        self.vbox.addLayout(self.hbox)
+
+        self._options = None
+
+        self.btn_sync.clicked.connect(self.accept)
+        self.btn_cancel.clicked.connect(self.reject)
+
+    def accept(self):
+
+        self._options = {
+            "force": self.chk_force.isChecked(),
+            "recursive": self.chk_recursive.isChecked(),
+        }
+
+        super().accept()
+
+    def options(self):
+        return self._options
+
 class SyncProgressDialog(QDialog):
 
     def __init__(self, ctxt, parent=None):
@@ -1006,12 +1248,10 @@ class SyncProgressDialog(QDialog):
         self.txt_status.setReadOnly(True)
         self.txt_status.setWordWrapMode(QTextOption.NoWrap)
 
-        self.btn_temp = QPushButton("Temp", self)
         self.btn_exit = QPushButton("Cancel", self)
 
         self.hbox = QHBoxLayout()
         self.hbox.addStretch(1)
-        self.hbox.addWidget(self.btn_temp)
         self.hbox.addWidget(self.btn_exit)
 
         self.vbox.addWidget(self.lbl_action)
@@ -1019,7 +1259,6 @@ class SyncProgressDialog(QDialog):
         self.vbox.addWidget(self.txt_status)
         self.vbox.addLayout(self.hbox)
 
-        self.btn_temp.clicked.connect(self.onTempPressed)
         self.btn_exit.clicked.connect(self.onExitPressed)
 
         self._run_fetch = False
@@ -1084,10 +1323,6 @@ class SyncProgressDialog(QDialog):
         self.thread.alive = False
         self.accept()
 
-    def onTempPressed(self):
-
-        self.txt_status.append("hello")
-
     def exec_(self):
 
         self.thread.start()
@@ -1097,29 +1332,90 @@ class SyncProgressDialog(QDialog):
         self.thread.start()
         super().show()
 
+class FavoritesPane(Pane):
+    """docstring for FavoritesPane"""
+    def __init__(self, ctxt, cfg, parent=None):
+        super(FavoritesPane, self).__init__(parent)
+
+        self.ctxt = ctxt
+        self.cfg = cfg
+
+        self.table_favorites = FavoritesListView(self)
+        self.view_image = ImageView(self)
+
+        self.addWidget(self.table_favorites)
+        self.addWidget(self.view_image)
+
+        self._hidden_sections = set()
+
+        self.onFavoritesChanged()
+
+        self.table_favorites.pushDirectory.connect(
+            lambda path: self.ctxt.pushDirectory(path))
+
+        self.table_favorites.toggleHiddenSection.connect(
+            self.onToggleHiddenSection)
+
+
+    def previewEntry(self, ent):
+
+        if isinstance(ent, sync2.FileEnt):
+            self.view_image.setPath(ent.local_path)
+
+    def onFavoritesChanged(self):
+
+        data = []
+        g = lambda row: (row['section'], row['name'])
+        section = None
+        for row in sorted(self.cfg.favorites, key=g):
+            if row['section'] != section:
+                data.append([None, row['section'], None, True])
+                section = row['section']
+
+            if section in self._hidden_sections:
+                continue
+
+            icon = QFileIconProvider.Folder
+            if 'icon' in row and isinstance(row['icon'], str):
+                if hasattr(QFileIconProvider, row['icon']):
+                    icon = getattr(QFileIconProvider, row['icon'])
+
+            icon = self.ctxt.getIcon(icon)
+            data.append([icon, row['name'], row['path'], False])
+
+        self.table_favorites.setNewData(data)
+
+    def onToggleHiddenSection(self, section):
+
+        if section in self._hidden_sections:
+            self._hidden_sections.remove(section)
+        else:
+            self._hidden_sections.add(section)
+
+        self.onFavoritesChanged()
+
 class SyncMainWindow(QMainWindow):
     """docstring for MainWindow"""
-    def __init__(self, ctxt):
+    def __init__(self, ctxt, cfg):
         super(SyncMainWindow, self).__init__()
 
         self.ctxt = ctxt
+        self.cfg = cfg
 
         self.initMenuBar()
         self.initStatusBar()
 
         self.table_file = FileTableView(self.ctxt, self)
-        self.table_location = LocationTableView(self)
 
         self.view_location = LocationView(self.ctxt, self)
 
-        self.pane_location = Pane(self)
-        self.pane_location.addWidget(self.table_location)
+        self.pane_favorites = FavoritesPane(ctxt, cfg, self)
         self.pane_file = Pane(self)
         self.pane_file.addWidget(self.view_location)
         self.pane_file.addWidget(self.table_file)
 
         self.splitter = QSplitter(self)
-        self.splitter.addWidget(self.pane_location)
+        self.splitter.addWidget(self.pane_favorites)
         self.splitter.addWidget(self.pane_file)
 
         self.setCentralWidget(self.splitter)
@@ -1211,14 +1507,31 @@ class SyncMainWindow(QMainWindow):
 
         self.sbar_lbl_dir_status2.setText(msg)
 
+        if count == 1:
+            ent = self.table_file.getSelection()[0][0]
+            self.pane_favorites.previewEntry(ent)
+
 def main():
+
+    if os.name == 'nt':
+        cfg_base = os.path.join(os.getenv('APPDATA'))
+    else:
+        cfg_base = os.path.expanduser("~/.config")
+
+    cfg_path = os.path.join(cfg_base, "yue-sync", "settings.yml")
+
+    # load the config, or create a new one if it does not exist
+    save = not os.path.exists(cfg_path)
+    cfg = SyncConfig(cfg_path)
+    if save:
+        cfg.save()
 
     app = QApplication(sys.argv)
     app.setApplicationName("Yue-Sync")
 
     app.setQuitOnLastWindowClosed(True)
-    #app_icon = QIcon(':/img/icon.png')
-    #app.setWindowIcon(app_icon)
+    app_icon = QIcon(':/icon.png')
+    app.setWindowIcon(app_icon)
 
     QGuiApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
 
@@ -1226,7 +1539,7 @@ def main():
 
     ctxt = SyncUiContext()
 
-    window = SyncMainWindow(ctxt)
+    window = SyncMainWindow(ctxt, cfg)
     window.showWindow()
 
     ctxt.pushDirectory(os.getcwd())

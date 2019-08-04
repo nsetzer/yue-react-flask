@@ -511,6 +511,22 @@ class FileState(object):
             return FileState.symbol_verbose(state)
         return FileState.symbol_short(state)
 
+    @staticmethod
+    def states():
+        return [
+            FileState.SAME,
+            FileState.PUSH,
+            FileState.PULL,
+            FileState.ERROR,
+            FileState.CONFLICT_MODIFIED,
+            FileState.CONFLICT_CREATED,
+            FileState.CONFLICT_VERSION,
+            FileState.CONFLICT_TYPE,
+            FileState.DELETE_BOTH,
+            FileState.DELETE_REMOTE,
+            FileState.DELETE_LOCAL,
+        ]
+
 class DirEnt(object):
     """docstring for DirEnt"""
     def __init__(self, name, remote_base, local_base, state=None):
@@ -1615,15 +1631,15 @@ def _sync_impl_iter(ctxt, paths, push=False, pull=False, force=False, recursive=
         if (ctxt.storageDao.isDir(dent.remote_base)) or (
            ctxt.fs.exists(dent.local_base) and ctxt.fs.isdir(dent.local_base)):
 
-            result = _check(ctxt, dent.remote_base, dent.local_base)
+            check_result = _check(ctxt, dent.remote_base, dent.local_base)
 
-            for fent in result.files:
+            for fent in check_result.files:
                 yield fent
                 result = _sync_file_impl(ctxt, fent, push, pull, force)
                 yield result
 
             if recursive:
-                paths.extend(result.dirs)
+                paths.extend(check_result.dirs)
 
         else:
             fent = _check_file(ctxt, dent.remote_base, dent.local_base)
