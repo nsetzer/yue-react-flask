@@ -7,6 +7,10 @@
 # create empty file
 # drag and drop mime types
 # set af version (same as local/cache or +1)
+# set / save column order;
+# hide / restore columns
+# implement get password dialog for sync context
+# mouse events, forward and back button
 
 import os
 import sys
@@ -29,37 +33,53 @@ from yueserver.framework.config import BaseConfig, yload, ydump
 
 from yueserver.tools import sync2
 
-def openNative( url ):
+def openNative(url):
 
     if os.name == "nt":
-        os.startfile(url);
+        os.startfile(url)
     elif sys.platform == "darwin":
-        os.system("open %s"%url);
+        os.system("open %s" % url)
     else:
         # could also use kde-open, gnome-open etc
         # TODO: implement code that tries each one until one works
-        #subprocess.call(["xdg-open",filepath])
-        sys.stderr.write("open unsupported on %s"%os.name)
+        # subprocess.call(["xdg-open",filepath])
+        sys.stderr.write("open unsupported on %s" % os.name)
 
 def isSubPath(dir_path, file_path):
-    return os.path.abspath(file_path).startswith(os.path.abspath(dir_path)+os.sep)
+    return os.path.abspath(file_path).startswith(os.path.abspath(dir_path) + os.sep)
 
-byte_labels = ['B','KB','MB','GB']
+def getFileType(path):
+    _, name = os.path.split(path)
+
+    if name.startswith("."):
+        return "DOT FILE"
+
+    if '.' not in name:
+        return "FILE"
+
+    name, ext = os.path.splitext(name)
+
+    if not ext:
+        return "FILE"
+
+    return ext.lstrip(".").upper()
+
+byte_labels = ['B', 'KB', 'MB', 'GB']
 def format_bytes(b):
-    kb=1024
+    kb = 1024
     for label in byte_labels:
         if b < kb:
             if label == "B":
-                return "%d %s"%(b,label)
+                return "%d %s" % (b, label)
             if label == "KB":
                 if b < 10:
-                    return "%.2f %s"%(b,label)
+                    return "%.2f %s" % (b, label)
                 else:
-                    return "%d %s"%(b,label)
+                    return "%d %s" % (b, label)
             else:
-                return "%.2f %s"%(b,label)
+                return "%.2f %s" % (b, label)
         b /= kb
-    return "%d%s"%(b,byte_labels[-1])
+    return "%d%s" % (b, byte_labels[-1])
 
 def format_datetime(dt):
     if dt > 0:
@@ -68,20 +88,20 @@ def format_datetime(dt):
 
 def format_mode_part(mode):
     s = ""
-    s += "r" if 0x4&mode else "-"
-    s += "w" if 0x2&mode else "-"
-    s += "x" if 0x1&mode else "-"
+    s += "r" if 0x4 & mode else "-"
+    s += "w" if 0x2 & mode else "-"
+    s += "x" if 0x1 & mode else "-"
     return s
 
 def format_mode(mode):
     """ format unix permissions as string
     e.g. octal 0o755 to rwxr-xr-x
     """
-    if isinstance(mode,int):
-        u = format_mode_part(mode >> 6) # user
-        g = format_mode_part(mode >> 3) # group
+    if isinstance(mode, int):
+        u = format_mode_part(mode >> 6)  # user
+        g = format_mode_part(mode >> 3)  # group
         o = format_mode_part(mode)      # other
-        return u+g+o
+        return u + g + o
     return ""
 
 def _dummy_fetch_iter(ctxt):
@@ -183,6 +203,7 @@ class SyncUiContext(QObject):
 
         self._location = ""
         self._location_history = []
+        self._location_pop_history = []
         self._dir_contents = []
         self._syncContext = {}
         self._activeContext = None
@@ -208,7 +229,7 @@ class SyncUiContext(QObject):
                 content = self._load_default(directory)
 
             # useful for color testing
-            #for state in sync2.FileState.states():
+            # for state in sync2.FileState.states():
             #    content.append(sync2.DirEnt(state, state, state, state))
 
             self._active_context = ctxt
@@ -274,17 +295,20 @@ class SyncUiContext(QObject):
 
         self.load(directory)
         self._location_history.append(directory)
+        self._location_pop_history = []
 
     def pushChildDirectory(self, dirname):
 
         directory = os.path.join(self._location, dirname)
         self.load(directory)
         self._location_history.append(directory)
+        self._location_pop_history = []
 
     def pushParentDirectory(self):
         directory, _ = os.path.split(self._location)
         self.load(directory)
         self._location_history.append(directory)
+        self._location_pop_history = []
 
     def popDirectory(self):
 
@@ -296,7 +320,22 @@ class SyncUiContext(QObject):
 
         directory = self._location_history[-2]
         self.load(directory)
-        self._location_history = self._location_history[:-1]
+        self._location_pop_history.append(self._location_history.pop())
+
+    def unpopDirectory(self):
+
+        if len(self._location_pop_history) < 1:
+            return
+
+        directory = self._location_pop_history.pop(0)
+        self.load(directory)
+        self._location_history.append(directory)
+
+    def hasBackHistory(self):
+        return len(self._location_history) > 0
+
+    def hasForwardHistory(self):
+        return len(self._location_pop_history) > 0
 
     def hasActiveContext(self):
         return self._active_context is not None
@@ -333,6 +372,9 @@ class SyncUiContext(QObject):
 
             ctxt = sync2.SyncContext(client, storageDao, self.fs,
                 userdata['root'], userdata['remote_base'], userdata['local_base'])
+
+            # replace the get password implementation
+            ctxt.getPassword = self.getPassword
 
             ctxt.current_local_base = userdata['current_local_base']
             ctxt.current_remote_base = userdata['current_remote_base']
@@ -397,14 +439,21 @@ class SyncUiContext(QObject):
         self._paste_entries = None
         self._paste_action = 0
 
+    def getPassword(self, kind):
+        """
+        kind: (server, client)
+        """
+        return ""
+
 class Pane(QWidget):
     """docstring for Pane"""
+
     def __init__(self, parent):
         super(Pane, self).__init__(parent)
         self.vbox = QVBoxLayout(self)
-        self.vbox.setContentsMargins(0,0,0,0)
+        self.vbox.setContentsMargins(0, 0, 0, 0)
 
-    def addWidget(self,widget):
+    def addWidget(self, widget):
         self.vbox.addWidget(widget)
 
 class ImageView(QLabel):
@@ -463,6 +512,7 @@ class FileContentSortProxyModel(SortProxyModel):
     Note: the proxy model could be extended to support filtering
         remote/local/synced files
     """
+
     def lessThan(self, indexL, indexR):
 
         order = self.sortOrder()
@@ -507,7 +557,6 @@ class FileContextMenu(QMenu):
 
         if self.ctxt.hasActiveContext():
 
-
             menu = self.addMenu("Sync")
             act = menu.addAction("Sync", lambda: self._action_sync(ents))
             act = menu.addAction("Push", lambda: self._action_push(ents))
@@ -519,7 +568,7 @@ class FileContextMenu(QMenu):
             self.addSeparator()
 
         ico = self.style().standardIcon(QStyle.SP_BrowserReload)
-        act = self.addAction(ico, "Refresh", lambda : self.ctxt.reload())
+        act = self.addAction(ico, "Refresh", lambda: self.ctxt.reload())
 
         act = self.addAction("Cut")
         act = self.addAction("Copy")
@@ -595,52 +644,58 @@ class FileTableView(TableView):
 
         model = self.baseModel()
 
-        idx = model.addColumn(2,"icon",editable=False)
+        idx = model.addColumn(2, "icon", editable=False)
         self.setDelegate(idx, ImageDelegate(self))
         model.getColumn(idx).setDisplayName("")
         model.getColumn(idx).setSortTransform(lambda data, row: os.path.splitext(data[row][3])[-1])
 
-        idx = model.addColumn(1,"state",editable=False)
+        idx = model.addColumn(1, "state", editable=False)
 
-        idx = model.addColumn(3,"filename",editable=False)
+        idx = model.addColumn(3, "filename", editable=False)
         model.getColumn(idx).setShortName("Name")
         model.getColumn(idx).setDisplayName("File Name")
 
-        idx = model.addTransformColumn(4,"local_size", self._fmt_size)
-        model.getColumn(idx).setDefaultTextAlignment(Qt.AlignRight|Qt.AlignVCenter)
+        idx = model.addTransformColumn(4, "local_size", self._fmt_size)
+        model.getColumn(idx).setDefaultTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
         model.getColumn(idx).setSortTransform(lambda data, row: data[row][4])
 
-        idx = model.addTransformColumn(5,"remote_size", self._fmt_size)
-        model.getColumn(idx).setDefaultTextAlignment(Qt.AlignRight|Qt.AlignVCenter)
+        idx = model.addTransformColumn(5, "remote_size", self._fmt_size)
+        model.getColumn(idx).setDefaultTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
         model.getColumn(idx).setSortTransform(lambda data, row: data[row][5])
 
-        idx = model.addTransformColumn(6,"local_permission", self._fmt_octal)
-        model.getColumn(idx).setDefaultTextAlignment(Qt.AlignRight|Qt.AlignVCenter)
+        idx = model.addTransformColumn(6, "local_permission", self._fmt_octal)
+        self.setDelegate(idx, MonospaceDelegate(self))
+        model.getColumn(idx).setDefaultTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
         model.getColumn(idx).setSortTransform(lambda data, row: data[row][6])
 
-        idx = model.addTransformColumn(7,"remote_permission", self._fmt_octal)
-        model.getColumn(idx).setDefaultTextAlignment(Qt.AlignRight|Qt.AlignVCenter)
+        idx = model.addTransformColumn(7, "remote_permission", self._fmt_octal)
+        self.setDelegate(idx, MonospaceDelegate(self))
+        model.getColumn(idx).setDefaultTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
         model.getColumn(idx).setSortTransform(lambda data, row: data[row][7])
 
-        idx = model.addTransformColumn(10,"local_mtime", self._fmt_datetime)
-        model.getColumn(idx).setDefaultTextAlignment(Qt.AlignRight|Qt.AlignVCenter)
+        idx = model.addTransformColumn(10, "local_mtime", self._fmt_datetime)
+        self.setDelegate(idx, MonospaceDelegate(self))
+        model.getColumn(idx).setDefaultTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
         model.getColumn(idx).setSortTransform(lambda data, row: data[row][10])
 
-        idx = model.addTransformColumn(11,"remote_mtime", self._fmt_datetime)
-        model.getColumn(idx).setDefaultTextAlignment(Qt.AlignRight|Qt.AlignVCenter)
+        idx = model.addTransformColumn(11, "remote_mtime", self._fmt_datetime)
+        self.setDelegate(idx, MonospaceDelegate(self))
+        model.getColumn(idx).setDefaultTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
         model.getColumn(idx).setSortTransform(lambda data, row: data[row][11])
 
-        idx = model.addTransformColumn(0,"remote_path", self._fmt_remote_path)
+        idx = model.addTransformColumn(0, "remote_path", self._fmt_remote_path)
 
-        model.addColumn(8,"remote_public",editable=False)
-        model.addColumn(9,"remote_encryption",editable=False)
+        model.addColumn(8, "remote_public", editable=False)
+        model.addColumn(9, "remote_encryption", editable=False)
+
+        model.addColumn(12, "type", editable=False)
 
         model.addForegroundRule("fg1", self._foregroundRule)
         model.addBackgroundRule("fg2", self._backgroundRule)
 
         self.setVerticalHeaderVisible(False)
 
-        #model.setColumnShortName(0,"")
+        # model.setColumnShortName(0,"")
         self.setColumnsMovable(True)
 
         self.setSortingEnabled(True)
@@ -680,10 +735,10 @@ class FileTableView(TableView):
         self.setColumnWidth(idx, 75)
 
         idx = self.baseModel().getColumnIndexByName("local_mtime")
-        self.setColumnWidth(idx, 125)
+        self.setColumnWidth(idx, 175)
 
         idx = self.baseModel().getColumnIndexByName("remote_mtime")
-        self.setColumnWidth(idx, 125)
+        self.setColumnWidth(idx, 175)
 
     def _fmt_remote_path(self, data, row, key):
         ent = data[row][key]
@@ -718,7 +773,8 @@ class FileTableView(TableView):
             if isinstance(ent, sync2.FileEnt):
 
                 df = {'size': 0, "permission": 0, "mtime": 0, "version": 0,
-                      "public": 0, "encryption": 0}
+                      "public": "", "encryption": ""}
+
                 lf = ent.lf or df
                 rf = ent.rf or df
                 af = ent.af or df
@@ -736,6 +792,7 @@ class FileTableView(TableView):
                     rf['encryption'],
                     af['mtime'],
                     rf['mtime'],
+                    getFileType(ent.name())
                 ]
                 data.append(item)
                 fcount += 1
@@ -750,10 +807,11 @@ class FileTableView(TableView):
                     0,
                     0,
                     0,
+                    "",
+                    "",
                     0,
                     0,
-                    0,
-                    0,
+                    ""
                 ]
                 data.append(item)
                 dcount += 1
@@ -779,7 +837,7 @@ class FileTableView(TableView):
 
         contextMenu = FileContextMenu(self.ctxt, rows, self)
 
-        contextMenu.exec_( event.globalPos() )
+        contextMenu.exec_(event.globalPos())
 
     def onMouseReleaseMiddle(self, event):
         pass
@@ -789,7 +847,6 @@ class FileTableView(TableView):
 
     def onSelectionChanged(self):
         pass
-
 
         # push
         # pull
@@ -860,17 +917,30 @@ class FavoritesDelegate(QStyledItemDelegate):
 
     def paint(self, painter, option, index):
 
-        opt = QStyleOptionViewItem(option);
+        opt = QStyleOptionViewItem(option)
 
-        opt.font.setBold(self.isBold(index));
+        opt.font.setBold(self.isBold(index))
 
-        super().paint(painter, opt, index);
+        super().paint(painter, opt, index)
 
     def isBold(self, index):
         # each row for this table contains a bool indicating
         # if the row should be bold
         row = index.data(RowValueRole)
         return row[-1]
+
+class MonospaceDelegate(QStyledItemDelegate):
+    def __init__(self, parent=None):
+        super(MonospaceDelegate, self).__init__(parent)
+
+    def paint(self, painter, option, index):
+
+        opt = QStyleOptionViewItem(option)
+
+        opt.font.setStyleHint(QFont.Monospace)
+        opt.font.setFamily("courier")
+
+        super().paint(painter, opt, index)
 
 class FavoritesListView(TableView):
 
@@ -899,7 +969,7 @@ class FavoritesListView(TableView):
         idx = self.baseModel().getColumnIndexByName("icon")
         self.setColumnWidth(idx, 32)
 
-    def onMouseDoubleClick(self,index):
+    def onMouseDoubleClick(self, index):
         data = index.data(RowValueRole)
         path = data[2]
         if path is not None:
@@ -908,17 +978,18 @@ class FavoritesListView(TableView):
         else:
             self.toggleHiddenSection.emit(data[1])
 
-    def onMouseReleaseRight(self,event):
+    def onMouseReleaseRight(self, event):
         pass
 
-    def onMouseReleaseMiddle(self,event):
+    def onMouseReleaseMiddle(self, event):
         pass
 
-    def onHeaderClicked(self,idx):
+    def onHeaderClicked(self, idx):
         pass
 
 class LocationView(QWidget):
     """docstring for LocationView"""
+
     def __init__(self, ctxt, parent=None):
         super(LocationView, self).__init__(parent)
 
@@ -1023,7 +1094,6 @@ class LocationView(QWidget):
     def onPushButtonPressed(self):
         self._onSyncButtonPressedImpl(True, False)
 
-
     def onPullButtonPressed(self):
         self._onSyncButtonPressedImpl(False, True)
 
@@ -1063,6 +1133,7 @@ class FetchProgressThread(QThread):
 
         # construct a new sync context for this thread
         ctxt = self.ctxt.activeContext().clone()
+        ctxt.getPassword = self.ctxt.getPassword
 
         # create an iterable in this thread for processing the command
 
@@ -1145,11 +1216,12 @@ class SyncProgressThread(QThread):
     def run(self):
 
         ctxt = self.ctxt.activeContext().clone()
-
-        #iterable = _dummy_sync_iter(
+        ctxt.getPassword = self.ctxt.getPassword
+        
+        # iterable = _dummy_sync_iter(
         #    ctxt, self.paths,
         #    self.push, self.pull, self.force, self.recursive
-        #)
+        # )
 
         iterable = sync2._sync_impl_iter(
             ctxt, self.paths,
@@ -1403,11 +1475,11 @@ class FileEntryInfoDialog(QDialog):
         self.lbl_r_encryption = QLabel(self)
 
         self.lbl_r_public.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
-        self.lbl_r_public.setFrameStyle(QFrame.Panel | QFrame.Raised);
-        self.lbl_r_public.setAlignment(Qt.AlignRight);
+        self.lbl_r_public.setFrameStyle(QFrame.Panel | QFrame.Raised)
+        self.lbl_r_public.setAlignment(Qt.AlignRight)
 
-        self.lbl_r_encryption.setFrameStyle(QFrame.Panel | QFrame.Raised);
-        self.lbl_r_encryption.setAlignment(Qt.AlignRight);
+        self.lbl_r_encryption.setFrameStyle(QFrame.Panel | QFrame.Raised)
+        self.lbl_r_encryption.setAlignment(Qt.AlignRight)
 
         self.btn_r_public_copy = QPushButton("Copy Link", self)
         self.btn_r_public = QPushButton("Create/Revoke", self)
@@ -1428,37 +1500,37 @@ class FileEntryInfoDialog(QDialog):
         self.lbl_l_permission = QLabel(self)
         self.lbl_r_permission = QLabel(self)
 
-        self.lbl_a_version.setFrameStyle(QFrame.Panel | QFrame.Sunken);
-        self.lbl_l_version.setFrameStyle(QFrame.Panel | QFrame.Sunken);
-        self.lbl_r_version.setFrameStyle(QFrame.Panel | QFrame.Sunken);
+        self.lbl_a_version.setFrameStyle(QFrame.Panel | QFrame.Sunken)
+        self.lbl_l_version.setFrameStyle(QFrame.Panel | QFrame.Sunken)
+        self.lbl_r_version.setFrameStyle(QFrame.Panel | QFrame.Sunken)
 
-        self.lbl_a_size.setFrameStyle(QFrame.Panel | QFrame.Sunken);
-        self.lbl_l_size.setFrameStyle(QFrame.Panel | QFrame.Sunken);
-        self.lbl_r_size.setFrameStyle(QFrame.Panel | QFrame.Sunken);
+        self.lbl_a_size.setFrameStyle(QFrame.Panel | QFrame.Sunken)
+        self.lbl_l_size.setFrameStyle(QFrame.Panel | QFrame.Sunken)
+        self.lbl_r_size.setFrameStyle(QFrame.Panel | QFrame.Sunken)
 
-        self.lbl_a_mtime.setFrameStyle(QFrame.Panel | QFrame.Sunken);
-        self.lbl_l_mtime.setFrameStyle(QFrame.Panel | QFrame.Sunken);
-        self.lbl_r_mtime.setFrameStyle(QFrame.Panel | QFrame.Sunken);
+        self.lbl_a_mtime.setFrameStyle(QFrame.Panel | QFrame.Sunken)
+        self.lbl_l_mtime.setFrameStyle(QFrame.Panel | QFrame.Sunken)
+        self.lbl_r_mtime.setFrameStyle(QFrame.Panel | QFrame.Sunken)
 
-        self.lbl_a_permission.setFrameStyle(QFrame.Panel | QFrame.Sunken);
-        self.lbl_l_permission.setFrameStyle(QFrame.Panel | QFrame.Sunken);
-        self.lbl_r_permission.setFrameStyle(QFrame.Panel | QFrame.Sunken);
+        self.lbl_a_permission.setFrameStyle(QFrame.Panel | QFrame.Sunken)
+        self.lbl_l_permission.setFrameStyle(QFrame.Panel | QFrame.Sunken)
+        self.lbl_r_permission.setFrameStyle(QFrame.Panel | QFrame.Sunken)
 
-        self.lbl_a_version.setAlignment(Qt.AlignRight);
-        self.lbl_l_version.setAlignment(Qt.AlignRight);
-        self.lbl_r_version.setAlignment(Qt.AlignRight);
+        self.lbl_a_version.setAlignment(Qt.AlignRight)
+        self.lbl_l_version.setAlignment(Qt.AlignRight)
+        self.lbl_r_version.setAlignment(Qt.AlignRight)
 
-        self.lbl_a_size.setAlignment(Qt.AlignRight);
-        self.lbl_l_size.setAlignment(Qt.AlignRight);
-        self.lbl_r_size.setAlignment(Qt.AlignRight);
+        self.lbl_a_size.setAlignment(Qt.AlignRight)
+        self.lbl_l_size.setAlignment(Qt.AlignRight)
+        self.lbl_r_size.setAlignment(Qt.AlignRight)
 
-        self.lbl_a_mtime.setAlignment(Qt.AlignRight);
-        self.lbl_l_mtime.setAlignment(Qt.AlignRight);
-        self.lbl_r_mtime.setAlignment(Qt.AlignRight);
+        self.lbl_a_mtime.setAlignment(Qt.AlignRight)
+        self.lbl_l_mtime.setAlignment(Qt.AlignRight)
+        self.lbl_r_mtime.setAlignment(Qt.AlignRight)
 
-        self.lbl_a_permission.setAlignment(Qt.AlignRight);
-        self.lbl_l_permission.setAlignment(Qt.AlignRight);
-        self.lbl_r_permission.setAlignment(Qt.AlignRight);
+        self.lbl_a_permission.setAlignment(Qt.AlignRight)
+        self.lbl_l_permission.setAlignment(Qt.AlignRight)
+        self.lbl_r_permission.setAlignment(Qt.AlignRight)
 
         row = 0
 
@@ -1476,7 +1548,7 @@ class FileEntryInfoDialog(QDialog):
 
         row += 1
         hline = QLabel(self)
-        hline.setFrameStyle(QFrame.HLine | QFrame.Sunken);
+        hline.setFrameStyle(QFrame.HLine | QFrame.Sunken)
         self.layout.addWidget(hline, row, 0, 1, 4)
 
         row += 1
@@ -1493,7 +1565,7 @@ class FileEntryInfoDialog(QDialog):
 
         row += 1
         hline = QLabel(self)
-        hline.setFrameStyle(QFrame.HLine | QFrame.Sunken);
+        hline.setFrameStyle(QFrame.HLine | QFrame.Sunken)
         self.layout.addWidget(hline, row, 0, 1, 4)
 
         row += 1
@@ -1534,7 +1606,7 @@ class FileEntryInfoDialog(QDialog):
         self.lbl_status.setText(ent.state())
 
         df = {'size': 0, "permission": 0, "mtime": 0, "version": 0,
-                      "public": "", "encryption": ""}
+              "public": "", "encryption": ""}
 
         af = ent.af or df
         lf = ent.lf or df
@@ -1556,24 +1628,25 @@ class FileEntryInfoDialog(QDialog):
 
         self.lbl_r_encryption.setText(rf['encryption'] or "none")
 
-        self.lbl_a_version.setText(str(af['version']));
-        self.lbl_l_version.setText(str(lf['version']));
-        self.lbl_r_version.setText(str(rf['version']));
+        self.lbl_a_version.setText(str(af['version']))
+        self.lbl_l_version.setText(str(lf['version']))
+        self.lbl_r_version.setText(str(rf['version']))
 
-        self.lbl_a_size.setText(str(af['size']));
-        self.lbl_l_size.setText(str(lf['size']));
-        self.lbl_r_size.setText(str(rf['size']));
+        self.lbl_a_size.setText(str(af['size']))
+        self.lbl_l_size.setText(str(lf['size']))
+        self.lbl_r_size.setText(str(rf['size']))
 
-        self.lbl_a_mtime.setText(format_datetime(af['mtime']));
-        self.lbl_l_mtime.setText(format_datetime(lf['mtime']));
-        self.lbl_r_mtime.setText(format_datetime(rf['mtime']));
+        self.lbl_a_mtime.setText(format_datetime(af['mtime']))
+        self.lbl_l_mtime.setText(format_datetime(lf['mtime']))
+        self.lbl_r_mtime.setText(format_datetime(rf['mtime']))
 
-        self.lbl_a_permission.setText(format_mode(af['permission']));
-        self.lbl_l_permission.setText(format_mode(lf['permission']));
-        self.lbl_r_permission.setText(format_mode(rf['permission']));
+        self.lbl_a_permission.setText(format_mode(af['permission']))
+        self.lbl_l_permission.setText(format_mode(lf['permission']))
+        self.lbl_r_permission.setText(format_mode(rf['permission']))
 
 class FavoritesPane(Pane):
     """docstring for FavoritesPane"""
+
     def __init__(self, ctxt, cfg, parent=None):
         super(FavoritesPane, self).__init__(parent)
 
@@ -1595,7 +1668,6 @@ class FavoritesPane(Pane):
 
         self.table_favorites.toggleHiddenSection.connect(
             self.onToggleHiddenSection)
-
 
     def previewEntry(self, ent):
 
@@ -1636,6 +1708,7 @@ class FavoritesPane(Pane):
 
 class SyncMainWindow(QMainWindow):
     """docstring for MainWindow"""
+
     def __init__(self, ctxt, cfg):
         super(SyncMainWindow, self).__init__()
 
@@ -1686,37 +1759,37 @@ class SyncMainWindow(QMainWindow):
         sw = geometry.width()
         sh = geometry.height()
         # calculate default values
-        dw = int(sw*.6)
-        dh = int(sh*.6)
-        dx = sw//2 - dw//2
-        dy = sh//2 - dh//2
+        dw = int(sw * .6)
+        dh = int(sh * .6)
+        dx = sw // 2 - dw // 2
+        dy = sh // 2 - dh // 2
         # use stored values if they exist
-        cw = 0#s.getDefault("window_width",dw)
-        ch = 0#s.getDefault("window_height",dh)
-        cx = -1#s.getDefault("window_x",dx)
-        cy = -1#s.getDefault("window_y",dy)
+        cw = 0  # s.getDefault("window_width",dw)
+        ch = 0  # s.getDefault("window_height",dh)
+        cx = -1  # s.getDefault("window_x",dx)
+        cy = -1  # s.getDefault("window_y",dy)
         # the application should start wholly on the screen
         # otherwise, default its position to the center of the screen
-        if cx < 0 or cx+cw>sw:
+        if cx < 0 or cx + cw > sw:
             cx = dx
             cw = dw
-        if cy < 0 or cy+ch>sh:
+        if cy < 0 or cy + ch > sh:
             cy = dy
             ch = dh
         if cw <= 0:
             cw = dw
         if ch <= 0:
             ch = dh
-        self.resize(cw,ch)
-        self.move(cx,cy)
+        self.resize(cw, ch)
+        self.move(cx, cy)
         self.show()
 
         # somewhat arbitrary
         # set the width of the quick access view to something
         # reasonable
         lw = 200
-        if cw > lw*2:
-            self.splitter.setSizes([lw,cw-lw])
+        if cw > lw * 2:
+            self.splitter.setSizes([lw, cw - lw])
 
     def onTableLocationChanged(self, path, dcount, fcount):
 
@@ -1785,6 +1858,7 @@ def main():
     ctxt.pushDirectory(os.getcwd())
 
     sys.exit(app.exec_())
+
 
 if __name__ == '__main__':
     main()

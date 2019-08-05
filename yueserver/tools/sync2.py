@@ -328,9 +328,13 @@ class SyncContext(object):
     def attr(self, directory):
         return DirAttr.openDir(self.local_base, directory)
 
+    def getPassword(self, kind):
+
+        return get_pass("%s password: " % kind)
+
     def getEncryptionServerPassword(self):
         if self.encryption_server_password is None:
-            self.encryption_server_password = get_pass("server password: ")
+            self.encryption_server_password = self.getPassword('server')
         return self.encryption_server_password
 
     def getEncryptionClientKey(self):
@@ -349,7 +353,7 @@ class SyncContext(object):
                     response.status_code)
             key = response.json()['result']['key']
 
-            password = get_pass("client password: ")
+            password = self.getPassword('client')
 
             self.encryption_client_key = decryptkey(password, key)
         return self.encryption_client_key
@@ -366,9 +370,11 @@ class SyncContext(object):
 
         storageDao = LocalStorageDao(db, db.tables)
 
-        return SyncContext(self.client, storageDao, self.fs,
+        ctxt = SyncContext(self.client, storageDao, self.fs,
             self.root, self.remote_base, self.local_base, self.verbose)
 
+        return ctxt
+        
     def close(self):
 
         self.storageDao.db.conn.close()
@@ -377,6 +383,7 @@ class SyncContext(object):
 
 class RecordBuilder(object):
     """docstring for RecordBuilder"""
+
     def __init__(self, rel_path=None):
         super(RecordBuilder, self).__init__()
 
@@ -529,6 +536,7 @@ class FileState(object):
 
 class DirEnt(object):
     """docstring for DirEnt"""
+
     def __init__(self, name, remote_base, local_base, state=None):
         super(DirEnt, self).__init__()
         self.remote_base = remote_base
@@ -537,13 +545,13 @@ class DirEnt(object):
         self._state = state or FileState.ERROR
 
     def state(self):
-        #if self.remote_base is None and self.local_base is None:
+        # if self.remote_base is None and self.local_base is None:
         #    return FileState.ERROR
-        #elif self.remote_base is None and self.local_base is not None:
+        # elif self.remote_base is None and self.local_base is not None:
         #    return FileState.PUSH
-        #elif self.remote_base is not None and self.local_base is None:
+        # elif self.remote_base is not None and self.local_base is None:
         #    return FileState.PULL
-        #elif self.remote_base is not None and self.local_base is not None:
+        # elif self.remote_base is not None and self.local_base is not None:
         #    return FileState.SAME
         return self._state
 
@@ -567,6 +575,10 @@ class FileEnt(object):
         self.lf = lf
         self.rf = rf
         self.af = af
+
+        self._state = None
+
+        self.state()  # set af version
 
     def __str__(self):
         return "FileEnt<%s,%s>" % (self.remote_path, self.local_path)
@@ -612,6 +624,7 @@ class FileEnt(object):
                 # file has changed locally
                 if self._samefile(self.lf, self.rf):
                     # local is newer
+                    self.af['version'] = self.lf['version'] + 1
                     return FileState.PUSH + ":3a"
                 else:
                     # both modified
@@ -619,7 +632,7 @@ class FileEnt(object):
 
             return FileState.ERROR + ":3b"
 
-    def state(self):
+    def _get_state(self):
 
         # this assumes that fetch properly updates the database
         # fetch needs to clear the remote version for files that are
@@ -643,6 +656,9 @@ class FileEnt(object):
         rfe = self.rf is not None
         afe = self.af is not None
 
+        if afe and lfe:
+            self.af['version'] = self.lf['version']
+
         # 0: error
         # Note: one way to get into the error state is to:
         #  in ctxt A: push files to remote
@@ -656,6 +672,7 @@ class FileEnt(object):
 
         # 1 : push
         elif lfnull and rfnull and afe:
+            self.af['version'] = 1
             return FileState.PUSH + ":1"
 
         # 2 : pull
@@ -684,22 +701,27 @@ class FileEnt(object):
 
         return FileState.ERROR
 
+    def state(self):
+        if self._state is None:
+            self._state = self._get_state()
+        return self._state
+
     def data(self):
         lv = ("%2d" % self.lf.get('version', 0)) if self.lf else "--"
         rv = ("%2d" % self.rf.get('version', 0)) if self.rf else "--"
         av = ("%2d" % self.af.get('version', 0)) if self.af else "--"
 
-        lm = ("%10d" % self.lf.get('mtime', 0)) if self.lf else ("-"*10)
-        rm = ("%10d" % self.rf.get('mtime', 0)) if self.rf else ("-"*10)
-        am = ("%10d" % self.af.get('mtime', 0)) if self.af else ("-"*10)
+        lm = ("%10d" % self.lf.get('mtime', 0)) if self.lf else ("-" * 10)
+        rm = ("%10d" % self.rf.get('mtime', 0)) if self.rf else ("-" * 10)
+        am = ("%10d" % self.af.get('mtime', 0)) if self.af else ("-" * 10)
 
-        _ls = ("%10d" % self.lf.get('size', 0)) if self.lf else ("-"*10)
-        _rs = ("%10d" % self.rf.get('size', 0)) if self.rf else ("-"*10)
-        _as = ("%10d" % self.af.get('size', 0)) if self.af else ("-"*10)
+        _ls = ("%10d" % self.lf.get('size', 0)) if self.lf else ("-" * 10)
+        _rs = ("%10d" % self.rf.get('size', 0)) if self.rf else ("-" * 10)
+        _as = ("%10d" % self.af.get('size', 0)) if self.af else ("-" * 10)
 
-        lp = ("%5s"%oct(self.lf.get('permission', 0))) if self.lf else ("-"*5)
-        rp = ("%5s"%oct(self.rf.get('permission', 0))) if self.rf else ("-"*5)
-        ap = ("%5s"%oct(self.af.get('permission', 0))) if self.af else ("-"*5)
+        lp = ("%5s" % oct(self.lf.get('permission', 0))) if self.lf else ("-" * 5)
+        rp = ("%5s" % oct(self.rf.get('permission', 0))) if self.rf else ("-" * 5)
+        ap = ("%5s" % oct(self.af.get('permission', 0))) if self.af else ("-" * 5)
 
         if self.rf:
             public = self.rf.get('public', None) or ""
@@ -737,8 +759,8 @@ class FileEnt(object):
             st_am = time.strftime('%y-%m-%d %H:%M:%S', time.localtime(mtime))
         else:
             st_am = "-" * 17
-        st_ap = ("%5s"%oct(self.af.get('permission', 0))) if self.af else ("-"*5)
-        st_as = ("%12d" % self.af.get('size', 0)) if self.af else ("-"*12)
+        st_ap = ("%5s" % oct(self.af.get('permission', 0))) if self.af else ("-" * 5)
+        st_as = ("%12d" % self.af.get('size', 0)) if self.af else ("-" * 12)
 
         if self.rf:
             enc = self.rf.get("encryption", None)
@@ -1203,7 +1225,7 @@ def _check(ctxt, remote_base, local_base):
             else:
                 del _names[name]
 
-        # local database info
+        # local (Cached) database info
         if f['local_version'] == 0:
             lf = None
         else:
@@ -1357,7 +1379,7 @@ def _parse_path_args(fs, remote_base, local_base, args_paths):
     paths = []
 
     for path in args_paths:
-        #if not fs.exists(path):
+        # if not fs.exists(path):
         #    raise FileNotFoundError(path)
         abspath, relpath = _norm_path(fs, remote_base, local_base, path)
         name = fs.split(abspath)[1]
@@ -1776,7 +1798,6 @@ def _list_impl(ctxt, root, path, verbose=False):
                 sys.stdout.write("%s\n" % (item['name']))
 
 def _move_get_actions(ctxt, ents, dst):
-
     """
     determines what actions, if any, to take given a list
     of paths and a target directory or file location
@@ -2359,6 +2380,7 @@ class InfoCLI(object):
 
     verbose logging will print bytes instead of megabytes
     """
+
     def register(self, parser):
 
         subparser = parser.add_parser('info',
@@ -2457,7 +2479,6 @@ class RemoveCLI(object):
 
         paths = _parse_path_args(ctxt.fs, ctxt.remote_base,
             ctxt.local_base, args.paths)
-
 
         _remove_impl(ctxt, paths, args.local, args.remote)
 
@@ -2631,9 +2652,9 @@ def _register_parsers(parser):
     SetPublicCLI().register(parser)
     GetPublicCLI().register(parser)
 
-    #GetCLI().register(parser)
-    #PutCLI().register(parser)
-    #CopyCLI().register(parser)
+    # GetCLI().register(parser)
+    # PutCLI().register(parser)
+    # CopyCLI().register(parser)
 
 def main():
 
@@ -2665,6 +2686,7 @@ def main():
         parser.print_help()
     else:
         args.func(args)
+
 
 if __name__ == '__main__':
     main()
