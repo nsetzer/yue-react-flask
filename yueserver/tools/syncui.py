@@ -1,5 +1,13 @@
 #! cd ../.. && python3 -m yueserver.tools.syncui
 
+# remove
+# move
+# cut/copy/paste
+# create directory
+# create empty file
+# drag and drop mime types
+# set af version (same as local/cache or +1)
+
 import os
 import sys
 import time
@@ -52,6 +60,11 @@ def format_bytes(b):
                 return "%.2f %s"%(b,label)
         b /= kb
     return "%d%s"%(b,byte_labels[-1])
+
+def format_datetime(dt):
+    if dt > 0:
+        return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(dt))
+    return ""
 
 def format_mode_part(mode):
     s = ""
@@ -323,6 +336,7 @@ class SyncUiContext(QObject):
 
             ctxt.current_local_base = userdata['current_local_base']
             ctxt.current_remote_base = userdata['current_remote_base']
+            ctxt.hostname = userdata['hostname']
 
         except sync2.SyncException as e:
             self.loadContextError.emit(directory, str(e))
@@ -493,10 +507,15 @@ class FileContextMenu(QMenu):
 
         if self.ctxt.hasActiveContext():
 
+
             menu = self.addMenu("Sync")
             act = menu.addAction("Sync", lambda: self._action_sync(ents))
             act = menu.addAction("Push", lambda: self._action_push(ents))
             act = menu.addAction("Pull", lambda: self._action_pull(ents))
+
+            if len(selection) == 1:
+                act = self.addAction("Info", lambda: self._action_info(ents[0]))
+
             self.addSeparator()
 
         ico = self.style().standardIcon(QStyle.SP_BrowserReload)
@@ -553,6 +572,13 @@ class FileContextMenu(QMenu):
 
     def _action_pull(self, ents):
         self._action_sync_impl(ents, False, True)
+
+    def _action_info(self, ent):
+
+        dialog = FileEntryInfoDialog(self)
+        hostname = self.ctxt.activeContext().hostname
+        dialog.setEntry(ent, hostname)
+        dialog.exec_()
 
 class FileTableView(TableView):
 
@@ -672,10 +698,7 @@ class FileTableView(TableView):
         return format_mode(data[row][key])
 
     def _fmt_datetime(self, data, row, key):
-        dt = data[row][key]
-        if dt > 0:
-            return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(dt))
-        return ""
+        return format_datetime(data[row][key])
 
     def onLocationChanging(self):
 
@@ -952,6 +975,7 @@ class LocationView(QWidget):
         self.btn_push.clicked.connect(self.onPushButtonPressed)
         self.btn_pull.clicked.connect(self.onPullButtonPressed)
         self.edit_location.returnPressed.connect(self.onOpenButtonPressed)
+        self.ctxt.locationChanging.connect(self.onLocationChanging)
         self.ctxt.locationChanged.connect(self.onLocationChanged)
 
     def onBackButtonPressed(self):
@@ -1003,7 +1027,13 @@ class LocationView(QWidget):
     def onPullButtonPressed(self):
         self._onSyncButtonPressedImpl(False, True)
 
+    def onLocationChanging(self):
+
+        self.setEnabled(False)
+
     def onLocationChanged(self, directory):
+
+        self.setEnabled(True)
 
         active = self.ctxt.hasActiveContext()
         self.btn_fetch.setEnabled(active)
@@ -1331,6 +1361,216 @@ class SyncProgressDialog(QDialog):
     def show(self):
         self.thread.start()
         super().show()
+
+class FileEntryInfoDialog(QDialog):
+
+    def __init__(self, parent=None):
+        super(FileEntryInfoDialog, self).__init__(parent)
+
+        self.layout = QGridLayout()
+
+        self.btn_accept = QPushButton("Close")
+        self.btn_accept.clicked.connect(self.accept)
+
+        self.hbox = QHBoxLayout()
+        self.hbox.addStretch(1)
+        self.hbox.addWidget(self.btn_accept)
+
+        self.vbox = QVBoxLayout(self)
+        self.vbox.addLayout(self.layout)
+        self.vbox.addStretch(1)
+        self.vbox.addLayout(self.hbox)
+
+        self.txt_local = QLineEdit(self)
+        self.txt_local.setReadOnly(True)
+
+        self.txt_remote = QLineEdit(self)
+        self.txt_remote.setReadOnly(True)
+
+        self.lbl_status = QLabel(self)
+        self.lbl_status.setAlignment(Qt.AlignRight)
+
+        self.lbl_disk = QLabel("Disk", self)
+        self.lbl_disk.setAlignment(Qt.AlignCenter)
+
+        self.lbl_cache = QLabel("Cache", self)
+        self.lbl_cache.setAlignment(Qt.AlignCenter)
+
+        self.lbl_remote = QLabel("Remote", self)
+        self.lbl_remote.setAlignment(Qt.AlignCenter)
+
+        self.lbl_r_public = QLabel(self)
+        self.lbl_r_encryption = QLabel(self)
+
+        self.lbl_r_public.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        self.lbl_r_public.setFrameStyle(QFrame.Panel | QFrame.Raised);
+        self.lbl_r_public.setAlignment(Qt.AlignRight);
+
+        self.lbl_r_encryption.setFrameStyle(QFrame.Panel | QFrame.Raised);
+        self.lbl_r_encryption.setAlignment(Qt.AlignRight);
+
+        self.btn_r_public_copy = QPushButton("Copy Link", self)
+        self.btn_r_public = QPushButton("Create/Revoke", self)
+
+        self.lbl_a_version = QLabel(self)
+        self.lbl_l_version = QLabel(self)
+        self.lbl_r_version = QLabel(self)
+
+        self.lbl_a_size = QLabel(self)
+        self.lbl_l_size = QLabel(self)
+        self.lbl_r_size = QLabel(self)
+
+        self.lbl_a_mtime = QLabel(self)
+        self.lbl_l_mtime = QLabel(self)
+        self.lbl_r_mtime = QLabel(self)
+
+        self.lbl_a_permission = QLabel(self)
+        self.lbl_l_permission = QLabel(self)
+        self.lbl_r_permission = QLabel(self)
+
+        self.lbl_a_version.setFrameStyle(QFrame.Panel | QFrame.Sunken);
+        self.lbl_l_version.setFrameStyle(QFrame.Panel | QFrame.Sunken);
+        self.lbl_r_version.setFrameStyle(QFrame.Panel | QFrame.Sunken);
+
+        self.lbl_a_size.setFrameStyle(QFrame.Panel | QFrame.Sunken);
+        self.lbl_l_size.setFrameStyle(QFrame.Panel | QFrame.Sunken);
+        self.lbl_r_size.setFrameStyle(QFrame.Panel | QFrame.Sunken);
+
+        self.lbl_a_mtime.setFrameStyle(QFrame.Panel | QFrame.Sunken);
+        self.lbl_l_mtime.setFrameStyle(QFrame.Panel | QFrame.Sunken);
+        self.lbl_r_mtime.setFrameStyle(QFrame.Panel | QFrame.Sunken);
+
+        self.lbl_a_permission.setFrameStyle(QFrame.Panel | QFrame.Sunken);
+        self.lbl_l_permission.setFrameStyle(QFrame.Panel | QFrame.Sunken);
+        self.lbl_r_permission.setFrameStyle(QFrame.Panel | QFrame.Sunken);
+
+        self.lbl_a_version.setAlignment(Qt.AlignRight);
+        self.lbl_l_version.setAlignment(Qt.AlignRight);
+        self.lbl_r_version.setAlignment(Qt.AlignRight);
+
+        self.lbl_a_size.setAlignment(Qt.AlignRight);
+        self.lbl_l_size.setAlignment(Qt.AlignRight);
+        self.lbl_r_size.setAlignment(Qt.AlignRight);
+
+        self.lbl_a_mtime.setAlignment(Qt.AlignRight);
+        self.lbl_l_mtime.setAlignment(Qt.AlignRight);
+        self.lbl_r_mtime.setAlignment(Qt.AlignRight);
+
+        self.lbl_a_permission.setAlignment(Qt.AlignRight);
+        self.lbl_l_permission.setAlignment(Qt.AlignRight);
+        self.lbl_r_permission.setAlignment(Qt.AlignRight);
+
+        row = 0
+
+        row += 1
+        self.layout.addWidget(QLabel("File Path"), row, 0, 1, 1)
+        self.layout.addWidget(self.txt_local, row, 1, 1, 3)
+
+        row += 1
+        self.layout.addWidget(QLabel("Remote Path"), row, 0, 1, 1)
+        self.layout.addWidget(self.txt_remote, row, 1, 1, 3)
+
+        row += 1
+        self.layout.addWidget(QLabel("Status"), row, 0, 1, 1)
+        self.layout.addWidget(self.lbl_status, row, 1, 1, 3)
+
+        row += 1
+        hline = QLabel(self)
+        hline.setFrameStyle(QFrame.HLine | QFrame.Sunken);
+        self.layout.addWidget(hline, row, 0, 1, 4)
+
+        row += 1
+        self.layout.addWidget(QLabel("Public URL"), row, 0, 1, 1)
+        self.layout.addWidget(self.lbl_r_public, row, 1, 1, 3)
+
+        row += 1
+        self.layout.addWidget(self.btn_r_public_copy, row, 1, 1, 1)
+        self.layout.addWidget(self.btn_r_public, row, 2, 1, 2)
+
+        row += 1
+        self.layout.addWidget(QLabel("Encryption Mode"), row, 0, 1, 1)
+        self.layout.addWidget(self.lbl_r_encryption, row, 1, 1, 3)
+
+        row += 1
+        hline = QLabel(self)
+        hline.setFrameStyle(QFrame.HLine | QFrame.Sunken);
+        self.layout.addWidget(hline, row, 0, 1, 4)
+
+        row += 1
+        self.layout.addWidget(self.lbl_disk, row, 1, 1, 1)
+        self.layout.addWidget(self.lbl_cache, row, 2, 1, 1)
+        self.layout.addWidget(self.lbl_remote, row, 3, 1, 1)
+
+        row += 1
+        self.layout.addWidget(QLabel("Version"), row, 0, 1, 1)
+        self.layout.addWidget(self.lbl_a_version, row, 1, 1, 1)
+        self.layout.addWidget(self.lbl_l_version, row, 2, 1, 1)
+        self.layout.addWidget(self.lbl_r_version, row, 3, 1, 1)
+
+        row += 1
+        self.layout.addWidget(QLabel("Size"), row, 0, 1, 1)
+        self.layout.addWidget(self.lbl_a_size, row, 1, 1, 1)
+        self.layout.addWidget(self.lbl_l_size, row, 2, 1, 1)
+        self.layout.addWidget(self.lbl_r_size, row, 3, 1, 1)
+
+        row += 1
+        self.layout.addWidget(QLabel("Modified Time"), row, 0, 1, 1)
+        self.layout.addWidget(self.lbl_a_mtime, row, 1, 1, 1)
+        self.layout.addWidget(self.lbl_l_mtime, row, 2, 1, 1)
+        self.layout.addWidget(self.lbl_r_mtime, row, 3, 1, 1)
+
+        row += 1
+        self.layout.addWidget(QLabel("Permission"), row, 0, 1, 1)
+        self.layout.addWidget(self.lbl_a_permission, row, 1, 1, 1)
+        self.layout.addWidget(self.lbl_l_permission, row, 2, 1, 1)
+        self.layout.addWidget(self.lbl_r_permission, row, 3, 1, 1)
+
+    def setEntry(self, ent, hostname=None):
+
+        self.txt_local.setText(ent.local_path)
+        self.txt_remote.setText(ent.remote_path)
+
+        # TODO: status should have an icon
+        self.lbl_status.setText(ent.state())
+
+        df = {'size': 0, "permission": 0, "mtime": 0, "version": 0,
+                      "public": "", "encryption": ""}
+
+        af = ent.af or df
+        lf = ent.lf or df
+        rf = ent.rf or df
+
+        if hostname:
+            public = "%s/p/%s" % (hostname, rf['public'])
+            public = "<a href=\"%s\">%s</a>" % (public, rf['public'])
+            self.lbl_r_public.setTextFormat(Qt.RichText)
+            self.lbl_r_public.setOpenExternalLinks(True)
+            self.lbl_r_public.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        else:
+            public = rf['public']
+            self.lbl_r_public.setTextFormat(Qt.RichText)
+            self.lbl_r_public.setOpenExternalLinks(False)
+            self.lbl_r_public.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        self.lbl_r_public.setText(public)
+
+        self.lbl_r_encryption.setText(rf['encryption'] or "none")
+
+        self.lbl_a_version.setText(str(af['version']));
+        self.lbl_l_version.setText(str(lf['version']));
+        self.lbl_r_version.setText(str(rf['version']));
+
+        self.lbl_a_size.setText(str(af['size']));
+        self.lbl_l_size.setText(str(lf['size']));
+        self.lbl_r_size.setText(str(rf['size']));
+
+        self.lbl_a_mtime.setText(format_datetime(af['mtime']));
+        self.lbl_l_mtime.setText(format_datetime(lf['mtime']));
+        self.lbl_r_mtime.setText(format_datetime(rf['mtime']));
+
+        self.lbl_a_permission.setText(format_mode(af['permission']));
+        self.lbl_l_permission.setText(format_mode(lf['permission']));
+        self.lbl_r_permission.setText(format_mode(rf['permission']));
 
 class FavoritesPane(Pane):
     """docstring for FavoritesPane"""

@@ -730,7 +730,7 @@ class FileEnt(object):
 
         """
 
-        st_lv = ("%4d" % self.lf.get('version', 0)) if self.lf else "--"
+        st_lv = ("%4d" % self.lf.get('version', 0)) if self.lf else "----"
         #st_am = ("%11d" % self.af.get('mtime', 0)) if self.af else ("-"*11)
         mtime = self.af.get('mtime', 0) if self.af else 0
         if mtime > 0:

@@ -63,6 +63,7 @@ class AppResource(WebResource):
     def static(self, path):
         """ retrieve static files
         """
+        logging.info("get static path: %s" % path)
         response = make_response(send_from_directory(
             self.config.static_dir, path))
         response.headers['Cache-Control'] = 'max-age=31536000'

@@ -14,6 +14,23 @@ import logging
 
 from .crypto import CipherConfigDecryptor, ParameterStoreConfigDecryptor
 
+def yload(path):
+
+    if not os.path.exists(path):
+        return {}
+
+    with open(path, "r") as rf:
+        return yaml.load(rf, Loader=Loader)
+
+def ydump(path, obj):
+    dir, _ = os.path.split(path)
+
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+
+    with open(path, "w") as wf:
+        yaml.dump(obj, wf, default_flow_style=False)
+
 class BaseConfig(object):
     def __init__(self):
         super(BaseConfig, self).__init__()
@@ -97,7 +114,6 @@ class LoggingConfig(BaseConfig):
         self.level = self.parse_loglevel(self.get_key(base, 'logging', 'level', default="error"))
 
 class ApplicationBaseConfig(BaseConfig):
-    """docstring for ApplicationBaseConfig"""
     def __init__(self, data):
         super(ApplicationBaseConfig, self).__init__()
 
