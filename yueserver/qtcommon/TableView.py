@@ -8,6 +8,8 @@ from PyQt5.QtGui import *
 # for testing
 import string
 import random
+import base64
+import zlib
 # http://pyqt.sourceforge.net/Docs/PyQt4/qt.html#ItemDataRole-enum
 
 RowValueRole = Qt.UserRole + 1000
@@ -514,6 +516,7 @@ class TableModel(QAbstractTableModel):
         return None
 
     def setData(self, index, value, role=Qt.EditRole):
+        print("set data", index, value)
         if role != Qt.EditRole:
             return False
 
@@ -666,11 +669,38 @@ class SortProxyModel(QSortFilterProxyModel):
         """
         super().sort(column, order)
 
+class AbstractHeaderView(QHeaderView):
+
+    showContextMenu = pyqtSignal(QMouseEvent)  # event
+
+    def __init__(self, orientation, parent=None):
+        super(AbstractHeaderView, self).__init__(orientation, parent)
+
+        #self.setSectionsClickable(True)
+        #self.setHighlightSections(True)
+
+        self.sectionResized.connect(self.onSectionResized)
+
+    def onSectionResized(self, index, old, new):
+        print("resize", index, old, new)
+
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+
+        if event.button() == Qt.RightButton:
+            self.showContextMenu.emit(event)
+
+        super().mouseReleaseEvent(event)
+
 class AbstractTableView(QTableView):
 
     MouseDoubleClick = pyqtSignal(QModelIndex)
     MouseReleaseRight = pyqtSignal(QMouseEvent)
     MouseReleaseMiddle = pyqtSignal(QMouseEvent)
+    MouseReleaseBack = pyqtSignal(QMouseEvent)
+    MouseReleaseForward = pyqtSignal(QMouseEvent)
     selectionChangedEvent = pyqtSignal()
     rowChanged = pyqtSignal(int)  # index of the row that changed
 
@@ -686,6 +716,10 @@ class AbstractTableView(QTableView):
         # TabFocus ClickFocus StrongFocus WheelFocus NoFocus
         #self.setFocusPolicy(Qt.ClickFocus );
 
+        header = AbstractHeaderView(Qt.Horizontal, self)
+        header.showContextMenu.connect(self.onShowHeaderContextMenu)
+        self.setHorizontalHeader(header)
+
         #  ScrollPerItem, ScrollPerPixel
         self.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
 
@@ -694,7 +728,11 @@ class AbstractTableView(QTableView):
         self.MouseDoubleClick.connect(self.onMouseDoubleClick)
         self.MouseReleaseRight.connect(self.onMouseReleaseRight)
         self.MouseReleaseMiddle.connect(self.onMouseReleaseMiddle)
+        self.MouseReleaseBack.connect(self.onMouseReleaseBack)
+        self.MouseReleaseForward.connect(self.onMouseReleaseForward)
         self.horizontalHeader().sectionClicked.connect(self.onHeaderClicked)
+
+        self._edit_index = None
 
     def selectionChanged(self, *args):
         super().selectionChanged(*args)
@@ -720,12 +758,45 @@ class AbstractTableView(QTableView):
         if event.button() == Qt.RightButton:
             self.MouseReleaseRight.emit(event)
             return
-        if event.button() == Qt.MiddleButton:
+        elif event.button() == Qt.MiddleButton:
             self.MouseReleaseMiddle.emit(event)
+            return
+        elif event.button() == Qt.BackButton:
+            self.MouseReleaseBack.emit(event)
+            return
+        elif event.button() == Qt.ForwardButton:
+            self.MouseReleaseForward.emit(event)
             return
         super(AbstractTableView, self).mouseReleaseEvent(event)
 
     def keyPressEvent(self, event):
+
+        """
+        if self._edit_index:
+            if self.isPersistentEditorOpen(self._edit_index):
+
+                if event.key() in (Qt.Key_Down, Qt.Key_Tab):
+                    row = self._edit_index.row()
+                    col = self._edit_index.column()
+                    row += 1
+                    if row < self.rowCount():
+                        self.closeEditor(QAbstractItemDelegate.SubmitModelCache)
+                        index = self.model().index(row, col)
+                        self.edit(index)
+                        self._edit_index = index
+                        return
+                elif event.key() == Qt.Key_Up:
+                    row = self._edit_index.row()
+                    col = self._edit_index.column()
+                    row -= 1
+                    if row >= 0:
+                        self.closeEditor(QAbstractItemDelegate.SubmitModelCache)
+                        index = self.model().index(row, col)
+                        self.edit(index)
+                        self._edit_index = index
+                        return
+        """
+
         super(AbstractTableView, self).keyPressEvent(event)
 
     def keyReleaseEvent(self, event):
@@ -733,6 +804,11 @@ class AbstractTableView(QTableView):
 
     # -----------------------------------------------------------------------
     # public slots
+
+    def onShowHeaderContextMenu(self, event):
+
+        # index = self.horizontalHeader().logicalIndexAt(event.x(), event.y())
+        print("AbstractTableView: Show Header Context Menu")
 
     def onMouseDoubleClick(self, index):
         """
@@ -757,6 +833,12 @@ class AbstractTableView(QTableView):
         # print(index.row(),index.column())
         print("AbstractTableView: Release Middle event")
 
+    def onMouseReleaseBack(self, event):
+        print("AbstractTableView: Release Back event")
+
+    def onMouseReleaseForward(self, event):
+        print("AbstractTableView: Release Forward event")
+
     def onHeaderClicked(self, idx):
         """
         activated when the user clicks a header
@@ -769,12 +851,26 @@ class AbstractTableView(QTableView):
     def getState(self):
         """ return a representation of the current state """
         headerState = self.horizontalHeader().saveState()
-        return (headerState,)
+        state = headerState.data()
+        state = zlib.compress(state)
+        state =  base64.b64encode(state).decode("utf-8")
+        return state
 
     def setState(self, state):
         """ restore state given the representation """
-        headerState = state[0]
-        self.horizontalHeader().restoreState(headerState)
+        print("restoring", state)
+        if not state:
+            print("error restoring state")
+            return
+        try:
+            state = base64.b64decode(state.encode("utf-8"))
+            state = zlib.decompress(state)
+        except Exception as e:
+            print("error restoring state", e)
+            return
+        state = QByteArray(state)
+        result = self.horizontalHeader().restoreState(state)
+        return result
 
     def setModel(self, model):
         self._baseModel = model  # save a reference to the non-proxy model
@@ -859,6 +955,19 @@ class AbstractTableView(QTableView):
     def setColumnsMovable(self, bMove):
         self.horizontalHeader().setSectionsMovable(bMove)
 
+    def setColumnHidden(self, logicalIndex):
+        self.horizontalHeader().setSectionHidden(logicalIndex)
+
+    def getHiddenColumns(self):
+
+        header = self.horizontalHeader()
+
+        hidden = []
+        for i in range(header.length()):
+            if header.isSectionHidden(i):
+                hidden.append(i)
+        return hidden
+
     def setColumnHeaderClickable(self, bClickable):
         self.horizontalHeader().setSectionsClickable(bClickable)
 
@@ -881,7 +990,7 @@ class AbstractTableView(QTableView):
         self.horizontalHeader().setSectionHidden(idx, bHidden)
 
     def scrollToRow(self, row, column=0, hint=QAbstractItemView.PositionAtCenter):
-        index = self.model.index(row, column)
+        index = self.model().index(row, column)
         super(AbstractTableView, self).scrollTo(index, hint)
 
     def resizeColumnToContents(self, index):

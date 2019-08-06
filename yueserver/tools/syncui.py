@@ -6,11 +6,12 @@
 # create directory
 # create empty file
 # drag and drop mime types
-# set af version (same as local/cache or +1)
-# set / save column order;
-# hide / restore columns
-# implement get password dialog for sync context
-# mouse events, forward and back button
+# directory load robustness
+# s3 file paths
+# table view reorder columns, persist ordering
+# empty string as root directory on windows, show available drives
+# typing should jump to that file
+#   support fuzzy matching "ti" => TheItem
 
 import os
 import sys
@@ -144,10 +145,13 @@ class SyncConfig(BaseConfig):
         if not self.favorites:
             self.favorites = self._getFavoritesDefault()
 
+        self.state = self.get_key(data, "state", default="")
+
     def save(self):
 
         obj = {
             "favorites": self.favorites,
+            "state": self.state
         }
 
         ydump(self._cfg_path, obj)
@@ -181,6 +185,10 @@ class SyncConfig(BaseConfig):
                 b("system", "Documents", "~/Documents"),
                 b("system", "Downloads", "~/Downloads"),
             ]
+
+    def setFileTableState(self, state):
+
+        self.state = state
 
 class SyncUiContext(QObject):
 
@@ -300,27 +308,41 @@ class SyncUiContext(QObject):
     def pushChildDirectory(self, dirname):
 
         directory = os.path.join(self._location, dirname)
-        self.load(directory)
+
+        # TODO: test access
+
+        # note buttons are enabled based on if there is history
+        # but a failed load should not effect state
         self._location_history.append(directory)
         self._location_pop_history = []
+
+        self.load(directory)
 
     def pushParentDirectory(self):
         directory, _ = os.path.split(self._location)
-        self.load(directory)
+
+        # TODO: test access
+
+        # note buttons are enabled based on if there is history
+        # but a failed load should not effect state
         self._location_history.append(directory)
         self._location_pop_history = []
 
-    def popDirectory(self):
+        self.load(directory)
 
-        for idx, item in enumerate(reversed(self._location_history)):
-            print(idx, item)
+    def popDirectory(self):
 
         if len(self._location_history) <= 1:
             return
 
+        # TODO: test access
+
+        # note buttons are enabled based on if there is history
+        # but a failed load should not effect state
         directory = self._location_history[-2]
-        self.load(directory)
         self._location_pop_history.append(self._location_history.pop())
+
+        self.load(directory)
 
     def unpopDirectory(self):
 
@@ -328,8 +350,8 @@ class SyncUiContext(QObject):
             return
 
         directory = self._location_pop_history.pop(0)
-        self.load(directory)
         self._location_history.append(directory)
+        self.load(directory)
 
     def hasBackHistory(self):
         return len(self._location_history) > 0
@@ -356,7 +378,6 @@ class SyncUiContext(QObject):
             userdata = sync2.get_cfg(directory)
 
         except sync2.SyncException as e:
-            print(str(e))
             return None
 
         try:
@@ -374,7 +395,7 @@ class SyncUiContext(QObject):
                 userdata['root'], userdata['remote_base'], userdata['local_base'])
 
             # replace the get password implementation
-            ctxt.getPassword = self.getPassword
+            ctxt.getPassword = self.getEncryptionPassword
 
             ctxt.current_local_base = userdata['current_local_base']
             ctxt.current_remote_base = userdata['current_remote_base']
@@ -439,11 +460,14 @@ class SyncUiContext(QObject):
         self._paste_entries = None
         self._paste_action = 0
 
-    def getPassword(self, kind):
-        """
-        kind: (server, client)
-        """
-        return ""
+    def getEncryptionPassword(self, kind):
+
+        prompt = "Enter %s password:" % kind
+        dialog = PasswordDialog(prompt)
+        if dialog.exec_() == QDialog.Accepted:
+            return dialog.getPassword()
+
+        return None
 
 class Pane(QWidget):
     """docstring for Pane"""
@@ -602,7 +626,6 @@ class FileContextMenu(QMenu):
             if isinstance(ent, sync2.DirEnt):
                 paths.append(ent)
             else:
-                print(ent)
                 paths.append(sync2.DirEnt(None, ent.remote_path, ent.local_path))
 
         optdialog = SyncOptionsDialog(self)
@@ -633,6 +656,9 @@ class FileTableView(TableView):
 
     locationChanged = pyqtSignal(str, int, int)  # dir, dcount, fcount
 
+    triggerSave = pyqtSignal()
+    triggerRestore = pyqtSignal()
+
     def __init__(self, ctxt, parent=None):
         super(FileTableView, self).__init__(parent)
 
@@ -641,6 +667,10 @@ class FileTableView(TableView):
         self.setWordWrap(False)
 
         self.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self.setVerticalHeaderVisible(False)
+        self.setSortingEnabled(True)
+        self.setColumnsMovable(True)
+        self.setColumnHeaderClickable(True)
 
         model = self.baseModel()
 
@@ -651,7 +681,7 @@ class FileTableView(TableView):
 
         idx = model.addColumn(1, "state", editable=False)
 
-        idx = model.addColumn(3, "filename", editable=False)
+        idx = model.addColumn(3, "filename", editable=True)
         model.getColumn(idx).setShortName("Name")
         model.getColumn(idx).setDisplayName("File Name")
 
@@ -693,12 +723,7 @@ class FileTableView(TableView):
         model.addForegroundRule("fg1", self._foregroundRule)
         model.addBackgroundRule("fg2", self._backgroundRule)
 
-        self.setVerticalHeaderVisible(False)
 
-        # model.setColumnShortName(0,"")
-        self.setColumnsMovable(True)
-
-        self.setSortingEnabled(True)
 
         self.ctxt.locationChanging.connect(self.onLocationChanging)
         self.ctxt.locationChanged.connect(self.onLocationChanged)
@@ -721,9 +746,12 @@ class FileTableView(TableView):
         self.sortByColumn(idx, Qt.AscendingOrder)
 
         # set column widths after the the initial show
+        self.resetColumnWidth()
+
+    def resetColumnWidth(self):
 
         idx = self.baseModel().getColumnIndexByName("icon")
-        self.setColumnWidth(idx, 32)
+        self.setColumnWidth(idx, 40)
 
         idx = self.baseModel().getColumnIndexByName("filename")
         self.setColumnWidth(idx, 200)
@@ -739,6 +767,37 @@ class FileTableView(TableView):
 
         idx = self.baseModel().getColumnIndexByName("remote_mtime")
         self.setColumnWidth(idx, 175)
+
+        print("setting column widths")
+
+    def onShowHeaderContextMenu(self, event):
+
+        contextMenu = QMenu(self)
+
+        index = self.horizontalHeader().logicalIndexAt(event.x(), event.y())
+        name = self.baseModel().getColumn(index).name()
+        contextMenu.addAction("Hide %s" % name,
+            lambda index=index: self.setColumnHidden(index, True))
+
+        contextMenu.addSeparator()
+
+        for index in self.getHiddenColumns():
+            name = self.baseModel().getColumn(index).name()
+            contextMenu.addAction("Show %s" % name,
+                lambda index=index: self.setColumnHidden(index, False))
+
+        contextMenu.addSeparator()
+        contextMenu.addAction("Save State", self.onActionSaveState)
+        contextMenu.addAction("Restore State", self.onActionRestoreState)
+        contextMenu.addAction("Resize Columns", self.resetColumnWidth)
+
+        contextMenu.exec_(event.globalPos())
+
+    def onActionSaveState(self):
+        self.triggerSave.emit()
+
+    def onActionRestoreState(self):
+        self.triggerRestore.emit()
 
     def _fmt_remote_path(self, data, row, key):
         ent = data[row][key]
@@ -840,10 +899,69 @@ class FileTableView(TableView):
         contextMenu.exec_(event.globalPos())
 
     def onMouseReleaseMiddle(self, event):
-        pass
+
+        # TODO: experiment with inserting rows
+        #       and editing data
+        # create an editor close signal which contains a model index
+        #   and an edit hint
+        # may need a custom close editor which is given the hint
+        #
+        # the item delegate detects tab/backtab and closes the editor
+        # with the correct hint, closeEditor can then open a new edior
+        row = 0
+        col = self.baseModel().getColumnIndexByName("filename")
+        self.scrollToRow(0)
+        index = self.model().index(row, col)
+
+        item = [
+            sync2.DirEnt("name", "", ""),
+            "state",
+            self.ctxt.getIcon(QFileIconProvider.Folder),
+            "name",
+            0,
+            0,
+            0,
+            0,
+            "",
+            "",
+            0,
+            0,
+            ""
+        ]
+
+
+        #self.baseModel().tabledata.insert(0, item)
+        #self.baseModel().insertRow(0)
+        self.edit(index)
+        self.setCurrentIndex(index)
+        self._edit_index = index
+
+    def onMouseReleaseBack(self, event):
+
+        self.ctxt.popDirectory()
+
+    def onMouseReleaseForward(self, event):
+
+        self.ctxt.unpopDirectory()
 
     def onHeaderClicked(self, idx):
-        pass
+        print(idx)
+
+    def closeEditor(self, editor, hint):
+
+        # QAbstractItemDelegate.NoHint
+        # QAbstractItemDelegate.EditNextItem
+        # QAbstractItemDelegate.EditPreviousItem
+        # QAbstractItemDelegate.SubmitModelCache
+        # QAbstractItemDelegate.RevertModelCache
+        print("close", editor, hint)
+
+        super().closeEditor(editor, hint)
+
+    def commitData(self, editor):
+        print("commit", editor)
+
+        super().commitData(editor)
 
     def onSelectionChanged(self):
         pass
@@ -1005,6 +1123,10 @@ class LocationView(QWidget):
         self.btn_back.setIcon(self.style().standardIcon(QStyle.SP_FileDialogBack))
         self.btn_back.setAutoRaise(True)
 
+        self.btn_forward = QToolButton(self)
+        self.btn_forward.setIcon(self.style().standardIcon(QStyle.SP_ArrowForward))
+        self.btn_forward.setAutoRaise(True)
+
         self.btn_up = QToolButton(self)
         self.btn_up.setIcon(self.style().standardIcon(QStyle.SP_FileDialogToParent))
         self.btn_up.setAutoRaise(True)
@@ -1018,6 +1140,7 @@ class LocationView(QWidget):
         self.btn_open.setAutoRaise(True)
 
         self.hbox1.addWidget(self.btn_back)
+        self.hbox1.addWidget(self.btn_forward)
         self.hbox1.addWidget(self.btn_up)
         self.hbox1.addWidget(self.btn_refresh)
         self.hbox1.addWidget(self.edit_location)
@@ -1027,8 +1150,10 @@ class LocationView(QWidget):
 
         self.btn_fetch = QPushButton("Fetch", self)
         self.btn_sync = QPushButton("Sync", self)
-        self.btn_push = QPushButton("Push", self)
-        self.btn_pull = QPushButton("Pull", self)
+        self.btn_push = QPushButton(
+            self.style().standardIcon(QStyle.SP_ArrowUp), "Push", self)
+        self.btn_pull = QPushButton(self.style().standardIcon(QStyle.SP_ArrowDown),
+            "Pull", self)
         self.hbox2.addWidget(self.btn_fetch)
         self.hbox2.addWidget(self.btn_sync)
         self.hbox2.addWidget(self.btn_push)
@@ -1038,6 +1163,7 @@ class LocationView(QWidget):
         self.vbox.addLayout(self.hbox2)
 
         self.btn_back.clicked.connect(self.onBackButtonPressed)
+        self.btn_forward.clicked.connect(self.onForwardButtonPressed)
         self.btn_up.clicked.connect(self.onUpButtonPressed)
         self.btn_refresh.clicked.connect(self.onRefreshButtonPressed)
         self.btn_open.clicked.connect(self.onOpenButtonPressed)
@@ -1051,6 +1177,9 @@ class LocationView(QWidget):
 
     def onBackButtonPressed(self):
         self.ctxt.popDirectory()
+
+    def onForwardButtonPressed(self):
+        self.ctxt.unpopDirectory()
 
     def onUpButtonPressed(self):
         self.ctxt.pushParentDirectory()
@@ -1105,6 +1234,9 @@ class LocationView(QWidget):
 
         self.setEnabled(True)
 
+        self.btn_forward.setEnabled(self.ctxt.hasForwardHistory())
+        self.btn_back.setEnabled(self.ctxt.hasBackHistory())
+
         active = self.ctxt.hasActiveContext()
         self.btn_fetch.setEnabled(active)
         self.btn_sync.setEnabled(active)
@@ -1113,15 +1245,14 @@ class LocationView(QWidget):
 
         self.edit_location.setText(directory)
 
-class FetchProgressThread(QThread):
+class ProgressThread(QThread):
 
     processingFile = pyqtSignal(str)  # path
     fileStatus = pyqtSignal(object)  # list of status result
+    getEncryptionPassword = pyqtSignal(str)
 
-    def __init__(self, ctxt, parent=None):
-        super(FetchProgressThread, self).__init__(parent)
-
-        self.ctxt = ctxt
+    def __init__(self, parent=None):
+        super(ProgressThread, self).__init__(parent)
 
         self.alive = True
 
@@ -1129,11 +1260,71 @@ class FetchProgressThread(QThread):
         self._tlimit_2 = 0
         self._results = []
 
+        self._password = None
+        self._lk_password = QMutex()
+        self._cv_password = QWaitCondition()
+
+    def getEncryptionPasswordWaiter(self, kind):
+        """
+        emit a signal to open a password dialog on the main thread
+        then wait for the dialog to close and the password to be set
+        return the password
+
+        this blocks the calling thread while the ui is operated
+        """
+        self._password = None
+        self.getEncryptionPassword.emit(kind)
+
+        self._lk_password.lock()
+        try:
+            self._cv_password.wait(self._lk_password)
+        finally:
+            self._lk_password.unlock()
+
+        return self._password
+
+    def setEncryptionPassword(self, password):
+
+        self._lk_password.lock()
+        try:
+            self._password = password
+            self._cv_password.wakeAll()
+        finally:
+            self._lk_password.unlock()
+
+    def sendUpdate(self, path):
+
+        now = time.time()
+
+        if self._tlimit_1 + .5 < now:
+            self._tlimit_1 = now
+
+            self.processingFile.emit(path)
+
+    def sendStatus(self, status):
+
+        self._results.append(status)
+
+        now = time.time()
+
+        if self._tlimit_2 + .5 < now:
+            self._tlimit_2 = now
+
+            self.fileStatus.emit(self._results)
+            self._results = []
+
+class FetchProgressThread(ProgressThread):
+
+    def __init__(self, ctxt, parent=None):
+        super(FetchProgressThread, self).__init__(parent)
+
+        self.ctxt = ctxt
+
     def run(self):
 
         # construct a new sync context for this thread
         ctxt = self.ctxt.activeContext().clone()
-        ctxt.getPassword = self.ctxt.getPassword
+        ctxt.getPassword = self.ctxt.getEncryptionPassword
 
         # create an iterable in this thread for processing the command
 
@@ -1171,31 +1362,7 @@ class FetchProgressThread(QThread):
         # close the database connection
         ctxt.close()
 
-    def sendUpdate(self, path):
-
-        now = time.time()
-
-        if self._tlimit_1 + .5 < now:
-            self._tlimit_1 = now
-
-            self.processingFile.emit(path)
-
-    def sendStatus(self, status):
-
-        self._results.append(status)
-
-        now = time.time()
-
-        if self._tlimit_2 + .5 < now:
-            self._tlimit_2 = now
-
-            self.fileStatus.emit(self._results)
-            self._results = []
-
-class SyncProgressThread(QThread):
-
-    processingFile = pyqtSignal(str)  # path
-    fileStatus = pyqtSignal(object)  # list of status result
+class SyncProgressThread(ProgressThread):
 
     def __init__(self, ctxt, paths, push, pull, force, recursive, parent=None):
         super(SyncProgressThread, self).__init__(parent)
@@ -1207,17 +1374,13 @@ class SyncProgressThread(QThread):
         self.force = force
         self.recursive = recursive
 
-        self.alive = True
 
-        self._tlimit_1 = 0
-        self._tlimit_2 = 0
-        self._results = []
 
     def run(self):
 
         ctxt = self.ctxt.activeContext().clone()
-        ctxt.getPassword = self.ctxt.getPassword
-        
+        ctxt.getPassword = self.getEncryptionPasswordWaiter
+
         # iterable = _dummy_sync_iter(
         #    ctxt, self.paths,
         #    self.push, self.pull, self.force, self.recursive
@@ -1268,27 +1431,6 @@ class SyncProgressThread(QThread):
         self.fileStatus.emit(self._results)
 
         ctxt.close()
-
-    def sendUpdate(self, path):
-
-        now = time.time()
-
-        if self._tlimit_1 + .5 < now:
-            self._tlimit_1 = now
-
-            self.processingFile.emit(path)
-
-    def sendStatus(self, status):
-
-        self._results.append(status)
-
-        now = time.time()
-
-        if self._tlimit_2 + .5 < now:
-            self._tlimit_2 = now
-
-            self.fileStatus.emit(self._results)
-            self._results = []
 
 class SyncOptionsDialog(QDialog):
 
@@ -1395,9 +1537,22 @@ class SyncProgressDialog(QDialog):
         self.thread = SyncProgressThread(self.ctxt,
             paths, push, pull, force, recursive, self)
 
+        self.thread.getEncryptionPassword.connect(self.onGetEncryptionPassword)
         self.thread.processingFile.connect(lambda path: self.lbl_status.setText(path))
         self.thread.fileStatus.connect(lambda paths: self.txt_status.append('\n'.join(paths)))
         self.thread.finished.connect(self.onThreadFinished)
+
+    def onGetEncryptionPassword(self, kind):
+
+        password = None
+
+        try:
+            password = self.ctxt.getEncryptionPassword(kind)
+
+        finally:
+            # set the password, or None if the user canceled
+            # wake up the thread that was waiting
+            self.thread.setEncryptionPassword(password)
 
     def onThreadFinished(self):
 
@@ -1532,6 +1687,17 @@ class FileEntryInfoDialog(QDialog):
         self.lbl_l_permission.setAlignment(Qt.AlignRight)
         self.lbl_r_permission.setAlignment(Qt.AlignRight)
 
+        font = self.font()
+        font.setFamily("courier")
+
+        self.lbl_a_mtime.setFont(font)
+        self.lbl_l_mtime.setFont(font)
+        self.lbl_r_mtime.setFont(font)
+        self.lbl_a_permission.setFont(font)
+        self.lbl_l_permission.setFont(font)
+        self.lbl_r_permission.setFont(font)
+
+
         row = 0
 
         row += 1
@@ -1612,14 +1778,14 @@ class FileEntryInfoDialog(QDialog):
         lf = ent.lf or df
         rf = ent.rf or df
 
-        if hostname:
+        if hostname and rf['public']:
             public = "%s/p/%s" % (hostname, rf['public'])
             public = "<a href=\"%s\">%s</a>" % (public, rf['public'])
             self.lbl_r_public.setTextFormat(Qt.RichText)
             self.lbl_r_public.setOpenExternalLinks(True)
             self.lbl_r_public.setTextInteractionFlags(Qt.TextBrowserInteraction)
         else:
-            public = rf['public']
+            public = "N/A"
             self.lbl_r_public.setTextFormat(Qt.RichText)
             self.lbl_r_public.setOpenExternalLinks(False)
             self.lbl_r_public.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -1636,13 +1802,56 @@ class FileEntryInfoDialog(QDialog):
         self.lbl_l_size.setText(str(lf['size']))
         self.lbl_r_size.setText(str(rf['size']))
 
-        self.lbl_a_mtime.setText(format_datetime(af['mtime']))
-        self.lbl_l_mtime.setText(format_datetime(lf['mtime']))
-        self.lbl_r_mtime.setText(format_datetime(rf['mtime']))
+        default = "                   "
+
+        self.lbl_a_mtime.setText(format_datetime(af['mtime']) or default)
+        self.lbl_l_mtime.setText(format_datetime(lf['mtime']) or default)
+        self.lbl_r_mtime.setText(format_datetime(rf['mtime']) or default)
 
         self.lbl_a_permission.setText(format_mode(af['permission']))
         self.lbl_l_permission.setText(format_mode(lf['permission']))
         self.lbl_r_permission.setText(format_mode(rf['permission']))
+
+class PasswordDialog(QDialog):
+
+    def __init__(self, prompt, parent=None):
+        super(PasswordDialog, self).__init__(parent)
+
+        self.vbox = QVBoxLayout(self)
+        self.hbox = QHBoxLayout()
+
+        self.chk_password = QCheckBox("Hide Password", self)
+        self.edit_password = QLineEdit(self)
+        self.btn_accept = QPushButton("OK", self)
+        self.btn_cancel = QPushButton("Cancel", self)
+
+        self.hbox.addStretch(1)
+        self.hbox.addWidget(self.btn_cancel)
+        self.hbox.addWidget(self.btn_accept)
+
+        self.vbox.addWidget(QLabel(prompt, self))
+        self.vbox.addWidget(self.edit_password)
+        self.vbox.addWidget(self.chk_password)
+        self.vbox.addStretch(1)
+        self.vbox.addLayout(self.hbox)
+
+        self.chk_password.setChecked(True)
+        self.edit_password.setEchoMode(QLineEdit.Password)
+
+        self.chk_password.stateChanged.connect(self.onStateChanged)
+
+        self.btn_accept.clicked.connect(self.accept)
+        self.btn_cancel.clicked.connect(self.reject)
+
+    def onStateChanged(self, state):
+
+        if state == Qt.Checked:
+            self.edit_password.setEchoMode(QLineEdit.Password)
+        else:
+            self.edit_password.setEchoMode(QLineEdit.Normal)
+
+    def getPassword(self):
+        return self.edit_password.text()
 
 class FavoritesPane(Pane):
     """docstring for FavoritesPane"""
@@ -1736,6 +1945,9 @@ class SyncMainWindow(QMainWindow):
         self.table_file.locationChanged.connect(self.onTableLocationChanged)
         self.table_file.selectionChangedEvent.connect(self.onTableSelectionChanged)
 
+        self.table_file.triggerSave.connect(self.onTriggerSave)
+        self.table_file.triggerRestore.connect(self.onTriggerRestore)
+
     def initMenuBar(self):
 
         menubar = self.menuBar()
@@ -1784,6 +1996,8 @@ class SyncMainWindow(QMainWindow):
         self.move(cx, cy)
         self.show()
 
+        # self.table_file.setState(self.cfg.state)
+
         # somewhat arbitrary
         # set the width of the quick access view to something
         # reasonable
@@ -1824,6 +2038,15 @@ class SyncMainWindow(QMainWindow):
             ent = self.table_file.getSelection()[0][0]
             self.pane_favorites.previewEntry(ent)
 
+    def onTriggerSave(self):
+
+        self.cfg.state = self.table_file.getState()
+        self.cfg.save()
+
+    def onTriggerRestore(self):
+
+        self.table_file.setState(self.cfg.state)
+
 def main():
 
     if os.name == 'nt':
@@ -1858,7 +2081,6 @@ def main():
     ctxt.pushDirectory(os.getcwd())
 
     sys.exit(app.exec_())
-
 
 if __name__ == '__main__':
     main()

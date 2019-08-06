@@ -353,9 +353,21 @@ class SyncContext(object):
                     response.status_code)
             key = response.json()['result']['key']
 
-            password = self.getPassword('client')
+            client_key = None
 
-            self.encryption_client_key = decryptkey(password, key)
+            for i in range(3):
+                try:
+                    password = self.getPassword('client')
+                    client_key = decryptkey(password, key)
+                    break;
+                except ValueError:
+                    pass
+
+            if client_key is None:
+                raise ValueError("invalid password")
+
+            self.encryption_client_key = client_key
+
         return self.encryption_client_key
 
     def normPath(self, path):
@@ -374,7 +386,7 @@ class SyncContext(object):
             self.root, self.remote_base, self.local_base, self.verbose)
 
         return ctxt
-        
+
     def close(self):
 
         self.storageDao.db.conn.close()
