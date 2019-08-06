@@ -8,11 +8,11 @@
 # drag and drop mime types
 # directory load robustness
 # s3 file paths
-# table view reorder columns, persist ordering
 # empty string as root directory on windows, show available drives
 # typing should jump to that file
 #   support fuzzy matching "ti" => TheItem
-
+# recursive status needs to set a dirty bit on directories
+#   cleared when recursive sync
 import os
 import sys
 import time
@@ -287,6 +287,7 @@ class SyncUiContext(QObject):
                     }
 
                     ent = sync2.FileEnt(None, fullpath, None, None, af)
+                    ent._state = sync2.FileState.SAME
                     _dir_contents.append(ent)
                 else:
                     ent = sync2.DirEnt(name, None, fullpath)
@@ -432,6 +433,58 @@ class SyncUiContext(QObject):
         image = icon.pixmap(QSize(32, 32)).toImage()
         self._icon_ext[kind] = image
         return image
+
+    def getImage(self, path):
+
+        if path in self._icon_ext:
+            return self._icon_ext[path]
+
+        image = QImage(path)
+        self._icon_ext[path] = image
+        return image
+
+    def getFileStateIcon(self, state):
+        state = state.split(":")[0]
+        image = self._getFileStateIcon(state)
+        if image is not None and image.isNull():
+            print("error loading image for ", state)
+        return image
+
+    def _getFileStateIcon(self, state):
+
+        if state == sync2.FileState.SAME:
+            # return self.getImage(":img/fs_same.png")
+            return None
+
+        elif state == sync2.FileState.PUSH:
+            return self.getImage(":/img/fs_push.png")
+
+        elif state == sync2.FileState.PULL:
+            return self.getImage(":/img/fs_pull.png")
+
+        elif state == sync2.FileState.CONFLICT_MODIFIED:
+            return self.getImage(":/img/fs_conflict.png")
+
+        elif state == sync2.FileState.CONFLICT_CREATED:
+            return self.getImage(":/img/fs_conflict.png")
+
+        elif state == sync2.FileState.CONFLICT_VERSION:
+            return self.getImage(":/img/fs_conflict.png")
+
+        elif state == sync2.FileState.CONFLICT_TYPE:
+            return self.getImage(":/img/fs_conflict.png")
+
+        elif state == sync2.FileState.DELETE_BOTH:
+            return self.getImage(":/img/fs_delete.png")
+
+        elif state == sync2.FileState.DELETE_REMOTE:
+            return self.getImage(":/img/fs_delete.png")
+
+        elif state == sync2.FileState.DELETE_LOCAL:
+            return self.getImage(":/img/fs_delete_remote.png")
+
+        # state == sync2.FileState.ERROR:
+        return self.getImage(":/img/fs_delete_error.png")
 
     def getFileIcon(self, path):
 
@@ -671,6 +724,7 @@ class FileTableView(TableView):
         self.setSortingEnabled(True)
         self.setColumnsMovable(True)
         self.setColumnHeaderClickable(True)
+        self.setEditTriggers(QAbstractItemView.SelectedClicked)
 
         model = self.baseModel()
 
@@ -680,6 +734,8 @@ class FileTableView(TableView):
         model.getColumn(idx).setSortTransform(lambda data, row: os.path.splitext(data[row][3])[-1])
 
         idx = model.addColumn(1, "state", editable=False)
+        self.setDelegate(idx, ImageDelegate(self))
+        model.getColumn(idx).setSortTransform(lambda data, row: data[row][-2])
 
         idx = model.addColumn(3, "filename", editable=True)
         model.getColumn(idx).setShortName("Name")
@@ -723,8 +779,6 @@ class FileTableView(TableView):
         model.addForegroundRule("fg1", self._foregroundRule)
         model.addBackgroundRule("fg2", self._backgroundRule)
 
-
-
         self.ctxt.locationChanging.connect(self.onLocationChanging)
         self.ctxt.locationChanged.connect(self.onLocationChanged)
 
@@ -745,12 +799,18 @@ class FileTableView(TableView):
         idx = self.baseModel().getColumnIndexByName("filename")
         self.sortByColumn(idx, Qt.AscendingOrder)
 
-        # set column widths after the the initial show
-        self.resetColumnWidth()
+        print("view setVisible", b)
 
-    def resetColumnWidth(self):
+    def resetColumns(self):
 
+        self._setHiddenColumns([])
+        self._setColumnOrder(list(range(self.columnCount())))
+
+        self.horizontalHeader().setSectionResizeMode(0)
         idx = self.baseModel().getColumnIndexByName("icon")
+        self.setColumnWidth(idx, 40)
+
+        idx = self.baseModel().getColumnIndexByName("state")
         self.setColumnWidth(idx, 40)
 
         idx = self.baseModel().getColumnIndexByName("filename")
@@ -762,11 +822,29 @@ class FileTableView(TableView):
         idx = self.baseModel().getColumnIndexByName("remote_size")
         self.setColumnWidth(idx, 75)
 
+        idx = self.baseModel().getColumnIndexByName("local_permission")
+        self.setColumnWidth(idx, 125)
+
+        idx = self.baseModel().getColumnIndexByName("remote_permission")
+        self.setColumnWidth(idx, 125)
+
         idx = self.baseModel().getColumnIndexByName("local_mtime")
         self.setColumnWidth(idx, 175)
 
         idx = self.baseModel().getColumnIndexByName("remote_mtime")
         self.setColumnWidth(idx, 175)
+
+        idx = self.baseModel().getColumnIndexByName("remote_path")
+        self.setColumnWidth(idx, 100)
+
+        idx = self.baseModel().getColumnIndexByName("remote_public")
+        self.setColumnWidth(idx, 100)
+
+        idx = self.baseModel().getColumnIndexByName("remote_encryption")
+        self.setColumnWidth(idx, 100)
+
+        idx = self.baseModel().getColumnIndexByName("type")
+        self.setColumnWidth(idx, 100)
 
         print("setting column widths")
 
@@ -789,7 +867,7 @@ class FileTableView(TableView):
         contextMenu.addSeparator()
         contextMenu.addAction("Save State", self.onActionSaveState)
         contextMenu.addAction("Restore State", self.onActionRestoreState)
-        contextMenu.addAction("Resize Columns", self.resetColumnWidth)
+        contextMenu.addAction("Resize Columns", self.resetColumns)
 
         contextMenu.exec_(event.globalPos())
 
@@ -840,7 +918,7 @@ class FileTableView(TableView):
 
                 item = [
                     ent,
-                    ent.state(),
+                    self.ctxt.getFileStateIcon(ent.state()),
                     self.ctxt.getFileIcon(ent.local_path),
                     ent.name(),
                     af['size'],
@@ -851,7 +929,8 @@ class FileTableView(TableView):
                     rf['encryption'],
                     af['mtime'],
                     rf['mtime'],
-                    getFileType(ent.name())
+                    getFileType(ent.name()),
+                    ent.state()
                 ]
                 data.append(item)
                 fcount += 1
@@ -859,7 +938,7 @@ class FileTableView(TableView):
 
                 item = [
                     ent,
-                    ent.state(),
+                    None,
                     self.ctxt.getIcon(QFileIconProvider.Folder),
                     ent.name(),
                     0,
@@ -870,7 +949,8 @@ class FileTableView(TableView):
                     "",
                     0,
                     0,
-                    ""
+                    "",
+                    ent.state()
                 ]
                 data.append(item)
                 dcount += 1
@@ -979,7 +1059,7 @@ class FileTableView(TableView):
 
         row = index.data(RowValueRole)
         ent = row[0]
-        state = row[1].split(":")[0]
+        state = row[-2].split(":")[0]
 
         if isinstance(ent, sync2.DirEnt):
 
@@ -989,7 +1069,7 @@ class FileTableView(TableView):
 
         row = index.data(RowValueRole)
         ent = row[0]
-        state = row[1].split(":")[0]
+        state = row[-2].split(":")[0]
 
         if not self.ctxt.hasActiveContext():
             return
@@ -1056,7 +1136,7 @@ class MonospaceDelegate(QStyledItemDelegate):
         opt = QStyleOptionViewItem(option)
 
         opt.font.setStyleHint(QFont.Monospace)
-        opt.font.setFamily("courier")
+        opt.font.setFamily("Courier New")
 
         super().paint(painter, opt, index)
 
@@ -1617,6 +1697,11 @@ class FileEntryInfoDialog(QDialog):
         self.lbl_status = QLabel(self)
         self.lbl_status.setAlignment(Qt.AlignRight)
 
+        self.lbl_status_image = QLabel(self)
+        self.lbl_status_image.setFixedHeight(32)
+        self.lbl_status_image.setFixedWidth(32)
+        self.lbl_status_image.setFrameStyle(QFrame.Panel | QFrame.Raised)
+
         self.lbl_disk = QLabel("Disk", self)
         self.lbl_disk.setAlignment(Qt.AlignCenter)
 
@@ -1710,7 +1795,11 @@ class FileEntryInfoDialog(QDialog):
 
         row += 1
         self.layout.addWidget(QLabel("Status"), row, 0, 1, 1)
-        self.layout.addWidget(self.lbl_status, row, 1, 1, 3)
+        self.layout.addWidget(self.lbl_status, row, 1, 1, 1,
+            Qt.AlignHCenter|Qt.AlignVCenter)
+        self.layout.addWidget(self.lbl_status_image, row, 2, 1, 1,
+            Qt.AlignHCenter|Qt.AlignVCenter)
+
 
         row += 1
         hline = QLabel(self)
@@ -1769,7 +1858,9 @@ class FileEntryInfoDialog(QDialog):
         self.txt_remote.setText(ent.remote_path)
 
         # TODO: status should have an icon
-        self.lbl_status.setText(ent.state())
+        state = ent.state().split(":")[0]
+        self.lbl_status_image.setPixmap(self.getStatePixmap(state))
+        self.lbl_status.setText(state)
 
         df = {'size': 0, "permission": 0, "mtime": 0, "version": 0,
               "public": "", "encryption": ""}
@@ -1811,6 +1902,30 @@ class FileEntryInfoDialog(QDialog):
         self.lbl_a_permission.setText(format_mode(af['permission']))
         self.lbl_l_permission.setText(format_mode(lf['permission']))
         self.lbl_r_permission.setText(format_mode(rf['permission']))
+
+    def getStatePixmap(self, state):
+
+        if state == sync2.FileState.SAME:
+            return QPixmap(":/img/fs_same.png")
+        elif state == sync2.FileState.PUSH:
+            return QPixmap(":/img/fs_push.png")
+        elif state == sync2.FileState.PULL:
+            return QPixmap(":/img/fs_pull.png")
+        elif state == sync2.FileState.CONFLICT_MODIFIED:
+            return QPixmap(":/img/fs_conflict.png")
+        elif state == sync2.FileState.CONFLICT_CREATED:
+            return QPixmap(":/img/fs_conflict.png")
+        elif state == sync2.FileState.CONFLICT_VERSION:
+            return QPixmap(":/img/fs_conflict.png")
+        elif state == sync2.FileState.CONFLICT_TYPE:
+            return QPixmap(":/img/fs_conflict.png")
+        elif state == sync2.FileState.DELETE_BOTH:
+            return QPixmap(":/img/fs_delete.png")
+        elif state == sync2.FileState.DELETE_REMOTE:
+            return QPixmap(":/img/fs_delete.png")
+        elif state == sync2.FileState.DELETE_LOCAL:
+            return QPixmap(":/img/fs_delete_remote.png")
+        return QPixmap(":/img/fs_delete_error.png")
 
 class PasswordDialog(QDialog):
 
@@ -2005,6 +2120,11 @@ class SyncMainWindow(QMainWindow):
         if cw > lw * 2:
             self.splitter.setSizes([lw, cw - lw])
 
+        # run this function immediately after the event loop starts
+        QTimer.singleShot(0, self.resetTableView)
+
+        print("end show")
+
     def onTableLocationChanged(self, path, dcount, fcount):
 
         msg = []
@@ -2038,14 +2158,23 @@ class SyncMainWindow(QMainWindow):
             ent = self.table_file.getSelection()[0][0]
             self.pane_favorites.previewEntry(ent)
 
+    def showEvent(self, event):
+        print("show event", event)
+
+    def resetTableView(self):
+        if not self.cfg.state:
+            self.table_file.resetColumns()
+        else:
+            self.table_file.setColumnState(self.cfg.state)
+
     def onTriggerSave(self):
 
-        self.cfg.state = self.table_file.getState()
+        self.cfg.state = self.table_file.getColumnState()
         self.cfg.save()
 
     def onTriggerRestore(self):
 
-        self.table_file.setState(self.cfg.state)
+        self.table_file.setColumnState(self.cfg.state)
 
 def main():
 
@@ -2066,7 +2195,7 @@ def main():
     app.setApplicationName("Yue-Sync")
 
     app.setQuitOnLastWindowClosed(True)
-    app_icon = QIcon(':/icon.png')
+    app_icon = QIcon(':/img/icon.png')
     app.setWindowIcon(app_icon)
 
     QGuiApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
@@ -2079,6 +2208,7 @@ def main():
     window.showWindow()
 
     ctxt.pushDirectory(os.getcwd())
+
 
     sys.exit(app.exec_())
 

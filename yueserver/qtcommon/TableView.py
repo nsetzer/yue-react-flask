@@ -8,6 +8,7 @@ from PyQt5.QtGui import *
 # for testing
 import string
 import random
+import traceback
 import base64
 import zlib
 # http://pyqt.sourceforge.net/Docs/PyQt4/qt.html#ItemDataRole-enum
@@ -682,7 +683,10 @@ class AbstractHeaderView(QHeaderView):
         self.sectionResized.connect(self.onSectionResized)
 
     def onSectionResized(self, index, old, new):
-        print("resize", index, old, new)
+        #traceback.print_stack()
+        #print("resize", index, old, new)
+        # super().onSectionResized(index, old, new)
+        pass
 
     def mousePressEvent(self, event):
         super().mousePressEvent(event)
@@ -848,7 +852,71 @@ class AbstractTableView(QTableView):
     # -----------------------------------------------------------------------
     # helper functions
 
-    def getState(self):
+    def _setColumnOrder(self, order):
+
+
+        h = self.horizontalHeader()
+
+        if len(order) != h.count():
+            return
+
+        for i in range(h.count()):
+            item = h.visualIndex(i)
+            # if this item is not in the correct position
+            # find the element that should be in this position
+            # and swap them
+            if item != order[i]:
+                for j in range(i, h.count()):
+                    if h.visualIndex(j) == order[i]:
+                        h.swapSections(i, j)
+
+    def _getColumnOrder(self):
+        h = self.horizontalHeader()
+        return [h.visualIndex(i) for i in range(h.count())]
+
+    def _setHiddenColumns(self, hidden):
+        h = self.horizontalHeader()
+        hidden = set(hidden)
+        for i in range(h.count()):
+            h.setSectionHidden(i, i in hidden)
+
+    def _getHiddenColumns(self):
+        h = self.horizontalHeader()
+        return [i for i in range(h.count()) if h.isSectionHidden(i)]
+
+    def _setColumnWidths(self, widths):
+
+        h = self.horizontalHeader()
+        if len(widths) != h.count():
+            return
+
+        for i, w in enumerate(widths):
+            self.setColumnWidth(i, w)
+
+    def _getColumnWidths(self):
+        h = self.horizontalHeader()
+        return [self.columnWidth(i) for i in range(h.count())]
+
+    def getColumnState(self):
+
+        state = {
+            "order": self._getColumnOrder(),
+            "hidden": self._getHiddenColumns(),
+            "widths": self._getColumnWidths(),
+        }
+
+        return state
+
+    def setColumnState(self, state):
+
+        if not state or not isinstance(state, dict):
+            return
+
+        self._setColumnOrder(state.get("order", []))
+        self._setHiddenColumns(state.get("hidden", []))
+        self._setColumnWidths(state.get("widths", []))
+
+    def __getState(self):
         """ return a representation of the current state """
         headerState = self.horizontalHeader().saveState()
         state = headerState.data()
@@ -856,7 +924,7 @@ class AbstractTableView(QTableView):
         state =  base64.b64encode(state).decode("utf-8")
         return state
 
-    def setState(self, state):
+    def __setState(self, state):
         """ restore state given the representation """
         print("restoring", state)
         if not state:
@@ -998,6 +1066,8 @@ class AbstractTableView(QTableView):
 
     def setColumnWidth(self, index, width):
         super(AbstractTableView, self).setColumnWidth(index, width)
+        #self.horizontalHeader().resizeSection(index, width)
+        #print(self.horizontalHeader().sectionResizeMode(index), width)
 
     def setLastColumnExpanding(self, bExpand):
         self.horizontalHeader().setStretchLastSection(bExpand)
