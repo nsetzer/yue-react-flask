@@ -21,6 +21,7 @@ import time
 import math
 import logging
 import posixpath
+import shlex
 
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
@@ -48,6 +49,34 @@ def openNative(url):
         # TODO: implement code that tries each one until one works
         # subprocess.call(["xdg-open",filepath])
         sys.stderr.write("open unsupported on %s" % os.name)
+
+def openProcess(cmdstr, pwd=None, blocking=False):
+    """
+    pwd must be provided if it is a network path on windows.
+    a network path begins with '\\' or '//'
+    otherwise popen will automatically preface the path
+    with the drive letter of the current working directory.
+    """
+
+    try:
+        if isinstance(cmdstr, str):
+            logging.info("execute process: " + cmdstr)
+            args = shlex.split(cmdstr)
+        else:
+            logging.info("execute process: " + ' '.join(cmdstr))
+            args = cmdstr
+
+        shell = sys.platform == "win32"
+        proc = subprocess.Popen(args,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            cwd=pwd, shell=shell)
+
+        if blocking:
+            proc.communicate()
+
+    except Exception as e:
+        raise Exception(cmdstr)
 
 def isSubPath(dir_path, file_path):
     return os.path.abspath(file_path).startswith(os.path.abspath(dir_path) + os.sep)
@@ -150,11 +179,18 @@ class SyncConfig(BaseConfig):
 
         self.state = self.get_key(data, "state", default="")
 
+        # both open and menu actions should be a list of objects
+        # {'action': 'shell command', 'text': 'text'}
+        self.open_actions = self.get_key(data, "open_actions", default=[])
+        self.menu_actions = self.get_key(data, "menu_actions", default=[])
+
     def save(self):
 
         obj = {
             "favorites": self.favorites,
-            "state": self.state
+            "state": self.state,
+            "open_actions": self.open_actions,
+            "menu_actions": self.menu_actions,
         }
 
         ydump(self._cfg_path, obj)
@@ -657,10 +693,11 @@ class FileContentSortProxyModel(SortProxyModel):
         return (dir, val, ent.name())
 
 class FileContextMenu(QMenu):
-    def __init__(self, ctxt, selection, parent=None):
+    def __init__(self, ctxt, cfg, selection, parent=None):
         super(FileContextMenu, self).__init__(parent)
 
         self.ctxt = ctxt
+        self.cfg = cfg
 
         ents = [row[0] for row in selection]
 
@@ -668,15 +705,40 @@ class FileContextMenu(QMenu):
             ent = selection[0][0]
             menu = self.addMenu("Open")
             act = menu.addAction("Native", lambda: self._action_open_native(ent))
-            act = menu.addAction("as Text")
-            act = menu.addAction("as Image")
-            act = menu.addAction("as Video")
-            act = menu.addAction("as PDF")
+
+            if self.cfg.open_actions:
+                self.addSeparator()
+            for item in self.cfg.open_actions:
+                act = item['action']
+                text = item['text']
+                g = lambda ents=ents, act=act: self._action_open_action(ents, act)
+                act = menu.addAction(text, g)
 
         act = self.addAction("Open Current Directory",
             lambda: openNative(self.ctxt.currentLocation()))
 
         self.addSeparator()
+
+        print(self.cfg.menu_actions)
+        if self.cfg.menu_actions:
+            for item in self.cfg.menu_actions:
+                act = item['action']
+                text = item['text']
+                mode = item.get('mode')
+                #
+                if mode == 'zero' and len(selection) != 0:
+                    continue
+
+                if mode == 'single' and len(selection) != 1:
+                    continue
+
+                if mode == 'multiple' and len(selection) == 0:
+                    continue
+
+                g = lambda ents=ents, act=act: self._action_menu_action(ents, act)
+                act = self.addAction(text, g)
+
+            self.addSeparator()
 
         if self.ctxt.hasActiveContext():
 
@@ -751,6 +813,25 @@ class FileContextMenu(QMenu):
         dialog.setEntry(ent, hostname)
         dialog.exec_()
 
+    def _action_open_action(self, ents, act):
+        
+        self._action_exec(ents, act)
+
+    def _action_menu_action(self, ents, act):
+        
+        self._action_exec(ents, act)
+
+    def _action_exec(self, ents, act):
+
+        opts = {
+            "pwd": self.ctxt.currentLocation(),
+            "path": ents[0].local_path,
+        }
+        args = shlex.split(act)
+        args = [arg.format(**opts) for arg in args]
+
+        print(args)
+
 class FileTableView(TableView):
 
     locationChanged = pyqtSignal(str, int, int)  # dir, dcount, fcount
@@ -758,10 +839,11 @@ class FileTableView(TableView):
     triggerSave = pyqtSignal()
     triggerRestore = pyqtSignal()
 
-    def __init__(self, ctxt, parent=None):
+    def __init__(self, ctxt, cfg, parent=None):
         super(FileTableView, self).__init__(parent)
 
         self.ctxt = ctxt
+        self.cfg = cfg
 
         self.setWordWrap(False)
 
@@ -1036,7 +1118,7 @@ class FileTableView(TableView):
 
         rows = self.getSelection()
 
-        contextMenu = FileContextMenu(self.ctxt, rows, self)
+        contextMenu = FileContextMenu(self.ctxt, self.cfg, rows, self)
 
         contextMenu.exec_(event.globalPos())
 
@@ -2144,7 +2226,7 @@ class SyncMainWindow(QMainWindow):
         self.initMenuBar()
         self.initStatusBar()
 
-        self.table_file = FileTableView(self.ctxt, self)
+        self.table_file = FileTableView(self.ctxt, self.cfg, self)
 
         self.view_location = LocationView(self.ctxt, self)
 
