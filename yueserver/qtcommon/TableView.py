@@ -321,6 +321,53 @@ class StarDelegate(StyledItemDelegate):
         v = editor.value()
         model.setData(index, v)
 
+class EditItemDelegate(StyledItemDelegate):
+    """
+    This is a hakc since ::EditNextItem and ::EditPreviousItem are not working
+    This preserves the index that is being modified, then intercepts
+    key presses to determines when the next index should be modified
+
+    with no model reference, it emits logical row/col instead of a QModelIndex
+    """
+
+    editRow = pyqtSignal(int, int)
+
+    def eventFilter(self, editor, event):
+
+        #if not editor:
+        #    return False
+
+        if event.type() == QEvent.KeyPress:
+
+            if event.key() == Qt.Key_Down or event.key() == Qt.Key_Tab:
+
+                self.commitData.emit(editor)
+                self.closeEditor.emit(editor, QAbstractItemDelegate.EditNextItem)
+
+                self.editRow.emit(self._index.row()+1, self._index.column())
+                return True
+
+            if event.key() == Qt.Key_Up or event.key() == Qt.Key_BackTab:
+
+                self.commitData.emit(editor)
+                self.closeEditor.emit(editor, QAbstractItemDelegate.EditPreviousItem)
+                self.editRow.emit(self._index.row()-1, self._index.column())
+                return True
+
+        return super().eventFilter(editor, event)
+
+    def createEditor(self, parent, option, index):
+        self._index = index
+        edit = QLineEdit(parent)
+        return edit
+
+    def setEditorData(self, editor, index):
+        editor.setText(str(index.data()))
+
+    def setModelData(self, editor, model, index):
+        v = editor.text()
+        model.setData(index, v)
+
 class TableColumn(QObject):
     def __init__(self, model, key, name, editable=False):
         # parent should be the model
@@ -517,11 +564,14 @@ class TableModel(QAbstractTableModel):
         return None
 
     def setData(self, index, value, role=Qt.EditRole):
-        print("set data", index, value)
+
         if role != Qt.EditRole:
             return False
 
         if index.row() > len(self.tabledata) or index.row() < 0:
+            return False
+
+        if not self.parent().onCommitValidateData(index, value):
             return False
 
         i = index.row()
@@ -533,6 +583,8 @@ class TableModel(QAbstractTableModel):
         if success:
             self.dataChanged.emit(index, index, [role, ])
         return success
+
+
 
     def headerData(self, section, orientation, role):
 
@@ -595,6 +647,23 @@ class TableModel(QAbstractTableModel):
         self.beginResetModel()
         self.tabledata = tabledata
         self.endResetModel()
+
+    def replaceRow(self, row, rowdata):
+
+        indexFrom = self.index(row, 0)
+        indexTo = self.index(row, len(self._columns)-1)
+
+        self.tabledata[row] = rowdata
+
+        role=Qt.EditRole
+        self.dataChanged.emit(indexFrom, indexTo, [role, ])
+
+    def insertRow(self, row, rowdata):
+        print("insert row")
+        index = QModelIndex()# self.createIndex(row, 0)
+        self.beginInsertRows(index, row, row)
+        self.tabledata.insert(row,rowdata)
+        self.endInsertRows()
 
     def forceReset(self):
         """force all cells to be repainted"""
@@ -745,7 +814,12 @@ class AbstractTableView(QTableView):
     def mouseDoubleClickEvent(self, event):
         index = self.indexAt(event.pos())
         col = self.baseModel().getColumn(index.column())
-        if not col.isEditable():
+        triggers = int(self.editTriggers()&QAbstractItemView.DoubleClicked)
+
+        if event.button != Qt.LeftButton:
+            return
+
+        if not (col.isEditable() and triggers>0):
             self.MouseDoubleClick.emit(index)
         else:
             super(AbstractTableView, self).mouseDoubleClickEvent(event)
@@ -954,6 +1028,12 @@ class AbstractTableView(QTableView):
         # todo: revist this, may not always change
         self.selectionChangedEvent.emit()
 
+    def replaceRow(self, row, rowdata):
+        self.baseModel().replaceRow(row, rowdata)
+
+    def insertRow(self, row, rowdata):
+        self.baseModel().insertRow(row, rowdata)
+
     def data(self, row_index):
         """ get row data at index, used in conjunction with transforms """
         # note: this uncovers an interesting implementation bug with
@@ -1010,6 +1090,15 @@ class AbstractTableView(QTableView):
         if self._baseModel is None:
             raise TableError("No Model Set")
         self.setItemDelegateForColumn(colidx, delegate)
+
+    # --------------------------------------------------------------------------
+    # editor
+
+    def commitData(self, editor):
+        super().commitData(editor)
+
+    def onCommitValidateData(self, index, value):
+        return True
 
     # --------------------------------------------------------------------------
     # row operations
@@ -1134,7 +1223,7 @@ class AbstractTableView(QTableView):
         row_end = bottomRight.row()
         col_start = topLeft.column()
         col_end = bottomRight.column()
-        print(topLeft.row(), topLeft.column(),
+        print("onDataChanged", topLeft.row(), topLeft.column(),
             bottomRight.row(), bottomRight.column(), roles)
 
         for row in range(row_start, row_end + 1):

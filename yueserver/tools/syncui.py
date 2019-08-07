@@ -7,17 +7,19 @@
 # create empty file
 # drag and drop mime types
 # directory load robustness
+#   gracefully handle errors during load()
+#   empty string as root directory on windows, show available drives
+# 'open as' behavior
 # s3 file paths
-# empty string as root directory on windows, show available drives
-# typing should jump to that file
-#   support fuzzy matching "ti" => TheItem
 # recursive status needs to set a dirty bit on directories
 #   cleared when recursive sync
+
 import os
 import sys
 import time
 import math
 import logging
+import posixpath
 
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
@@ -26,7 +28,7 @@ from PyQt5.QtGui import *
 from yueserver.dao.filesys.filesys import FileSystem
 from yueserver.qtcommon.TableView import (
     TableError, TableModel, TableView, RowValueRole, ImageDelegate,
-    SortProxyModel, RowSortValueRole, ListView
+    SortProxyModel, RowSortValueRole, ListView, EditItemDelegate
 )
 from yueserver.qtcommon.exceptions import installExceptionHook
 from yueserver.qtcommon import resource
@@ -522,6 +524,49 @@ class SyncUiContext(QObject):
 
         return None
 
+    def renameEntry(self, ent, name):
+
+        if isinstance(ent, sync2.DirEnt):
+            local_path = ent.local_base
+            remote_path = ent.remote_base
+        else:
+            local_path = ent.local_path
+            remote_path = ent.remote_path
+
+        if local_path:
+            fpath, fname = self.fs.split(local_path)
+            new_local_path = self.fs.join(fpath, name)
+        else:
+            new_local_path = local_path
+
+        print("***", local_path, "=>", new_local_path)
+
+        if local_path == new_local_path:
+            return None
+
+        os.rename(local_path, new_local_path)
+
+        if remote_path:
+            fpath, fname = posixpath.split(remote_path)
+            new_remote_path = posixpath.join(fpath, name)
+        else:
+            new_remote_path = remote_path
+
+        print("***", remote_path, "=>", new_remote_path)
+
+        if isinstance(ent, sync2.DirEnt):
+            new_ent = sync2.DirEnt(name, new_remote_path, new_local_path)
+
+        elif not self.hasActiveContext():
+            new_ent = sync2.FileEnt(None, new_local_path, None, None, af)
+            new_ent._state = sync2.FileState.SAME
+
+        else:
+            new_ent = sync2._check_file(
+                self.activeContext(), remote_path, local_path)
+
+        return new_ent
+
 class Pane(QWidget):
     """docstring for Pane"""
 
@@ -725,6 +770,7 @@ class FileTableView(TableView):
         self.setColumnsMovable(True)
         self.setColumnHeaderClickable(True)
         self.setEditTriggers(QAbstractItemView.SelectedClicked)
+        # self.setEditTriggers(QAbstractItemView.NoEditTriggers)
 
         model = self.baseModel()
 
@@ -738,6 +784,10 @@ class FileTableView(TableView):
         model.getColumn(idx).setSortTransform(lambda data, row: data[row][-2])
 
         idx = model.addColumn(3, "filename", editable=True)
+        delegate = EditItemDelegate(self)
+        delegate.editRow.connect(self.editRow)
+        self.setDelegate(idx, delegate)
+
         model.getColumn(idx).setShortName("Name")
         model.getColumn(idx).setDisplayName("File Name")
 
@@ -897,6 +947,55 @@ class FileTableView(TableView):
         self.setEnabled(False)
         self.setNewData([])
 
+    def _itemFromEntry(self, ent):
+
+        if isinstance(ent, sync2.FileEnt):
+
+            df = {'size': 0, "permission": 0, "mtime": 0, "version": 0,
+                  "public": "", "encryption": ""}
+
+            lf = ent.lf or df
+            rf = ent.rf or df
+            af = ent.af or df
+
+            item = [
+                ent,
+                self.ctxt.getFileStateIcon(ent.state()),
+                self.ctxt.getFileIcon(ent.local_path),
+                ent.name(),
+                af['size'],
+                rf['size'],
+                af['permission'],
+                rf['permission'],
+                rf['public'],
+                rf['encryption'],
+                af['mtime'],
+                rf['mtime'],
+                getFileType(ent.name()),
+                ent.state()
+            ]
+
+        elif isinstance(ent, sync2.DirEnt):
+
+            item = [
+                ent,
+                None,
+                self.ctxt.getIcon(QFileIconProvider.Folder),
+                ent.name(),
+                0,
+                0,
+                0,
+                0,
+                "",
+                "",
+                0,
+                0,
+                "",
+                ent.state()
+            ]
+
+        return item
+
     def onLocationChanged(self, directory):
 
         self.setEnabled(True)
@@ -906,53 +1005,11 @@ class FileTableView(TableView):
         fcount = 0
         dcount = 0
         for ent in self.ctxt.contents():
-
+            item = self._itemFromEntry(ent)
+            data.append(item)
             if isinstance(ent, sync2.FileEnt):
-
-                df = {'size': 0, "permission": 0, "mtime": 0, "version": 0,
-                      "public": "", "encryption": ""}
-
-                lf = ent.lf or df
-                rf = ent.rf or df
-                af = ent.af or df
-
-                item = [
-                    ent,
-                    self.ctxt.getFileStateIcon(ent.state()),
-                    self.ctxt.getFileIcon(ent.local_path),
-                    ent.name(),
-                    af['size'],
-                    rf['size'],
-                    af['permission'],
-                    rf['permission'],
-                    rf['public'],
-                    rf['encryption'],
-                    af['mtime'],
-                    rf['mtime'],
-                    getFileType(ent.name()),
-                    ent.state()
-                ]
-                data.append(item)
                 fcount += 1
             elif isinstance(ent, sync2.DirEnt):
-
-                item = [
-                    ent,
-                    None,
-                    self.ctxt.getIcon(QFileIconProvider.Folder),
-                    ent.name(),
-                    0,
-                    0,
-                    0,
-                    0,
-                    "",
-                    "",
-                    0,
-                    0,
-                    "",
-                    ent.state()
-                ]
-                data.append(item)
                 dcount += 1
         self.setNewData(data)
 
@@ -988,33 +1045,42 @@ class FileTableView(TableView):
         #
         # the item delegate detects tab/backtab and closes the editor
         # with the correct hint, closeEditor can then open a new edior
-        row = 0
+        # - view.commitData()
+        # - model.setData()
+
+        rows = self.selectionModel().selectedRows()
+        if len(rows) != 1:
+            return
+
+        row = rows[0].row()
+
         col = self.baseModel().getColumnIndexByName("filename")
-        self.scrollToRow(0)
+        self.scrollToRow(row)
         index = self.model().index(row, col)
 
-        item = [
-            sync2.DirEnt("name", "", ""),
-            "state",
-            self.ctxt.getIcon(QFileIconProvider.Folder),
-            "name",
-            0,
-            0,
-            0,
-            0,
-            "",
-            "",
-            0,
-            0,
-            ""
-        ]
+        ent = sync2.DirEnt("sample-%d" % self.rowCount(), "", "")
+        item = self._itemFromEntry(ent)
+        self.insertRow(0, item)
 
+        # find the newly inserted index
+        current_index = None
+        for row in range(0, self.model().rowCount(QModelIndex())):
+            index = self.model().index(row, col)
+            row = index.data(RowValueRole)
+            if ent is row[0]:
+                current_index = index
+                break;
+
+        self.setCurrentIndex(current_index)
+        self.edit(current_index)
+
+        print("insert item", ent.name())
 
         #self.baseModel().tabledata.insert(0, item)
         #self.baseModel().insertRow(0)
-        self.edit(index)
-        self.setCurrentIndex(index)
-        self._edit_index = index
+        #self.edit(index)
+        #self.setCurrentIndex(index)
+        #self._edit_index = index
 
     def onMouseReleaseBack(self, event):
 
@@ -1038,10 +1104,40 @@ class FileTableView(TableView):
 
         super().closeEditor(editor, hint)
 
-    def commitData(self, editor):
-        print("commit", editor)
+    def editRow(self, row, col):
+        index = self.model().index(row, col)
+        self.setCurrentIndex(index)
+        self.edit(index)
 
-        super().commitData(editor)
+    def onCommitValidateData(self, index, value):
+        """
+        intercept the edit data request
+        to modify an entry and replace the entire row
+        """
+        return False
+        row = index.data(RowValueRole)
+        ent = row[0]
+
+        idx = self.baseModel().getColumnIndexByName("filename")
+        print(index.column(), idx)
+        if index.column() != idx:
+            return False
+
+        try:
+            # TODO: renaming could result in inserting one value
+            #       in addition to replacing one row
+            new_ent = self.ctxt.renameEntry(ent, value)
+
+            if new_ent is None:
+                return False
+            item = self._itemFromEntry(new_ent)
+            self.replaceRow(index.row(), item)
+
+        except Exception as e:
+            print(e)
+            return False
+
+        return False
 
     def onSelectionChanged(self):
         pass
