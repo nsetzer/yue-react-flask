@@ -13,6 +13,7 @@
 # s3 file paths
 # recursive status needs to set a dirty bit on directories
 #   cleared when recursive sync
+# model filter using unix glob
 
 import os
 import sys
@@ -821,10 +822,14 @@ class FileTableView(TableView):
 
         idx = model.addTransformColumn(0, "remote_path", self._fmt_remote_path)
 
-        model.addColumn(8, "remote_public", editable=False)
-        model.addColumn(9, "remote_encryption", editable=False)
+        idx = model.addColumn(8, "remote_public", editable=False)
+        model.getColumn(idx).setDefaultTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
-        model.addColumn(12, "type", editable=False)
+        idx = model.addColumn(9, "remote_encryption", editable=False)
+        model.getColumn(idx).setDefaultTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        idx = model.addColumn(12, "type", editable=False)
+        model.getColumn(idx).setDefaultTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         model.addForegroundRule("fg1", self._foregroundRule)
         model.addBackgroundRule("fg2", self._backgroundRule)
@@ -1093,17 +1098,6 @@ class FileTableView(TableView):
     def onHeaderClicked(self, idx):
         print(idx)
 
-    def closeEditor(self, editor, hint):
-
-        # QAbstractItemDelegate.NoHint
-        # QAbstractItemDelegate.EditNextItem
-        # QAbstractItemDelegate.EditPreviousItem
-        # QAbstractItemDelegate.SubmitModelCache
-        # QAbstractItemDelegate.RevertModelCache
-        print("close", editor, hint)
-
-        super().closeEditor(editor, hint)
-
     def editRow(self, row, col):
         index = self.model().index(row, col)
         self.setCurrentIndex(index)
@@ -1155,20 +1149,28 @@ class FileTableView(TableView):
 
         row = index.data(RowValueRole)
         ent = row[0]
-        state = row[-2].split(":")[0]
+        state = row[-1].split(":")[0]
 
         if isinstance(ent, sync2.DirEnt):
-
             return QColor(32, 32, 200)
 
     def _backgroundRule(self, index, col):
 
         row = index.data(RowValueRole)
         ent = row[0]
-        state = row[-2].split(":")[0]
+        state = row[-1].split(":")[0]
 
         if not self.ctxt.hasActiveContext():
             return
+
+        idx = self.baseModel().getColumnIndexByName("state")
+        if index.column() == idx:
+            if row[9] == 'client':
+                return QColor(0xFF, 0xD7, 0x00, 64)
+            if row[9] == 'server':
+                return QColor(0x0F, 0x52, 0xBA, 64)
+            if row[9] == 'system':
+                return QColor(0x9B, 0x11, 0x1E, 64)
 
         if state == sync2.FileState.SAME:
             return None
@@ -1202,7 +1204,7 @@ class FileTableView(TableView):
 
         if state == sync2.FileState.ERROR:
             return QColor(255, 0, 0, 64)
-
+        print("ASDasd", state)
         return None
 
 class FavoritesDelegate(QStyledItemDelegate):
@@ -1294,6 +1296,9 @@ class LocationView(QWidget):
 
         # https://joekuan.wordpress.com/2015/09/23/list-of-qt-icons/
         self.edit_location = QLineEdit(self)
+        self.edit_filter = QLineEdit(self)
+        self.edit_filter.setFixedWidth(100)
+        self.edit_filter.setPlaceholderText("Filter")
 
         self.btn_back = QToolButton(self)
         self.btn_back.setIcon(self.style().standardIcon(QStyle.SP_FileDialogBack))
@@ -1321,6 +1326,7 @@ class LocationView(QWidget):
         self.hbox1.addWidget(self.btn_refresh)
         self.hbox1.addWidget(self.edit_location)
         self.hbox1.addWidget(self.btn_open)
+        self.hbox1.addWidget(self.edit_filter)
 
         self.vbox.addLayout(self.hbox1)
 

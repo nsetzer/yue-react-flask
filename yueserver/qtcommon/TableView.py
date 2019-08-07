@@ -816,7 +816,7 @@ class AbstractTableView(QTableView):
         col = self.baseModel().getColumn(index.column())
         triggers = int(self.editTriggers()&QAbstractItemView.DoubleClicked)
 
-        if event.button != Qt.LeftButton:
+        if event.button() != Qt.LeftButton:
             return
 
         if not (col.isEditable() and triggers>0):
@@ -965,7 +965,8 @@ class AbstractTableView(QTableView):
             return
 
         for i, w in enumerate(widths):
-            self.setColumnWidth(i, w)
+            if w != 0:
+                self.setColumnWidth(i, w)
 
     def _getColumnWidths(self):
         h = self.horizontalHeader()
