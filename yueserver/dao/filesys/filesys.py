@@ -74,8 +74,9 @@ class LocalFileSystemImpl(AbstractFileSystem):
         permission = st.st_mode & 0o777
         mtime = int(st.st_mtime)
 
-        if not (st.st_mode & S_IRGRP):
-            raise FileNotFoundError(path)
+        # TODO check if current user has read access
+        #if not (st.st_mode & S_IRGRP):
+        #    raise FileNotFoundError("grp access: %s" % path)
 
         is_dir = bool(S_ISDIR(st.st_mode))
 

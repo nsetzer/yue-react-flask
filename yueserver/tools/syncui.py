@@ -319,6 +319,7 @@ class SyncUiContext(QObject):
 
     def _access(self, directory):
         if directory:
+
             self.fs.file_info(directory)
 
     def _load_get_context(self, directory):
@@ -356,7 +357,13 @@ class SyncUiContext(QObject):
             try:
                 try:
                     record = self.fs.file_info(fullpath)
+                except FileNotFoundError as e:
+                    print("not found: %s" % e)
+                    ent = sync2.DirEnt(name, None, fullpath, sync2.FileState.ERROR)
+                    _dir_contents.append(ent)
+                    continue
                 except OSError as e:
+                    print(type(e), e, fullpath)
                     ent = sync2.DirEnt(name, None, fullpath, sync2.FileState.ERROR)
                     _dir_contents.append(ent)
                     continue
@@ -1736,7 +1743,8 @@ class LocationView(QWidget):
         self.ctxt = ctxt
         self.vbox = QVBoxLayout(self)
         self.hbox1 = QHBoxLayout()
-        self.hbox2 = QHBoxLayout()
+        self.wdt_syncPanel = QWidget(self)
+        self.hbox2 = QHBoxLayout(self.wdt_syncPanel)
 
         # https://joekuan.wordpress.com/2015/09/23/list-of-qt-icons/
         self.edit_location = QLineEdit(self)
@@ -1786,7 +1794,8 @@ class LocationView(QWidget):
         self.hbox2.addWidget(self.btn_pull)
         self.hbox2.addStretch(1)
 
-        self.vbox.addLayout(self.hbox2)
+        # self.vbox.addLayout(self.hbox2)
+        self.vbox.addWidget(self.wdt_syncPanel)
 
         self.btn_back.clicked.connect(self.onBackButtonPressed)
         self.btn_forward.clicked.connect(self.onForwardButtonPressed)
@@ -1864,10 +1873,13 @@ class LocationView(QWidget):
         self.btn_back.setEnabled(self.ctxt.hasBackHistory())
 
         active = self.ctxt.hasActiveContext()
-        self.btn_fetch.setEnabled(active)
-        self.btn_sync.setEnabled(active)
-        self.btn_push.setEnabled(active)
-        self.btn_pull.setEnabled(active)
+
+        self.wdt_syncPanel.setVisible(active)
+
+        #self.btn_fetch.setEnabled(active)
+        #self.btn_sync.setEnabled(active)
+        #self.btn_push.setEnabled(active)
+        #self.btn_pull.setEnabled(active)
 
         self.edit_location.setText(directory)
 
