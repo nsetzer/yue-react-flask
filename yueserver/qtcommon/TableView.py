@@ -347,7 +347,7 @@ class EditItemDelegate(StyledItemDelegate):
                 self.editRow.emit(self._index.row()+1, self._index.column())
                 return True
 
-            if event.key() == Qt.Key_Up or event.key() == Qt.Key_BackTab:
+            if event.key() == Qt.Key_Up or event.key() == Qt.Key_Backtab:
 
                 self.commitData.emit(editor)
                 self.closeEditor.emit(editor, QAbstractItemDelegate.EditPreviousItem)

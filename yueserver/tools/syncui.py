@@ -10,6 +10,7 @@
 #   gracefully handle errors during load()
 #   empty string as root directory on windows, show available drives
 # 'open as' behavior
+#   text mode test
 # s3 file paths
 # recursive status needs to set a dirty bit on directories
 #   cleared when recursive sync
@@ -22,12 +23,14 @@ import math
 import logging
 import posixpath
 import shlex
+import subprocess
 
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 
 from yueserver.dao.filesys.filesys import FileSystem
+from yueserver.dao.filesys.drives import get_drives
 from yueserver.qtcommon.TableView import (
     TableError, TableModel, TableView, RowValueRole, ImageDelegate,
     SortProxyModel, RowSortValueRole, ListView, EditItemDelegate
@@ -50,7 +53,7 @@ def openNative(url):
         # subprocess.call(["xdg-open",filepath])
         sys.stderr.write("open unsupported on %s" % os.name)
 
-def openProcess(cmdstr, pwd=None, blocking=False):
+def openProcess(args, pwd=None, blocking=False):
     """
     pwd must be provided if it is a network path on windows.
     a network path begins with '\\' or '//'
@@ -58,25 +61,47 @@ def openProcess(cmdstr, pwd=None, blocking=False):
     with the drive letter of the current working directory.
     """
 
-    try:
-        if isinstance(cmdstr, str):
-            logging.info("execute process: " + cmdstr)
-            args = shlex.split(cmdstr)
-        else:
-            logging.info("execute process: " + ' '.join(cmdstr))
-            args = cmdstr
 
-        shell = sys.platform == "win32"
-        proc = subprocess.Popen(args,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            cwd=pwd, shell=shell)
+    shell = sys.platform == "win32"
+    proc = subprocess.Popen(args,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        cwd=pwd, shell=shell)
 
-        if blocking:
-            proc.communicate()
+    if blocking:
+        proc.communicate()
 
-    except Exception as e:
-        raise Exception(cmdstr)
+def executeAction(action, ent, pwd):
+    """
+    an action is a bash syntax string
+    shlex is used to parse the arguments
+
+    ent is a FileEnt or DirEnt, and used to
+    format arguments after parsing
+
+    pwd, path, filename, name, ext are valid format options
+    format syntax is `echo {filename}`
+
+    """
+
+    if isinstance(ent, sync2.DirEnt):
+        path = ent.local_base
+    else:
+        path = ent.local_path
+
+    _, filename = os.path.split(path)
+    name, ext = os.path.splitext(filename)
+    opts = {
+        "pwd": pwd,
+        "path": path,
+        "filename": name,
+        "name": name,
+        "ext": ext,
+    }
+    args = shlex.split(action)
+    args = [arg.format(**opts) for arg in args]
+
+    return openProcess(args, pwd)
 
 def isSubPath(dir_path, file_path):
     return os.path.abspath(file_path).startswith(os.path.abspath(dir_path) + os.sep)
@@ -268,12 +293,17 @@ class SyncUiContext(QObject):
         QApplication.processEvents()
 
         try:
-            ctxt = self._load_get_context(directory)
 
-            if ctxt is not None:
-                content = self._load_context(ctxt, directory)
+            if directory == '':
+                content = self._load_drives()
+                ctxt = None
             else:
-                content = self._load_default(directory)
+                ctxt = self._load_get_context(directory)
+
+                if ctxt is not None:
+                    content = self._load_context(ctxt, directory)
+                else:
+                    content = self._load_default(directory)
 
             # useful for color testing
             # for state in sync2.FileState.states():
@@ -287,6 +317,10 @@ class SyncUiContext(QObject):
             print("error changing directory")
             logging.exception(str(e))
 
+    def _access(self, directory):
+        if directory:
+            self.fs.file_info(directory)
+
     def _load_get_context(self, directory):
         for local_base, ctxt in self._syncContext.items():
             if isSubPath(local_base, directory):
@@ -294,6 +328,17 @@ class SyncUiContext(QObject):
         else:
             return self.loadSyncContext(directory)
         return None
+
+    def _load_drives(self):
+
+        _dir_contents = []
+
+        for drive in get_drives():
+            ent = sync2.DirEnt(drive, None, drive)
+            ent._state = sync2.FileState.SAME
+            _dir_contents.append(ent)
+
+        return _dir_contents
 
     def _load_context(self, ctxt, directory):
         abspath, relpath = ctxt.normPath(directory)
@@ -312,7 +357,7 @@ class SyncUiContext(QObject):
                 try:
                     record = self.fs.file_info(fullpath)
                 except OSError as e:
-                    ent = sync2.DirEnt(name, None, fullpath)
+                    ent = sync2.DirEnt(name, None, fullpath, sync2.FileState.ERROR)
                     _dir_contents.append(ent)
                     continue
 
@@ -330,6 +375,7 @@ class SyncUiContext(QObject):
                     _dir_contents.append(ent)
                 else:
                     ent = sync2.DirEnt(name, None, fullpath)
+                    ent._state = sync2.FileState.SAME
                     _dir_contents.append(ent)
 
             except FileNotFoundError:
@@ -337,9 +383,18 @@ class SyncUiContext(QObject):
         return _dir_contents
 
     def reload(self):
-        self.load(self._location)
+
+        # reload the directory if it is no longer accessible
+        # load the parent directory instead
+        try:
+            self._access(self._location)
+            self.load(self._location)
+        except OSError:
+            self.pushParentDirectory()
 
     def pushDirectory(self, directory):
+
+        self._access(directory)
 
         self.load(directory)
         self._location_history.append(directory)
@@ -349,7 +404,7 @@ class SyncUiContext(QObject):
 
         directory = os.path.join(self._location, dirname)
 
-        # TODO: test access
+        self._access(directory)
 
         # note buttons are enabled based on if there is history
         # but a failed load should not effect state
@@ -361,7 +416,10 @@ class SyncUiContext(QObject):
     def pushParentDirectory(self):
         directory, _ = os.path.split(self._location)
 
-        # TODO: test access
+        if directory == self._location:
+            directory = ""
+
+        self._access(directory)
 
         # note buttons are enabled based on if there is history
         # but a failed load should not effect state
@@ -375,11 +433,10 @@ class SyncUiContext(QObject):
         if len(self._location_history) <= 1:
             return
 
-        # TODO: test access
-
         # note buttons are enabled based on if there is history
         # but a failed load should not effect state
         directory = self._location_history[-2]
+        self._access(directory)
         self._location_pop_history.append(self._location_history.pop())
 
         self.load(directory)
@@ -390,6 +447,7 @@ class SyncUiContext(QObject):
             return
 
         directory = self._location_pop_history.pop(0)
+        self._access(directory)
         self._location_history.append(directory)
         self.load(directory)
 
@@ -523,7 +581,7 @@ class SyncUiContext(QObject):
             return self.getImage(":/img/fs_delete_remote.png")
 
         # state == sync2.FileState.ERROR:
-        return self.getImage(":/img/fs_delete_error.png")
+        return self.getImage(":/img/fs_error.png")
 
     def getFileIcon(self, path):
 
@@ -693,6 +751,11 @@ class FileContentSortProxyModel(SortProxyModel):
         return (dir, val, ent.name())
 
 class FileContextMenu(QMenu):
+
+    createDirectory = pyqtSignal()
+    createEmptyFile = pyqtSignal()
+    rename = pyqtSignal()
+
     def __init__(self, ctxt, cfg, selection, parent=None):
         super(FileContextMenu, self).__init__(parent)
 
@@ -716,6 +779,12 @@ class FileContextMenu(QMenu):
 
         act = self.addAction("Open Current Directory",
             lambda: openNative(self.ctxt.currentLocation()))
+
+        menu = self.addMenu("New")
+        menu.addAction("Directory", self._action_new_directory)
+        menu.addAction("Empty File", self._action_new_file)
+
+        self.addAction("Rename", self._action_rename)
 
         self.addSeparator()
 
@@ -814,23 +883,31 @@ class FileContextMenu(QMenu):
         dialog.exec_()
 
     def _action_open_action(self, ents, act):
-        
+
         self._action_exec(ents, act)
 
     def _action_menu_action(self, ents, act):
-        
+
+        # todo: should be blocking
+        # todo: should auto refresh
         self._action_exec(ents, act)
 
     def _action_exec(self, ents, act):
 
-        opts = {
-            "pwd": self.ctxt.currentLocation(),
-            "path": ents[0].local_path,
-        }
-        args = shlex.split(act)
-        args = [arg.format(**opts) for arg in args]
+        pwd = self.ctxt.currentLocation()
 
-        print(args)
+        executeAction(act, ents[0], pwd)
+
+    def _action_new_directory(self):
+        self.createDirectory.emit()
+
+    def _action_new_file(self):
+
+        self.createEmptyFile.emit()
+
+    def _action_rename(self):
+
+        self.rename.emit()
 
 class FileTableView(TableView):
 
@@ -838,6 +915,11 @@ class FileTableView(TableView):
 
     triggerSave = pyqtSignal()
     triggerRestore = pyqtSignal()
+
+    createDirectory = pyqtSignal(QModelIndex, object)
+    createEmptyFile = pyqtSignal(QModelIndex, object)
+    renameDirectory = pyqtSignal(QModelIndex, object)
+    renameFile = pyqtSignal(QModelIndex, object)
 
     def __init__(self, ctxt, cfg, parent=None):
         super(FileTableView, self).__init__(parent)
@@ -920,6 +1002,11 @@ class FileTableView(TableView):
         self.ctxt.locationChanged.connect(self.onLocationChanged)
 
         self.selectionChangedEvent.connect(self.onSelectionChanged)
+
+        self.createDirectory.connect(self.onCreateDirectory)
+        self.createEmptyFile.connect(self.onCreateEmptyFile)
+        self.renameDirectory.connect(self.onRenameDirectory)
+        self.renameFile.connect(self.onRenameFile)
 
     def getSortProxyModel(self):
         """
@@ -1066,7 +1153,7 @@ class FileTableView(TableView):
 
             item = [
                 ent,
-                None,
+                self.ctxt.getFileStateIcon(ent.state()),
                 self.ctxt.getIcon(QFileIconProvider.Folder),
                 ent.name(),
                 0,
@@ -1110,15 +1197,29 @@ class FileTableView(TableView):
         if isinstance(ent, sync2.DirEnt):
             self.ctxt.pushChildDirectory(ent.name())
         else:
-            print(ent.lf)
-            print(ent.rf)
-            print(ent.af)
+
+            ftype = getFileType(ent.local_path)
+
+            action = None
+            for act in self.cfg.open_actions:
+                supported = [stype.upper() for stype in act.get("types", [])]
+                if ftype in supported:
+                    action = act.get("action", None)
+                    break
+
+            if action is not None:
+
+                executeAction(action, ent, self.ctxt.currentLocation())
 
     def onMouseReleaseRight(self, event):
 
         rows = self.getSelection()
 
         contextMenu = FileContextMenu(self.ctxt, self.cfg, rows, self)
+
+        contextMenu.createDirectory.connect(self.onBeginCreateDirectory)
+        contextMenu.createEmptyFile.connect(self.onBeginCreateEmptyFile)
+        contextMenu.rename.connect(self.onBeginRename)
 
         contextMenu.exec_(event.globalPos())
 
@@ -1177,20 +1278,281 @@ class FileTableView(TableView):
 
         self.ctxt.unpopDirectory()
 
-    def onHeaderClicked(self, idx):
-        print(idx)
+    def onBeginCreateDirectory(self):
+        """
+        create a dummy DirEnt and open an editor
+        """
+        col = self.baseModel().getColumnIndexByName("filename")
+        ent = sync2.DirEnt("sample-%d" % self.rowCount(), "", "")
+        ent.create = True
+        item = self._itemFromEntry(ent)
+        self.insertRow(0, item)
+
+        # find the newly inserted index
+        current_index = None
+        for row in range(0, self.model().rowCount(QModelIndex())):
+            index = self.model().index(row, col)
+            row = index.data(RowValueRole)
+            if ent is row[0]:
+                current_index = index
+                break;
+
+        self.setCurrentIndex(current_index)
+        self.edit(current_index)
+
+    def onCreateDirectory(self, index, value):
+        """
+        modify the dummy DirEnt with the editor value
+        """
+        row = index.data(RowValueRole)
+        ent = row[0]
+
+        try:
+
+            path = os.path.join(self.ctxt.currentLocation(), value)
+
+            if self.ctxt.hasActiveContext():
+                abspath, relpath = self.ctxt.activeContext().normPath(path)
+            else:
+                abspath = path
+                relpath = ""
+
+            if os.path.exists(abspath):
+                raise Exception(abspath)
+
+            os.makedirs(abspath)
+
+            # construct a new ent to replace the dummy
+            ent = sync2.DirEnt(value, relpath, abspath, sync2.FileState.PUSH)
+
+            item = self._itemFromEntry(ent)
+            self.replaceRow(index.row(), item)
+
+            current_index = None
+            col = self.baseModel().getColumnIndexByName("filename")
+            for row in range(0, self.model().rowCount(QModelIndex())):
+                index = self.model().index(row, col)
+                row = index.data(RowValueRole)
+                if ent is row[0]:
+                    current_index = index
+                    break;
+            self.setCurrentIndex(current_index)
+            self.scrollToRow(current_index.row())
+
+        except Exception as e:
+            self.ctxt.reload()
+            raise e
+
+    def onBeginCreateEmptyFile(self):
+        """
+        create a dummy FileEnt and open an editor
+        """
+
+        col = self.baseModel().getColumnIndexByName("filename")
+        path = os.path.join(self.ctxt.currentLocation(), "dummy")
+        ent = sync2.FileEnt(None, path, None, None, None)
+        ent.create = True
+        item = self._itemFromEntry(ent)
+        self.insertRow(0, item)
+
+        # find the newly inserted index
+        current_index = None
+        for row in range(0, self.model().rowCount(QModelIndex())):
+            index = self.model().index(row, col)
+            row = index.data(RowValueRole)
+            if ent is row[0]:
+                current_index = index
+                break;
+
+        self.setCurrentIndex(current_index)
+        self.edit(current_index)
+
+    def onCreateEmptyFile(self, index, value):
+        """
+        modify the dummy FileEnt with the editor value
+        """
+        row = index.data(RowValueRole)
+        ent = row[0]
+
+        try:
+
+            path = os.path.join(self.ctxt.currentLocation(), value)
+
+            if self.ctxt.hasActiveContext():
+                abspath, relpath = self.ctxt.activeContext().normPath(path)
+            else:
+                abspath = path
+                relpath = None
+
+            if os.path.exists(abspath):
+                raise Exception(abspath)
+
+            open(abspath, "w").close()
+
+            # construct a new ent to replace the dummy
+            if self.ctxt.hasActiveContext():
+                ent = sync2._check_file(self.ctxt.activeContext(), relpath, abspath)
+            else:
+                ent = sync2.FileEnt(relpath, abspath, None, None, None)
+
+            item = self._itemFromEntry(ent)
+            self.replaceRow(index.row(), item)
+
+            current_index = None
+            col = self.baseModel().getColumnIndexByName("filename")
+            for row in range(0, self.model().rowCount(QModelIndex())):
+                index = self.model().index(row, col)
+                row = index.data(RowValueRole)
+                if ent is row[0]:
+                    current_index = index
+                    break;
+            self.setCurrentIndex(current_index)
+            self.scrollToRow(current_index.row())
+
+        except Exception as e:
+            self.ctxt.reload()
+            raise e
+
+    def onBeginRename(self):
+
+        row_indices = self.selectionModel().selectedRows()
+
+        if len(row_indices) == 0:
+            return
+
+        index = row_indices[0]
+        col = self.baseModel().getColumnIndexByName("filename")
+        index = self.model().index(index.row(), col)
+
+        self.setCurrentIndex(index)
+        self.edit(index)
+
+    def onRenameDirectory(self, index, value):
+        row = index.data(RowValueRole)
+        ent = row[0]
+
+        try:
+
+            path = os.path.join(self.ctxt.currentLocation(), value)
+
+            if self.ctxt.hasActiveContext():
+                abspath, relpath = self.ctxt.activeContext().normPath(path)
+            else:
+                abspath = path
+                relpath = ""
+
+            if os.path.exists(abspath):
+                raise Exception(abspath)
+
+            os.rename(ent.local_base, abspath)
+
+            # construct a new ent to replace the dummy
+            ent = sync2.DirEnt(value, relpath, abspath, sync2.FileState.PUSH)
+
+            item = self._itemFromEntry(ent)
+            self.replaceRow(index.row(), item)
+
+            # TODO: if in an active context
+            #   _check_directory on old path, if remote exists insert ent
+            #   check for duplicate entries in the list and remove
+
+            current_index = None
+            col = self.baseModel().getColumnIndexByName("filename")
+            for row in range(0, self.model().rowCount(QModelIndex())):
+                index = self.model().index(row, col)
+                row = index.data(RowValueRole)
+                if ent is row[0]:
+                    current_index = index
+                    break;
+            self.setCurrentIndex(current_index)
+            self.scrollToRow(current_index.row())
+
+        except Exception as e:
+            self.ctxt.reload()
+            raise e
+
+    def onRenameFile(self, index, value):
+        row = index.data(RowValueRole)
+        ent = row[0]
+
+        try:
+
+            path = os.path.join(self.ctxt.currentLocation(), value)
+
+            if self.ctxt.hasActiveContext():
+                abspath, relpath = self.ctxt.activeContext().normPath(path)
+            else:
+                abspath = path
+                relpath = None
+
+            if os.path.exists(abspath):
+                raise Exception(abspath)
+
+            os.rename(ent.local_path, abspath)
+
+            # construct a new ent to replace the dummy
+            if self.ctxt.hasActiveContext():
+                ent = sync2._check_file(self.ctxt.activeContext(), relpath, abspath)
+            else:
+                ent = sync2.FileEnt(relpath, abspath, None, None, None)
+
+            item = self._itemFromEntry(ent)
+            self.replaceRow(index.row(), item)
+
+            # TODO: if in an active context
+            #   _check_file on old path, if remote exists insert ent
+            #   check for duplicate entries in the list and remove
+
+            current_index = None
+            col = self.baseModel().getColumnIndexByName("filename")
+            for row in range(0, self.model().rowCount(QModelIndex())):
+                index = self.model().index(row, col)
+                row = index.data(RowValueRole)
+                if ent is row[0]:
+                    current_index = index
+                    break;
+            self.setCurrentIndex(current_index)
+            self.scrollToRow(current_index.row())
+
+        except Exception as e:
+            self.ctxt.reload()
+            raise e
 
     def editRow(self, row, col):
+        """ used by the edit delegate to edit next/previous row"""
+        # todo: bounds checking?
         index = self.model().index(row, col)
         self.setCurrentIndex(index)
         self.edit(index)
 
     def onCommitValidateData(self, index, value):
+
+        row = index.data(RowValueRole)
+        ent = row[0]
+
+        # todo: on editor close remove dummy ents if not committing
+        if isinstance(ent, sync2.DirEnt):
+            # todo: better dummy entry checking?
+            if hasattr(ent, 'create'):
+                self.createDirectory.emit(index, value)
+            else:
+                self.renameDirectory.emit(index, value)
+
+        if isinstance(ent, sync2.FileEnt):
+            if hasattr(ent, 'create'):
+                self.createEmptyFile.emit(index, value)
+            else:
+                self.renameFile.emit(index, value)
+
+        # always fail the validation, the row will be updated
+        # during a successful rename
+        return False
+
+    def old_onCommitValidateData(self, index, value):
         """
         intercept the edit data request
         to modify an entry and replace the entire row
         """
-        return False
         row = index.data(RowValueRole)
         ent = row[0]
 
@@ -1453,8 +1815,8 @@ class LocationView(QWidget):
 
     def onOpenButtonPressed(self):
         directory = self.edit_location.text().strip()
-        if os.path.exists(directory):
-            self.ctxt.pushDirectory(directory)
+
+        self.ctxt.pushDirectory(directory)
 
     def _getEnt(self):
         path = self.ctxt.currentLocation()

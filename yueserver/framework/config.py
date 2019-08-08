@@ -29,7 +29,7 @@ def ydump(path, obj):
         os.makedirs(dir)
 
     with open(path, "w") as wf:
-        yaml.dump(obj, wf, default_flow_style=False)
+        yaml.dump(obj, wf, width=78, indent=4)
 
 class BaseConfig(object):
     def __init__(self):
