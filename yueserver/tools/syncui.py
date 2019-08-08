@@ -14,7 +14,11 @@
 # s3 file paths
 # recursive status needs to set a dirty bit on directories
 #   cleared when recursive sync
-# model filter using unix glob
+# model filter using unix glob (qsortfilterproxymodel)
+# create a FileSystemTableView from which sync table view inherits from
+#   FileSystemTableView(fs)
+#   contains a private class as a SignalHandler for private signals (e.g. rename)
+#   takes care of basic file system operations
 
 import os
 import sys

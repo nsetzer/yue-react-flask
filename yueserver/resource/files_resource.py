@@ -148,6 +148,8 @@ def _list_path(service, root, path, list_=False, password=None, preview=None, dl
             headers = {
                 'Cache-Control': 'max-age=31536000',
                 'ETag': ETag,
+                'X-YUE-ROOT': root,
+                'X-YUE-PATH': path,
             }
 
             return send_generator(go, '%s.%s.png' % (name, preview),
@@ -172,6 +174,9 @@ def _list_path(service, root, path, list_=False, password=None, preview=None, dl
                 "X-YUE-MTIME": info.mtime,
                 'Cache-Control': 'max-age=31536000',
                 'ETag': ETag,
+                'X-YUE-ROOT': root,
+                'X-YUE-PATH': path,
+                'X-YUE-NAME': name,
             }
             return send_generator(go, name,
                 file_size=None, headers=headers, attachment=dl)

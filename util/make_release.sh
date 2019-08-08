@@ -65,7 +65,7 @@ cat <<EOF > uninstall.sh
 #!/bin/bash
 cd \$(dirname \$0)
 echo "uninstalling yueserver"
-rm -rf yueserver yueclient build
+rm -rf yueserver yueclient build frontend
 rm wsgi.py requirements.txt
 rm start.sh start_debug.sh uninstall.sh
 rm manage.sh backupdb.sh
