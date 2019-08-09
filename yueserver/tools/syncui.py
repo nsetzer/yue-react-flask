@@ -498,6 +498,8 @@ class SyncUiContext(QObject):
 
             db = sync2.db_connect("sqlite:///" + db_path)
 
+            # TODO: emit connection details
+            print(userdata['hostname'])
             client = sync2.connect(userdata['hostname'],
                 userdata['username'], userdata['password'])
 
