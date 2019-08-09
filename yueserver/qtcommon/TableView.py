@@ -616,17 +616,35 @@ class TableModel(QAbstractTableModel):
     # these methods could be implemented depending on the model
     # however the default use-case does not generalize to removing data
 
-    def removeColumn(self, idx, parent=QModelIndex()):
-        raise TableError("not implemented")
+    #def removeColumn(self, idx, parent=QModelIndex()):
+    #    super().removeColumn(idx, parent)
 
     def removeColumns(self, idx, count, parent=QModelIndex()):
         raise TableError("not implemented")
 
-    def removeRow(self, idx, parent=QModelIndex()):
-        raise TableError("not implemented")
+    #def removeRow(self, idx, parent=QModelIndex()):
+    #    super().removeRows(idx, parent)
 
     def removeRows(self, idx, count, parent=QModelIndex()):
-        raise TableError("not implemented")
+
+        s = idx
+        e = idx + count
+
+        if s < 0 or e > len(self.tabledata):
+            return False
+
+        self.beginRemoveRows(parent, idx, idx+count-1)
+
+        if s == 0:
+            self.tabledata = self.tabledata[s:]
+        if e == len(self.tabledata):
+            self.tabledata = self.tabledata[:e]
+        else:
+            self.tabledata = self.tabledata[:s] + self.tabledata[e:]
+
+        self.endRemoveRows()
+
+        return True
 
     # -----------------------------------------------------------------------
     # helper functions

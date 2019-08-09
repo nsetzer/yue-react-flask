@@ -475,6 +475,9 @@ class SyncUiContext(QObject):
         return self._active_context
 
     def contents(self):
+        # todo: deprecate this method
+        # will make it easier than trying to have the table
+        # model update the context
         return self._dir_contents
 
     def currentLocation(self):
@@ -672,6 +675,89 @@ class SyncUiContext(QObject):
                 self.activeContext(), remote_path, local_path)
 
         return new_ent
+
+class OverlayText(QWidget):
+
+    def __init__(self, text, parent = None):
+        super(OverlayText, self).__init__(parent)
+
+        palette = QPalette(self.palette())
+        palette.setColor(palette.Background, Qt.transparent)
+        self.setPalette(palette)
+
+        self._text = text
+
+    def setText(self, text):
+        self._text = text
+
+    def showEvent(self, event):
+        self.resize(self.parent().size())
+
+    def paintEvent(self, event):
+
+        if self.size() != self.parent().size():
+            self.resize(self.parent().size())
+
+        painter = QPainter()
+        painter.begin(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.fillRect(self.parent().rect(), QBrush(QColor(255, 255, 255, 127)))
+
+        painter.drawText(self.parent().rect(), Qt.AlignHCenter|Qt.AlignVCenter, self._text)
+
+        painter.end()
+
+class OverlaySpinner(QWidget):
+
+    def __init__(self, parent = None):
+        super(OverlaySpinner, self).__init__(parent)
+
+        palette = QPalette(self.palette())
+        palette.setColor(palette.Background, Qt.transparent)
+        self.setPalette(palette)
+
+        self.cos = [(30 * math.cos(2 * math.pi * i / 6.0) - 10) for i in range(6)]
+        self.sin = [(30 * math.sin(2 * math.pi * i / 6.0) - 10) for i in range(6)]
+
+        self.counter = 0
+
+    def paintEvent(self, event):
+
+        if self.size() != self.parent().size():
+            self.resize(self.parent().size())
+
+        painter = QPainter()
+        painter.begin(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.fillRect(event.rect(), QBrush(QColor(255, 255, 255, 127)))
+        painter.setPen(QPen(Qt.NoPen))
+
+        for i in range(6):
+            if (self.counter // 5) % 6 == i:
+                color = QColor(127, 127 + (self.counter % 5)*32, 127)
+                painter.setBrush(QBrush(color))
+            else:
+                color = QColor(127, 127, 127)
+                painter.setBrush(QBrush(color))
+            x = self.width()/2 + self.cos[i]
+            y = self.height()/2 + self.sin[i]
+            painter.drawEllipse(x, y, 20, 20)
+
+        painter.end()
+
+    def showEvent(self, event):
+
+        self.resize(self.parent().size())
+        self.timer = self.startTimer(75)
+        self.counter = 0
+
+    def hideEvent(self, event):
+        self.killTimer(self.timer)
+
+    def timerEvent(self, event):
+
+        self.counter += 1
+        self.update()
 
 class Pane(QWidget):
     """docstring for Pane"""
@@ -1235,51 +1321,7 @@ class FileTableView(TableView):
         contextMenu.exec_(event.globalPos())
 
     def onMouseReleaseMiddle(self, event):
-
-        # TODO: experiment with inserting rows
-        #       and editing data
-        # create an editor close signal which contains a model index
-        #   and an edit hint
-        # may need a custom close editor which is given the hint
-        #
-        # the item delegate detects tab/backtab and closes the editor
-        # with the correct hint, closeEditor can then open a new edior
-        # - view.commitData()
-        # - model.setData()
-
-        rows = self.selectionModel().selectedRows()
-        if len(rows) != 1:
-            return
-
-        row = rows[0].row()
-
-        col = self.baseModel().getColumnIndexByName("filename")
-        self.scrollToRow(row)
-        index = self.model().index(row, col)
-
-        ent = sync2.DirEnt("sample-%d" % self.rowCount(), "", "")
-        item = self._itemFromEntry(ent)
-        self.insertRow(0, item)
-
-        # find the newly inserted index
-        current_index = None
-        for row in range(0, self.model().rowCount(QModelIndex())):
-            index = self.model().index(row, col)
-            row = index.data(RowValueRole)
-            if ent is row[0]:
-                current_index = index
-                break;
-
-        self.setCurrentIndex(current_index)
-        self.edit(current_index)
-
-        print("insert item", ent.name())
-
-        #self.baseModel().tabledata.insert(0, item)
-        #self.baseModel().insertRow(0)
-        #self.edit(index)
-        #self.setCurrentIndex(index)
-        #self._edit_index = index
+        pass
 
     def onMouseReleaseBack(self, event):
 
@@ -1294,7 +1336,8 @@ class FileTableView(TableView):
         create a dummy DirEnt and open an editor
         """
         col = self.baseModel().getColumnIndexByName("filename")
-        ent = sync2.DirEnt("sample-%d" % self.rowCount(), "", "")
+        # todo: check for unique name
+        ent = sync2.DirEnt("newfile.txt", "", "")
         ent.create = True
         item = self._itemFromEntry(ent)
         self.insertRow(0, item)
@@ -1329,7 +1372,7 @@ class FileTableView(TableView):
                 relpath = ""
 
             if os.path.exists(abspath):
-                raise Exception(abspath)
+                raise Exception("exists %s" % abspath)
 
             os.makedirs(abspath)
 
@@ -1360,7 +1403,7 @@ class FileTableView(TableView):
         """
 
         col = self.baseModel().getColumnIndexByName("filename")
-        path = os.path.join(self.ctxt.currentLocation(), "dummy")
+        path = os.path.join(self.ctxt.currentLocation(), "newfile.txt")
         ent = sync2.FileEnt(None, path, None, None, None)
         ent.create = True
         item = self._itemFromEntry(ent)
@@ -1396,7 +1439,7 @@ class FileTableView(TableView):
                 relpath = None
 
             if os.path.exists(abspath):
-                raise Exception(abspath)
+                raise Exception("exists %s" % abspath)
 
             open(abspath, "w").close()
 
@@ -1559,6 +1602,20 @@ class FileTableView(TableView):
         # during a successful rename
         return False
 
+    def closeEditor(self, editor, hint):
+
+        super().closeEditor(editor, hint)
+
+        if hint == QAbstractItemDelegate.RevertModelCache:
+            i = 0
+            while i < len(self.baseModel().tabledata):
+                row = self.baseModel().tabledata[i]
+                ent = row[0]
+                if hasattr(row[0], 'create'):
+                    self.baseModel().removeRow(i)
+                else:
+                    i += 1
+
     def old_onCommitValidateData(self, index, value):
         """
         intercept the edit data request
@@ -1599,6 +1656,21 @@ class FileTableView(TableView):
         # paste
         # remove_local
         # remove_remote
+
+    def paintEvent(self, event):
+
+        super().paintEvent(event)
+
+        if self.rowCount() == 0:
+            text = "Directory Empty"
+            painter = QPainter()
+            painter.begin(self.viewport())
+            painter.setRenderHint(QPainter.Antialiasing)
+            #painter.fillRect(self.rect(),
+            #    QBrush(QColor(255, 0, 0, 127)))
+            painter.drawText(self.rect(),
+                Qt.AlignHCenter|Qt.AlignVCenter, text)
+            painter.end()
 
     def _foregroundRule(self, index, col):
 
@@ -1748,7 +1820,9 @@ class LocationView(QWidget):
         self.vbox = QVBoxLayout(self)
         self.hbox1 = QHBoxLayout()
         self.wdt_syncPanel = QWidget(self)
+        self.wdt_syncPanel.setVisible(False)
         self.hbox2 = QHBoxLayout(self.wdt_syncPanel)
+        self.hbox2.setContentsMargins(0, 0, 0, 0)
 
         # https://joekuan.wordpress.com/2015/09/23/list-of-qt-icons/
         self.edit_location = QLineEdit(self)
@@ -2606,6 +2680,13 @@ class SyncMainWindow(QMainWindow):
 
         self.table_file = FileTableView(self.ctxt, self.cfg, self)
 
+        self.spinner = OverlaySpinner(self.table_file)
+        self.spinner.hide()
+
+        self.timer = QTimer(self)
+        self.timer.setSingleShot(True)
+        self.timer.timeout.connect(lambda: self.spinner.show())
+
         self.view_location = LocationView(self.ctxt, self)
 
         self.pane_favorites = FavoritesPane(ctxt, cfg, self)
@@ -2624,6 +2705,9 @@ class SyncMainWindow(QMainWindow):
 
         self.table_file.triggerSave.connect(self.onTriggerSave)
         self.table_file.triggerRestore.connect(self.onTriggerRestore)
+
+        self.ctxt.locationChanging.connect(self.onLocationChanging)
+        self.ctxt.locationChanged.connect(self.onLocationChanged)
 
     def initMenuBar(self):
 
@@ -2737,6 +2821,14 @@ class SyncMainWindow(QMainWindow):
     def onTriggerRestore(self):
 
         self.table_file.setColumnState(self.cfg.state)
+
+    def onLocationChanging(self):
+        self.timer.start(333)
+
+    def onLocationChanged(self, directory):
+
+        self.timer.stop()
+        self.spinner.hide()
 
 def main():
 
