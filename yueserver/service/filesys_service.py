@@ -325,7 +325,7 @@ class FileSysService(object):
 
     # TODO: version defaulting to 0 may be a bug, change to None
     def saveFile(self, user, fs_name, path, stream,
-      mtime=None, version=0, permission=0, encryption=None):
+      mtime=None, version=None, permission=0, encryption=None):
 
         if self.fs.isabs(path):
             raise FileSysServiceException(path)
@@ -352,13 +352,12 @@ class FileSysService(object):
         except StorageNotFoundException as e:
             pass
 
-        if info is not None and version > 0:
-            if info.version >= version:
-                raise FileSysServiceException("invalid version", 409)
-            version = info.version
-        else:
-            # dao layer expects None, or a valid version
-            version = None
+        if info is not None and info.version > 0 and version is not None:
+            if version < info.version:
+                raise FileSysServiceException("Version out of date", 409)
+
+        if version == 0:
+            version = None # + 1 handled by dao layer
 
         if storage_path is None:
             storage_path = self._getNewStoragePath(user, fs_name, path)

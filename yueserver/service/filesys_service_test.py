@@ -115,6 +115,27 @@ class FileServiceTestCase(unittest.TestCase):
 
         self.assertEqual(record1.storage_path, record2.storage_path)
 
+    def test_001f_updateVersion(self):
+
+        # same test as 001a, but increment the version (upsert->update)
+        root = "mem"
+        path = "test/test_version.txt"
+
+        self.service.saveFile(self.app.USER, root, path,
+            BytesIO(b"def456"), version = 3)
+        result = self.service.listSingleFile(self.app.USER, root, path)
+        self.assertEqual(result['files'][0]['version'], 3)
+
+
+        self.service.saveFile(self.app.USER, root, path,
+            BytesIO(b"def456"), version = 5)
+        result = self.service.listSingleFile(self.app.USER, root, path)
+        self.assertEqual(result['files'][0]['version'], 5)
+
+        with self.assertRaises(FileSysServiceException):
+            self.service.saveFile(self.app.USER, root, path,
+                BytesIO(b"def456"), version = 2)
+
     def test_002a_system(self):
 
         key1 = self.service.getUserSystemPassword(self.app.USER)

@@ -19,7 +19,7 @@
 #   FileSystemTableView(fs)
 #   contains a private class as a SignalHandler for private signals (e.g. rename)
 #   takes care of basic file system operations
-
+# checkbox to hide hidden files
 import os
 import sys
 import time

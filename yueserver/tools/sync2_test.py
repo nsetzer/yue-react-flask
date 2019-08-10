@@ -17,7 +17,7 @@ from ..dao.filesys.crypt import HEADER_SIZE
 
 from .sync2 import db_connect, \
     DatabaseTables, LocalStorageDao, SyncContext, DirAttr, FileEnt, \
-    _check, RecordBuilder, FileState, _sync_file, _sync_file_impl, \
+    _check, RecordBuilder, FileState, _sync_file_impl, \
     _fetch, _sync_file_push, _sync_file_pull, LocalStorageTable, _check_file, \
     ProgressFileReaderWrapper
 
