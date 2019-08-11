@@ -9,8 +9,6 @@
 # directory load robustness
 #   gracefully handle errors during load()
 #   empty string as root directory on windows, show available drives
-# 'open as' behavior
-#   text mode test
 # s3 file paths
 # recursive status needs to set a dirty bit on directories
 #   cleared when recursive sync
@@ -20,6 +18,7 @@
 #   contains a private class as a SignalHandler for private signals (e.g. rename)
 #   takes care of basic file system operations
 # checkbox to hide hidden files
+
 import os
 import sys
 import time
@@ -209,8 +208,14 @@ class SyncConfig(BaseConfig):
         self.state = self.get_key(data, "state", default="")
 
         # both open and menu actions should be a list of objects
-        # {'action': 'shell command', 'text': 'text'}
+        # {'action': '', 'text': '', 'types': [], 'default': False}
+        # action: shell command
+        # text: display text
+        # types: file extensions (type name from type column)
+        # default: True for the default text action
         self.open_actions = self.get_key(data, "open_actions", default=[])
+        # {'action': '', 'text': '', 'mode': ''}
+        # mode: zero|single|multiple
         self.menu_actions = self.get_key(data, "menu_actions", default=[])
 
     def save(self):
@@ -514,6 +519,7 @@ class SyncUiContext(QObject):
             ctxt.current_local_base = userdata['current_local_base']
             ctxt.current_remote_base = userdata['current_remote_base']
             ctxt.hostname = userdata['hostname']
+            ctxt.username = userdata['username']
 
         except sync2.SyncException as e:
             self.loadContextError.emit(directory, str(e))
@@ -1033,8 +1039,9 @@ class FileTableView(TableView):
         self.setSortingEnabled(True)
         self.setColumnsMovable(True)
         self.setColumnHeaderClickable(True)
-        self.setEditTriggers(QAbstractItemView.SelectedClicked)
-        # self.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        # double click to open is also firing edit selected
+        # self.setEditTriggers(QAbstractItemView.SelectedClicked)
+        self.setEditTriggers(QAbstractItemView.NoEditTriggers)
 
         model = self.baseModel()
 
@@ -1067,11 +1074,13 @@ class FileTableView(TableView):
         self.setDelegate(idx, MonospaceDelegate(self))
         model.getColumn(idx).setDefaultTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
         model.getColumn(idx).setSortTransform(lambda data, row: data[row][6])
+        model.getColumn(idx).setShortName("permission")
 
         idx = model.addTransformColumn(7, "remote_permission", self._fmt_octal)
         self.setDelegate(idx, MonospaceDelegate(self))
         model.getColumn(idx).setDefaultTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
         model.getColumn(idx).setSortTransform(lambda data, row: data[row][7])
+        model.getColumn(idx).setShortName("r_perm")
 
         idx = model.addTransformColumn(10, "local_mtime", self._fmt_datetime)
         self.setDelegate(idx, MonospaceDelegate(self))
@@ -1129,6 +1138,8 @@ class FileTableView(TableView):
         self._setHiddenColumns([])
         self._setColumnOrder(list(range(self.columnCount())))
 
+        fm1 = QFontMetrics(self.font())
+
         self.horizontalHeader().setSectionResizeMode(0)
         idx = self.baseModel().getColumnIndexByName("icon")
         self.setColumnWidth(idx, 40)
@@ -1139,23 +1150,32 @@ class FileTableView(TableView):
         idx = self.baseModel().getColumnIndexByName("filename")
         self.setColumnWidth(idx, 200)
 
+        w = fm1.width("XXXX XX")
+        print("set w", w)
+
         idx = self.baseModel().getColumnIndexByName("local_size")
-        self.setColumnWidth(idx, 75)
+        self.setColumnWidth(idx, w * 1.25)
 
         idx = self.baseModel().getColumnIndexByName("remote_size")
-        self.setColumnWidth(idx, 75)
+        self.setColumnWidth(idx, w * 1.25)
+
+        w = fm1.width("---------")
+        print("set w", w)
 
         idx = self.baseModel().getColumnIndexByName("local_permission")
-        self.setColumnWidth(idx, 125)
+        self.setColumnWidth(idx, w * 1.5) # 125
 
         idx = self.baseModel().getColumnIndexByName("remote_permission")
-        self.setColumnWidth(idx, 125)
+        self.setColumnWidth(idx, w * 1.5)
+
+        w = fm1.width("XXXX-XX-XX XX:XX:XX")
+        print("set w", w)
 
         idx = self.baseModel().getColumnIndexByName("local_mtime")
-        self.setColumnWidth(idx, 175)
+        self.setColumnWidth(idx, w * 1.25)
 
         idx = self.baseModel().getColumnIndexByName("remote_mtime")
-        self.setColumnWidth(idx, 175)
+        self.setColumnWidth(idx, w * 1.25)
 
         idx = self.baseModel().getColumnIndexByName("remote_path")
         self.setColumnWidth(idx, 100)
@@ -1288,9 +1308,19 @@ class FileTableView(TableView):
 
         self.locationChanged.emit(directory, dcount, fcount)
 
+        self.viewport().setFocus(Qt.OtherFocusReason)
+
     def onMouseDoubleClick(self, index):
 
+        self.onOpenIndex(index)
+
+    def onOpenIndex(self, index):
+
         row = index.data(RowValueRole)
+
+        if row is None:
+            return
+
         ent = row[0]
 
         if isinstance(ent, sync2.DirEnt):
@@ -1299,16 +1329,29 @@ class FileTableView(TableView):
 
             ftype = getFileType(ent.local_path)
 
+            text_action = None
             action = None
             for act in self.cfg.open_actions:
                 supported = [stype.upper() for stype in act.get("types", [])]
                 if ftype in supported:
                     action = act.get("action", None)
-                    break
+                if act.get('default', False):
+                    text_action = act.get("action", None)
 
             if action is not None:
 
                 executeAction(action, ent, self.ctxt.currentLocation())
+
+            elif text_action is not None:
+
+                is_text = False
+                with self.ctxt.fs.open(ent.local_path, "rb") as rf:
+                    g = lambda v: v==0xD or v==0xA or v >= 0x20
+                    is_text = all(g(b) for b in rf.read(2014))
+                if is_text:
+                    executeAction(text_action, ent, self.ctxt.currentLocation())
+            else:
+                openNative(ent.local_path)
 
     def onMouseReleaseRight(self, event):
 
@@ -1332,6 +1375,14 @@ class FileTableView(TableView):
     def onMouseReleaseForward(self, event):
 
         self.ctxt.unpopDirectory()
+
+    def keyReleaseEvent(self, event):
+        if event.key() == Qt.Key_Return:
+            row_indices = self.selectionModel().selectedRows()
+            if len(row_indices) == 1:
+                self.onOpenIndex(row_indices[0])
+        elif event.key() == Qt.Key_Backspace:
+            self.ctxt.pushParentDirectory()
 
     def onBeginCreateDirectory(self):
         """
@@ -1733,7 +1784,7 @@ class FileTableView(TableView):
 
         if state == sync2.FileState.ERROR:
             return QColor(255, 0, 0, 64)
-        print("ASDasd", state)
+
         return None
 
 class FavoritesDelegate(QStyledItemDelegate):
@@ -2724,9 +2775,11 @@ class SyncMainWindow(QMainWindow):
         statusbar = self.statusBar()
         self.sbar_lbl_dir_status1 = QLabel()
         self.sbar_lbl_dir_status2 = QLabel()
+        self.sbar_lbl_sync_host = QLabel()
 
         statusbar.addWidget(self.sbar_lbl_dir_status1)
         statusbar.addWidget(self.sbar_lbl_dir_status2)
+        statusbar.addWidget(self.sbar_lbl_sync_host)
 
     def showWindow(self):
 
@@ -2831,6 +2884,11 @@ class SyncMainWindow(QMainWindow):
 
         self.timer.stop()
         self.spinner.hide()
+
+        if self.ctxt.hasActiveContext():
+            ctxt = self.ctxt.activeContext()
+            txt ="%s@%s" % (ctxt.username, ctxt.hostname)
+            self.sbar_lbl_sync_host.setText(txt)
 
 def main():
 
