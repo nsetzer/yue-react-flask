@@ -1,23 +1,23 @@
 #! cd ../.. && python3 -m yueserver.tools.syncui
 
 # remove
-# move
-# cut/copy/paste
-# create directory
-# create empty file
+# move/cut/copy/paste
 # drag and drop mime types
 # directory load robustness
 #   gracefully handle errors during load()
-#   empty string as root directory on windows, show available drives
+#   pull files do not exist locally (ignore actions)
+# os.path => ctxt.fs
 # s3 file paths
+# _check and attr.match(...)
+#   secondary show hidden files bool to display hidden by attrs
+#   check should return them with FileState.IGNORE
 # recursive status needs to set a dirty bit on directories
 #   cleared when recursive sync
-# model filter using unix glob (qsortfilterproxymodel)
 # create a FileSystemTableView from which sync table view inherits from
 #   FileSystemTableView(fs)
 #   contains a private class as a SignalHandler for private signals (e.g. rename)
 #   takes care of basic file system operations
-# checkbox to hide hidden files
+# icon for ignore
 
 import os
 import sys
@@ -27,6 +27,7 @@ import logging
 import posixpath
 import shlex
 import subprocess
+import fnmatch
 
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
@@ -218,6 +219,10 @@ class SyncConfig(BaseConfig):
         # mode: zero|single|multiple
         self.menu_actions = self.get_key(data, "menu_actions", default=[])
 
+        self.showHiddenFiles = True
+
+        self.rowScale = 1.75
+
     def save(self):
 
         obj = {
@@ -225,6 +230,8 @@ class SyncConfig(BaseConfig):
             "state": self.state,
             "open_actions": self.open_actions,
             "menu_actions": self.menu_actions,
+            "showHiddenFiles": self.showHiddenFiles,
+            "rowScale": self.rowScale,
         }
 
         ydump(self._cfg_path, obj)
@@ -520,6 +527,7 @@ class SyncUiContext(QObject):
             ctxt.current_remote_base = userdata['current_remote_base']
             ctxt.hostname = userdata['hostname']
             ctxt.username = userdata['username']
+            ctxt.showHiddenNames = True
 
         except sync2.SyncException as e:
             self.loadContextError.emit(directory, str(e))
@@ -549,8 +557,9 @@ class SyncUiContext(QObject):
             return self._icon_ext[kind]
 
         icon = self._icon_provider.icon(kind)
-        image = icon.pixmap(QSize(32, 32)).toImage()
+        image = icon.pixmap(QSize(64, 64)).toImage()
         self._icon_ext[kind] = image
+        print(image.size())
         return image
 
     def getImage(self, path):
@@ -574,6 +583,9 @@ class SyncUiContext(QObject):
         if state == sync2.FileState.SAME:
             # return self.getImage(":img/fs_same.png")
             return None
+
+        elif state == sync2.FileState.IGNORE:
+            return self.getImage(":img/fs_same.png")
 
         elif state == sync2.FileState.PUSH:
             return self.getImage(":/img/fs_push.png")
@@ -835,6 +847,11 @@ class FileContentSortProxyModel(SortProxyModel):
         remote/local/synced files
     """
 
+    def __init__(self, *args):
+        super(FileContentSortProxyModel, self).__init__(*args)
+
+        self._pattern = ""
+
     def lessThan(self, indexL, indexR):
 
         order = self.sortOrder()
@@ -855,11 +872,42 @@ class FileContentSortProxyModel(SortProxyModel):
 
         return (dir, val, ent.name())
 
+    def setFilterGlobPattern(self, pattern):
+
+        if '*' not in pattern:
+            pattern = "*%s*" % pattern
+
+        self._pattern = pattern
+        self.invalidateFilter()
+
+    def setShowHiddenFiles(self, hidden):
+        self._show_hidden = hidden
+        self.invalidateFilter()
+
+    def filterAcceptsRow(self, row, parent):
+
+        data = self.parent().baseModel().tabledata[row]
+
+        name = data[3]
+
+        if not self._show_hidden and name.startswith("."):
+            return False
+
+        if isinstance(data[0], sync2.DirEnt):
+            return True
+
+        if not self._pattern:
+            return True
+
+        return fnmatch.fnmatch(name, self._pattern)
+
 class FileContextMenu(QMenu):
 
     createDirectory = pyqtSignal()
     createEmptyFile = pyqtSignal()
     rename = pyqtSignal()
+
+    showHiddenFiles = pyqtSignal(bool)
 
     def __init__(self, ctxt, cfg, selection, parent=None):
         super(FileContextMenu, self).__init__(parent)
@@ -893,7 +941,13 @@ class FileContextMenu(QMenu):
 
         self.addSeparator()
 
-        print(self.cfg.menu_actions)
+        if self.cfg.showHiddenFiles:
+            self.addAction("Hide Hidden Files", self._action_toggle_show_hidden)
+        else:
+            self.addAction("Show Hidden Files", self._action_toggle_show_hidden)
+
+        self.addSeparator()
+
         if self.cfg.menu_actions:
             for item in self.cfg.menu_actions:
                 act = item['action']
@@ -1014,6 +1068,12 @@ class FileContextMenu(QMenu):
 
         self.rename.emit()
 
+    def _action_toggle_show_hidden(self):
+
+        self.cfg.showHiddenFiles = not self.cfg.showHiddenFiles
+        self.showHiddenFiles.emit(self.cfg.showHiddenFiles)
+
+
 class FileTableView(TableView):
 
     locationChanged = pyqtSignal(str, int, int)  # dir, dcount, fcount
@@ -1031,6 +1091,12 @@ class FileTableView(TableView):
 
         self.ctxt = ctxt
         self.cfg = cfg
+
+        fm = QFontMetrics(self.font())
+        v = self.verticalHeader()
+        v.setSectionResizeMode(QHeaderView.Fixed)
+        print(v.defaultSectionSize(), fm.height())
+        v.setDefaultSectionSize(int(fm.height() * self.cfg.rowScale))
 
         self.setWordWrap(False)
 
@@ -1105,6 +1171,9 @@ class FileTableView(TableView):
 
         model.addForegroundRule("fg1", self._foregroundRule)
         model.addBackgroundRule("fg2", self._backgroundRule)
+
+
+        self.model().setShowHiddenFiles(self.cfg.showHiddenFiles)
 
         self.ctxt.locationChanging.connect(self.onLocationChanging)
         self.ctxt.locationChanged.connect(self.onLocationChanged)
@@ -1362,6 +1431,8 @@ class FileTableView(TableView):
         contextMenu.createDirectory.connect(self.onBeginCreateDirectory)
         contextMenu.createEmptyFile.connect(self.onBeginCreateEmptyFile)
         contextMenu.rename.connect(self.onBeginRename)
+        contextMenu.showHiddenFiles.connect(
+            lambda b: self.model().setShowHiddenFiles(b))
 
         contextMenu.exec_(event.globalPos())
 
@@ -1376,13 +1447,26 @@ class FileTableView(TableView):
 
         self.ctxt.unpopDirectory()
 
-    def keyReleaseEvent(self, event):
+    def keyPressEvent(self, event):
+        # print(event.key(), self.state(), QTableView.EditingState)
+
+        state = self.state()
+
+        super().keyPressEvent(event)
+
+        # if the editor is open prevent firing open events
+        if state == QTableView.EditingState:
+            return
+
         if event.key() == Qt.Key_Return:
             row_indices = self.selectionModel().selectedRows()
             if len(row_indices) == 1:
                 self.onOpenIndex(row_indices[0])
         elif event.key() == Qt.Key_Backspace:
             self.ctxt.pushParentDirectory()
+
+    def keyReleaseEvent(self, event):
+        pass
 
     def onBeginCreateDirectory(self):
         """
@@ -1592,7 +1676,12 @@ class FileTableView(TableView):
                 abspath = path
                 relpath = None
 
+
+
             if os.path.exists(abspath):
+                if os.path.samefile(path, abspath):
+                    # new name is the same as the old name
+                    return
                 raise Exception(abspath)
 
             os.rename(ent.local_path, abspath)
@@ -1624,6 +1713,10 @@ class FileTableView(TableView):
         except Exception as e:
             self.ctxt.reload()
             raise e
+
+    def onSetFilterPatteern(self, pattern):
+        print(pattern)
+        self.model().setFilterGlobPattern(pattern)
 
     def editRow(self, row, col):
         """ used by the edit delegate to edit next/previous row"""
@@ -1755,6 +1848,9 @@ class FileTableView(TableView):
         if state == sync2.FileState.SAME:
             return None
 
+        elif state == sync2.FileState.IGNORE:
+            return QColor(200, 32, 200, 32)
+
         elif state == sync2.FileState.PUSH:
             return QColor(32, 200, 32, 32)
 
@@ -1823,8 +1919,17 @@ class FavoritesListView(TableView):
     pushDirectory = pyqtSignal(str)
     toggleHiddenSection = pyqtSignal(str)
 
-    def __init__(self, parent=None):
+    def __init__(self, ctxt, cfg, parent=None):
         super(FavoritesListView, self).__init__(parent)
+
+        self.ctxt = ctxt
+        self.cfg = cfg
+
+        fm = QFontMetrics(self.font())
+        v = self.verticalHeader()
+        v.setSectionResizeMode(QHeaderView.Fixed)
+        print(v.defaultSectionSize(), fm.height())
+        v.setDefaultSectionSize(int(fm.height() * self.cfg.rowScale))
 
         self.setLastColumnExpanding(True)
 
@@ -1864,7 +1969,8 @@ class FavoritesListView(TableView):
         pass
 
 class LocationView(QWidget):
-    """docstring for LocationView"""
+
+    setFilterPattern = pyqtSignal(str)
 
     def __init__(self, ctxt, parent=None):
         super(LocationView, self).__init__(parent)
@@ -1937,6 +2043,7 @@ class LocationView(QWidget):
         self.btn_sync.clicked.connect(self.onSyncButtonPressed)
         self.btn_push.clicked.connect(self.onPushButtonPressed)
         self.btn_pull.clicked.connect(self.onPullButtonPressed)
+        self.edit_filter.textChanged.connect(self.setFilterPattern)
         self.edit_location.returnPressed.connect(self.onOpenButtonPressed)
         self.ctxt.locationChanging.connect(self.onLocationChanging)
         self.ctxt.locationChanged.connect(self.onLocationChanged)
@@ -2596,6 +2703,8 @@ class FileEntryInfoDialog(QDialog):
 
         if state == sync2.FileState.SAME:
             return QPixmap(":/img/fs_same.png")
+        if state == sync2.FileState.IGNORE:
+            return QPixmap(":/img/fs_same.png")
         elif state == sync2.FileState.PUSH:
             return QPixmap(":/img/fs_push.png")
         elif state == sync2.FileState.PULL:
@@ -2666,7 +2775,7 @@ class FavoritesPane(Pane):
         self.ctxt = ctxt
         self.cfg = cfg
 
-        self.table_favorites = FavoritesListView(self)
+        self.table_favorites = FavoritesListView(ctxt, cfg, self)
         self.view_image = ImageView(self)
 
         self.addWidget(self.table_favorites)
@@ -2758,6 +2867,8 @@ class SyncMainWindow(QMainWindow):
 
         self.table_file.triggerSave.connect(self.onTriggerSave)
         self.table_file.triggerRestore.connect(self.onTriggerRestore)
+
+        self.view_location.setFilterPattern.connect(self.table_file.onSetFilterPatteern)
 
         self.ctxt.locationChanging.connect(self.onLocationChanging)
         self.ctxt.locationChanged.connect(self.onLocationChanged)

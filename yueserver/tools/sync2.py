@@ -325,6 +325,8 @@ class SyncContext(object):
         self.encryption_server_password = None
         self.encryption_client_key = None
 
+        self.showHiddenNames = False
+
     def attr(self, directory):
         return DirAttr.openDir(self.local_base, directory)
 
@@ -471,6 +473,7 @@ class FileState(object):
     DELETE_BOTH = "delete-both"
     DELETE_REMOTE = "delete-remote"
     DELETE_LOCAL = "delete-local"
+    IGNORE = "ignore"
 
     @staticmethod
     def symbol_short(state):
@@ -496,6 +499,8 @@ class FileState(object):
             sym = "-x"
         if FileState.DELETE_LOCAL == state:
             sym = "x-"
+        if FileState.IGNORE == state:
+            sym = "??"
         return sym
 
     @staticmethod
@@ -522,6 +527,8 @@ class FileState(object):
             sym = "DREM"
         if FileState.DELETE_LOCAL == state:
             sym = "DLOC"
+        if FileState.IGNORE == state:
+            sym = "IGN_"
         return sym
 
     @staticmethod
@@ -544,6 +551,7 @@ class FileState(object):
             FileState.DELETE_BOTH,
             FileState.DELETE_REMOTE,
             FileState.DELETE_LOCAL,
+            FileState.IGNORE,
         ]
 
 class DirEnt(object):
@@ -1206,13 +1214,16 @@ def _check(ctxt, remote_base, local_base):
 
     for d in _dirs:
 
-        if attr.match(d):
-            continue
-
         remote_path = posixpath.join(remote_base, d)
         local_path = ctxt.fs.join(local_base, d)
         # check that the directory exists locally
-        if d in _names:
+
+        if attr.match(d):
+            if ctxt.showHiddenNames:
+                state = FileState.IGNORE
+            else:
+                continue
+        elif d in _names:
             if _names[d].isDir:
                 state = FileState.SAME
             else:
@@ -1283,11 +1294,20 @@ def _check(ctxt, remote_base, local_base):
         local_path = ctxt.fs.join(local_base, n)
         record = ctxt.fs.file_info(local_path)
 
+        state = None
+
         if attr.match(n):
-            continue
+            if ctxt.showHiddenNames:
+                state = FileState.IGNORE
+            else:
+                continue
+        else:
+            state = FileState.PUSH
+
+        print(name, state)
 
         if record.isDir:
-            dirs.append(DirEnt(n, remote_path, local_path, FileState.PUSH))
+            dirs.append(DirEnt(n, remote_path, local_path, state))
         else:
             af = {
                 "version": record.version,
@@ -1295,7 +1315,9 @@ def _check(ctxt, remote_base, local_base):
                 "mtime": record.mtime,
                 "permission": record.permission,
             }
-            files.append(FileEnt(remote_path, local_path, None, None, af))
+            ent = FileEnt(remote_path, local_path, None, None, af)
+            ent._state = state
+            files.append(ent)
 
     return CheckResult(remote_base, dirs, files)
 
@@ -1591,6 +1613,8 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
             return SyncResult(ent, state, "force not enabled")
 
     if FileState.SAME == state:
+        pass
+    elif FileState.IGNORE == state:
         pass
     elif (FileState.PUSH == state and push) or \
          (FileState.DELETE_REMOTE == state and not pull and push) or \
