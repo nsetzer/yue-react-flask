@@ -8,6 +8,11 @@
 #   pull files do not exist locally (ignore actions)
 # os.path => ctxt.fs
 # s3 file paths
+# allow side by side windows and tabbed UI
+# stack history of row index and item name for pop directory
+#   on pop, emit the element name to select and scrollTo
+#   + enable refresh and highlight item if it still exists
+# on exit save session to session.yml in config dir
 # _check and attr.match(...)
 #   secondary show hidden files bool to display hidden by attrs
 #   check should return them with FileState.IGNORE
@@ -18,6 +23,10 @@
 #   contains a private class as a SignalHandler for private signals (e.g. rename)
 #   takes care of basic file system operations
 # icon for ignore
+# icons
+#   shortcut delighter for link file types
+#   new file delighter (asterisk) for files modified recently
+#   favorites icon as path to png
 
 import os
 import sys
@@ -1055,6 +1064,7 @@ class FileContextMenu(QMenu):
 
         pwd = self.ctxt.currentLocation()
 
+        print(act, pwd, ents[0])
         executeAction(act, ents[0], pwd)
 
     def _action_new_directory(self):
@@ -1072,7 +1082,6 @@ class FileContextMenu(QMenu):
 
         self.cfg.showHiddenFiles = not self.cfg.showHiddenFiles
         self.showHiddenFiles.emit(self.cfg.showHiddenFiles)
-
 
 class FileTableView(TableView):
 
@@ -1379,6 +1388,10 @@ class FileTableView(TableView):
 
         self.viewport().setFocus(Qt.OtherFocusReason)
 
+        # give keyboard focus to the first item
+        # TODO: location change should emit a row to highlight
+        self.setCurrentIndex(self.model().index(0, 0))
+
     def onMouseDoubleClick(self, index):
 
         self.onOpenIndex(index)
@@ -1408,19 +1421,21 @@ class FileTableView(TableView):
                     text_action = act.get("action", None)
 
             if action is not None:
-
                 executeAction(action, ent, self.ctxt.currentLocation())
+                return
 
-            elif text_action is not None:
+            if text_action is not None:
 
                 is_text = False
                 with self.ctxt.fs.open(ent.local_path, "rb") as rf:
-                    g = lambda v: v==0xD or v==0xA or v >= 0x20
+                    g = lambda v: v == 0xD or v == 0xA or v >= 0x20
                     is_text = all(g(b) for b in rf.read(2014))
+
                 if is_text:
                     executeAction(text_action, ent, self.ctxt.currentLocation())
-            else:
-                openNative(ent.local_path)
+                    return
+
+            openNative(ent.local_path)
 
     def onMouseReleaseRight(self, event):
 
@@ -1450,12 +1465,14 @@ class FileTableView(TableView):
     def keyPressEvent(self, event):
         # print(event.key(), self.state(), QTableView.EditingState)
 
-        state = self.state()
-
-        super().keyPressEvent(event)
-
         # if the editor is open prevent firing open events
-        if state == QTableView.EditingState:
+        if self.state() == QTableView.EditingState:
+            if event.key() == Qt.Key_Home:
+                event.accept()
+            elif event.key() == Qt.Key_End:
+                event.accept()
+            else:
+                super().keyPressEvent(event)
             return
 
         if event.key() == Qt.Key_Return:
@@ -1464,6 +1481,12 @@ class FileTableView(TableView):
                 self.onOpenIndex(row_indices[0])
         elif event.key() == Qt.Key_Backspace:
             self.ctxt.pushParentDirectory()
+        elif event.key() == Qt.Key_Home:
+            self.scrollToRow(0)
+        elif event.key() == Qt.Key_End:
+            self.scrollToRow(self.rowCount()-1)
+        else:
+            super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event):
         pass
@@ -1633,6 +1656,9 @@ class FileTableView(TableView):
                 relpath = ""
 
             if os.path.exists(abspath):
+                if os.path.samefile(path, abspath):
+                    # new name is the same as the old name
+                    return
                 raise Exception(abspath)
 
             os.rename(ent.local_base, abspath)
@@ -1675,8 +1701,6 @@ class FileTableView(TableView):
             else:
                 abspath = path
                 relpath = None
-
-
 
             if os.path.exists(abspath):
                 if os.path.samefile(path, abspath):
@@ -1794,15 +1818,6 @@ class FileTableView(TableView):
     def onSelectionChanged(self):
         pass
 
-        # push
-        # pull
-        # sync
-        # copy
-        # cut
-        # paste
-        # remove_local
-        # remove_remote
-
     def paintEvent(self, event):
 
         super().paintEvent(event)
@@ -1820,12 +1835,11 @@ class FileTableView(TableView):
 
     def _foregroundRule(self, index, col):
 
-        row = index.data(RowValueRole)
-        ent = row[0]
-        state = row[-1].split(":")[0]
+        #row = index.data(RowValueRole)
+        #ent = row[0]
+        #state = row[-1].split(":")[0]
 
-        if isinstance(ent, sync2.DirEnt):
-            return QColor(32, 32, 200)
+        return None
 
     def _backgroundRule(self, index, col):
 
