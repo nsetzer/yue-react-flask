@@ -3142,6 +3142,7 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName("Yue-Sync")
+    app.setStyle("windows")
 
     app.setQuitOnLastWindowClosed(True)
     app_icon = QIcon(':/img/icon.png')
