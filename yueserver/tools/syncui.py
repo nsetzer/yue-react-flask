@@ -504,6 +504,60 @@ class SyncUiContext(QObject):
     def currentLocation(self):
         return self._location
 
+    def getEncryptionPassword(self, kind):
+
+        prompt = "Enter %s password:" % kind
+        dialog = PasswordDialog(prompt)
+        if dialog.exec_() == QDialog.Accepted:
+            return dialog.getPassword()
+
+        return None
+
+    def renameEntry(self, ent, name):
+
+        if isinstance(ent, sync2.DirEnt):
+            local_path = ent.local_base
+            remote_path = ent.remote_base
+        else:
+            local_path = ent.local_path
+            remote_path = ent.remote_path
+
+        if local_path:
+            fpath, fname = self.fs.split(local_path)
+            new_local_path = self.fs.join(fpath, name)
+        else:
+            new_local_path = local_path
+
+        print("***", local_path, "=>", new_local_path)
+
+        if local_path == new_local_path:
+            return None
+
+        os.rename(local_path, new_local_path)
+
+        if remote_path:
+            fpath, fname = posixpath.split(remote_path)
+            new_remote_path = posixpath.join(fpath, name)
+        else:
+            new_remote_path = remote_path
+
+        print("***", remote_path, "=>", new_remote_path)
+
+        if isinstance(ent, sync2.DirEnt):
+            new_ent = sync2.DirEnt(name, new_remote_path, new_local_path)
+
+        elif not self.hasActiveContext():
+            new_ent = sync2.FileEnt(None, new_local_path, None, None, af)
+            new_ent._state = sync2.FileState.SAME
+
+        else:
+            new_ent = sync2._check_file(
+                self.activeContext(), remote_path, local_path)
+
+        return new_ent
+
+    # -----------------------------------------
+
     def loadSyncContext(self, directory):
 
         # this duplicates the logic from get_ctxt
@@ -568,7 +622,6 @@ class SyncUiContext(QObject):
         icon = self._icon_provider.icon(kind)
         image = icon.pixmap(QSize(64, 64)).toImage()
         self._icon_ext[kind] = image
-        print(image.size())
         return image
 
     def getImage(self, path):
@@ -653,57 +706,6 @@ class SyncUiContext(QObject):
         self._paste_entries = None
         self._paste_action = 0
 
-    def getEncryptionPassword(self, kind):
-
-        prompt = "Enter %s password:" % kind
-        dialog = PasswordDialog(prompt)
-        if dialog.exec_() == QDialog.Accepted:
-            return dialog.getPassword()
-
-        return None
-
-    def renameEntry(self, ent, name):
-
-        if isinstance(ent, sync2.DirEnt):
-            local_path = ent.local_base
-            remote_path = ent.remote_base
-        else:
-            local_path = ent.local_path
-            remote_path = ent.remote_path
-
-        if local_path:
-            fpath, fname = self.fs.split(local_path)
-            new_local_path = self.fs.join(fpath, name)
-        else:
-            new_local_path = local_path
-
-        print("***", local_path, "=>", new_local_path)
-
-        if local_path == new_local_path:
-            return None
-
-        os.rename(local_path, new_local_path)
-
-        if remote_path:
-            fpath, fname = posixpath.split(remote_path)
-            new_remote_path = posixpath.join(fpath, name)
-        else:
-            new_remote_path = remote_path
-
-        print("***", remote_path, "=>", new_remote_path)
-
-        if isinstance(ent, sync2.DirEnt):
-            new_ent = sync2.DirEnt(name, new_remote_path, new_local_path)
-
-        elif not self.hasActiveContext():
-            new_ent = sync2.FileEnt(None, new_local_path, None, None, af)
-            new_ent._state = sync2.FileState.SAME
-
-        else:
-            new_ent = sync2._check_file(
-                self.activeContext(), remote_path, local_path)
-
-        return new_ent
 
 class OverlayText(QWidget):
 
@@ -789,15 +791,39 @@ class OverlaySpinner(QWidget):
         self.update()
 
 class Pane(QWidget):
-    """docstring for Pane"""
+
+    FILES1 = 1
+    FILES2 = 2
+    HOST   = 3
+    statusUpdate = pyqtSignal(int, str)
+    previewEntry = pyqtSignal(object)
 
     def __init__(self, parent):
         super(Pane, self).__init__(parent)
         self.vbox = QVBoxLayout(self)
         self.vbox.setContentsMargins(0, 0, 0, 0)
+        self._firstShow = False
 
     def addWidget(self, widget):
         self.vbox.addWidget(widget)
+
+    def setVisible(self, b):
+        super().setVisible(b)
+
+        print(self.__class__.__name__, "visible")
+
+        if self._firstShow == False:
+            self.onFirstShow()
+            self._firstShow = True
+
+    def onFirstShow(self):
+        pass
+
+    def onEnter(self):
+        pass
+
+    def onExit(self):
+        pass
 
 class ImageView(QLabel):
 
@@ -845,6 +871,26 @@ class ImageView(QLabel):
             self.pixmap = QPixmap.fromImage(image)
         super().setPixmap(self.pixmap)
         self.setHidden(False)
+
+class TabWidget(QTabWidget):
+    def __init__(self, parent = None):
+        super(TabWidget, self).__init__( parent)
+        self.currentChanged.connect(self.onCurrentTabChanged)
+
+        self.previousTab = None
+
+    def onCurrentTabChanged(self,index):
+
+        w = self.widget( index )
+
+        if self.previousTab is not None:
+            if hasattr(self.previousTab, 'onExit'):
+                self.previousTab.onExit()
+
+        if hasattr(w, 'onEnter'):
+            w.onEnter();
+
+        self.previousTab = w
 
 class FileContentSortProxyModel(SortProxyModel):
     """
@@ -1208,8 +1254,6 @@ class FileTableView(TableView):
 
         idx = self.baseModel().getColumnIndexByName("filename")
         self.sortByColumn(idx, Qt.AscendingOrder)
-
-        print("view setVisible", b)
 
     def resetColumns(self):
 
@@ -1933,10 +1977,9 @@ class FavoritesListView(TableView):
     pushDirectory = pyqtSignal(str)
     toggleHiddenSection = pyqtSignal(str)
 
-    def __init__(self, ctxt, cfg, parent=None):
+    def __init__(self, cfg, parent=None):
         super(FavoritesListView, self).__init__(parent)
 
-        self.ctxt = ctxt
         self.cfg = cfg
 
         fm = QFontMetrics(self.font())
@@ -2128,11 +2171,6 @@ class LocationView(QWidget):
 
         self.wdt_syncPanel.setVisible(active)
 
-        #self.btn_fetch.setEnabled(active)
-        #self.btn_sync.setEnabled(active)
-        #self.btn_push.setEnabled(active)
-        #self.btn_pull.setEnabled(active)
-
         self.edit_location.setText(directory)
 
 class ProgressThread(QThread):
@@ -2263,8 +2301,6 @@ class SyncProgressThread(ProgressThread):
         self.pull = pull
         self.force = force
         self.recursive = recursive
-
-
 
     def run(self):
 
@@ -2783,13 +2819,16 @@ class PasswordDialog(QDialog):
 class FavoritesPane(Pane):
     """docstring for FavoritesPane"""
 
+    pushDirectoryMain = pyqtSignal(str)
+    pushDirectorySecondary = pyqtSignal(str)
+
     def __init__(self, ctxt, cfg, parent=None):
         super(FavoritesPane, self).__init__(parent)
 
         self.ctxt = ctxt
         self.cfg = cfg
 
-        self.table_favorites = FavoritesListView(ctxt, cfg, self)
+        self.table_favorites = FavoritesListView(cfg, self)
         self.view_image = ImageView(self)
 
         self.addWidget(self.table_favorites)
@@ -2800,7 +2839,7 @@ class FavoritesPane(Pane):
         self.onFavoritesChanged()
 
         self.table_favorites.pushDirectory.connect(
-            lambda path: self.ctxt.pushDirectory(path))
+            lambda path: self.pushDirectoryMain.emit(path))
 
         self.table_favorites.toggleHiddenSection.connect(
             self.onToggleHiddenSection)
@@ -2842,18 +2881,18 @@ class FavoritesPane(Pane):
 
         self.onFavoritesChanged()
 
-class SyncMainWindow(QMainWindow):
-    """docstring for MainWindow"""
+class LocationPane(Pane):
 
-    def __init__(self, ctxt, cfg):
-        super(SyncMainWindow, self).__init__()
+    onPrimaryChanged = pyqtSignal(Pane, str)
+    onSecondaryChanged = pyqtSignal(Pane, str)
+
+    def __init__(self, ctxt, cfg, parent=None):
+        super(LocationPane, self).__init__(parent)
 
         self.ctxt = ctxt
         self.cfg = cfg
 
-        self.initMenuBar()
-        self.initStatusBar()
-
+        self.view_location = LocationView(self.ctxt, self)
         self.table_file = FileTableView(self.ctxt, self.cfg, self)
 
         self.spinner = OverlaySpinner(self.table_file)
@@ -2863,18 +2902,8 @@ class SyncMainWindow(QMainWindow):
         self.timer.setSingleShot(True)
         self.timer.timeout.connect(lambda: self.spinner.show())
 
-        self.view_location = LocationView(self.ctxt, self)
-
-        self.pane_favorites = FavoritesPane(ctxt, cfg, self)
-        self.pane_file = Pane(self)
-        self.pane_file.addWidget(self.view_location)
-        self.pane_file.addWidget(self.table_file)
-
-        self.splitter = QSplitter(self)
-        self.splitter.addWidget(self.pane_favorites)
-        self.splitter.addWidget(self.pane_file)
-
-        self.setCentralWidget(self.splitter)
+        self.addWidget(self.view_location)
+        self.addWidget(self.table_file)
 
         self.table_file.locationChanged.connect(self.onTableLocationChanged)
         self.table_file.selectionChangedEvent.connect(self.onTableSelectionChanged)
@@ -2882,10 +2911,113 @@ class SyncMainWindow(QMainWindow):
         self.table_file.triggerSave.connect(self.onTriggerSave)
         self.table_file.triggerRestore.connect(self.onTriggerRestore)
 
-        self.view_location.setFilterPattern.connect(self.table_file.onSetFilterPatteern)
-
         self.ctxt.locationChanging.connect(self.onLocationChanging)
         self.ctxt.locationChanged.connect(self.onLocationChanged)
+
+        self.view_location.setFilterPattern.connect(self.table_file.onSetFilterPatteern)
+
+    def onTableLocationChanged(self, path, dcount, fcount):
+
+        msg = []
+
+        if fcount == 1:
+            msg.append("1 file")
+        elif fcount > 1:
+            msg.append("%d files" % fcount)
+
+        if dcount == 1:
+            msg.append("1 directory")
+        elif dcount > 1:
+            msg.append("%d directories" % dcount)
+
+        self.statusUpdate.emit(Pane.FILES1, " ".join(msg))
+
+    def onTableSelectionChanged(self):
+
+        msg = ""
+
+        count = self.table_file.getSelectionCount()
+
+        if count == 1:
+            msg = "1 selected"
+        elif count > 1:
+            msg = "%d selected" % count
+
+        self.statusUpdate.emit(Pane.FILES2, msg)
+
+        if count == 1:
+            ent = self.table_file.getSelection()[0][0]
+            self.previewEntry.emit(ent)
+
+    def onTriggerSave(self):
+
+        self.cfg.state = self.table_file.getColumnState()
+        self.cfg.save()
+
+    def onTriggerRestore(self):
+
+        self.table_file.setColumnState(self.cfg.state)
+
+    def onLocationChanging(self):
+        self.timer.start(333)
+
+    def onLocationChanged(self, directory):
+
+        self.timer.stop()
+        self.spinner.hide()
+
+        if self.ctxt.hasActiveContext():
+            ctxt = self.ctxt.activeContext()
+            txt ="%s@%s" % (ctxt.username, ctxt.hostname)
+            self.statusUpdate.emit(Pane.HOST, txt)
+
+        self.onPrimaryChanged.emit(self, directory)
+
+    def resetTableView(self):
+        if not self.cfg.state:
+            self.table_file.resetColumns()
+        else:
+            self.table_file.setColumnState(self.cfg.state)
+
+    def onFirstShow(self):
+        # on first enter
+        QTimer.singleShot(0, self.resetTableView)
+
+class SyncMainWindow(QMainWindow):
+
+    def __init__(self, cfg):
+        super(SyncMainWindow, self).__init__()
+
+        self.cfg = cfg
+
+        self.initMenuBar()
+        self.initStatusBar()
+
+        self.ctxt = SyncUiContext()
+
+        self.btn_newTab = QToolButton(self)
+        self.btn_newTab.clicked.connect(self.newTab)
+        self.btn_newTab.setIcon(self.style().standardIcon(QStyle.SP_FileDialogNewFolder))
+
+        self.tabview = TabWidget(self)
+        self.tabview.tabBar().setMovable(True)
+        self.tabview.setCornerWidget(self.btn_newTab)
+        self.tabview.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.tabview.tabBar().setUsesScrollButtons(True)
+        self.tabview.tabBar().setElideMode(Qt.ElideNone)
+        self.tabview.tabCloseRequested.connect(self.onTabCloseRequest)
+
+        self.pane_favorites = FavoritesPane(self.ctxt, cfg, self)
+
+        self.pane_favorites.pushDirectoryMain.connect(
+            self.ctxt.pushDirectory)
+
+        self.splitter = QSplitter(self)
+        self.splitter.addWidget(self.pane_favorites)
+        self.splitter.addWidget(self.tabview)
+
+        self.setCentralWidget(self.splitter)
 
     def initMenuBar(self):
 
@@ -2946,74 +3078,52 @@ class SyncMainWindow(QMainWindow):
         if cw > lw * 2:
             self.splitter.setSizes([lw, cw - lw])
 
+        # TODO: fix for multi tab views
         # run this function immediately after the event loop starts
-        QTimer.singleShot(0, self.resetTableView)
+        #
 
-        print("end show")
+    def onStatusBarUpdate(self, index, message):
 
-    def onTableLocationChanged(self, path, dcount, fcount):
+        lbl = {
+            Pane.FILES1: self.sbar_lbl_dir_status1,
+            Pane.FILES2: self.sbar_lbl_dir_status2,
+            Pane.HOST: self.sbar_lbl_sync_host,
+        }[index]
 
-        msg = []
+        lbl.setText(message)
 
-        if fcount == 1:
-            msg.append("1 file")
-        elif fcount > 1:
-            msg.append("%d files" % fcount)
+    def onTabCloseRequest(self, idx):
 
-        if dcount == 1:
-            msg.append("1 directory")
-        elif dcount > 1:
-            msg.append("%d directories" % dcount)
+        if 0 <= idx < self.tabview.count():
+            self.tabview.removeTab(idx)
+            self.tabview.setTabsClosable(self.tabview.count()>1)
 
-        self.sbar_lbl_dir_status1.setText(" ".join(msg))
+    def newTab(self):
+        self.addTab(os.getcwd(), None, None)
 
-    def onTableSelectionChanged(self):
+    def addTab(self, primaryPath, secondaryPath, icon=None):
 
-        msg = ""
+        if icon is None:
+            icon = self.ctxt._icon_provider.icon(QFileIconProvider.Folder)
 
-        count = self.table_file.getSelectionCount()
+        pane = LocationPane(self.ctxt, self.cfg, self)
 
-        if count == 1:
-            msg = "1 selected"
-        elif count > 1:
-            msg = "%d selected" % count
+        pane.statusUpdate.connect(self.onStatusBarUpdate)
+        pane.previewEntry.connect(self.pane_favorites.previewEntry)
+        pane.onPrimaryChanged.connect(self.onDirectoryChanged)
 
-        self.sbar_lbl_dir_status2.setText(msg)
+        self.tabview.addTab(pane, icon, "")
 
-        if count == 1:
-            ent = self.table_file.getSelection()[0][0]
-            self.pane_favorites.previewEntry(ent)
+        self.ctxt.pushDirectory(primaryPath)
 
-    def showEvent(self, event):
-        print("show event", event)
+    def onDirectoryChanged(self, pane, path):
 
-    def resetTableView(self):
-        if not self.cfg.state:
-            self.table_file.resetColumns()
+        index = self.tabview.indexOf(pane)
+        _, name = self.ctxt.fs.split(path)
+        if name :
+            self.tabview.setTabText(index, name)
         else:
-            self.table_file.setColumnState(self.cfg.state)
-
-    def onTriggerSave(self):
-
-        self.cfg.state = self.table_file.getColumnState()
-        self.cfg.save()
-
-    def onTriggerRestore(self):
-
-        self.table_file.setColumnState(self.cfg.state)
-
-    def onLocationChanging(self):
-        self.timer.start(333)
-
-    def onLocationChanged(self, directory):
-
-        self.timer.stop()
-        self.spinner.hide()
-
-        if self.ctxt.hasActiveContext():
-            ctxt = self.ctxt.activeContext()
-            txt ="%s@%s" % (ctxt.username, ctxt.hostname)
-            self.sbar_lbl_sync_host.setText(txt)
+            self.tabview.setTabText(index, "root")
 
 def main():
 
@@ -3041,13 +3151,10 @@ def main():
 
     installExceptionHook()
 
-    ctxt = SyncUiContext()
-
-    window = SyncMainWindow(ctxt, cfg)
+    window = SyncMainWindow(cfg)
     window.showWindow()
 
-    ctxt.pushDirectory(os.getcwd())
-
+    window.newTab()
 
     sys.exit(app.exec_())
 

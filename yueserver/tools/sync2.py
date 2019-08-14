@@ -125,17 +125,25 @@ def LocalStorageTable(metadata):
         Column('remote_size', Integer, default=0),
         Column('local_permission', Integer, default=0),
         Column('remote_permission', Integer, default=0),
-        Column('remote_public', String, default=0),
-        Column('remote_encryption', String, default=0),
+        Column('remote_public', String, default=""),
+        Column('remote_encryption', String, default=""),
 
         Column('local_mtime', Integer, default=0),
         Column('remote_mtime', Integer, default=0)
+    )
+
+def DirectoryStatusTable(metadata):
+    return Table('directory_status', metadata,
+        Column('rel_path', String, primary_key=True, nullable=False),
+        Column('valid', Integer, default=0),
+        Column('status', String, default=""),
     )
 
 class DatabaseTables(object):
     def __init__(self, metadata):
         super(DatabaseTables, self).__init__()
         self.LocalStorageTable = LocalStorageTable(metadata)
+        self.DirectoryStatusTable = DirectoryStatusTable(metadata)
 
 class LocalStorageDao(object):
     def __init__(self, db, dbtables):
@@ -480,9 +488,9 @@ class FileState(object):
         if FileState.SAME == state:
             sym = "--"
         if FileState.PUSH == state:
-            sym = ">-"
+            sym = "=>"
         if FileState.PULL == state:
-            sym = "-<"
+            sym = "<="
         if FileState.ERROR == state:
             sym = "ee"
         if FileState.CONFLICT_MODIFIED == state:
@@ -943,9 +951,10 @@ class DirAttr(object):
         return settings, patterns
 
 class CheckResult(object):
-    def __init__(self, remote_base, dirs, files):
-        self.remote_base = remote_base
+    def __init__(self, remote_base, local_base, dirs, files):
         super(CheckResult, self).__init__()
+        self.remote_base = remote_base
+        self.local_base = local_base
         self.dirs = dirs
         self.files = files
 
@@ -1304,8 +1313,6 @@ def _check(ctxt, remote_base, local_base):
         else:
             state = FileState.PUSH
 
-        print(name, state)
-
         if record.isDir:
             dirs.append(DirEnt(n, remote_path, local_path, state))
         else:
@@ -1319,7 +1326,7 @@ def _check(ctxt, remote_base, local_base):
             ent._state = state
             files.append(ent)
 
-    return CheckResult(remote_base, dirs, files)
+    return CheckResult(remote_base, local_base, dirs, files)
 
 def _check_file(ctxt, remote_path, local_path):
     """
@@ -1386,6 +1393,26 @@ def _check_file(ctxt, remote_path, local_path):
 
     return ent
 
+def _check_recursive_impl(ctxt, remote_dir, local_dir, recursive):
+
+    result = _check(ctxt, remote_dir, local_dir)
+
+    results = [result]
+
+    while len(results) > 0:
+        result = results.pop(0)
+
+        for ent in result.dirs:
+            yield ent
+
+            if recursive:
+                rbase = posixpath.join(result.remote_base, ent.name())
+                lbase = ctxt.fs.join(result.local_base, ent.name())
+                results.append(_check(ctxt, rbase, lbase))
+
+        for ent in result.files:
+            yield ent
+
 def _norm_path(fs, remote_base, local_base, path):
 
     if not os.path.isabs(path):
@@ -1428,6 +1455,15 @@ def _parse_path_args(fs, remote_base, local_base, args_paths):
 
 def _status_dir_impl(ctxt, remote_dir, local_dir, recursive):
 
+    """
+    for ent in _check_recursive_impl(ctxt, remote_dir, local_dir, recursive):
+
+        if isinstance(ent, DirEnt):
+            _status_directory_impl(ctxt, ent)
+        else:
+            _status_file_impl(ctxt, ent)
+    """
+
     result = _check(ctxt, remote_dir, local_dir)
 
     ents = list(result.dirs) + list(result.files)
@@ -1436,17 +1472,7 @@ def _status_dir_impl(ctxt, remote_dir, local_dir, recursive):
 
         if isinstance(ent, DirEnt):
 
-            state = ent.state()
-
-            if not (state == FileState.SAME and ctxt.verbose == 0):
-
-                sym = FileState.symbol(state, ctxt.verbose > 2)
-                path = ctxt.fs.relpath(ent.local_base, ctxt.current_local_base)
-
-                if ctxt.verbose > 1:
-                    sys.stdout.write("d%s %s %s/\n" % (sym, " " * 46, path))
-                else:
-                    sys.stdout.write("d%s %s/\n" % (sym, path))
+            _status_directory_impl(ctxt, ent)
 
             if recursive:
                 rbase = posixpath.join(remote_dir, ent.name())
@@ -1454,6 +1480,19 @@ def _status_dir_impl(ctxt, remote_dir, local_dir, recursive):
                 _status_dir_impl(ctxt, rbase, lbase, recursive)
         else:
             _status_file_impl(ctxt, ent)
+
+def _status_directory_impl(ctxt, ent):
+    state = ent.state()
+
+    if not (state == FileState.SAME and ctxt.verbose == 0):
+
+        sym = FileState.symbol(state, ctxt.verbose > 2)
+        path = ctxt.fs.relpath(ent.local_base, ctxt.current_local_base)
+
+        if ctxt.verbose > 1:
+            sys.stdout.write("d%s %s %s/\n" % (sym, " " * 46, path))
+        else:
+            sys.stdout.write("d%s %s/\n" % (sym, path))
 
 def _status_file_impl(ctxt, ent):
     state = ent.state().split(':')[0]
