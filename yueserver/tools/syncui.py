@@ -2,6 +2,7 @@
 
 # remove
 # move/cut/copy/paste
+# location bar expand user and also environ vars
 # drag and drop mime types
 # directory load robustness
 #   gracefully handle errors during load()
@@ -279,7 +280,89 @@ class SyncConfig(BaseConfig):
 
         self.state = state
 
-class SyncUiContext(QObject):
+def _load_drives():
+
+    _dir_contents = []
+
+    for drive in get_drives():
+        ent = sync2.DirEnt(drive, None, drive)
+        ent._state = sync2.FileState.SAME
+        _dir_contents.append(ent)
+
+    return _dir_contents
+
+def _load_context(ctxt, directory):
+    abspath, relpath = ctxt.normPath(directory)
+    result = sync2._check(ctxt, relpath, abspath)
+
+    _dir_contents = result.dirs + result.files
+    return _dir_contents
+
+def _load_default(fs, directory):
+
+    _dir_contents = []
+    for name in os.listdir(directory):
+        fullpath = os.path.join(directory, name)
+
+        try:
+            try:
+                record = fs.file_info(fullpath)
+            except FileNotFoundError as e:
+                print("not found: %s" % e)
+                ent = sync2.DirEnt(name, None, fullpath, sync2.FileState.ERROR)
+                _dir_contents.append(ent)
+                continue
+            except OSError as e:
+                print(type(e), e, fullpath)
+                ent = sync2.DirEnt(name, None, fullpath, sync2.FileState.ERROR)
+                _dir_contents.append(ent)
+                continue
+
+            if not record.isDir:
+
+                af = {
+                    "version": record.version,
+                    "size": record.size,
+                    "mtime": record.mtime,
+                    "permission": record.permission,
+                }
+
+                ent = sync2.FileEnt(None, fullpath, None, None, af)
+                ent._state = sync2.FileState.SAME
+                _dir_contents.append(ent)
+            else:
+                ent = sync2.DirEnt(name, None, fullpath)
+                ent._state = sync2.FileState.SAME
+                _dir_contents.append(ent)
+
+        except FileNotFoundError:
+            pass
+    return _dir_contents
+
+class LoadThread(QThread):
+    newContent = pyqtSignal(str, object)
+
+    def __init__(self, fs, ctxt, directory, parent=None):
+        super(LoadThread, self).__init__(parent)
+        self.fs = fs
+        self.ctxt = ctxt
+        self.directory = directory
+
+    def run(self):
+
+        try:
+            if self.directory == '':
+                content = _load_drives()
+            elif self.ctxt is not None:
+                content = _load_context(self.ctxt, self.directory)
+            else:
+                content = _load_default(self.fs, self.directory)
+
+            self.newContent.emit(self.directory, content)
+        except Exception as e:
+            logging.exception(str(e))
+
+class LocationContext(QObject):
 
     # 3 signals to capture the start of a directory change,
     # then periodic updates as files become available
@@ -288,28 +371,21 @@ class SyncUiContext(QObject):
     locationUpdate = pyqtSignal(str)  # directory
     locationChanged = pyqtSignal(str)  # directory
 
-    loadContextSuccess = pyqtSignal(str)  # directory
-    loadContextError = pyqtSignal(str, str)  # directory, reason
+    #loadContextSuccess = pyqtSignal(str)  # directory
+    #loadContextError = pyqtSignal(str, str)  # directory, reason
+    #contextOpened = pyqtSignal(str)  # cfgdir
 
-    contextOpened = pyqtSignal(str)  # cfgdir
+    def __init__(self, appCtxt):
+        super(LocationContext, self).__init__()
 
-    def __init__(self):
-        super(SyncUiContext, self).__init__()
-
-        self.fs = FileSystem()
+        self.appCtxt = appCtxt
+        self.fs = self.appCtxt.fs
 
         self._location = ""
         self._location_history = []
         self._location_pop_history = []
         self._dir_contents = []
-        self._syncContext = {}
-        self._activeContext = None
-
-        self._icon_provider = QFileIconProvider()
-        self._icon_ext = {}
-
-        self._paste_entries = None
-        self._paste_action = 0
+        self._active_context = None
 
     def load(self, directory):
 
@@ -320,15 +396,15 @@ class SyncUiContext(QObject):
         try:
 
             if directory == '':
-                content = self._load_drives()
+                content = _load_drives()
                 ctxt = None
             else:
-                ctxt = self._load_get_context(directory)
+                ctxt = self.appCtxt.getSyncContext(directory)
 
                 if ctxt is not None:
-                    content = self._load_context(ctxt, directory)
+                    content = _load_context(ctxt, directory)
                 else:
-                    content = self._load_default(directory)
+                    content = _load_default(self.fs, directory)
 
             # useful for color testing
             # for state in sync2.FileState.states():
@@ -342,77 +418,36 @@ class SyncUiContext(QObject):
             print("error changing directory")
             logging.exception(str(e))
 
+    def threaded_load(self, directory):
+        """
+        TODO: requires a reopen of sqlite objects
+        """
+        self.locationChanging.emit()
+        print("on load", directory)
+
+        if directory == '':
+            ctxt = None
+        else:
+            ctxt = self.appCtxt.getSyncContext(directory)
+
+        self._active_context = ctxt
+        self._thread = LoadThread(self.fs, ctxt, directory)
+        self._thread.newContent.connect(self.onNewContent)
+        self._thread.finished.connect(self.onLoadFinished)
+        self._thread.start()
+
+    def onNewContent(self, directory, content):
+        self._dir_contents = content
+        self._location = directory
+        self.locationChanged.emit(directory)
+
+    def onLoadFinished(self):
+        self._thread.wait()
+        self._thread = None
+
     def _access(self, directory):
         if directory:
-
             self.fs.file_info(directory)
-
-    def _load_get_context(self, directory):
-        for local_base, ctxt in self._syncContext.items():
-            if isSubPath(local_base, directory):
-                return ctxt
-        else:
-            return self.loadSyncContext(directory)
-        return None
-
-    def _load_drives(self):
-
-        _dir_contents = []
-
-        for drive in get_drives():
-            ent = sync2.DirEnt(drive, None, drive)
-            ent._state = sync2.FileState.SAME
-            _dir_contents.append(ent)
-
-        return _dir_contents
-
-    def _load_context(self, ctxt, directory):
-        abspath, relpath = ctxt.normPath(directory)
-        result = sync2._check(ctxt, relpath, abspath)
-
-        _dir_contents = result.dirs + result.files
-        return _dir_contents
-
-    def _load_default(self, directory):
-
-        _dir_contents = []
-        for name in os.listdir(directory):
-            fullpath = os.path.join(directory, name)
-
-            try:
-                try:
-                    record = self.fs.file_info(fullpath)
-                except FileNotFoundError as e:
-                    print("not found: %s" % e)
-                    ent = sync2.DirEnt(name, None, fullpath, sync2.FileState.ERROR)
-                    _dir_contents.append(ent)
-                    continue
-                except OSError as e:
-                    print(type(e), e, fullpath)
-                    ent = sync2.DirEnt(name, None, fullpath, sync2.FileState.ERROR)
-                    _dir_contents.append(ent)
-                    continue
-
-                if not record.isDir:
-
-                    af = {
-                        "version": record.version,
-                        "size": record.size,
-                        "mtime": record.mtime,
-                        "permission": record.permission,
-                    }
-
-                    ent = sync2.FileEnt(None, fullpath, None, None, af)
-                    ent._state = sync2.FileState.SAME
-                    _dir_contents.append(ent)
-                else:
-                    ent = sync2.DirEnt(name, None, fullpath)
-                    ent._state = sync2.FileState.SAME
-                    _dir_contents.append(ent)
-
-            except FileNotFoundError:
-                pass
-        return _dir_contents
 
     def reload(self):
 
@@ -504,15 +539,6 @@ class SyncUiContext(QObject):
     def currentLocation(self):
         return self._location
 
-    def getEncryptionPassword(self, kind):
-
-        prompt = "Enter %s password:" % kind
-        dialog = PasswordDialog(prompt)
-        if dialog.exec_() == QDialog.Accepted:
-            return dialog.getPassword()
-
-        return None
-
     def renameEntry(self, ent, name):
 
         if isinstance(ent, sync2.DirEnt):
@@ -557,8 +583,51 @@ class SyncUiContext(QObject):
         return new_ent
 
     # -----------------------------------------
+    def getIcon(self, kind):
+        return self.appCtxt.getIcon(kind)
 
-    def loadSyncContext(self, directory):
+    def getFileStateIcon(self, state):
+        return self.appCtxt.getFileStateIcon(state)
+
+    def getFileIcon(self, path):
+        return self.appCtxt.getFileIcon(path)
+
+    def setCutData(self, entries):
+        return self.appCtxt.setCutData(entries)
+
+    def setCopyData(self, entries):
+        return self.appCtxt.setCopyData(entries)
+
+    def pasteData(self):
+        return self.appCtxt.pasteData()
+
+    def clearPasteData(self):
+        return self.appCtxt.clearPasteData()
+
+class AppContext(QObject):
+
+    def __init__(self):
+        super(AppContext, self).__init__()
+
+        self.fs = FileSystem()
+
+        self._icon_provider = QFileIconProvider()
+        self._icon_ext = {}
+
+        self._paste_entries = None
+        self._paste_action = 0
+        self._syncContext = {}
+
+    def getSyncContext(self, directory):
+        for local_base, ctxt in self._syncContext.items():
+            if isSubPath(local_base, directory):
+                return ctxt
+        else:
+            return self._get_context(directory)
+        return None
+
+    def _get_context(self, directory):
+        print("get", directory)
 
         # this duplicates the logic from get_ctxt
         try:
@@ -584,7 +653,7 @@ class SyncUiContext(QObject):
                 userdata['root'], userdata['remote_base'], userdata['local_base'])
 
             # replace the get password implementation
-            ctxt.getPassword = self.getEncryptionPassword
+            ctxt.getPassword = self._app_getEncryptionPassword
 
             ctxt.current_local_base = userdata['current_local_base']
             ctxt.current_remote_base = userdata['current_remote_base']
@@ -593,22 +662,31 @@ class SyncUiContext(QObject):
             ctxt.showHiddenNames = True
 
         except sync2.SyncException as e:
-            self.loadContextError.emit(directory, str(e))
-            print(str(e))
+            #self.loadContextError.emit(directory, str(e))
+            print("ld ctxt error", str(e))
             return None
 
         except Exception as e:
-            self.loadContextError.emit(directory, str(e))
-            print(str(e))
+            #self.loadContextError.emit(directory, str(e))
+            print("ld ctxt exception",str(e))
             return None
 
         else:
 
             local_base = userdata['local_base']
             self._syncContext[local_base] = ctxt
-            self.contextOpened.emit(local_base)
+            # self.contextOpened.emit(local_base)
 
             return ctxt
+
+    def _app_getEncryptionPassword(self, kind):
+
+        prompt = "Enter %s password:" % kind
+        dialog = PasswordDialog(prompt)
+        if dialog.exec_() == QDialog.Accepted:
+            return dialog.getPassword()
+
+        return None
 
     def getIcon(self, kind):
         """
@@ -706,7 +784,6 @@ class SyncUiContext(QObject):
         self._paste_entries = None
         self._paste_action = 0
 
-
 class OverlayText(QWidget):
 
     def __init__(self, text, parent = None):
@@ -758,6 +835,7 @@ class OverlaySpinner(QWidget):
             self.resize(self.parent().size())
 
         painter = QPainter()
+
         painter.begin(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.fillRect(event.rect(), QBrush(QColor(255, 255, 255, 127)))
@@ -802,7 +880,7 @@ class Pane(QWidget):
         super(Pane, self).__init__(parent)
         self.vbox = QVBoxLayout(self)
         self.vbox.setContentsMargins(0, 0, 0, 0)
-        self._firstShow = False
+        self._firstShow = True
 
     def addWidget(self, widget):
         self.vbox.addWidget(widget)
@@ -810,11 +888,11 @@ class Pane(QWidget):
     def setVisible(self, b):
         super().setVisible(b)
 
-        print(self.__class__.__name__, "visible")
+        print(self.__class__.__name__, "visible", id(self), self._firstShow, b)
 
-        if self._firstShow == False:
+        if b and self._firstShow:
             self.onFirstShow()
-            self._firstShow = True
+            self._firstShow = False
 
     def onFirstShow(self):
         pass
@@ -1897,11 +1975,11 @@ class FileTableView(TableView):
         idx = self.baseModel().getColumnIndexByName("state")
         if index.column() == idx:
             if row[9] == 'client':
-                return QColor(0xFF, 0xD7, 0x00, 64)
+                return QColor(0xFF, 0xD7, 0x00)
             if row[9] == 'server':
-                return QColor(0x0F, 0x52, 0xBA, 64)
+                return QColor(0x0F, 0x52, 0xBA)
             if row[9] == 'system':
-                return QColor(0x9B, 0x11, 0x1E, 64)
+                return QColor(0x9B, 0x11, 0x1E)
 
         if state == sync2.FileState.SAME:
             return None
@@ -2028,6 +2106,7 @@ class FavoritesListView(TableView):
 class LocationView(QWidget):
 
     setFilterPattern = pyqtSignal(str)
+    splitInterface = pyqtSignal()
 
     def __init__(self, ctxt, parent=None):
         super(LocationView, self).__init__(parent)
@@ -2066,6 +2145,9 @@ class LocationView(QWidget):
         self.btn_open.setIcon(self.style().standardIcon(QStyle.SP_ArrowForward))
         self.btn_open.setAutoRaise(True)
 
+        self.btn_split = QToolButton(self)
+        self.btn_split.clicked.connect(self.splitInterface)
+
         self.hbox1.addWidget(self.btn_back)
         self.hbox1.addWidget(self.btn_forward)
         self.hbox1.addWidget(self.btn_up)
@@ -2073,6 +2155,7 @@ class LocationView(QWidget):
         self.hbox1.addWidget(self.edit_location)
         self.hbox1.addWidget(self.btn_open)
         self.hbox1.addWidget(self.edit_filter)
+        self.hbox1.addWidget(self.btn_split)
 
         self.vbox.addLayout(self.hbox1)
 
@@ -2105,6 +2188,26 @@ class LocationView(QWidget):
         self.ctxt.locationChanging.connect(self.onLocationChanging)
         self.ctxt.locationChanged.connect(self.onLocationChanged)
 
+    def showSplitButton(self, visible):
+        self.btn_split.setVisible(visible)
+
+    def setSplitIcon(self, bSplit):
+
+        img = QPixmap(32, 32)
+        img.fill( Qt.transparent)
+        painter = QPainter()
+        painter.begin(img)
+        painter.setPen(QColor(0, 0, 0))
+        painter.setRenderHint(QPainter.Antialiasing)
+        # painter.fillRect(3, 3, 27, 27, QColor(127, 127, 127))
+        painter.drawRoundedRect(2, 2, 28, 28, 4, 4)
+        if bSplit:
+            painter.drawRoundedRect(2, 2, 15, 28, 4, 4)
+            painter.drawRoundedRect(15, 2, 15, 28, 4, 4)
+        painter.end()
+        self.btn_split.setIcon(QIcon(img))
+        self.btn_split.setAutoRaise(True)
+
     def onBackButtonPressed(self):
         self.ctxt.popDirectory()
 
@@ -2119,6 +2222,14 @@ class LocationView(QWidget):
 
     def onOpenButtonPressed(self):
         directory = self.edit_location.text().strip()
+
+        directory = os.path.expanduser(directory)
+        directory = os.path.expandvars(directory)
+
+        if not os.path.exists(directory):
+            print("directory", directory)
+            # TODO: change bar to red background color until successful load
+            return
 
         self.ctxt.pushDirectory(directory)
 
@@ -2252,7 +2363,7 @@ class FetchProgressThread(ProgressThread):
 
         # construct a new sync context for this thread
         ctxt = self.ctxt.activeContext().clone()
-        ctxt.getPassword = self.ctxt.getEncryptionPassword
+        ctxt.getPassword = self.getEncryptionPasswordWaiter
 
         # create an iterable in this thread for processing the command
 
@@ -2473,7 +2584,7 @@ class SyncProgressDialog(QDialog):
         password = None
 
         try:
-            password = self.ctxt.getEncryptionPassword(kind)
+            password = self.ctxt.appCtxt._app_getEncryptionPassword(kind)
 
         finally:
             # set the password, or None if the user canceled
@@ -2817,15 +2928,14 @@ class PasswordDialog(QDialog):
         return self.edit_password.text()
 
 class FavoritesPane(Pane):
-    """docstring for FavoritesPane"""
 
     pushDirectoryMain = pyqtSignal(str)
     pushDirectorySecondary = pyqtSignal(str)
 
-    def __init__(self, ctxt, cfg, parent=None):
+    def __init__(self, appCtxt, cfg, parent=None):
         super(FavoritesPane, self).__init__(parent)
 
-        self.ctxt = ctxt
+        self.appCtxt = appCtxt
         self.cfg = cfg
 
         self.table_favorites = FavoritesListView(cfg, self)
@@ -2867,7 +2977,7 @@ class FavoritesPane(Pane):
                 if hasattr(QFileIconProvider, row['icon']):
                     icon = getattr(QFileIconProvider, row['icon'])
 
-            icon = self.ctxt.getIcon(icon)
+            icon = self.appCtxt.getIcon(icon)
             data.append([icon, row['name'], row['path'], False])
 
         self.table_favorites.setNewData(data)
@@ -2883,13 +2993,14 @@ class FavoritesPane(Pane):
 
 class LocationPane(Pane):
 
-    onPrimaryChanged = pyqtSignal(Pane, str)
-    onSecondaryChanged = pyqtSignal(Pane, str)
+    locationChanged = pyqtSignal(Pane, str)
+    splitInterface = pyqtSignal()
 
-    def __init__(self, ctxt, cfg, parent=None):
+    def __init__(self, appCtxt, cfg, parent=None):
         super(LocationPane, self).__init__(parent)
 
-        self.ctxt = ctxt
+        self.appCtxt = appCtxt
+        self.ctxt = LocationContext(self.appCtxt)
         self.cfg = cfg
 
         self.view_location = LocationView(self.ctxt, self)
@@ -2915,6 +3026,10 @@ class LocationPane(Pane):
         self.ctxt.locationChanged.connect(self.onLocationChanged)
 
         self.view_location.setFilterPattern.connect(self.table_file.onSetFilterPatteern)
+        self.view_location.splitInterface.connect(self.splitInterface)
+
+    def setSplitIcon(self, bSplit):
+        self.view_location.setSplitIcon(bSplit)
 
     def onTableLocationChanged(self, path, dcount, fcount):
 
@@ -2971,7 +3086,10 @@ class LocationPane(Pane):
             txt ="%s@%s" % (ctxt.username, ctxt.hostname)
             self.statusUpdate.emit(Pane.HOST, txt)
 
-        self.onPrimaryChanged.emit(self, directory)
+        self.locationChanged.emit(self.parent(), directory)
+
+    def showSplitButton(self, visible):
+        self.view_location.showSplitButton(visible)
 
     def resetTableView(self):
         if not self.cfg.state:
@@ -2983,6 +3101,40 @@ class LocationPane(Pane):
         # on first enter
         QTimer.singleShot(0, self.resetTableView)
 
+class DoubleLocationPane(QWidget):
+
+    def __init__(self, appCtxt, cfg, parent=None):
+        super(DoubleLocationPane, self).__init__(parent)
+
+        self.primary = LocationPane(appCtxt, cfg, self)
+        self.secondary = LocationPane(appCtxt, cfg, self)
+        self.secondary.hide()
+
+        self.primary.setSplitIcon(True)
+        self.secondary.setSplitIcon(False)
+
+        self.hbox = QHBoxLayout(self)
+
+        self.hbox.addWidget(self.primary)
+        self.hbox.addWidget(self.secondary)
+
+        self.primary.splitInterface.connect(self.onShowSecondary)
+        self.secondary.splitInterface.connect(self.onHideSecondary)
+
+    def onShowSecondary(self):
+        self.secondary.show()
+        self.primary.showSplitButton(False)
+
+    def onHideSecondary(self):
+        self.secondary.hide()
+        self.primary.showSplitButton(True)
+
+    def setPrimaryDirectory(self, path):
+        self.primary.ctxt.pushDirectory(path)
+
+    def setSecondaryDirectory(self, path):
+        self.secondary.ctxt.pushDirectory(path)
+
 class SyncMainWindow(QMainWindow):
 
     def __init__(self, cfg):
@@ -2993,7 +3145,7 @@ class SyncMainWindow(QMainWindow):
         self.initMenuBar()
         self.initStatusBar()
 
-        self.ctxt = SyncUiContext()
+        self.appCtxt = AppContext()
 
         self.btn_newTab = QToolButton(self)
         self.btn_newTab.clicked.connect(self.newTab)
@@ -3008,10 +3160,10 @@ class SyncMainWindow(QMainWindow):
         self.tabview.tabBar().setElideMode(Qt.ElideNone)
         self.tabview.tabCloseRequested.connect(self.onTabCloseRequest)
 
-        self.pane_favorites = FavoritesPane(self.ctxt, cfg, self)
+        self.pane_favorites = FavoritesPane(self.appCtxt, cfg, self)
 
         self.pane_favorites.pushDirectoryMain.connect(
-            self.ctxt.pushDirectory)
+            self.onPushDirectory)
 
         self.splitter = QSplitter(self)
         self.splitter.addWidget(self.pane_favorites)
@@ -3099,31 +3251,70 @@ class SyncMainWindow(QMainWindow):
             self.tabview.setTabsClosable(self.tabview.count()>1)
 
     def newTab(self):
-        self.addTab(os.getcwd(), None, None)
+        self.addTab(os.getcwd(), "", None)
 
     def addTab(self, primaryPath, secondaryPath, icon=None):
 
         if icon is None:
-            icon = self.ctxt._icon_provider.icon(QFileIconProvider.Folder)
+            icon = self.appCtxt._icon_provider.icon(QFileIconProvider.Folder)
 
-        pane = LocationPane(self.ctxt, self.cfg, self)
+        pane = DoubleLocationPane(self.appCtxt, self.cfg, self)
 
-        pane.statusUpdate.connect(self.onStatusBarUpdate)
-        pane.previewEntry.connect(self.pane_favorites.previewEntry)
-        pane.onPrimaryChanged.connect(self.onDirectoryChanged)
+        pane.primary.statusUpdate.connect(self.onStatusBarUpdate)
+        pane.primary.previewEntry.connect(self.pane_favorites.previewEntry)
+        pane.primary.locationChanged.connect(self.onDirectoryChanged)
 
         self.tabview.addTab(pane, icon, "")
 
-        self.ctxt.pushDirectory(primaryPath)
+        pane.setPrimaryDirectory(primaryPath)
+        pane.setSecondaryDirectory(secondaryPath)
+
+        self.tabview.setTabsClosable(self.tabview.count()>1)
+
+        self.tabview.setCurrentWidget(pane)
 
     def onDirectoryChanged(self, pane, path):
 
         index = self.tabview.indexOf(pane)
-        _, name = self.ctxt.fs.split(path)
+        _, name = self.appCtxt.fs.split(path)
         if name :
             self.tabview.setTabText(index, name)
         else:
             self.tabview.setTabText(index, "root")
+
+    def onPushDirectory(self, path):
+        print(path)
+
+        w = self.tabview.currentWidget()
+        w.setPrimaryDirectory(path)
+
+def setDarkTheme(app):
+
+    palette = QPalette()
+
+    white = QColor(215, 215, 215)
+    #text = QColor(214, 120, 0)
+    text = white
+
+    palette.setColor(QPalette.Window, QColor(53,53,53))
+    palette.setColor(QPalette.WindowText, text)
+    palette.setColor(QPalette.Base, QColor(30, 35, 40))
+    palette.setColor(QPalette.AlternateBase, QColor(45, 50, 60))
+    palette.setColor(QPalette.ToolTipBase, white)
+    palette.setColor(QPalette.ToolTipText, white)
+    # palette.setColor(QPalette.PlaceholderText, white) Qt 5.12
+    palette.setColor(QPalette.Text, text)
+    palette.setColor(QPalette.Button, QColor(53,53,53))
+    palette.setColor(QPalette.ButtonText, text)
+    palette.setColor(QPalette.BrightText, white)
+
+    palette.setColor(QPalette.Active,  QPalette.Highlight, QColor(0,0,255).lighter())
+    palette.setColor(QPalette.Inactive,QPalette.Highlight, QColor(15,15,15))
+    palette.setColor(QPalette.Disabled,QPalette.Highlight, QColor(15,15,15))
+    palette.setColor(QPalette.Active,  QPalette.HighlightedText, Qt.black)
+    palette.setColor(QPalette.Inactive,QPalette.HighlightedText, white)
+    palette.setColor(QPalette.Disabled,QPalette.HighlightedText, white)
+    app.setPalette(palette)
 
 def main():
 
@@ -3131,6 +3322,10 @@ def main():
         cfg_base = os.path.join(os.getenv('APPDATA'))
     else:
         cfg_base = os.path.expanduser("~/.config")
+
+    if os.name == 'nt':
+        if 'HOME' not in os.environ:
+            os.environ['HOME'] = os.path.expanduser("~")
 
     cfg_path = os.path.join(cfg_base, "yue-sync", "settings.yml")
 
@@ -3142,7 +3337,10 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName("Yue-Sync")
-    app.setStyle("windows")
+    print(QStyleFactory.keys())
+    app.setStyle("Fusion")
+    # app.setStyle("windowsvista")
+    # setDarkTheme(app)
 
     app.setQuitOnLastWindowClosed(True)
     app_icon = QIcon(':/img/icon.png')
