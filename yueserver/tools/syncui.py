@@ -1007,10 +1007,17 @@ class FileContentSortProxyModel(SortProxyModel):
 
     def setFilterGlobPattern(self, pattern):
 
-        if '*' not in pattern:
+        # TODO: support multiple patterns
+        # {pattern: str, mode: int}
+        # mode: {glob, state, size, date. permission, etc}
+        # pattern: raw text
+        # direction: <= < = > =>
+        if pattern.startswith('state:'):
+            pass
+        elif '*' not in pattern:
             pattern = "*%s*" % pattern
 
-        self._pattern = pattern
+        self._pattern = pattern.strip()
         self.invalidateFilter()
 
     def setShowHiddenFiles(self, hidden):
@@ -1026,13 +1033,19 @@ class FileContentSortProxyModel(SortProxyModel):
         if not self._show_hidden and name.startswith("."):
             return False
 
-        if isinstance(data[0], sync2.DirEnt):
-            return True
-
         if not self._pattern:
             return True
 
-        return fnmatch.fnmatch(name, self._pattern)
+        if self._pattern.startswith('state:'):
+            _, state = self._pattern.split(':')
+            return data[13].startswith(state)
+        else:
+
+            # TODO: support optional match directories
+            if isinstance(data[0], sync2.DirEnt):
+                return True
+
+            return fnmatch.fnmatch(name, self._pattern)
 
 class FileContextMenu(QMenu):
 
@@ -1452,20 +1465,20 @@ class FileTableView(TableView):
             af = ent.af or df
 
             item = [
-                ent,
-                self.ctxt.getFileStateIcon(ent.state()),
-                self.ctxt.getFileIcon(ent.local_path),
-                ent.name(),
-                af['size'],
-                rf['size'],
-                af['permission'],
-                rf['permission'],
-                rf['public'],
-                rf['encryption'],
-                af['mtime'],
-                rf['mtime'],
-                getFileType(ent.name()),
-                ent.state()
+                ent,                                      # 0
+                self.ctxt.getFileStateIcon(ent.state()),  # 1
+                self.ctxt.getFileIcon(ent.local_path),    # 2
+                ent.name(),                               # 3
+                af['size'],                               # 4
+                rf['size'],                               # 5
+                af['permission'],                         # 6
+                rf['permission'],                         # 7
+                rf['public'],                             # 8
+                rf['encryption'],                         # 9
+                af['mtime'],                              # 10
+                rf['mtime'],                              #
+                getFileType(ent.name()),                  #
+                ent.state()                               # 13
             ]
 
         elif isinstance(ent, sync2.DirEnt):
@@ -1861,7 +1874,6 @@ class FileTableView(TableView):
             raise e
 
     def onSetFilterPatteern(self, pattern):
-        print(pattern)
         self.model().setFilterGlobPattern(pattern)
 
     def editRow(self, row, col):
@@ -3293,28 +3305,42 @@ def setDarkTheme(app):
     palette = QPalette()
 
     white = QColor(215, 215, 215)
-    #text = QColor(214, 120, 0)
     text = white
 
-    palette.setColor(QPalette.Window, QColor(53,53,53))
+    black = QColor(15, 15, 15)
+    invertText = black
+
+    highlight = QColor(100, 100, 220)
+    window = QColor(55, 49, 49)
+    base = QColor(30, 35, 40)
+    altbase = QColor(45, 50, 60)
+
+
+    palette.setColor(QPalette.Window, window)
     palette.setColor(QPalette.WindowText, text)
-    palette.setColor(QPalette.Base, QColor(30, 35, 40))
-    palette.setColor(QPalette.AlternateBase, QColor(45, 50, 60))
-    palette.setColor(QPalette.ToolTipBase, white)
-    palette.setColor(QPalette.ToolTipText, white)
+    palette.setColor(QPalette.Base, base)
+    palette.setColor(QPalette.AlternateBase, altbase)
+    palette.setColor(QPalette.ToolTipBase, text)
+    palette.setColor(QPalette.ToolTipText, text)
     # palette.setColor(QPalette.PlaceholderText, white) Qt 5.12
     palette.setColor(QPalette.Text, text)
-    palette.setColor(QPalette.Button, QColor(53,53,53))
+    palette.setColor(QPalette.Button, window)
     palette.setColor(QPalette.ButtonText, text)
-    palette.setColor(QPalette.BrightText, white)
+    palette.setColor(QPalette.BrightText, text)
 
-    palette.setColor(QPalette.Active,  QPalette.Highlight, QColor(0,0,255).lighter())
-    palette.setColor(QPalette.Inactive,QPalette.Highlight, QColor(15,15,15))
-    palette.setColor(QPalette.Disabled,QPalette.Highlight, QColor(15,15,15))
-    palette.setColor(QPalette.Active,  QPalette.HighlightedText, Qt.black)
-    palette.setColor(QPalette.Inactive,QPalette.HighlightedText, white)
-    palette.setColor(QPalette.Disabled,QPalette.HighlightedText, white)
+    palette.setColor(QPalette.Active,  QPalette.Highlight, highlight)
+    palette.setColor(QPalette.Inactive,QPalette.Highlight, invertText)
+    palette.setColor(QPalette.Disabled,QPalette.Highlight, invertText)
+    palette.setColor(QPalette.Active,  QPalette.HighlightedText, invertText)
+    palette.setColor(QPalette.Inactive,QPalette.HighlightedText, text)
+    palette.setColor(QPalette.Disabled,QPalette.HighlightedText, text)
     app.setPalette(palette)
+
+    #font = app.font()
+    #font.setPointSize(10)
+    #app.setFont(font)
+
+    return
 
 def main():
 
