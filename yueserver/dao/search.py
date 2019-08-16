@@ -37,6 +37,32 @@ class StrPos(str):
         inst.name = strval
         return inst
 
+class Column(object):
+    """
+    an object representing a column of data
+
+    usage: data[column.name] => value
+    """
+
+    def __init__(self, name):
+        super(Column, self).__init__()
+        self.name = name
+
+    def __str__(self):
+        return str(self.name)
+
+    def __repr__(self):
+        return "<%s>" % self.name
+
+    def ilike(self, value):
+        raise NotImplementedError()
+
+    def notilike(self, value):
+        return not self.ilike(value)
+
+    def op(self, name):
+        raise NotImplementedError()
+
 class Rule(object):
 
     def __init__(self):
@@ -777,6 +803,7 @@ class Grammar(object):
         self.year_fields = set()  # integer that represents a year
         self.number_fields = set()
 
+        self.oldstyle_operator_default = PartialStringSearchRule
         self.compile_operators()
 
         self.autoset_datetime = True
@@ -1033,7 +1060,7 @@ class Grammar(object):
     def parseTokensOldStyle(self, tokens):
 
         current_col = self.all_text
-        current_opr = PartialStringSearchRule
+        current_opr = self.oldstyle_operator_default
 
         i = 0
         while i < len(tokens):
@@ -1076,6 +1103,8 @@ class Grammar(object):
                 self.meta_options[colid] = int(value)
             else:
                 raise ParseError("Illegal operation `%s` at position %d for option `%s`" % (tok, tok.pos, colid))
+        else:
+            self.meta_options[colid] = value
 
     # protected
 

@@ -22,6 +22,13 @@
 # icons
 #   shortcut delighter for link file types
 #   favorites icon as path to png
+# remove debug colons from file state
+# text edit delegate which accepts home/end keys correctly on all plats
+#   including a custom line edit for location and filter
+# filter timestamo support for hours minutes
+#     yyyy/mm/dd hh:mm
+#     hh:mm
+
 
 import os
 import sys
@@ -49,6 +56,14 @@ from yueserver.qtcommon import resource
 from yueserver.framework.config import BaseConfig, yload, ydump
 
 from yueserver.tools import sync2
+
+from yueserver.dao.search import (
+    SearchGrammar, AndSearchRule, OrSearchRule, NotSearchRule, ColumnSearchRule,
+    LessThanSearchRule, GreaterThanSearchRule,
+    LessThanEqualSearchRule, GreaterThanEqualSearchRule,
+    PartialStringSearchRule, InvertedPartialStringSearchRule,
+    Column, case_
+)
 
 def openNative(url):
 
@@ -972,6 +987,176 @@ class TabWidget(QTabWidget):
 
         self.previousTab = w
 
+class GlobStringSearchRule(ColumnSearchRule):
+
+    def check(self, elem, ignoreCase=True):
+        v1 = self.type_(case_(self.value, ignoreCase))
+        v2 = self.type_(case_(elem[self.column.name], ignoreCase))
+        return fnmatch.fnmatch(v2, v1)
+
+    def __repr__(self):
+        return "<%s matches `%s`>" % (self.fmtval(self.value), self.column)
+
+    def sql(self):
+        return self.column.ilike("%%%s%%" % self.value)
+
+class InvertedGlobStringSearchRule(ColumnSearchRule):
+
+    def check(self, elem, ignoreCase=True):
+        v1 = self.type_(case_(self.value, ignoreCase))
+        v2 = self.type_(case_(elem[self.column.name], ignoreCase))
+        print(self.column, v2, v1)
+        return not fnmatch.fnmatch(v2, v1)
+
+    def __repr__(self):
+        return "<%s does not match `%s`>" % (self.fmtval(self.value), self.column)
+
+    def sql(self):
+        return self.column.notilike("%%%s%%" % self.value)
+
+class FilterGrammar(SearchGrammar):
+
+    META_DIRECTORY = "dir"
+
+    def __init__(self, dtn=None):
+        super(FilterGrammar, self).__init__(dtn)
+
+        self.colmap = {
+            "filename": FileTableRowItem.COL_NAME,
+            "state": FileTableRowItem.COL_STATE,
+            "timestamp": FileTableRowItem.COL_L_MTIME,
+            "size": FileTableRowItem.COL_L_SIZE,
+            "public": FileTableRowItem.COL_PUBLIC,
+            "encryption": FileTableRowItem.COL_ENCRYPTION,
+            "type": FileTableRowItem.COL_TYPE,
+        }
+
+    def translateColumn(self, colid):
+
+        return Column(self.colmap[colid])
+
+    def compile_operators(self):
+
+        self.all_text = 'all_text'
+        # sigil is used to define the oldstyle syntax marker
+        # it should not appear in tok_special
+        self.sigil = '.'
+
+        # tokens control how the grammar is parsed.
+        self.tok_whitespace = " \t"  # token separators
+        # all meaningful non-text chars
+        self.tok_operators = '~!=<>'
+        self.tok_flow = "|&"
+        self.tok_special = self.tok_operators + self.tok_flow
+        self.tok_negate = "!"
+        self.tok_nest_begin = '('
+        self.tok_nest_end = ')'
+        self.tok_quote = "\""
+        self.tok_escape = "\\"
+
+        self.oldstyle_operator_default = GlobStringSearchRule
+
+        # does not require left token
+        self.operators = {
+            "=": PartialStringSearchRule,
+            "!=": InvertedPartialStringSearchRule,
+        }
+
+        self.operators_invert = {
+            InvertedGlobStringSearchRule: GlobStringSearchRule,
+            InvertedPartialStringSearchRule: PartialStringSearchRule,
+        }
+
+        # require left/right token
+        self.special = {
+            "<": LessThanSearchRule,
+            ">": GreaterThanSearchRule,
+            "<=": LessThanEqualSearchRule,
+            ">=": GreaterThanEqualSearchRule,
+        }
+
+        self.special_invert = {
+            GreaterThanSearchRule: LessThanSearchRule,
+            LessThanSearchRule: GreaterThanSearchRule,
+            GreaterThanEqualSearchRule: LessThanEqualSearchRule,
+            LessThanEqualSearchRule: GreaterThanEqualSearchRule,
+        }
+
+        # meta options can be used to control the query results
+        # by default, limit could be used to limit the number of results
+
+        self.meta_columns = set([
+            FilterGrammar.META_DIRECTORY,
+            FilterGrammar.META_LIMIT,
+            FilterGrammar.META_OFFSET,
+            FilterGrammar.META_DEBUG
+        ])
+        self.meta_options = dict()
+
+        self.old_style_operators = self.operators.copy()
+        self.old_style_operators.update(self.special)
+
+        self.old_style_operators_invert = self.operators_invert.copy()
+        self.old_style_operators_invert.update(self.special_invert)
+
+        self.operators_flow = {
+            "&&": AndSearchRule,
+            "||": OrSearchRule,
+            "!": NotSearchRule,
+        }
+
+        self.operators_flow_invert = {v: k for k, v in self.operators_flow.items()}
+
+        self.operators_flow_join = AndSearchRule
+
+    def buildRule(self, colid, rule, value):
+
+        if colid == self.all_text:
+            if rule in [GlobStringSearchRule, InvertedGlobStringSearchRule]:
+                if '*' not in value and '?' not in value:
+                    value = "*%s*" % value.strip()
+            colid = 'filename'
+        col = self.translateColumn(colid)
+
+        if colid == 'size':
+            return self.buildSizeRule(col, rule, value)
+        elif colid == "timestamp":
+            return self.buildDateRule(col, rule, value)
+
+        return rule(col, value, type_=str)
+
+    def buildSizeRule(self, col, rule, value):
+
+        # remove whitespace and apply a multiplier
+        # parse suffix: b, kb, mb, gb
+
+        value = value.replace(" ", "").lower()
+
+        m = 1
+        if value.endswith('b'):
+            value = value[:-1]
+        elif value.endswith('k'):
+            m = 1024
+            value = value[:-1]
+        elif value.endswith('m'):
+            m = 1024 * 1024
+            value = value[:-1]
+        elif value.endswith('g'):
+            m = 1024 * 1024 * 1024
+            value = value[:-1]
+        elif value.endswith('kb'):
+            m = 1024
+            value = value[:-2]
+        elif value.endswith('mb'):
+            m = 1024 * 1024
+            value = value[:-2]
+        elif value.endswith('gb'):
+            m = 1024 * 1024 * 1024
+            value = value[:-2]
+        value = int(value) * m
+
+        return rule(col, value, type_=int)
+
 class FileContentSortProxyModel(SortProxyModel):
     """
     A sort proxy model that is aware of the file content
@@ -985,7 +1170,10 @@ class FileContentSortProxyModel(SortProxyModel):
     def __init__(self, *args):
         super(FileContentSortProxyModel, self).__init__(*args)
 
-        self._pattern = ""
+        self._rule = None
+        self._dir = False
+
+        self.grammar = FilterGrammar()
 
     def lessThan(self, indexL, indexR):
 
@@ -1014,12 +1202,16 @@ class FileContentSortProxyModel(SortProxyModel):
         # mode: {glob, state, size, date. permission, etc}
         # pattern: raw text
         # direction: <= < = > =>
-        if pattern.startswith('state:'):
-            pass
-        elif '*' not in pattern:
-            pattern = "*%s*" % pattern
 
-        self._pattern = pattern.strip()
+        try:
+            self._rule = self.grammar.ruleFromString(pattern)
+            self._dir = 'dir' in self.grammar.meta_options
+            print("compiled rule:", self._rule, "match dirname:", self._dir)
+        except Exception as e:
+            self._rule = None
+            self._dir = False
+            print("error compiling rule", type(e), e)
+
         self.invalidateFilter()
 
     def setShowHiddenFiles(self, hidden):
@@ -1028,26 +1220,21 @@ class FileContentSortProxyModel(SortProxyModel):
 
     def filterAcceptsRow(self, row, parent):
 
-        data = self.parent().baseModel().tabledata[row]
+        item = self.parent().baseModel().tabledata[row]
 
-        name = data[3]
+        name = item[FileTableRowItem.COL_NAME]
+        ent = item[FileTableRowItem.COL_ENT]
 
         if not self._show_hidden and name.startswith("."):
             return False
 
-        if not self._pattern:
+        if not self._rule:
             return True
 
-        if self._pattern.startswith('state:'):
-            _, state = self._pattern.split(':')
-            return data[13].startswith(state)
-        else:
+        if not self._dir and isinstance(ent, sync2.DirEnt):
+            return True
 
-            # TODO: support optional match directories
-            if isinstance(data[0], sync2.DirEnt):
-                return True
-
-            return fnmatch.fnmatch(name, self._pattern)
+        return self._rule.check(item)
 
 class FileContextMenu(QMenu):
 
@@ -1226,6 +1413,89 @@ class FileContextMenu(QMenu):
 
         self.cfg.showHiddenFiles = not self.cfg.showHiddenFiles
         self.showHiddenFiles.emit(self.cfg.showHiddenFiles)
+
+class FileTableRowItem(object):
+
+    COL_ENT        = 0
+    COL_STATE      = 1
+    COL_ICON       = 2
+    COL_NAME       = 3
+    COL_L_SIZE     = 4
+    COL_R_SIZE     = 5
+    COL_L_PERM     = 6
+    COL_R_PERM     = 7
+    COL_PUBLIC     = 8
+    COL_ENCRYPTION = 9
+    COL_L_MTIME    = 10
+    COL_R_MTIME    = 11
+    COL_TYPE       = 12
+    COL_STATE      = 13
+
+    COL_COUNT      = 13  # number of columns
+
+    def __init__(self, data=None):
+        super(FileTableRowItem, self).__init__()
+
+        if data:
+            self._data = data
+        else:
+            self._data = [None] * COL_COUNT
+
+    def __getitem__(self, index):
+        return self._data[index]
+
+    def __setitem__(self, index, value):
+        self._data[index] = value
+
+    @staticmethod
+    def fromEntry(ctxt, ent):
+
+        if isinstance(ent, sync2.FileEnt):
+
+            df = {'size': 0, "permission": 0, "mtime": 0, "version": 0,
+                  "public": "", "encryption": ""}
+
+            lf = ent.lf or df
+            rf = ent.rf or df
+            af = ent.af or df
+
+            item = [
+                ent,                                      # 0
+                ctxt.getFileStateIcon(ent.state()),  # 1
+                ctxt.getFileIcon(ent.local_path),    # 2
+                ent.name(),                               # 3
+                af['size'],                               # 4
+                rf['size'],                               # 5
+                af['permission'],                         # 6
+                rf['permission'],                         # 7
+                rf['public'],                             # 8
+                rf['encryption'],                         # 9
+                af['mtime'],                              # 10
+                rf['mtime'],                              #
+                getFileType(ent.name()),                  #
+                ent.state()                               # 13
+            ]
+
+        elif isinstance(ent, sync2.DirEnt):
+
+            item = [
+                ent,
+                ctxt.getFileStateIcon(ent.state()),
+                ctxt.getIcon(QFileIconProvider.Folder),
+                ent.name(),
+                0,
+                0,
+                0,
+                0,
+                "",
+                "",
+                0,
+                0,
+                "",
+                ent.state()
+            ]
+
+        return FileTableRowItem(item)
 
 class FileTableView(TableView):
 
@@ -1460,55 +1730,6 @@ class FileTableView(TableView):
         self.setEnabled(False)
         self.setNewData([])
 
-    def _itemFromEntry(self, ent):
-
-        if isinstance(ent, sync2.FileEnt):
-
-            df = {'size': 0, "permission": 0, "mtime": 0, "version": 0,
-                  "public": "", "encryption": ""}
-
-            lf = ent.lf or df
-            rf = ent.rf or df
-            af = ent.af or df
-
-            item = [
-                ent,                                      # 0
-                self.ctxt.getFileStateIcon(ent.state()),  # 1
-                self.ctxt.getFileIcon(ent.local_path),    # 2
-                ent.name(),                               # 3
-                af['size'],                               # 4
-                rf['size'],                               # 5
-                af['permission'],                         # 6
-                rf['permission'],                         # 7
-                rf['public'],                             # 8
-                rf['encryption'],                         # 9
-                af['mtime'],                              # 10
-                rf['mtime'],                              #
-                getFileType(ent.name()),                  #
-                ent.state()                               # 13
-            ]
-
-        elif isinstance(ent, sync2.DirEnt):
-
-            item = [
-                ent,
-                self.ctxt.getFileStateIcon(ent.state()),
-                self.ctxt.getIcon(QFileIconProvider.Folder),
-                ent.name(),
-                0,
-                0,
-                0,
-                0,
-                "",
-                "",
-                0,
-                0,
-                "",
-                ent.state()
-            ]
-
-        return item
-
     def onLocationChanged(self, directory, target):
 
         self.setEnabled(True)
@@ -1518,7 +1739,7 @@ class FileTableView(TableView):
         fcount = 0
         dcount = 0
         for ent in self.ctxt.contents():
-            item = self._itemFromEntry(ent)
+            item = FileTableRowItem.fromEntry(self.ctxt, ent)
             data.append(item)
             if isinstance(ent, sync2.FileEnt):
                 fcount += 1
@@ -1656,7 +1877,7 @@ class FileTableView(TableView):
         # todo: check for unique name
         ent = sync2.DirEnt("newfile.txt", "", "")
         ent.create = True
-        item = self._itemFromEntry(ent)
+        item = FileTableRowItem.fromEntry(self.ctxt, ent)
         self.insertRow(0, item)
 
         # find the newly inserted index
@@ -1696,7 +1917,7 @@ class FileTableView(TableView):
             # construct a new ent to replace the dummy
             ent = sync2.DirEnt(value, relpath, abspath, sync2.FileState.PUSH)
 
-            item = self._itemFromEntry(ent)
+            item = FileTableRowItem.fromEntry(self.ctxt, ent)
             self.replaceRow(index.row(), item)
 
             current_index = None
@@ -1723,7 +1944,7 @@ class FileTableView(TableView):
         path = os.path.join(self.ctxt.currentLocation(), "newfile.txt")
         ent = sync2.FileEnt(None, path, None, None, None)
         ent.create = True
-        item = self._itemFromEntry(ent)
+        item = FileTableRowItem.fromEntryy(self.ctxt, ent)
         self.insertRow(0, item)
 
         # find the newly inserted index
@@ -1766,7 +1987,7 @@ class FileTableView(TableView):
             else:
                 ent = sync2.FileEnt(relpath, abspath, None, None, None)
 
-            item = self._itemFromEntry(ent)
+            item = FileTableRowItem.fromEntry(self.ctxt, ent)
             self.replaceRow(index.row(), item)
 
             current_index = None
@@ -1823,7 +2044,7 @@ class FileTableView(TableView):
             # construct a new ent to replace the dummy
             ent = sync2.DirEnt(value, relpath, abspath, sync2.FileState.PUSH)
 
-            item = self._itemFromEntry(ent)
+            item = FileTableRowItem.fromEntry(self.ctxt, ent)
             self.replaceRow(index.row(), item)
 
             # TODO: if in an active context
@@ -1873,7 +2094,7 @@ class FileTableView(TableView):
             else:
                 ent = sync2.FileEnt(relpath, abspath, None, None, None)
 
-            item = self._itemFromEntry(ent)
+            item = FileTableRowItem.fromEntry(self.ctxt, ent)
             self.replaceRow(index.row(), item)
 
             # TODO: if in an active context
@@ -1962,7 +2183,7 @@ class FileTableView(TableView):
 
             if new_ent is None:
                 return False
-            item = self._itemFromEntry(new_ent)
+            item = FileTableRowItem.fromEntry(self.ctxt, new_ent)
             self.replaceRow(index.row(), item)
 
         except Exception as e:
