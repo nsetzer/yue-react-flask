@@ -2,17 +2,13 @@
 
 # remove
 # move/cut/copy/paste
-# location bar expand user and also environ vars
 # drag and drop mime types
 # directory load robustness
 #   gracefully handle errors during load()
 #   pull files do not exist locally (ignore actions)
 # os.path => ctxt.fs
 # s3 file paths
-# allow side by side windows and tabbed UI
-# stack history of row index and item name for pop directory
-#   on pop, emit the element name to select and scrollTo
-#   + enable refresh and highlight item if it still exists
+# improve directory push / pop (implementation stack is confusing)
 # on exit save session to session.yml in config dir
 # _check and attr.match(...)
 #   secondary show hidden files bool to display hidden by attrs
@@ -23,10 +19,9 @@
 #   FileSystemTableView(fs)
 #   contains a private class as a SignalHandler for private signals (e.g. rename)
 #   takes care of basic file system operations
-# icon for ignore
 # icons
+#   ignore state
 #   shortcut delighter for link file types
-#   new file delighter (asterisk) for files modified recently
 #   favorites icon as path to png
 
 import os
@@ -57,6 +52,7 @@ from yueserver.tools import sync2
 
 def openNative(url):
 
+    # TODO: replace with subprocess
     if os.name == "nt":
         os.startfile(url)
     elif sys.platform == "darwin":
@@ -369,7 +365,7 @@ class LocationContext(QObject):
     # then a final signal to indicate the process is complete
     locationChanging = pyqtSignal()
     locationUpdate = pyqtSignal(str)  # directory
-    locationChanged = pyqtSignal(str)  # directory
+    locationChanged = pyqtSignal(str, str)  # directory
 
     #loadContextSuccess = pyqtSignal(str)  # directory
     #loadContextError = pyqtSignal(str, str)  # directory, reason
@@ -387,7 +383,7 @@ class LocationContext(QObject):
         self._dir_contents = []
         self._active_context = None
 
-    def load(self, directory):
+    def load(self, directory, target=None):
 
         self.locationChanging.emit()
 
@@ -412,11 +408,16 @@ class LocationContext(QObject):
 
             self._active_context = ctxt
             self._dir_contents = content
-            self._location = directory
-            self.locationChanged.emit(directory)
+
         except Exception as e:
             print("error changing directory")
             logging.exception(str(e))
+            self._dir_contents = []
+            self._active_context = None
+
+        finally:
+            self._location = directory
+            self.locationChanged.emit(directory, target)
 
     def threaded_load(self, directory):
         """
@@ -464,7 +465,7 @@ class LocationContext(QObject):
         self._access(directory)
 
         self.load(directory)
-        self._location_history.append(directory)
+        self._location_history.append((directory, None))
         self._location_pop_history = []
 
     def pushChildDirectory(self, dirname):
@@ -475,7 +476,7 @@ class LocationContext(QObject):
 
         # note buttons are enabled based on if there is history
         # but a failed load should not effect state
-        self._location_history.append(directory)
+        self._location_history.append((directory, dirname))
         self._location_pop_history = []
 
         self.load(directory)
@@ -490,7 +491,7 @@ class LocationContext(QObject):
 
         # note buttons are enabled based on if there is history
         # but a failed load should not effect state
-        self._location_history.append(directory)
+        self._location_history.append((directory, None))
         self._location_pop_history = []
 
         self.load(directory)
@@ -502,20 +503,21 @@ class LocationContext(QObject):
 
         # note buttons are enabled based on if there is history
         # but a failed load should not effect state
-        directory = self._location_history[-2]
+        directory, _ = self._location_history[-2]
+        _, name = self._location_history[-1]
         self._access(directory)
         self._location_pop_history.append(self._location_history.pop())
 
-        self.load(directory)
+        self.load(directory, name)
 
     def unpopDirectory(self):
 
         if len(self._location_pop_history) < 1:
             return
 
-        directory = self._location_pop_history.pop(0)
+        directory, name = self._location_pop_history.pop(0)
         self._access(directory)
-        self._location_history.append(directory)
+        self._location_history.append((directory, name))
         self.load(directory)
 
     def hasBackHistory(self):
@@ -725,7 +727,7 @@ class AppContext(QObject):
             return None
 
         elif state == sync2.FileState.IGNORE:
-            return self.getImage(":img/fs_same.png")
+            return self.getImage(":img/fs_ignore.png")
 
         elif state == sync2.FileState.PUSH:
             return self.getImage(":/img/fs_push.png")
@@ -1502,7 +1504,7 @@ class FileTableView(TableView):
 
         return item
 
-    def onLocationChanged(self, directory):
+    def onLocationChanged(self, directory, target):
 
         self.setEnabled(True)
 
@@ -1523,9 +1525,24 @@ class FileTableView(TableView):
 
         self.viewport().setFocus(Qt.OtherFocusReason)
 
-        # give keyboard focus to the first item
-        # TODO: location change should emit a row to highlight
-        self.setCurrentIndex(self.model().index(0, 0))
+        if target is not None:
+            current_index = None
+            col = self.baseModel().getColumnIndexByName("filename")
+            for row in range(0, self.model().rowCount(QModelIndex())):
+                index = self.model().index(row, col)
+                row = index.data(RowValueRole)
+                if row[0].name() == target:
+                    current_index = index
+                    break;
+            if current_index is not None:
+                self.setCurrentIndex(current_index)
+                self.scrollToRow(current_index.row())
+            else:
+                self.setCurrentIndex(self.model().index(0, 0))
+        else:
+            # give keyboard focus to the first item
+            # TODO: location change should emit a row to highlight
+            self.setCurrentIndex(self.model().index(0, 0))
 
     def onMouseDoubleClick(self, index):
 
@@ -2283,7 +2300,7 @@ class LocationView(QWidget):
 
         self.setEnabled(False)
 
-    def onLocationChanged(self, directory):
+    def onLocationChanged(self, directory, target):
 
         self.setEnabled(True)
 
@@ -2877,7 +2894,7 @@ class FileEntryInfoDialog(QDialog):
         if state == sync2.FileState.SAME:
             return QPixmap(":/img/fs_same.png")
         if state == sync2.FileState.IGNORE:
-            return QPixmap(":/img/fs_same.png")
+            return QPixmap(":/img/fs_ignore.png")
         elif state == sync2.FileState.PUSH:
             return QPixmap(":/img/fs_push.png")
         elif state == sync2.FileState.PULL:
@@ -3088,7 +3105,7 @@ class LocationPane(Pane):
     def onLocationChanging(self):
         self.timer.start(333)
 
-    def onLocationChanged(self, directory):
+    def onLocationChanged(self, directory, target):
 
         self.timer.stop()
         self.spinner.hide()

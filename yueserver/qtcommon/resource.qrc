@@ -8,5 +8,7 @@
      <file>img/fs_conflict.png</file>
      <file>img/fs_delete.png</file>
      <file>img/fs_delete_remote.png</file>
+     <file>img/fs_ignore.png</file>
+     <file>img/fs_link.png</file>
  </qresource>
  </RCC>
