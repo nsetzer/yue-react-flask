@@ -1524,10 +1524,15 @@ def _sync_file_push(ctxt, attr, ent):
     #    server response should include new version
     #    force flag to disable server side version check
     #    if only perm_ changed, send a metadata update instead
+
+    versions = []
+    for df in [ent.lf, ent.rf, ent.af]:
+        if ent.lf:
+            versions.append(ent.lf['version'])
+        else:
+            versions.append(0)
+
     version = ent.af['version']
-    if ent.lf is not None:
-        version = max(ent.lf['version'], version)
-    ent.af['version'] = version + 1
 
     mtime = ent.af['mtime']
     perm_ = ent.af['permission']
@@ -1553,14 +1558,25 @@ def _sync_file_push(ctxt, attr, ent):
 
     # if public attr set, subsequent call to set a public path if not set
     # public password attr should be be an encrypted string
+
+    # TODO: send version, use response to update parameters from remote
     response = ctxt.client.files_upload(ctxt.root, ent.remote_path, f,
-        mtime=mtime, permission=perm_, crypt=crypt, headers=headers)
+        mtime=mtime, version=version, permission=perm_, crypt=crypt, headers=headers)
 
     if response.status_code == 409:
-        raise SyncUserException("local database out of date. fetch first")
+        msg = "local database out of date. fetch first"
+        msg += "\n%s" % response.text
+        msg += "\n%s" % ent.local_path
+        msg += "\n%s" % ent.remote_path
+        msg += "\n%s" % versions
+        raise SyncUserException(msg)
 
     if response.status_code != 200 and response.status_code != 201:
         raise SyncException("unexpected error: %s" % response.status_code)
+
+    # TODO: af should be update using response json values
+    print("push_file", response.json())
+    ent.af['version'] = version
 
     record = RecordBuilder().local(**ent.af).remote(**ent.af).build()
     record['remote_encryption'] = crypt

@@ -20,7 +20,6 @@
 #   contains a private class as a SignalHandler for private signals (e.g. rename)
 #   takes care of basic file system operations
 # icons
-#   ignore state
 #   shortcut delighter for link file types
 #   favorites icon as path to png
 
@@ -33,6 +32,7 @@ import posixpath
 import shlex
 import subprocess
 import fnmatch
+import traceback
 
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
@@ -1169,7 +1169,12 @@ class FileContextMenu(QMenu):
         if optdialog.exec_() == QDialog.Accepted:
             opts = optdialog.options()
             dialog = SyncProgressDialog(self.ctxt)
-            dialog.initiateSync(paths, push, pull, **opts)
+
+            thread = SyncProgressThread(self.ctxt,
+                paths, push, pull, opts['force'],  opts['recursive'],
+                dialog)
+
+            dialog.setThread(thread)
             dialog.exec_()
             self.ctxt.reload()
 
@@ -2271,7 +2276,8 @@ class LocationView(QWidget):
     def onFetchButtonPressed(self):
 
         dialog = SyncProgressDialog(self.ctxt)
-        dialog.initiateFetch()
+        thread = FetchProgressThread(self.ctxt, dialog)
+        dialog.setThread(thread, "Fetching...")
         dialog.exec_()
         self.ctxt.reload()
 
@@ -2283,7 +2289,11 @@ class LocationView(QWidget):
         if optdialog.exec_() == QDialog.Accepted:
             opts = optdialog.options()
             dialog = SyncProgressDialog(self.ctxt)
-            dialog.initiateSync([dent], push, pull, **opts)
+            thread = SyncProgressThread(
+                self.ctxt,
+                [dent], push, pull, opts['force'],  opts['recursive'],
+                dialog)
+            dialog.setThread(thread, "Syncing...")
             dialog.exec_()
             self.ctxt.reload()
 
@@ -2317,7 +2327,7 @@ class ProgressThread(QThread):
 
     processingFile = pyqtSignal(str)  # path
     fileStatus = pyqtSignal(object)  # list of status result
-    getEncryptionPassword = pyqtSignal(str)
+    getEncryptionPassword = pyqtSignal(str)  # kind
 
     def __init__(self, parent=None):
         super(ProgressThread, self).__init__(parent)
@@ -2340,11 +2350,11 @@ class ProgressThread(QThread):
 
         this blocks the calling thread while the ui is operated
         """
-        self._password = None
-        self.getEncryptionPassword.emit(kind)
 
         self._lk_password.lock()
         try:
+            self._password = None
+            self.getEncryptionPassword.emit(kind)
             self._cv_password.wait(self._lk_password)
         finally:
             self._lk_password.unlock()
@@ -2369,13 +2379,16 @@ class ProgressThread(QThread):
 
             self.processingFile.emit(path)
 
-    def sendStatus(self, status):
+    def sendStatus(self, status, force=False):
 
-        self._results.append(status)
+        if isinstance(status, list):
+            self._results.extend(status)
+        else:
+            self._results.append(status)
 
         now = time.time()
 
-        if self._tlimit_2 + .5 < now:
+        if force or self._tlimit_2 + .5 < now:
             self._tlimit_2 = now
 
             self.fileStatus.emit(self._results)
@@ -2488,6 +2501,8 @@ class SyncProgressThread(ProgressThread):
 
             except Exception as e:
                 # TODO: reraise in main thread
+                lines = traceback.format_exception(*sys.exc_info())
+                self.sendStatus(lines, True)
                 logging.exception(e)
                 break
 
@@ -2576,32 +2591,14 @@ class SyncProgressDialog(QDialog):
 
         self.thread = None
 
-    def initiateFetch(self):
+    def setThread(self, thread, action="Running..."):
 
-        if self._run_fetch or self._run_sync:
+        if self.thread is not None:
             return
 
-        self._run_fetch = True
+        self.lbl_action.setText(action)
 
-        self.lbl_action.setText("Fetching...")
-
-        self.thread = FetchProgressThread(self.ctxt, self)
-
-        self.thread.processingFile.connect(lambda path: self.lbl_status.setText(path))
-        self.thread.fileStatus.connect(lambda paths: self.txt_status.append('\n'.join(paths)))
-        self.thread.finished.connect(self.onThreadFinished)
-
-    def initiateSync(self, paths, push, pull, force, recursive):
-
-        if self._run_fetch or self._run_sync:
-            return
-
-        self._run_sync = (paths, push, pull, force, recursive)
-
-        self.lbl_action.setText("Syncing...")
-
-        self.thread = SyncProgressThread(self.ctxt,
-            paths, push, pull, force, recursive, self)
+        self.thread = thread
 
         self.thread.getEncryptionPassword.connect(self.onGetEncryptionPassword)
         self.thread.processingFile.connect(lambda path: self.lbl_status.setText(path))

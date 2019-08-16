@@ -352,12 +352,13 @@ class FileSysService(object):
         except StorageNotFoundException as e:
             pass
 
-        if info is not None and info.version > 0 and version is not None:
-            if version < info.version:
-                raise FileSysServiceException("Version out of date", 409)
-
         if version == 0:
             version = None # + 1 handled by dao layer
+
+        elif info is not None and info.version > 0 and version is not None:
+            if version < info.version:
+                raise FileSysServiceException(
+                    "Version out of date (%d < %d)" % (version, info.version), 409)
 
         if storage_path is None:
             storage_path = self._getNewStoragePath(user, fs_name, path)
@@ -394,6 +395,8 @@ class FileSysService(object):
         # existing thumbnails need to be recomputed
         self.storageDao.previewInvalidate(user['id'], file_id)
 
+        # TODO: is it possible to return the new version ?
+        #       it is either info.version+1 or version or 1
         file_info = dict(
             size=size,
             mtime=mtime,
