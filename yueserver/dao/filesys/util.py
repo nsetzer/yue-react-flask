@@ -41,7 +41,6 @@ class FileRecord(object):
     def __repr__(self):
         return "FileRecord<%s@%s>" % (self.name, self.storage_path)
 
-
 def sh_escape(args):
     """
     print an argument list so that it can be copy and pasted to a terminal

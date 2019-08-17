@@ -2,6 +2,7 @@
 
 # remove
 # move/cut/copy/paste
+#   samefile? keep both? replace? replace all?
 # drag and drop mime types
 # directory load robustness
 #   gracefully handle errors during load()
@@ -1474,18 +1475,25 @@ class FileContextMenu(QMenu):
         ico = self.style().standardIcon(QStyle.SP_BrowserReload)
         act = self.addAction(ico, "Refresh", lambda: self.ctxt.reload())
 
-        act = self.addAction("Cut")
-        act = self.addAction("Copy")
-        act = self.addAction("Paste")
+        act = self.addAction("Copy", lambda: self._action_copy(ents))
+        act = self.addAction("Cut", lambda: self._action_cut(ents))
+
+        act = self.addAction("Paste", self._action_paste)
+        clipboard = QGuiApplication.clipboard();
+        mimeData = clipboard.mimeData()
+        print("paste enabled", mimeData.hasUrls())
+        # act.setEnabled(mimeData.hasUrls())
 
         self.addSeparator()
 
-        if self.ctxt.hasActiveContext():
-            menu = self.addMenu("Delete")
-            act = menu.addAction("Delete Local")
-            act = menu.addAction("Delete Remote")
-        else:
-            act = self.addAction("Delete")
+        #if self.ctxt.hasActiveContext():
+        #    menu = self.addMenu("Delete")
+        #    act = menu.addAction("Delete Local")
+        #    act = menu.addAction("Delete Remote")
+        #else:
+        #    act = self.addAction("Delete")
+
+        act = self.addAction("Delete", lambda: self._action_remove(ents))
 
     def _action_template(self):
         pass
@@ -1569,6 +1577,90 @@ class FileContextMenu(QMenu):
 
         self.cfg.showHiddenFiles = not self.cfg.showHiddenFiles
         self.showHiddenFiles.emit(self.cfg.showHiddenFiles)
+
+    def _action_copy(self, ents):
+
+        urls = []
+        for ent in ents:
+            url = ent.local_url()
+            if url:
+                urls.append(QUrl(url))
+
+        if urls:
+
+            mimeData = QMimeData()
+
+            # windows explorer hint for copy
+            mimeData.setData("Preferred DropEffect", b'\x05\x00\x00\x00')
+            mimeData.setUrls(urls)
+
+            clipboard = QGuiApplication.clipboard();
+            clipboard.setMimeData(mimeData)
+
+    def _action_cut(self, ents):
+
+        urls = []
+        for ent in ents:
+            url = ent.local_url()
+            if url:
+                urls.append(QUrl(url))
+
+        if urls:
+
+            mimeData = QMimeData()
+
+            # windows explorer hint for move (cut)
+            mimeData.setData("Preferred DropEffect", b'\x02\x00\x00\x00')
+            mimeData.setUrls(urls)
+
+            clipboard = QGuiApplication.clipboard();
+            clipboard.setMimeData(mimeData)
+
+    def _action_paste(self):
+
+        clipboard = QGuiApplication.clipboard();
+        mimeData = clipboard.mimeData()
+
+        # print(mimeData.formats())
+
+        data = mimeData.data("Preferred DropEffect")
+
+        dropAction = Qt.IgnoreAction
+        if data == b'\x02\x00\x00\x00':
+            dropAction = Qt.MoveAction
+        elif data == b'\x05\x00\x00\x00':
+            dropAction = Qt.CopyAction
+        else:
+            print("unknown action:", data)
+            return
+
+        if mimeData.hasUrls():
+            urls = []
+            for url in mimeData.urls():
+                urls.append(url.toLocalFile())
+
+            dialog = SyncProgressDialog(self.ctxt)
+            thread = CopyProgressThread(self.ctxt.fs, urls, self.ctxt.currentLocation(), dropAction, self)
+            dialog.setThread(thread)
+            dialog.exec_()
+
+    def _action_remove(self, ents):
+
+        urls = []
+        for ent in ents:
+            if isinstance(ent, sync2.DirEnt):
+                path = ent.local_base
+            else:
+                path = ent.local_path
+
+            if path:
+                urls.append(path)
+
+        if urls:
+            dialog = SyncProgressDialog(self.ctxt)
+            thread = RemoveProgressThread(self.ctxt.fs, urls, self)
+            dialog.setThread(thread)
+            dialog.exec_()
 
 class FileTableRowItem(object):
 
@@ -1664,6 +1756,10 @@ class FileTableView(TableView):
     createEmptyFile = pyqtSignal(QModelIndex, object)
     renameDirectory = pyqtSignal(QModelIndex, object)
     renameFile = pyqtSignal(QModelIndex, object)
+
+    copyEntries = pyqtSignal(list)
+    moveEntries = pyqtSignal(list)
+    pasteEntries = pyqtSignal()
 
     def __init__(self, ctxt, cfg, parent=None):
         super(FileTableView, self).__init__(parent)
@@ -1996,6 +2092,25 @@ class FileTableView(TableView):
 
         self.ctxt.unpopDirectory()
 
+    def onDragBegin(self):
+
+        selection = self.getSelection()
+
+        urls = []
+        for row in selection:
+            ent = row[FileTableRowItem.COL_ENT]
+            url = ent.local_url()
+            if url:
+                urls.append(QUrl(url))
+
+        if urls:
+            drag = QDrag(self)
+            mimeData = QMimeData()
+            mimeData.setUrls(urls)
+            drag.setMimeData(mimeData)
+            action = drag.exec_(Qt.CopyAction|Qt.MoveAction|Qt.LinkAction, Qt.MoveAction)
+            print("drag exec action chosen is", action)
+
     def keyPressEvent(self, event):
         # print(event.key(), self.state(), QTableView.EditingState)
 
@@ -2023,7 +2138,22 @@ class FileTableView(TableView):
             super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event):
-        pass
+
+        if event.modifiers()&Qt.ControlModifier:
+            if event.key() == Qt.Key_V:
+                self.pasteEntries.emit()
+                event.accept()
+                return
+            if event.key() == Qt.Key_C:
+                self.copyEntries.emit(self.getSelection())
+                event.accept()
+                return
+            if event.key() == Qt.Key_X:
+                self.moveEntries.emit(self.getSelection())
+                event.accept()
+                return
+
+        super().keyReleaseEvent(event)
 
     def onBeginCreateDirectory(self):
         """
@@ -2711,6 +2841,10 @@ class ProgressThread(QThread):
     fileStatus = pyqtSignal(object)  # list of status result
     getEncryptionPassword = pyqtSignal(str)  # kind
 
+    # show a message box to the user
+    # (title, text, icon, choices)
+    getChoice = pyqtSignal(str, str, object, list)
+
     def __init__(self, parent=None):
         super(ProgressThread, self).__init__(parent)
 
@@ -2721,8 +2855,19 @@ class ProgressThread(QThread):
         self._results = []
 
         self._password = None
+        self._userChoiceIndex = None
         self._lk_password = QMutex()
         self._cv_password = QWaitCondition()
+
+    def run(self):
+
+        try:
+            self.main()
+        except Exception as e:
+            logging.exception(e)
+
+    def main(self):
+        pass
 
     def getEncryptionPasswordWaiter(self, kind):
         """
@@ -2748,6 +2893,35 @@ class ProgressThread(QThread):
         self._lk_password.lock()
         try:
             self._password = password
+            self._cv_password.wakeAll()
+        finally:
+            self._lk_password.unlock()
+
+    def getUserChoice(self, title, text, icon, choices):
+        # icons:
+        #     QMessageBox.NoIcon
+        #     QMessageBox.Question
+        #     QMessageBox.Information
+        #     QMessageBox.Warning
+        #     QMessageBox.Critical
+        # choices: a list of strings for button text
+        #
+        # returns: index of the button clicked or None on error
+
+        self._lk_password.lock()
+        try:
+            self._userChoiceIndex = None
+            self.getChoice.emit(title, text, icon, choices)
+            self._cv_password.wait(self._lk_password)
+        finally:
+            self._lk_password.unlock()
+
+        return self._userChoiceIndex
+
+    def setUserChoice(self, choiceIndex):
+        self._lk_password.lock()
+        try:
+            self._userChoiceIndex = choiceIndex
             self._cv_password.wakeAll()
         finally:
             self._lk_password.unlock()
@@ -2783,7 +2957,7 @@ class FetchProgressThread(ProgressThread):
 
         self.ctxt = ctxt
 
-    def run(self):
+    def main(self):
 
         # construct a new sync context for this thread
         ctxt = self.ctxt.activeContext().clone()
@@ -2837,7 +3011,7 @@ class SyncProgressThread(ProgressThread):
         self.force = force
         self.recursive = recursive
 
-    def run(self):
+    def main(self):
 
         ctxt = self.ctxt.activeContext().clone()
         ctxt.getPassword = self.getEncryptionPasswordWaiter
@@ -2894,6 +3068,78 @@ class SyncProgressThread(ProgressThread):
         self.fileStatus.emit(self._results)
 
         ctxt.close()
+
+class CopyProgressThread(ProgressThread):
+
+    def __init__(self, fs, urls, dst, action, parent=None):
+        super(CopyProgressThread, self).__init__(parent)
+
+        self.fs = fs
+        self.urls = urls
+        self.dst = dst
+        self.action = action
+
+    def main(self):
+
+        #index = self.getUserChoice("Text", "click a button",
+        #    QMessageBox.Information,
+        #    ["Skip", "Replace", "Replace All", "Keep", "Keep All"])
+        #print("user chose", index)
+
+        discoveredSize = 0
+        transferedSize = 0
+
+        if self.action == Qt.MoveAction:
+            generator = self.fs.move_multiple(self.urls, self.dst)
+        else:
+            generator = self.fs.copy_multiple(self.urls, self.dst)
+
+        while True:
+            try:
+                kind, src, dst, size = next(generator)
+
+                discoveredSize += size
+                self.sendUpdate("%d/%d" % (transferedSize, discoveredSize))
+                self.sendStatus("src: %s" % src)
+                self.sendStatus("dst: %s" % dst)
+            except StopIteration:
+                break
+
+        self.sendStatus("done", force=True)
+
+class RemoveProgressThread(ProgressThread):
+
+    def __init__(self, fs, urls, parent=None):
+        super(RemoveProgressThread, self).__init__(parent)
+
+        self.fs = fs
+        self.urls = urls
+
+    def main(self):
+
+        #index = self.getUserChoice("Text", "click a button",
+        #    QMessageBox.Information,
+        #    ["Skip", "Replace", "Replace All", "Keep", "Keep All"])
+        #print("user chose", index)
+
+        discoveredSize = 0
+        transferedSize = 0
+        generator = self.fs.remove_multiple(self.urls)
+
+        for url in self.urls:
+            self.sendStatus(url)
+
+        while True:
+            try:
+                kind, src, size = next(generator)
+
+                discoveredSize += size
+                self.sendUpdate("%d/%d" % (transferedSize, discoveredSize))
+                self.sendStatus("%d src: %s" % (kind, src))
+            except StopIteration:
+                break
+
+        self.sendStatus("done", force=True)
 
 class SyncOptionsDialog(QDialog):
 
@@ -2973,6 +3219,10 @@ class SyncProgressDialog(QDialog):
 
         self.thread = None
 
+        self._resizeTimer = QTimer()
+        self._resizeTimer.setSingleShot(True)
+        self._resizeTimer.timeout.connect(self.onResizeTimeout)
+
     def setThread(self, thread, action="Running..."):
 
         if self.thread is not None:
@@ -2983,6 +3233,7 @@ class SyncProgressDialog(QDialog):
         self.thread = thread
 
         self.thread.getEncryptionPassword.connect(self.onGetEncryptionPassword)
+        self.thread.getChoice.connect(self.onGetUserChoice)
         self.thread.processingFile.connect(lambda path: self.lbl_status.setText(path))
         self.thread.fileStatus.connect(lambda paths: self.txt_status.append('\n'.join(paths)))
         self.thread.finished.connect(self.onThreadFinished)
@@ -2998,6 +3249,33 @@ class SyncProgressDialog(QDialog):
             # set the password, or None if the user canceled
             # wake up the thread that was waiting
             self.thread.setEncryptionPassword(password)
+
+    def onGetUserChoice(self, title, text, icon, choices):
+
+        index = None
+        try:
+            box = QMessageBox(self)
+
+            box.setWindowTitle(title)
+            box.setText(text)
+            box.setIcon(icon)
+
+            # create buttons for all choices
+            btns = []
+            for choice in choices:
+                btns.append(box.addButton(choice, QMessageBox.AcceptRole))
+            if btns:
+                box.setDefaultButton(btns[-1])
+
+            box.exec_()
+
+            # figure out which button index was clicked
+            for i, btn in enumerate(btns):
+                if btn == box.clickedButton():
+                    index = i
+                    break
+        finally:
+            self.thread.setUserChoice(index)
 
     def onThreadFinished(self):
 
@@ -3033,6 +3311,15 @@ class SyncProgressDialog(QDialog):
     def show(self):
         self.thread.start()
         super().show()
+
+    def resizeEvent(self, event):
+        self._resizeTimer.start(500)
+        self.txt_status.hide()
+        super().resizeEvent(event)
+
+    def onResizeTimeout(self):
+        self.txt_status.show()
+
 
 class FileEntryInfoDialog(QDialog):
 
@@ -3414,6 +3701,8 @@ class LocationPane(Pane):
         self.ctxt = LocationContext(self.appCtxt)
         self.cfg = cfg
 
+        self.setAcceptDrops(True)
+
         self.view_location = LocationView(self.ctxt, self)
         self.table_file = FileTableView(self.ctxt, self.cfg, self)
 
@@ -3446,6 +3735,10 @@ class LocationPane(Pane):
 
         self.table_file.triggerSave.connect(self.onTriggerSave)
         self.table_file.triggerRestore.connect(self.onTriggerRestore)
+
+        self.table_file.copyEntries.connect(self.onCopyEntries)
+        self.table_file.moveEntries.connect(self.onMoveEntries)
+        self.table_file.pasteEntries.connect(self.onPasteEntries)
 
         self.ctxt.locationChanging.connect(self.onLocationChanging)
         self.ctxt.locationChanged.connect(self.onLocationChanged)
@@ -3526,6 +3819,102 @@ class LocationPane(Pane):
     def onFirstShow(self):
         # on first enter
         QTimer.singleShot(0, self.resetTableView)
+
+    def dragEnterEvent(self, event):
+
+        if event.source() is self.table_file:
+            event.ignore()
+            return
+
+        if event.mimeData().hasUrls():
+            if event.possibleActions() & Qt.MoveAction:
+                event.setDropAction(Qt.MoveAction)
+                event.accept()
+            else:
+                event.acceptProposedAction()
+
+    def dropEvent(self, event):
+
+        print(event.dropAction())
+
+        if not (event.dropAction() & (Qt.MoveAction|Qt.CopyAction)):
+            event.ignore()
+
+        if event.mimeData().hasUrls():
+
+            urls = []
+            for url in event.mimeData().urls():
+                urls.append(url.toLocalFile())
+            event.accept()
+
+            print("dropped", urls)
+
+    def onCopyEntries(self, entries):
+
+        urls = []
+        for item in entries:
+            url = item[FileTableRowItem.COL_ENT].local_url()
+            if url:
+                urls.append(QUrl(url))
+
+        print("copy", urls)
+        if urls:
+
+            mimeData = QMimeData()
+
+            # windows explorer hint for copy
+            mimeData.setData("Preferred DropEffect", b'\x05\x00\x00\x00')
+            mimeData.setUrls(urls)
+
+            clipboard = QGuiApplication.clipboard();
+            clipboard.setMimeData(mimeData)
+
+    def onMoveEntries(self, entries):
+
+        urls = []
+        for ent in entries:
+            url = ent.local_url()
+            if url:
+                url.append(QUrl(url))
+
+        if urls:
+
+            mimeData = QMimeData()
+
+            # windows explorer hint for move (cut)
+            mimeData.setData("Preferred DropEffect", b'\x02\x00\x00\x00')
+            mimeData.setUrls(urls)
+
+            clipboard = QGuiApplication.clipboard();
+            clipboard.setMimeData(mimeData)
+
+    def onPasteEntries(self):
+
+        clipboard = QGuiApplication.clipboard();
+        mimeData = clipboard.mimeData()
+
+        # print(mimeData.formats())
+
+        data = mimeData.data("Preferred DropEffect")
+
+        dropAction = Qt.IgnoreAction
+        if data == b'\x02\x00\x00\x00':
+            dropAction = Qt.MoveAction
+        elif data == b'\x05\x00\x00\x00':
+            dropAction = Qt.CopyAction
+        else:
+            print("unknown action:", data)
+            return
+
+        if mimeData.hasUrls():
+            urls = []
+            for url in mimeData.urls():
+                urls.append(url.toLocalFile())
+
+            dialog = SyncProgressDialog(self.ctxt)
+            thread = CopyProgressThread(self.ctxt.fs, urls, self.ctxt.currentLocation(), dropAction, self)
+            dialog.setThread(thread)
+            dialog.exec_()
 
 class DoubleLocationPane(QWidget):
 

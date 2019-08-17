@@ -1,4 +1,4 @@
-
+#! cd ../../.. && python3 -m yueserver.dao.filesys.filesys
 """
 An Abstract File System API
 
@@ -19,10 +19,18 @@ import datetime
 import time
 import subprocess
 import logging
+import posixpath
 from ..util import epoch_time
 from stat import S_ISDIR, S_ISREG, S_IRGRP, S_ISLNK
 
 from .util import sh_escape, AbstractFileSystem, FileRecord
+
+class FileSystemError(Exception):
+    pass
+
+class FileSystemExistsError(FileSystemError):
+    pass
+
 
 class LocalFileSystemImpl(AbstractFileSystem):
     """docstring for LocalFileSystemImpl"""
@@ -99,6 +107,18 @@ class LocalFileSystemImpl(AbstractFileSystem):
         dir, _ = self.split(path)
         if len(self.listdir(dir)) == 0:
             os.rmdir(dir)
+
+    def samedrive(self, patha, pathb):
+
+        if os.name == 'nt':
+            # todo: support for UNC paths
+            sta = patha[:2].upper()
+            stb = pathb[:2].upper()
+            return sta == stb
+        else:
+            sta = os.stat(patha).st_dev
+            stb = os.stat(pathb).st_dev
+            return sta == stb
 
 class MemoryFileSystemImpl(AbstractFileSystem):
     """An In-Memory filesystem
@@ -206,6 +226,12 @@ class FileSystem(object):
     """
 
     # by default s3 paths should fail, until registed
+
+    FS_UNK = 0
+    FS_REG = 1
+    FS_DIR = 2
+    FS_LNK = 3
+
     default_fs = {"s3://": None}
 
     def __init__(self):
@@ -243,3 +269,123 @@ class FileSystem(object):
     def _mem(self):
         return self._fs[MemoryFileSystemImpl.scheme]._mem_store
 
+    def _copy_impl(self, src, dst_dir, move, followLinks):
+
+        """
+        yield pairs of (src,dst) names moving src into dst
+
+        a simple move across file systems may result in a complicated copy
+        """
+
+        _, name = self.split(src)
+        tgt = self.join(dst_dir, name)
+
+        if self.exists(tgt) and self.samefile(src, tgt):
+            pass
+        elif not self.isdir(src):
+            rec = self.file_info(src)
+            yield (FileSystem.FS_REG, src, tgt, rec.size)
+        elif move and self.samedrive(src, dst_dir):
+            # if just moving, between the same drive
+            # a simple rename should suffice
+            # if the move fails, the user can always just copy files instead
+            yield (FileSystem.FS_REG, src, tgt, 0)
+        else:
+
+            dirs = [(src, tgt)]
+            while len(dirs) > 0:
+                dir, dst = dirs.pop(0)
+
+                yield (FileSystem.FS_DIR, dir, dst, 0)
+
+                for rec in self.scandir(dir):
+                    path = self.join(dir, rec.name)
+                    tgt = self.join(dst, rec.name)
+                    # todo: handle links, etc
+                    if rec.isDir:
+                        dirs.append((path, tgt))
+                    else:
+                        yield (FileSystem.FS_REG, path, tgt, rec.size)
+
+    def copy(self, src, dst_dir):
+        return self._copy_impl(src, dst_dir, False, False)
+
+    def copy_multiple(self, urls, dst_dir):
+
+        for url in urls:
+            yield from self.copy(url, dst_dir)
+
+    def move(self, src, dst_dir):
+        return self._copy_impl(src, dst_dir, True, False)
+
+    def move_multiple(self, urls, dst_dir):
+
+        for url in urls:
+            yield from self.move(url, dst_dir)
+
+    def _remove_recursive(self, dir):
+
+        """
+        yield paths from a directory in an order such
+        that the content is returned first followed by
+        the directory, so that directories may be
+        deleted as they are emptied
+
+        """
+        for rec in self.scandir(dir):
+            path = self.join(dir, rec.name)
+            try:
+                rec = self.file_info(path)
+                # todo: handle links, etc
+                if rec.isDir:
+                    yield from self._remove_recursive(path)
+                else:
+                    yield (FileSystem.FS_REG, path, rec.size)
+
+            except FileNotFoundError as e:
+                yield (FileSystem.FS_UNK, src, 0)
+                continue
+
+        yield (FileSystem.FS_DIR, dir, 0)
+
+    def remove(self, src):
+
+        """
+        """
+        _, name = self.split(src)
+        tgt = self.join(src, name)
+
+        if not self.isdir(src):
+            try:
+                rec = self.file_info(src)
+                yield (FileSystem.FS_REG, src, rec.size)
+            except FileNotFoundError as e:
+                yield (FileSystem.FS_UNK, src, 0)
+
+        else:
+            yield from self._remove_recursive(src)
+
+    def remove_multiple(self, urls):
+
+        for url in urls:
+            yield from self.remove(url)
+
+
+
+
+
+def main():
+
+    fs = FileSystem()
+
+    for kind, src, dst, size in fs.copy(r"D:\Storage\secure", "C:\\followme"):
+        print("%d % 8d %s => %s" % (kind, size, src, dst))
+    print("--")
+    for kind, src, dst, size in fs.move(r"D:\Storage\secure", "D:\\followme"):
+        print("%d % 8d %s => %s" % (kind, size, src, dst))
+    print("--")
+    for kind, src, dst, size in fs.copy(r"D:\Storage\secure\.yueattr", "C:\\followme"):
+        print("%d % 8d %s => %s" % (kind, size, src, dst))
+
+if __name__ == '__main__':
+    main()

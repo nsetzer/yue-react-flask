@@ -859,6 +859,18 @@ class AbstractTableView(QTableView):
 
         super(AbstractTableView, self).mousePressEvent(event)
 
+        self._mouse_position_start = (event.x(), event.y())
+
+    def mouseMoveEvent(self, event):
+        self._mouse_position = (event.x(), event.y())
+
+        dx = event.x() - self._mouse_position_start[0]
+        dy = event.y() - self._mouse_position_start[1]
+        distance = (dx*dx + dy*dy)**.5
+
+        if distance > self.verticalHeader().defaultSectionSize():
+            self.onDragBegin()
+
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.RightButton:
             self.MouseReleaseRight.emit(event)
@@ -949,6 +961,12 @@ class AbstractTableView(QTableView):
         activated when the user clicks a header
         """
         print("AbstractTableView: Header Clicked %d" % idx)
+
+    # -----------------------------------------------------------------------
+    # drag and drop operations
+
+    def onDragBegin(self):
+        pass
 
     # -----------------------------------------------------------------------
     # helper functions

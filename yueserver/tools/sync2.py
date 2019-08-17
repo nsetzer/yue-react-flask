@@ -594,6 +594,11 @@ class DirEnt(object):
         return "<DirEnt(%s,%s,%s)>" % (
             self.remote_base, self.local_base, self._state)
 
+    def local_url(self):
+        if self.local_base:
+            return "file:///%s" % self.local_base
+        return None
+
 class FileEnt(object):
     def __init__(self, remote_path, local_path, lf, rf, af):
         super(FileEnt, self).__init__()
@@ -806,6 +811,11 @@ class FileEnt(object):
 
     def local_directory(self):
         return os.path.split(self.local_path)[0]
+
+    def local_url(self):
+        if self.local_path:
+            return "file:///%s" % self.local_path
+        return None
 
 class DirAttr(object):
     """collection of meta directory attributes
