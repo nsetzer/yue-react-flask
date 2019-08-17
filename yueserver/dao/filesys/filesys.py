@@ -20,7 +20,7 @@ import time
 import subprocess
 import logging
 from ..util import epoch_time
-from stat import S_ISDIR, S_ISREG, S_IRGRP
+from stat import S_ISDIR, S_ISREG, S_IRGRP, S_ISLNK
 
 from .util import sh_escape, AbstractFileSystem, FileRecord
 
@@ -77,6 +77,13 @@ class LocalFileSystemImpl(AbstractFileSystem):
         # TODO check if current user has read access
         #if not (st.st_mode & S_IRGRP):
         #    raise FileNotFoundError("grp access: %s" % path)
+
+        # todo fix the mistake of FileRecord
+        # replace isDir with an enum:
+        #   FS_UNK=0, FS_DIR=1, FS_REG=2
+        #   isLink = true|false
+        # use lstat, and if it is a link, use os.stat
+        # to figure out the kind of link
 
         is_dir = bool(S_ISDIR(st.st_mode))
 

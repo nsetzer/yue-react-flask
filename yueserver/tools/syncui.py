@@ -23,12 +23,10 @@
 #   shortcut delighter for link file types
 #   favorites icon as path to png
 # remove debug colons from file state
-# text edit delegate which accepts home/end keys correctly on all plats
-#   including a custom line edit for location and filter
 # filter timestamo support for hours minutes
 #     yyyy/mm/dd hh:mm
 #     hh:mm
-
+# info dialog for directories
 
 import os
 import sys
@@ -40,6 +38,7 @@ import shlex
 import subprocess
 import fnmatch
 import traceback
+from datetime import datetime
 
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
@@ -887,12 +886,6 @@ class OverlaySpinner(QWidget):
 
 class Pane(QWidget):
 
-    FILES1 = 1
-    FILES2 = 2
-    HOST   = 3
-    statusUpdate = pyqtSignal(int, str)
-    previewEntry = pyqtSignal(object)
-
     def __init__(self, parent):
         super(Pane, self).__init__(parent)
         self.vbox = QVBoxLayout(self)
@@ -986,6 +979,169 @@ class TabWidget(QTabWidget):
             w.onEnter();
 
         self.previousTab = w
+
+class LineEdit(QLineEdit):
+    def __init__(self, parent=None):
+        super(LineEdit, self).__init__(parent)
+
+    def keyPressEvent(self, event):
+
+        if event.type() == QEvent.KeyPress:
+            if event.key() == Qt.Key_Home:
+                self.setCursorPosition(0)
+                event.accept()
+                return
+
+            if event.key() == Qt.Key_End:
+                self.setCursorPosition(len(self.text()))
+                event.accept()
+                return
+
+        return super().keyPressEvent(event)
+
+class Calculator(QWidget):
+    def __init__(self, parent=None):
+        super(Calculator, self).__init__(parent)
+
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(16, 0, 16, 0)
+        self.edit_text = LineEdit(self)
+        self.lbl_result = QLabel(self)
+        self.lbl_result.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.lbl_result.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        self.lbl_result.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.lbl_result.setFrameStyle(QFrame.Panel | QFrame.Sunken)
+
+        self.edit_text.editingFinished.connect(self.evaluate)
+        self.layout.addWidget(self.edit_text)
+        self.layout.addWidget(self.lbl_result)
+
+        self._initvars()
+
+    def _initvars(self):
+
+        self.globals = {"__builtins__":None}
+        self.locals = {}
+        for key in dir(math):
+            if not key.startswith("_"):
+                self.locals[key] = getattr(math,key);
+        self.locals['ans'] = 0
+        self.locals['abs'] = abs
+        self.locals['ascii'] = ascii
+        self.locals['bin'] = bin
+        self.locals['bool'] = bool
+        self.locals['chr'] = chr
+        self.locals['complex'] = complex
+        self.locals['divmod'] = divmod
+        self.locals['float'] = float
+        self.locals['hex'] = hex
+        self.locals['int'] = int
+        self.locals['max'] = max
+        self.locals['min'] = min
+        self.locals['oct'] = oct
+        self.locals['ord'] = ord
+        self.locals['pow'] = pow
+        self.locals['round'] = round
+        self.locals['str'] = str
+        self.locals['sum'] = sum
+        self.locals['fold'] = lambda initial,seq: sum(seq,initial)
+        self.locals['sign'] = lambda x: 1 if x>=0 else -1
+        self.locals['j'] = complex(0,1)
+        #print(' '.join(list(self.locals.keys())))
+
+    def evaluate(self):
+
+        text= self.edit_text.text().strip()
+        if not text:
+            return
+
+        try:
+            result = eval(text,self.globals,self.locals)
+            self.lbl_result.setText(str(result))
+            self.locals["ans"] = result
+        except Exception as e:
+            self.lbl_result.setText(str(e))
+
+class Calendar(QLabel):
+    def __init__(self, parent=None):
+        super(Calendar, self).__init__(parent)
+
+        self.timer = QTimer(self)
+        self.timer.setInterval(1000)
+        self.timer.setSingleShot(False)
+        self.timer.timeout.connect(self.updateDate)
+        self.timer.start()
+
+        fm = QFontMetrics(self.font())
+        self._width = fm.width("X") * 14
+        self._size = QSize(self._width, -1)
+
+    def sizeHint(self):
+        return self._size
+
+    def updateDate(self):
+        date = datetime.now().strftime("%a %Y/%m/%d")
+        self.setText(date)
+
+    def setEnabled(self, enable):
+
+        if enable:
+            self.timer.start()
+        else:
+            self.timer.stop()
+
+        super().setEnabled(enable)
+
+class Clock(QWidget):
+    """docstring for Clock"""
+    def __init__(self, parent=None):
+        super(Clock, self).__init__(parent)
+
+        self.timer = QTimer(self)
+        self.timer.setInterval(333)
+        self.timer.setSingleShot(False)
+        self.timer.timeout.connect(self.updateTime)
+        self.timer.start()
+
+        self.output1 = QLabel(self)
+        self.output1.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.output1.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Maximum)
+        self.output1.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        #self.output1.setFrameStyle(QFrame.Panel | QFrame.Raised)
+
+        self.output2 = QLabel(self)
+        self.output2.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.output2.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Maximum)
+        self.output2.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        #self.output2.setFrameStyle(QFrame.Panel | QFrame.Raised)
+
+        self.hbox = QHBoxLayout(self)
+        self.hbox.addWidget(self.output1)
+        self.hbox.addWidget(self.output2)
+        self.hbox.setContentsMargins(16, 0, 16, 0)
+
+        fm = QFontMetrics(self.font())
+        self._width = fm.width("X") * 10
+        margin = self.hbox.contentsMargins().left() + \
+                 self.hbox.contentsMargins().right()
+        self._size = QSize(margin + self._width * 2, -1)
+
+    def sizeHint(self):
+        return self._size
+
+    def updateTime(self):
+
+        self.output1.setText(datetime.now().strftime("%H:%M:%S"))
+        self.output2.setText(datetime.utcnow().strftime("%H:%M:%S"))
+
+    def setEnabled(self, enable):
+
+        if enable:
+            self.timer.start()
+        else:
+            self.timer.stop()
+
+        super().setEnabled(enable)
 
 class GlobStringSearchRule(ColumnSearchRule):
 
@@ -2375,9 +2531,10 @@ class LocationView(QWidget):
         self.hbox2.setContentsMargins(0, 0, 0, 0)
 
         # https://joekuan.wordpress.com/2015/09/23/list-of-qt-icons/
-        self.edit_location = QLineEdit(self)
-        self.edit_filter = QLineEdit(self)
-        self.edit_filter.setFixedWidth(100)
+        self.edit_location = LineEdit(self)
+        self.edit_filter = LineEdit(self)
+        self.edit_filter.setMaximumWidth(150)
+        self.edit_filter.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         self.edit_filter.setPlaceholderText("Filter")
 
         self.btn_back = QToolButton(self)
@@ -2532,6 +2689,10 @@ class LocationView(QWidget):
         self.setEnabled(False)
 
     def onLocationChanged(self, directory, target):
+
+
+        print("min", self.minimumSize(), self.maximumSize())
+        print(self.hbox1.sizeHint())
 
         self.setEnabled(True)
 
@@ -2986,7 +3147,6 @@ class FileEntryInfoDialog(QDialog):
         self.lbl_l_permission.setFont(font)
         self.lbl_r_permission.setFont(font)
 
-
         row = 0
 
         row += 1
@@ -3188,8 +3348,11 @@ class FavoritesPane(Pane):
         self.table_favorites = FavoritesListView(cfg, self)
         self.view_image = ImageView(self)
 
+        self.calculator = Calculator(self)
+
         self.addWidget(self.table_favorites)
         self.addWidget(self.view_image)
+        self.addWidget(self.calculator)
 
         self._hidden_sections = set()
 
@@ -3241,6 +3404,7 @@ class FavoritesPane(Pane):
 class LocationPane(Pane):
 
     locationChanged = pyqtSignal(Pane, str)
+    previewEntry = pyqtSignal(object)
     splitInterface = pyqtSignal()
 
     def __init__(self, appCtxt, cfg, parent=None):
@@ -3260,8 +3424,22 @@ class LocationPane(Pane):
         self.timer.setSingleShot(True)
         self.timer.timeout.connect(lambda: self.spinner.show())
 
+        self.lbl_status_1 = QLabel(self)
+        self.lbl_status_2 = QLabel(self)
+        self.lbl_status_3 = QLabel(self)
+        self.lbl_status_1.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        self.lbl_status_2.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        self.lbl_status_3.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+
+        self.hbox_status = QHBoxLayout()
+        self.hbox_status.addWidget(self.lbl_status_1)
+        self.hbox_status.addWidget(self.lbl_status_2)
+        self.hbox_status.addWidget(self.lbl_status_3)
+        self.hbox_status.addStretch(.25)
+
         self.addWidget(self.view_location)
         self.addWidget(self.table_file)
+        self.vbox.addLayout(self.hbox_status)
 
         self.table_file.locationChanged.connect(self.onTableLocationChanged)
         self.table_file.selectionChangedEvent.connect(self.onTableSelectionChanged)
@@ -3292,23 +3470,22 @@ class LocationPane(Pane):
         elif dcount > 1:
             msg.append("%d directories" % dcount)
 
-        self.statusUpdate.emit(Pane.FILES1, " ".join(msg))
+        self.lbl_status_1.setText(" ".join(msg))
 
     def onTableSelectionChanged(self):
 
-        msg = ""
-
         count = self.table_file.getSelectionCount()
 
+        msg = ""
         if count == 1:
             msg = "1 selected"
         elif count > 1:
             msg = "%d selected" % count
 
-        self.statusUpdate.emit(Pane.FILES2, msg)
+        self.lbl_status_2.setText(msg)
 
         if count == 1:
-            ent = self.table_file.getSelection()[0][0]
+            ent = self.table_file.getSelection()[0][FileTableRowItem.COL_ENT]
             self.previewEntry.emit(ent)
 
     def onTriggerSave(self):
@@ -3330,8 +3507,10 @@ class LocationPane(Pane):
 
         if self.ctxt.hasActiveContext():
             ctxt = self.ctxt.activeContext()
-            txt ="%s@%s" % (ctxt.username, ctxt.hostname)
-            self.statusUpdate.emit(Pane.HOST, txt)
+            txt = "%s@%s" % (ctxt.username, ctxt.hostname)
+            self.lbl_status_3.setText(txt)
+        else:
+            self.lbl_status_3.setText("")
 
         self.locationChanged.emit(self.parent(), directory)
 
@@ -3382,6 +3561,16 @@ class DoubleLocationPane(QWidget):
     def setSecondaryDirectory(self, path):
         self.secondary.ctxt.pushDirectory(path)
 
+class EventFilter(QObject):
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.ActivationChange:
+            self.parent().onFocusChanged(self.parent().isActiveWindow())
+        return super().eventFilter(obj, event)
+
 class SyncMainWindow(QMainWindow):
 
     def __init__(self, cfg):
@@ -3418,6 +3607,8 @@ class SyncMainWindow(QMainWindow):
 
         self.setCentralWidget(self.splitter)
 
+        self.installEventFilter(EventFilter(self))
+
     def initMenuBar(self):
 
         menubar = self.menuBar()
@@ -3429,13 +3620,12 @@ class SyncMainWindow(QMainWindow):
     def initStatusBar(self):
 
         statusbar = self.statusBar()
-        self.sbar_lbl_dir_status1 = QLabel()
-        self.sbar_lbl_dir_status2 = QLabel()
-        self.sbar_lbl_sync_host = QLabel()
 
-        statusbar.addWidget(self.sbar_lbl_dir_status1)
-        statusbar.addWidget(self.sbar_lbl_dir_status2)
-        statusbar.addWidget(self.sbar_lbl_sync_host)
+        self.calendar = Calendar(self)
+        statusbar.addWidget(self.calendar)
+
+        self.clock = Clock(self)
+        statusbar.addWidget(self.clock)
 
     def showWindow(self):
 
@@ -3481,16 +3671,6 @@ class SyncMainWindow(QMainWindow):
         # run this function immediately after the event loop starts
         #
 
-    def onStatusBarUpdate(self, index, message):
-
-        lbl = {
-            Pane.FILES1: self.sbar_lbl_dir_status1,
-            Pane.FILES2: self.sbar_lbl_dir_status2,
-            Pane.HOST: self.sbar_lbl_sync_host,
-        }[index]
-
-        lbl.setText(message)
-
     def onTabCloseRequest(self, idx):
 
         if 0 <= idx < self.tabview.count():
@@ -3507,8 +3687,8 @@ class SyncMainWindow(QMainWindow):
 
         pane = DoubleLocationPane(self.appCtxt, self.cfg, self)
 
-        pane.primary.statusUpdate.connect(self.onStatusBarUpdate)
         pane.primary.previewEntry.connect(self.pane_favorites.previewEntry)
+        pane.secondary.previewEntry.connect(self.pane_favorites.previewEntry)
         pane.primary.locationChanged.connect(self.onDirectoryChanged)
 
         self.tabview.addTab(pane, icon, "")
@@ -3524,16 +3704,19 @@ class SyncMainWindow(QMainWindow):
 
         index = self.tabview.indexOf(pane)
         _, name = self.appCtxt.fs.split(path)
-        if name :
+        if name:
             self.tabview.setTabText(index, name)
         else:
             self.tabview.setTabText(index, "root")
 
     def onPushDirectory(self, path):
-        print(path)
-
         w = self.tabview.currentWidget()
         w.setPrimaryDirectory(path)
+
+    def onFocusChanged(self, focus):
+
+        self.calendar.setEnabled(focus)
+        self.clock.setEnabled(focus)
 
 def setDarkTheme(app):
 
@@ -3601,7 +3784,7 @@ def main():
     print(QStyleFactory.keys())
     app.setStyle("Fusion")
     # app.setStyle("windowsvista")
-    # setDarkTheme(app)
+    setDarkTheme(app)
 
     app.setQuitOnLastWindowClosed(True)
     app_icon = QIcon(':/img/icon.png')
