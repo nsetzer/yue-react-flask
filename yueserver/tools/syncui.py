@@ -37,6 +37,10 @@
 # context menu
 #   copy file name
 #   copy file path
+# shortcut for delete
+# after a copy/move operation between sides, refresh source
+# replace FileRecord -> FileSystemEntry -> {FileEntry, DirEntry}
+
 import os
 import sys
 import time
@@ -2956,6 +2960,8 @@ class ProgressThread(QThread):
 
         try:
             self.main()
+        except StopIteration as e:
+            pass
         except Exception as e:
             logging.exception(e)
 
@@ -3042,6 +3048,10 @@ class ProgressThread(QThread):
 
             self.fileStatus.emit(self._results)
             self._results = []
+
+    def checkAlive(self):
+        if not self.alive:
+            raise StopIteration()
 
 class FetchProgressThread(ProgressThread):
 
@@ -3182,28 +3192,42 @@ class CopyProgressThread(ProgressThread):
         discoveredSize = 0
         transferedSize = 0
 
-        # TODO: check the urls here, if any of them are
-        # not the same drive as dst and this is move request
-        # downgrade to a copy request
+        if self.action == Qt.MoveAction:
+            for url in self.urls:
+                if not self.fs.samedrive(url, self.dst):
+                    self.action = Qt.CopyAction
+                    break
 
         if self.action == Qt.MoveAction:
             generator = self.fs.move_multiple(self.urls, self.dst)
             handler = self._move_one
+            self.sendStatus("Moving Files", force=True)
         else:
             generator = self.fs.copy_multiple(self.urls, self.dst)
             handler = self._copy_one
+            self.sendStatus("Copying Files", force=True)
 
         while True:
+            self.checkAlive()
+
             try:
                 kind, src, dst, size = next(generator)
 
-                discoveredSize += size
-                self.sendUpdate("%d/%d" % (transferedSize, discoveredSize))
-
-                handler(kind, src, dst)
-
             except StopIteration:
                 break
+
+            discoveredSize += size
+            self.sendUpdate("%d/%d %s" % (
+                transferedSize, discoveredSize, dst))
+
+            try:
+                handler(kind, src, dst)
+            except OSError as e:
+                self.sendStatus("%s:\n %s" % (src, e))
+            except Exception as e:
+                self.sendStatus("%s:\n %s" % (src, e))
+
+
 
         self.sendStatus("done", force=True)
 
@@ -3274,21 +3298,23 @@ class RemoveProgressThread(ProgressThread):
             self.sendStatus(url)
 
         while True:
+
+            self.checkAlive()
+
             try:
                 kind, src, size = next(generator)
+            except StopIteration:
+                break
 
                 discoveredSize += size
                 self.sendUpdate("%d/%d" % (transferedSize, discoveredSize))
 
-                try:
-                    self._remove_one(kind, src)
-                except OSError as e:
-                    self.sendStatus("%s: %s" % (src, e))
-                except Exception as e:
-                    self.sendStatus("%s: %s" % (src, e))
-
-            except StopIteration:
-                break
+            try:
+                self._remove_one(kind, src)
+            except OSError as e:
+                self.sendStatus("%s:\n %s" % (src, e))
+            except Exception as e:
+                self.sendStatus("%s:\n %s" % (src, e))
 
         self.sendStatus("done", force=True)
 
