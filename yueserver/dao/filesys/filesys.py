@@ -108,17 +108,15 @@ class LocalFileSystemImpl(AbstractFileSystem):
         if len(self.listdir(dir)) == 0:
             os.rmdir(dir)
 
-    def samedrive(self, patha, pathb):
+    def drive(self, patha):
+        """ returns a meaningless but unique drive identifier (str or int) """
 
         if os.name == 'nt':
             # todo: support for UNC paths
-            sta = patha[:2].upper()
-            stb = pathb[:2].upper()
-            return sta == stb
+            return patha[:2].upper()
         else:
-            sta = os.stat(patha).st_dev
-            stb = os.stat(pathb).st_dev
-            return sta == stb
+            return os.stat(patha).st_dev
+
 
 class MemoryFileSystemImpl(AbstractFileSystem):
     """An In-Memory filesystem
@@ -269,18 +267,47 @@ class FileSystem(object):
     def _mem(self):
         return self._fs[MemoryFileSystemImpl.scheme]._mem_store
 
+    def samedrive(self, patha, pathb):
+        sta = self.drive(patha)
+        stb = self.drive(pathb)
+        return sta == stb
+
+    def find(self, dir):
+        """
+        yield items starting at dir
+        let the caller decide how to filter and display results
+        """
+
+        dirs = [dir]
+
+        while len(dirs) > 0:
+            dir = dirs.pop(0)
+
+            yield (FileSystem.FS_DIR, dir, 0)
+
+            for rec in self.scandir(dir):
+                path = self.join(dir, rec.name)
+                # todo: handle links, etc
+                if rec.isDir:
+                    dirs.append(path)
+                else:
+                    yield (FileSystem.FS_REG, path, rec.size)
+
     def _copy_impl(self, src, dst_dir, move, followLinks):
 
         """
         yield pairs of (src,dst) names moving src into dst
 
         a simple move across file systems may result in a complicated copy
+
+        yield directories before contants so that directories can be created
         """
 
         _, name = self.split(src)
         tgt = self.join(dst_dir, name)
 
-        if self.exists(tgt) and self.samefile(src, tgt):
+        if move and self.exists(tgt) and self.samefile(src, tgt):
+            # a copy operation should result in duplicating the file
             pass
         elif not self.isdir(src):
             rec = self.file_info(src)

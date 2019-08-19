@@ -24,11 +24,19 @@
 #   shortcut delighter for link file types
 #   favorites icon as path to png
 # remove debug colons from file state
-# filter timestamo support for hours minutes
+# filter timestamp support for hours minutes
 #     yyyy/mm/dd hh:mm
 #     hh:mm
 # info dialog for directories
-
+# a right press on an unselected row should select it
+# expand executeAction to run in the background
+#   emit signal for success / failure
+#   menu_action may need a "fork": [true|default: false] option
+#   or "blocking", wait until tar, 7z finish, but launch cmd, terminal
+# drag and drop between drives between two views does not work
+# context menu
+#   copy file name
+#   copy file path
 import os
 import sys
 import time
@@ -96,7 +104,7 @@ def openProcess(args, pwd=None, blocking=False):
     if blocking:
         proc.communicate()
 
-def executeAction(action, ent, pwd):
+def executeAction(action, ents, pwd):
     """
     an action is a bash syntax string
     shlex is used to parse the arguments
@@ -107,25 +115,72 @@ def executeAction(action, ent, pwd):
     pwd, path, filename, name, ext are valid format options
     format syntax is `echo {filename}`
 
+        pwd      - present working directory
+        path     - path of first file
+        paths    - special case, all paths
+        filename - filename of first file, including ext
+        name     - name part of first file, excluding ext
+        ext      - ext part of first file, including period
+        unique   - a unique prefix
+
     """
 
-    if isinstance(ent, sync2.DirEnt):
-        path = ent.local_base
-    else:
-        path = ent.local_path
-
-    _, filename = os.path.split(path)
-    name, ext = os.path.splitext(filename)
     opts = {
-        "pwd": pwd,
-        "path": path,
-        "filename": name,
-        "name": name,
-        "ext": ext,
+        "pwd": pwd
     }
+
+    paths = []
+
+    if ents is not None and ents:
+
+        for ent in ents:
+
+            if isinstance(ent, sync2.DirEnt):
+                path = ent.local_base
+            else:
+                path = ent.local_path
+
+            paths.append(path)
+
+        # assuming single mode operation
+        path = paths[0]
+        _, filename = os.path.split(path)
+        name, ext = os.path.splitext(filename)
+        opts.update({
+            "path": path,
+            "filename": filename,
+            "name": name,
+            "ext": ext,
+        })
+
+    if '{unique}' in action:
+        _, name = os.path.split(pwd)
+        if not name:
+            name = 'root'
+
+        # generate a unique name by looking for existing prefixes
+        i = 1
+        basename = name
+        contents = os.listdir(pwd)
+        exists = lambda p: any([c.startswith(p) for c in contents])
+        while exists(name):
+            name = "%s-%d" % (basename, i)
+            i += 1
+
+        opts["unique"] = name
+
     args = shlex.split(action)
+    i = 0
+    while i < len(args):
+        if args[i] == '{paths}':
+            args = args[:i] + paths + args[i+1:]
+            i += len(paths)
+        else:
+            i += 1
+
     args = [arg.format(**opts) for arg in args]
 
+    print(args)
     return openProcess(args, pwd)
 
 def isSubPath(dir_path, file_path):
@@ -927,7 +982,7 @@ class ImageView(QLabel):
         self.setFixedHeight(128)
         self.setHidden(True)
 
-        self.image_extensions = [".png", ".jpg"]
+        self.image_extensions = [".png", ".jpg", "jpeg", ".bmp"]
 
         self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         self.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
@@ -1409,56 +1464,24 @@ class FileContextMenu(QMenu):
 
         ents = [row[0] for row in selection]
 
+        menu = self.addMenu("New")
+        menu.addAction("Directory", self._action_new_directory)
+        menu.addAction("Empty File", self._action_new_file)
+
         if len(selection) == 1:
             ent = selection[0][0]
             menu = self.addMenu("Open")
             act = menu.addAction("Native", lambda: self._action_open_native(ent))
 
             if self.cfg.open_actions:
-                self.addSeparator()
+                menu.addSeparator()
+
             for item in self.cfg.open_actions:
                 act = item['action']
                 text = item['text']
                 g = lambda ents=ents, act=act: self._action_open_action(ents, act)
                 act = menu.addAction(text, g)
 
-        act = self.addAction("Open Current Directory",
-            lambda: openNative(self.ctxt.currentLocation()))
-
-        menu = self.addMenu("New")
-        menu.addAction("Directory", self._action_new_directory)
-        menu.addAction("Empty File", self._action_new_file)
-
-        self.addAction("Rename", self._action_rename)
-
-        self.addSeparator()
-
-        if self.cfg.showHiddenFiles:
-            self.addAction("Hide Hidden Files", self._action_toggle_show_hidden)
-        else:
-            self.addAction("Show Hidden Files", self._action_toggle_show_hidden)
-
-        self.addSeparator()
-
-        if self.cfg.menu_actions:
-            for item in self.cfg.menu_actions:
-                act = item['action']
-                text = item['text']
-                mode = item.get('mode')
-                #
-                if mode == 'zero' and len(selection) != 0:
-                    continue
-
-                if mode == 'single' and len(selection) != 1:
-                    continue
-
-                if mode == 'multiple' and len(selection) == 0:
-                    continue
-
-                g = lambda ents=ents, act=act: self._action_menu_action(ents, act)
-                act = self.addAction(text, g)
-
-            self.addSeparator()
 
         if self.ctxt.hasActiveContext():
 
@@ -1470,21 +1493,31 @@ class FileContextMenu(QMenu):
             if len(selection) == 1:
                 act = self.addAction("Info", lambda: self._action_info(ents[0]))
 
-            self.addSeparator()
+        self.addSeparator()
+
+        if self.cfg.showHiddenFiles:
+            self.addAction("Hide Hidden Files", self._action_toggle_show_hidden)
+        else:
+            self.addAction("Show Hidden Files", self._action_toggle_show_hidden)
+
 
         ico = self.style().standardIcon(QStyle.SP_BrowserReload)
         act = self.addAction(ico, "Refresh", lambda: self.ctxt.reload())
 
+        self.addAction("Rename", self._action_rename)
+
         act = self.addAction("Copy", lambda: self._action_copy(ents))
         act = self.addAction("Cut", lambda: self._action_cut(ents))
 
-        act = self.addAction("Paste", self._action_paste)
         clipboard = QGuiApplication.clipboard();
         mimeData = clipboard.mimeData()
-        print("paste enabled", mimeData.hasUrls())
-        # act.setEnabled(mimeData.hasUrls())
+        if mimeData.hasUrls():
+            text = "Paste (%d)" % len(mimeData.urls())
+        else:
+            text = "Paste (0)"
 
-        self.addSeparator()
+        act = self.addAction(text, self._action_paste)
+        act.setEnabled(mimeData.hasUrls())
 
         #if self.ctxt.hasActiveContext():
         #    menu = self.addMenu("Delete")
@@ -1494,6 +1527,42 @@ class FileContextMenu(QMenu):
         #    act = self.addAction("Delete")
 
         act = self.addAction("Delete", lambda: self._action_remove(ents))
+
+        self.addSeparator()
+
+        act = self.addAction("Copy File Name", lambda: self._action_copy_name(ents[0]))
+        act = self.addAction("Copy File Path", lambda: self._action_copy_path(ents[0]))
+
+        self.addSeparator()
+
+        act = self.addAction("Open Current Directory",
+            lambda: openNative(self.ctxt.currentLocation()))
+
+        if self.cfg.menu_actions:
+            groups = {}
+            for item in self.cfg.menu_actions:
+                act = item['action']
+                text = item['text']
+                mode = item.get('mode')
+                grp = item.get("group", None)
+                #
+                if mode == 'zero' and len(selection) != 0:
+                    continue
+
+                if mode == 'single' and len(selection) != 1:
+                    continue
+
+                if mode == 'multiple' and len(selection) == 0:
+                    continue
+
+                tgt = self
+                if grp is not None:
+                    if grp not in groups:
+                        groups[grp] = self.addMenu(grp)
+                    tgt = groups[grp]
+
+                g = lambda ents=ents, act=act: self._action_menu_action(ents, act)
+                act = tgt.addAction(text, g)
 
     def _action_template(self):
         pass
@@ -1559,8 +1628,7 @@ class FileContextMenu(QMenu):
 
         pwd = self.ctxt.currentLocation()
 
-        print(act, pwd, ents[0])
-        executeAction(act, ents[0], pwd)
+        executeAction(act, ents, pwd)
 
     def _action_new_directory(self):
         self.createDirectory.emit()
@@ -1577,6 +1645,27 @@ class FileContextMenu(QMenu):
 
         self.cfg.showHiddenFiles = not self.cfg.showHiddenFiles
         self.showHiddenFiles.emit(self.cfg.showHiddenFiles)
+
+    def _action_copy_name(self, ent):
+
+        mimeData = QMimeData()
+        mimeData.setText(ent.name())
+
+        clipboard = QGuiApplication.clipboard();
+        clipboard.setMimeData(mimeData)
+
+    def _action_copy_path(self, ent):
+
+        if isinstance(ent, sync2.DirEnt):
+            path = ent.local_base
+        else:
+            path = ent.local_path
+
+        mimeData = QMimeData()
+        mimeData.setText(path)
+
+        clipboard = QGuiApplication.clipboard();
+        clipboard.setMimeData(mimeData)
 
     def _action_copy(self, ents):
 
@@ -1643,6 +1732,7 @@ class FileContextMenu(QMenu):
             thread = CopyProgressThread(self.ctxt.fs, urls, self.ctxt.currentLocation(), dropAction, self)
             dialog.setThread(thread)
             dialog.exec_()
+            self.ctxt.reload()
 
     def _action_remove(self, ents):
 
@@ -1661,6 +1751,7 @@ class FileContextMenu(QMenu):
             thread = RemoveProgressThread(self.ctxt.fs, urls, self)
             dialog.setThread(thread)
             dialog.exec_()
+            self.ctxt.reload()
 
 class FileTableRowItem(object):
 
@@ -1847,8 +1938,23 @@ class FileTableView(TableView):
         model.addForegroundRule("fg1", self._foregroundRule)
         model.addBackgroundRule("fg2", self._backgroundRule)
 
-
         self.model().setShowHiddenFiles(self.cfg.showHiddenFiles)
+
+        self.xcut_copy = QShortcut(QKeySequence(QKeySequence.Copy), self)
+        self.xcut_copy.setContext(Qt.WidgetShortcut)
+        self.xcut_copy.activated.connect(lambda: self.copyEntries.emit(self.getSelection()))
+
+        self.xcut_cut = QShortcut(QKeySequence(QKeySequence.Cut), self)
+        self.xcut_cut.setContext(Qt.WidgetShortcut)
+        self.xcut_cut.activated.connect(lambda: self.moveEntries.emit(self.getSelection()))
+
+        self.xcut_paste = QShortcut(QKeySequence(QKeySequence.Paste), self)
+        self.xcut_paste.setContext(Qt.WidgetShortcut)
+        self.xcut_paste.activated.connect(self.pasteEntries)
+
+        self.xcut_refresh = QShortcut(QKeySequence(QKeySequence.Refresh), self)
+        self.xcut_refresh.setContext(Qt.WidgetShortcut)
+        self.xcut_refresh.activated.connect(lambda : self.ctxt.reload())
 
         self.ctxt.locationChanging.connect(self.onLocationChanging)
         self.ctxt.locationChanged.connect(self.onLocationChanged)
@@ -2051,7 +2157,7 @@ class FileTableView(TableView):
                     text_action = act.get("action", None)
 
             if action is not None:
-                executeAction(action, ent, self.ctxt.currentLocation())
+                executeAction(action, [ent], self.ctxt.currentLocation())
                 return
 
             if text_action is not None:
@@ -2062,7 +2168,7 @@ class FileTableView(TableView):
                     is_text = all(g(b) for b in rf.read(2014))
 
                 if is_text:
-                    executeAction(text_action, ent, self.ctxt.currentLocation())
+                    executeAction(text_action, [ent], self.ctxt.currentLocation())
                     return
 
             openNative(ent.local_path)
@@ -2136,24 +2242,6 @@ class FileTableView(TableView):
             self.scrollToRow(self.rowCount()-1)
         else:
             super().keyPressEvent(event)
-
-    def keyReleaseEvent(self, event):
-
-        if event.modifiers()&Qt.ControlModifier:
-            if event.key() == Qt.Key_V:
-                self.pasteEntries.emit()
-                event.accept()
-                return
-            if event.key() == Qt.Key_C:
-                self.copyEntries.emit(self.getSelection())
-                event.accept()
-                return
-            if event.key() == Qt.Key_X:
-                self.moveEntries.emit(self.getSelection())
-                event.accept()
-                return
-
-        super().keyReleaseEvent(event)
 
     def onBeginCreateDirectory(self):
         """
@@ -2230,7 +2318,7 @@ class FileTableView(TableView):
         path = os.path.join(self.ctxt.currentLocation(), "newfile.txt")
         ent = sync2.FileEnt(None, path, None, None, None)
         ent.create = True
-        item = FileTableRowItem.fromEntryy(self.ctxt, ent)
+        item = FileTableRowItem.fromEntry(self.ctxt, ent)
         self.insertRow(0, item)
 
         # find the newly inserted index
@@ -2655,6 +2743,7 @@ class LocationView(QWidget):
         self.ctxt = ctxt
         self.vbox = QVBoxLayout(self)
         self.hbox1 = QHBoxLayout()
+        self.hbox3 = QHBoxLayout()
         self.wdt_syncPanel = QWidget(self)
         self.wdt_syncPanel.setVisible(False)
         self.hbox2 = QHBoxLayout(self.wdt_syncPanel)
@@ -2663,8 +2752,8 @@ class LocationView(QWidget):
         # https://joekuan.wordpress.com/2015/09/23/list-of-qt-icons/
         self.edit_location = LineEdit(self)
         self.edit_filter = LineEdit(self)
-        self.edit_filter.setMaximumWidth(150)
-        self.edit_filter.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        self.edit_filter.setMaximumWidth(250)
+        #self.edit_filter.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         self.edit_filter.setPlaceholderText("Filter")
 
         self.btn_back = QToolButton(self)
@@ -2694,12 +2783,16 @@ class LocationView(QWidget):
         self.hbox1.addWidget(self.btn_forward)
         self.hbox1.addWidget(self.btn_up)
         self.hbox1.addWidget(self.btn_refresh)
-        self.hbox1.addWidget(self.edit_location)
-        self.hbox1.addWidget(self.btn_open)
+        self.hbox1.addStretch(.3)
+        #self.hbox1.addWidget(self.edit_location)
         self.hbox1.addWidget(self.edit_filter)
         self.hbox1.addWidget(self.btn_split)
 
+        self.hbox3.addWidget(self.edit_location)
+        self.hbox3.addWidget(self.btn_open)
+
         self.vbox.addLayout(self.hbox1)
+        self.vbox.addLayout(self.hbox3)
 
         self.btn_fetch = QPushButton("Fetch", self)
         self.btn_sync = QPushButton("Sync", self)
@@ -3089,10 +3182,16 @@ class CopyProgressThread(ProgressThread):
         discoveredSize = 0
         transferedSize = 0
 
+        # TODO: check the urls here, if any of them are
+        # not the same drive as dst and this is move request
+        # downgrade to a copy request
+
         if self.action == Qt.MoveAction:
             generator = self.fs.move_multiple(self.urls, self.dst)
+            handler = self._move_one
         else:
             generator = self.fs.copy_multiple(self.urls, self.dst)
+            handler = self._copy_one
 
         while True:
             try:
@@ -3100,12 +3199,54 @@ class CopyProgressThread(ProgressThread):
 
                 discoveredSize += size
                 self.sendUpdate("%d/%d" % (transferedSize, discoveredSize))
-                self.sendStatus("src: %s" % src)
-                self.sendStatus("dst: %s" % dst)
+
+                handler(kind, src, dst)
+
             except StopIteration:
                 break
 
         self.sendStatus("done", force=True)
+
+    def _move_one(self, kind, src, dst):
+
+        if self.fs.exists(dst):
+            self.sendStatus("Cannot move file destination exists:\n  %s\n  %s" % (src, dst))
+            return
+
+        if kind == FileSystem.FS_DIR:
+            os.rename(src, dst)
+        elif kind == FileSystem.FS_REG:
+            os.rename(src, dst)
+
+    def _copy_one(self, kind, src, dst):
+
+        if kind == FileSystem.FS_DIR:
+            self.fs.makedirs(dst)
+
+        elif kind == FileSystem.FS_REG:
+
+            if self.fs.exists(dst):
+                dst = self._safe_name(dst)
+
+            self._copy_file(src, dst)
+
+    def _safe_name(self, path):
+        i = 1
+        while True:
+            new_path = "%s (%d)" % (path, i)
+            if not self.fs.exists(new_path):
+                path = new_path
+                break
+        return path
+
+    def _copy_file(self, src, dst):
+
+        with self.fs.open(dst, "wb") as wb:
+            with self.fs.open(src, "rb") as rb:
+                buf = rb.read(4096)
+                while buf:
+                    wb.write(buf)
+                    buf = rb.read(4096)
 
 class RemoveProgressThread(ProgressThread):
 
@@ -3117,10 +3258,13 @@ class RemoveProgressThread(ProgressThread):
 
     def main(self):
 
-        #index = self.getUserChoice("Text", "click a button",
-        #    QMessageBox.Information,
-        #    ["Skip", "Replace", "Replace All", "Keep", "Keep All"])
-        #print("user chose", index)
+        index = self.getUserChoice("Delete", "Remove items?",
+            QMessageBox.Warning,
+            ["Delete", "Cancel"])
+
+        if index != 0:
+            self.sendStatus("Action canceled by user")
+            return
 
         discoveredSize = 0
         transferedSize = 0
@@ -3135,11 +3279,36 @@ class RemoveProgressThread(ProgressThread):
 
                 discoveredSize += size
                 self.sendUpdate("%d/%d" % (transferedSize, discoveredSize))
-                self.sendStatus("%d src: %s" % (kind, src))
+
+                try:
+                    self._remove_one(kind, src)
+                except OSError as e:
+                    self.sendStatus("%s: %s" % (src, e))
+                except Exception as e:
+                    self.sendStatus("%s: %s" % (src, e))
+
             except StopIteration:
                 break
 
         self.sendStatus("done", force=True)
+
+    def _remove_one(self, kind, src):
+
+        if kind == FileSystem.FS_DIR:
+            self._remove_dir(src)
+
+        elif kind == FileSystem.FS_REG:
+            self._remove_reg(src)
+
+    def _remove_dir(self, src):
+
+        files = os.listdir(src)
+        if len(files) == 0:
+            os.rmdir(src)
+
+    def _remove_reg(self, src):
+
+        os.remove(src)
 
 class SyncOptionsDialog(QDialog):
 
@@ -3185,6 +3354,7 @@ class SyncProgressDialog(QDialog):
     def __init__(self, ctxt, parent=None):
         super(SyncProgressDialog, self).__init__(None)
 
+        # TODO: eliminate dependency on location context
         self.ctxt = ctxt
 
         self.vbox = QVBoxLayout(self)
@@ -3313,13 +3483,15 @@ class SyncProgressDialog(QDialog):
         super().show()
 
     def resizeEvent(self, event):
-        self._resizeTimer.start(500)
-        self.txt_status.hide()
-        super().resizeEvent(event)
+        # failed attempt at improving resize performance
+        #self._resizeTimer.start(500)
+        #self.txt_status.hide()
+        #super().resizeEvent(event)
+        pass
 
     def onResizeTimeout(self):
-        self.txt_status.show()
-
+        #self.txt_status.show()
+        pass
 
 class FileEntryInfoDialog(QDialog):
 
@@ -3835,9 +4007,8 @@ class LocationPane(Pane):
 
     def dropEvent(self, event):
 
-        print(event.dropAction())
-
-        if not (event.dropAction() & (Qt.MoveAction|Qt.CopyAction)):
+        dropAction = event.dropAction()&(Qt.MoveAction|Qt.CopyAction)
+        if not dropAction:
             event.ignore()
 
         if event.mimeData().hasUrls():
@@ -3847,7 +4018,12 @@ class LocationPane(Pane):
                 urls.append(url.toLocalFile())
             event.accept()
 
-            print("dropped", urls)
+            dialog = SyncProgressDialog(self.ctxt)
+            thread = CopyProgressThread(self.ctxt.fs, urls,
+                self.ctxt.currentLocation(), dropAction, self)
+            dialog.setThread(thread)
+            dialog.exec_()
+            self.ctxt.reload()
 
     def onCopyEntries(self, entries):
 
@@ -3915,6 +4091,7 @@ class LocationPane(Pane):
             thread = CopyProgressThread(self.ctxt.fs, urls, self.ctxt.currentLocation(), dropAction, self)
             dialog.setThread(thread)
             dialog.exec_()
+            self.ctxt.reload()
 
 class DoubleLocationPane(QWidget):
 
@@ -4067,7 +4244,11 @@ class SyncMainWindow(QMainWindow):
             self.tabview.setTabsClosable(self.tabview.count()>1)
 
     def newTab(self):
-        self.addTab(os.getcwd(), "", None)
+        path = os.path.join(os.getcwd(), "playground")
+        if os.path.exists(path):
+            self.addTab(path, path, None)
+        else:
+            self.addTab(os.getcwd(), os.getcwd(), None)
 
     def addTab(self, primaryPath, secondaryPath, icon=None):
 
@@ -4173,7 +4354,7 @@ def main():
     print(QStyleFactory.keys())
     app.setStyle("Fusion")
     # app.setStyle("windowsvista")
-    setDarkTheme(app)
+    # setDarkTheme(app)
 
     app.setQuitOnLastWindowClosed(True)
     app_icon = QIcon(':/img/icon.png')

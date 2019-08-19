@@ -834,6 +834,8 @@ class AbstractTableView(QTableView):
 
         self._edit_index = None
 
+        self._mouse_position_start = (-1, -1)
+
     def selectionChanged(self, *args):
         super().selectionChanged(*args)
         self.selectionChangedEvent.emit()
@@ -854,8 +856,8 @@ class AbstractTableView(QTableView):
     def mousePressEvent(self, event):
         #index = self.indexAt(event.pos())
         # print(index.row(),index.column())
-        if event.button() != Qt.LeftButton:
-            return
+        #if event.button() != Qt.LeftButton:
+        #    return
 
         super(AbstractTableView, self).mousePressEvent(event)
 

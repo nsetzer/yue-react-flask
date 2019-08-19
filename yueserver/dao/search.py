@@ -573,7 +573,7 @@ class FormatConversion(object):
         dtn = self.datetime_now
         dt1 = self.computeDateDelta(dtn.year, dtn.month, dtn.day, dy, dm, dd)
         dt2 = dt1 + timedelta(1)
-        return calendar.timegm(dt1.timetuple()), calendar.timegm(dt2.timetuple())
+        return time.mktime(dt1.timetuple()), time.mktime(dt2.timetuple())
 
     def computeDateDelta(self, y, m, d, dy, dm, dd=0):
         """
@@ -616,6 +616,34 @@ class FormatConversion(object):
             y += 2000
         return y
 
+    def formatDateTime(self, sValue):
+
+        sDate, sTime = sValue.split(None, 1)
+
+        dParts = sDate.split('/')
+        if len(dParts) != 3:
+            raise ParseError("Invalid Date format `%s` at position %s." % (sValue, sValue.pos))
+
+        # timestamp > "2019/08/18 12:00"
+        tParts = sTime.split(":")
+        if len(tParts) < 2 or len(tParts) > 3:
+            raise ParseError("Invalid Time format `%s` at position %s." % (sValue, sValue.pos))
+
+        y = int(dParts[self.DATE_LOCALE_FMT_Y])
+        m = int(dParts[self.DATE_LOCALE_FMT_M])
+        d = int(dParts[self.DATE_LOCALE_FMT_D])
+        y = self.adjustYear(y)
+
+        H = int(tParts[0])
+        M = int(tParts[1])
+        # ignore seconds for now...
+
+        dt1 = datetime(y, m, d, H, M)
+        dt2 = dt1 + timedelta(1)
+
+        result = time.mktime(dt1.timetuple()), time.mktime(dt2.timetuple())
+        return result
+
     def formatDate(self, sValue):
         """
         accepts strings of the following form:
@@ -655,7 +683,8 @@ class FormatConversion(object):
             dt1 = datetime(y, m, d)
             dt2 = dt1 + timedelta(1)
 
-        result = calendar.timegm(dt1.timetuple()), calendar.timegm(dt2.timetuple())
+        # Note: switched calendar.timegm to time.mktime
+        result = time.mktime(dt1.timetuple()), time.mktime(dt2.timetuple())
         return result
 
     def parseDuration(self, sValue):
@@ -689,10 +718,10 @@ class FormatConversion(object):
 
         dt = NLPDateRange(self.datetime_now).parse(value)
         if dt:
-            cf = calendar.timegm(dt[0].utctimetuple())
+            cf = time.mktime(dt[0].utctimetuple())
             if cf < 0:
                 cf = 0
-            rf = calendar.timegm(dt[1].utctimetuple())
+            rf = time.mktime(dt[1].utctimetuple())
             return cf, rf
         return None
 
@@ -1237,15 +1266,19 @@ class SearchGrammar(Grammar):
         > : farther into the past, excluding the given date
         = : exactly that day, from 00:00:00 to 23:59:59
         """
-        c = value.count('/')
+        c1 = value.count('/')
+        c2 = value.count(':')
 
         invert = False
         try:
-            if c > 0:
+            if c2 > 0:
+                # parse the string as some form of "YYYY/MM/DD HH:MM:SS"
+                epochtime, epochtime2 = self.fc.formatDateTime(value)
+            elif c1 > 0:
                 # if there are any slashes assume the user wants to
                 # parse the string as some form of YYYY/MM/DD
                 epochtime, epochtime2 = self.fc.formatDate(value)
-            elif c > 2:
+            elif c1 > 2:
                 # the user gave two many separators for the date to make sense
                 # TODO: create a special format for YY/MM/DD since that it can
                 # be modified for other orders
