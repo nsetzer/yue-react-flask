@@ -1,5 +1,7 @@
 #! cd ../.. && python3 -m yueserver.tools.syncui
 
+# conflict upload set correct version
+# pressing go to parent should center on the new child directory
 # remove
 # move/cut/copy/paste
 #   samefile? keep both? keep all? replace? replace all?
@@ -25,7 +27,20 @@
 #   menu_action may need a "fork": [true|default: false] option
 #   or "blocking", wait until tar, 7z finish, but launch cmd, terminal
 # replace FileRecord -> FileSystemEntry -> {FileEntry, DirEntry}
-# meta-action e.g. 'compare set left' and 'compare files'
+# no reason to have meta actions
+#   hard code special case for `compare set left `
+#   hard code diff option, configure via {left} and {right}
+#
+# IconTextDelegate for FavoritesView
+#   display icon and text in single column
+#   both icon and text are optional
+#   optional bold text mode
+# cli options
+#   $0 path1 [path2]
+#   $0 -o [path1, ...] open one or more tabs to a path
+#   $0 -e path1        open a file as if it was double clicked
+#   $0 -d path1 path2  diff two files or folders
+#
 
 import os
 import sys
@@ -1476,7 +1491,6 @@ class FileContextMenu(QMenu):
                 g = lambda ents=ents, act=act: self._action_open_action(ents, act)
                 act = menu.addAction(text, g)
 
-
         if self.ctxt.hasActiveContext():
 
             menu = self.addMenu("Sync")
@@ -1484,21 +1498,21 @@ class FileContextMenu(QMenu):
             act = menu.addAction("Push", lambda: self._action_push(ents))
             act = menu.addAction("Pull", lambda: self._action_pull(ents))
 
+            if self.cfg.showBlacklistFiles:
+                menu.addAction("Hide Blacklist Files", self._action_toggle_show_blacklist)
+            else:
+                menu.addAction("Show Blacklist Files", self._action_toggle_show_blacklist)
+
         if len(selection) == 1:
             ico = self.style().standardIcon(QStyle.SP_FileDialogInfoView)
             act = self.addAction(ico, "Properties", lambda: self._action_info(ents[0]))
-
-        self.addSeparator()
 
         if self.cfg.showHiddenFiles:
             self.addAction("Hide Hidden Files", self._action_toggle_show_hidden)
         else:
             self.addAction("Show Hidden Files", self._action_toggle_show_hidden)
 
-        if self.cfg.showBlacklistFiles:
-            self.addAction("Hide Blacklist Files", self._action_toggle_show_blacklist)
-        else:
-            self.addAction("Show Blacklist Files", self._action_toggle_show_blacklist)
+        self.addSeparator()
 
         ico = self.style().standardIcon(QStyle.SP_BrowserReload)
         act = self.addAction(ico, "Refresh", lambda: self.ctxt.reload())
