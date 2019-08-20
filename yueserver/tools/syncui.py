@@ -2,20 +2,16 @@
 
 # remove
 # move/cut/copy/paste
-#   samefile? keep both? replace? replace all?
+#   samefile? keep both? keep all? replace? replace all?
+#   after a copy/move operation between sides, refresh both sources
 # drag and drop mime types
 # directory load robustness
 #   gracefully handle errors during load()
 #   pull files do not exist locally (ignore actions)
-# os.path => ctxt.fs
+# os.path => ctxt.fs; eliminate os.* and os.path.*
 # s3 file paths
 # improve directory push / pop (implementation stack is confusing)
 # on exit save session to session.yml in config dir
-# _check and attr.match(...)
-#   secondary show hidden files bool to display hidden by attrs
-#   check should return them with FileState.IGNORE
-# recursive status needs to set a dirty bit on directories
-#   cleared when recursive sync
 # create a FileSystemTableView from which sync table view inherits from
 #   FileSystemTableView(fs)
 #   contains a private class as a SignalHandler for private signals (e.g. rename)
@@ -24,22 +20,12 @@
 #   shortcut delighter for link file types
 #   favorites icon as path to png
 # remove debug colons from file state
-# filter timestamp support for hours minutes
-#     yyyy/mm/dd hh:mm
-#     hh:mm
-# info dialog for directories
-# a right press on an unselected row should select it
 # expand executeAction to run in the background
 #   emit signal for success / failure
 #   menu_action may need a "fork": [true|default: false] option
 #   or "blocking", wait until tar, 7z finish, but launch cmd, terminal
-# drag and drop between drives between two views does not work
-# context menu
-#   copy file name
-#   copy file path
-# shortcut for delete
-# after a copy/move operation between sides, refresh source
 # replace FileRecord -> FileSystemEntry -> {FileEntry, DirEntry}
+# meta-action e.g. 'compare set left' and 'compare files'
 
 import os
 import sys
@@ -300,6 +286,7 @@ class SyncConfig(BaseConfig):
         self.menu_actions = self.get_key(data, "menu_actions", default=[])
 
         self.showHiddenFiles = True
+        self.showBlacklistFiles = True
 
         self.rowScale = 1.75
 
@@ -311,6 +298,7 @@ class SyncConfig(BaseConfig):
             "open_actions": self.open_actions,
             "menu_actions": self.menu_actions,
             "showHiddenFiles": self.showHiddenFiles,
+            "showBlacklistFiles": self.showBlacklistFiles,
             "rowScale": self.rowScale,
         }
 
@@ -729,7 +717,7 @@ class AppContext(QObject):
                 userdata['root'], userdata['remote_base'], userdata['local_base'])
 
             # replace the get password implementation
-            ctxt.getPassword = self._app_getEncryptionPassword
+            ctxt.getPassword = PasswordDialog.getPasswordKind
 
             ctxt.current_local_base = userdata['current_local_base']
             ctxt.current_remote_base = userdata['current_remote_base']
@@ -755,19 +743,9 @@ class AppContext(QObject):
 
             return ctxt
 
-    def _app_getEncryptionPassword(self, kind):
-
-        prompt = "Enter %s password:" % kind
-        dialog = PasswordDialog(prompt)
-        if dialog.exec_() == QDialog.Accepted:
-            return dialog.getPassword()
-
-        return None
-
     def getIcon(self, kind):
         """
         https://doc.qt.io/qt-5/qfileiconprovider.html
-
 
         """
         if kind in self._icon_ext:
@@ -1389,6 +1367,9 @@ class FileContentSortProxyModel(SortProxyModel):
         self._rule = None
         self._dir = False
 
+        self._show_hidden = False
+        self._show_blacklist = False
+
         self.grammar = FilterGrammar()
 
     def lessThan(self, indexL, indexR):
@@ -1434,14 +1415,22 @@ class FileContentSortProxyModel(SortProxyModel):
         self._show_hidden = hidden
         self.invalidateFilter()
 
+    def setShowBlacklistFiles(self, hidden):
+        self._show_blacklist = hidden
+        self.invalidateFilter()
+
     def filterAcceptsRow(self, row, parent):
 
         item = self.parent().baseModel().tabledata[row]
 
         name = item[FileTableRowItem.COL_NAME]
         ent = item[FileTableRowItem.COL_ENT]
+        state = item[FileTableRowItem.COL_STATE]
 
         if not self._show_hidden and name.startswith("."):
+            return False
+
+        if not self._show_blacklist and state == sync2.FileState.IGNORE:
             return False
 
         if not self._rule:
@@ -1459,6 +1448,7 @@ class FileContextMenu(QMenu):
     rename = pyqtSignal()
 
     showHiddenFiles = pyqtSignal(bool)
+    showBlacklistFiles = pyqtSignal(bool)
 
     def __init__(self, ctxt, cfg, selection, parent=None):
         super(FileContextMenu, self).__init__(parent)
@@ -1494,8 +1484,9 @@ class FileContextMenu(QMenu):
             act = menu.addAction("Push", lambda: self._action_push(ents))
             act = menu.addAction("Pull", lambda: self._action_pull(ents))
 
-            if len(selection) == 1:
-                act = self.addAction("Info", lambda: self._action_info(ents[0]))
+        if len(selection) == 1:
+            ico = self.style().standardIcon(QStyle.SP_FileDialogInfoView)
+            act = self.addAction(ico, "Properties", lambda: self._action_info(ents[0]))
 
         self.addSeparator()
 
@@ -1504,6 +1495,10 @@ class FileContextMenu(QMenu):
         else:
             self.addAction("Show Hidden Files", self._action_toggle_show_hidden)
 
+        if self.cfg.showBlacklistFiles:
+            self.addAction("Hide Blacklist Files", self._action_toggle_show_blacklist)
+        else:
+            self.addAction("Show Blacklist Files", self._action_toggle_show_blacklist)
 
         ico = self.style().standardIcon(QStyle.SP_BrowserReload)
         act = self.addAction(ico, "Refresh", lambda: self.ctxt.reload())
@@ -1530,7 +1525,8 @@ class FileContextMenu(QMenu):
         #else:
         #    act = self.addAction("Delete")
 
-        act = self.addAction("Delete", lambda: self._action_remove(ents))
+        ico = self.style().standardIcon(QStyle.SP_TrashIcon)
+        act = self.addAction(ico, "Delete", lambda: self._action_remove(ents))
 
         self.addSeparator()
 
@@ -1592,7 +1588,7 @@ class FileContextMenu(QMenu):
         optdialog = SyncOptionsDialog(self)
         if optdialog.exec_() == QDialog.Accepted:
             opts = optdialog.options()
-            dialog = SyncProgressDialog(self.ctxt)
+            dialog = SyncProgressDialog()
 
             thread = SyncProgressThread(self.ctxt,
                 paths, push, pull, opts['force'],  opts['recursive'],
@@ -1614,7 +1610,9 @@ class FileContextMenu(QMenu):
     def _action_info(self, ent):
 
         dialog = FileEntryInfoDialog(self)
-        hostname = self.ctxt.activeContext().hostname
+        hostname = None
+        if self.ctxt.hasActiveContext():
+            hostname = self.ctxt.activeContext().hostname
         dialog.setEntry(ent, hostname)
         dialog.exec_()
 
@@ -1649,6 +1647,11 @@ class FileContextMenu(QMenu):
 
         self.cfg.showHiddenFiles = not self.cfg.showHiddenFiles
         self.showHiddenFiles.emit(self.cfg.showHiddenFiles)
+
+    def _action_toggle_show_blacklist(self):
+
+        self.cfg.showBlacklistFiles = not self.cfg.showBlacklistFiles
+        self.showBlacklistFiles.emit(self.cfg.showBlacklistFiles)
 
     def _action_copy_name(self, ent):
 
@@ -1732,7 +1735,7 @@ class FileContextMenu(QMenu):
             for url in mimeData.urls():
                 urls.append(url.toLocalFile())
 
-            dialog = SyncProgressDialog(self.ctxt)
+            dialog = SyncProgressDialog()
             thread = CopyProgressThread(self.ctxt.fs, urls, self.ctxt.currentLocation(), dropAction, self)
             dialog.setThread(thread)
             dialog.exec_()
@@ -1751,7 +1754,7 @@ class FileContextMenu(QMenu):
                 urls.append(path)
 
         if urls:
-            dialog = SyncProgressDialog(self.ctxt)
+            dialog = SyncProgressDialog()
             thread = RemoveProgressThread(self.ctxt.fs, urls, self)
             dialog.setThread(thread)
             dialog.exec_()
@@ -1943,6 +1946,7 @@ class FileTableView(TableView):
         model.addBackgroundRule("fg2", self._backgroundRule)
 
         self.model().setShowHiddenFiles(self.cfg.showHiddenFiles)
+        self.model().setShowBlacklistFiles(self.cfg.showBlacklistFiles)
 
         self.xcut_copy = QShortcut(QKeySequence(QKeySequence.Copy), self)
         self.xcut_copy.setContext(Qt.WidgetShortcut)
@@ -1959,6 +1963,10 @@ class FileTableView(TableView):
         self.xcut_refresh = QShortcut(QKeySequence(QKeySequence.Refresh), self)
         self.xcut_refresh.setContext(Qt.WidgetShortcut)
         self.xcut_refresh.activated.connect(lambda : self.ctxt.reload())
+
+        self.xcut_delete = QShortcut(QKeySequence(QKeySequence.Delete), self)
+        self.xcut_delete.setContext(Qt.WidgetShortcut)
+        self.xcut_delete.activated.connect(self.onRemoveSelection)
 
         self.ctxt.locationChanging.connect(self.onLocationChanging)
         self.ctxt.locationChanged.connect(self.onLocationChanged)
@@ -2188,6 +2196,8 @@ class FileTableView(TableView):
         contextMenu.rename.connect(self.onBeginRename)
         contextMenu.showHiddenFiles.connect(
             lambda b: self.model().setShowHiddenFiles(b))
+        contextMenu.showBlacklistFiles.connect(
+            lambda b: self.model().setShowBlacklistFiles(b))
 
         contextMenu.exec_(event.globalPos())
 
@@ -2494,7 +2504,26 @@ class FileTableView(TableView):
             self.ctxt.reload()
             raise e
 
-    def onSetFilterPatteern(self, pattern):
+    def onRemoveSelection(self):
+
+        rows = self.getSelection()
+        paths = []
+        for row in rows:
+            ent = row[FileTableRowItem.COL_ENT]
+            if isinstance(ent, sync2.DirEnt):
+                path = ent.local_base
+            else:
+                path = ent.local_path
+            if path:
+                paths.append(path)
+
+        dialog = SyncProgressDialog()
+        thread = RemoveProgressThread(self.ctxt.fs, paths, self)
+        dialog.setThread(thread)
+        dialog.exec_()
+        self.ctxt.reload()
+
+    def onSetFilterPattern(self, pattern):
         self.model().setFilterGlobPattern(pattern)
 
     def editRow(self, row, col):
@@ -2685,7 +2714,8 @@ class MonospaceDelegate(QStyledItemDelegate):
 
 class FavoritesListView(TableView):
 
-    pushDirectory = pyqtSignal(str)
+    pushDirectoryMain = pyqtSignal(str)
+    pushDirectorySecondary = pyqtSignal(str)
     toggleHiddenSection = pyqtSignal(str)
 
     def __init__(self, cfg, parent=None):
@@ -2723,18 +2753,45 @@ class FavoritesListView(TableView):
         path = data[2]
         if path is not None:
             path = os.path.expanduser(path)
-            self.pushDirectory.emit(path)
+            path = os.path.expandvars(path)
+            self.pushDirectoryMain.emit(path)
         else:
             self.toggleHiddenSection.emit(data[1])
 
     def onMouseReleaseRight(self, event):
-        pass
+
+        contextMenu = QMenu(self)
+
+        contextMenu.addAction("Open Directory (Left)", self.onPushDirectoryMain)
+        contextMenu.addAction("Open Directory (Right)", self.onPushDirectorySecondary)
+
+        contextMenu.exec_(event.globalPos())
+
 
     def onMouseReleaseMiddle(self, event):
         pass
 
     def onHeaderClicked(self, idx):
         pass
+
+    def onPushDirectoryMain(self):
+        rows = self.getSelection()
+        if len(rows) > 0:
+            path = rows[0][2]
+            path = os.path.expanduser(path)
+            path = os.path.expandvars(path)
+            if path is not None:
+                self.pushDirectoryMain.emit(path)
+
+    def onPushDirectorySecondary(self):
+        rows = self.getSelection()
+        if len(rows) > 0:
+            path = rows[0][2]
+            path = os.path.expanduser(path)
+            path = os.path.expandvars(path)
+            if path is not None:
+                self.pushDirectorySecondary.emit(path)
+
 
 class LocationView(QWidget):
 
@@ -2880,7 +2937,7 @@ class LocationView(QWidget):
 
     def onFetchButtonPressed(self):
 
-        dialog = SyncProgressDialog(self.ctxt)
+        dialog = SyncProgressDialog()
         thread = FetchProgressThread(self.ctxt, dialog)
         dialog.setThread(thread, "Fetching...")
         dialog.exec_()
@@ -2893,7 +2950,7 @@ class LocationView(QWidget):
         optdialog = SyncOptionsDialog(self)
         if optdialog.exec_() == QDialog.Accepted:
             opts = optdialog.options()
-            dialog = SyncProgressDialog(self.ctxt)
+            dialog = SyncProgressDialog()
             thread = SyncProgressThread(
                 self.ctxt,
                 [dent], push, pull, opts['force'],  opts['recursive'],
@@ -3261,6 +3318,7 @@ class CopyProgressThread(ProgressThread):
             if not self.fs.exists(new_path):
                 path = new_path
                 break
+            i += 1
         return path
 
     def _copy_file(self, src, dst):
@@ -3377,11 +3435,8 @@ class SyncOptionsDialog(QDialog):
 
 class SyncProgressDialog(QDialog):
 
-    def __init__(self, ctxt, parent=None):
+    def __init__(self, parent=None):
         super(SyncProgressDialog, self).__init__(None)
-
-        # TODO: eliminate dependency on location context
-        self.ctxt = ctxt
 
         self.vbox = QVBoxLayout(self)
 
@@ -3439,7 +3494,7 @@ class SyncProgressDialog(QDialog):
         password = None
 
         try:
-            password = self.ctxt.appCtxt._app_getEncryptionPassword(kind)
+            password = PasswordDialog.getPasswordKind(kind)
 
         finally:
             # set the password, or None if the user canceled
@@ -3703,6 +3758,27 @@ class FileEntryInfoDialog(QDialog):
 
     def setEntry(self, ent, hostname=None):
 
+        if isinstance(ent, sync2.DirEnt):
+            self.setDirEntry(ent, hostname)
+        else:
+            self.setFileEntry(ent, hostname)
+
+    def setDirEntry(self, ent, hostname):
+
+        self.txt_local.setText(ent.local_base)
+        self.txt_remote.setText(ent.remote_base)
+
+        # TODO: status should have an icon
+        state = ent.state().split(":")[0]
+        self.lbl_status_image.setPixmap(self.getStatePixmap(state))
+        self.lbl_status.setText(state)
+
+        df = {'size': 0, "permission": 0, "mtime": 0, "version": 0,
+              "public": "", "encryption": ""}
+
+        self.setAttrs(df, df, df)
+
+    def setFileEntry(self, ent, hostname):
         self.txt_local.setText(ent.local_path)
         self.txt_remote.setText(ent.remote_path)
 
@@ -3732,6 +3808,11 @@ class FileEntryInfoDialog(QDialog):
 
         self.lbl_r_public.setText(public)
 
+        self.setAttrs(af, lf, rf)
+
+    def setAttrs(self, af, lf, rf):
+
+
         self.lbl_r_encryption.setText(rf['encryption'] or "none")
 
         self.lbl_a_version.setText(str(af['version']))
@@ -3751,6 +3832,8 @@ class FileEntryInfoDialog(QDialog):
         self.lbl_a_permission.setText(format_mode(af['permission']))
         self.lbl_l_permission.setText(format_mode(lf['permission']))
         self.lbl_r_permission.setText(format_mode(rf['permission']))
+
+
 
     def getStatePixmap(self, state):
 
@@ -3819,6 +3902,14 @@ class PasswordDialog(QDialog):
     def getPassword(self):
         return self.edit_password.text()
 
+    @staticmethod
+    def getPasswordKind(kind):
+        prompt = "Enter %s password:" % kind
+        dialog = PasswordDialog(prompt)
+        if dialog.exec_() == QDialog.Accepted:
+            return dialog.getPassword()
+        return None
+
 class FavoritesPane(Pane):
 
     pushDirectoryMain = pyqtSignal(str)
@@ -3843,8 +3934,10 @@ class FavoritesPane(Pane):
 
         self.onFavoritesChanged()
 
-        self.table_favorites.pushDirectory.connect(
-            lambda path: self.pushDirectoryMain.emit(path))
+        self.table_favorites.pushDirectoryMain.connect(
+            self.pushDirectoryMain)
+        self.table_favorites.pushDirectorySecondary.connect(
+            self.pushDirectorySecondary)
 
         self.table_favorites.toggleHiddenSection.connect(
             self.onToggleHiddenSection)
@@ -3941,7 +4034,7 @@ class LocationPane(Pane):
         self.ctxt.locationChanging.connect(self.onLocationChanging)
         self.ctxt.locationChanged.connect(self.onLocationChanged)
 
-        self.view_location.setFilterPattern.connect(self.table_file.onSetFilterPatteern)
+        self.view_location.setFilterPattern.connect(self.table_file.onSetFilterPattern)
         self.view_location.splitInterface.connect(self.splitInterface)
 
     def setSplitIcon(self, bSplit):
@@ -4044,7 +4137,7 @@ class LocationPane(Pane):
                 urls.append(url.toLocalFile())
             event.accept()
 
-            dialog = SyncProgressDialog(self.ctxt)
+            dialog = SyncProgressDialog()
             thread = CopyProgressThread(self.ctxt.fs, urls,
                 self.ctxt.currentLocation(), dropAction, self)
             dialog.setThread(thread)
@@ -4113,7 +4206,7 @@ class LocationPane(Pane):
             for url in mimeData.urls():
                 urls.append(url.toLocalFile())
 
-            dialog = SyncProgressDialog(self.ctxt)
+            dialog = SyncProgressDialog()
             thread = CopyProgressThread(self.ctxt.fs, urls, self.ctxt.currentLocation(), dropAction, self)
             dialog.setThread(thread)
             dialog.exec_()
@@ -4138,6 +4231,13 @@ class DoubleLocationPane(QWidget):
 
         self.primary.splitInterface.connect(self.onShowSecondary)
         self.secondary.splitInterface.connect(self.onHideSecondary)
+
+    def showSecondary(self, show):
+
+        if show:
+            self.onShowSecondary()
+        else:
+            self.onHideSecondary()
 
     def onShowSecondary(self):
         self.secondary.show()
@@ -4192,6 +4292,8 @@ class SyncMainWindow(QMainWindow):
 
         self.pane_favorites.pushDirectoryMain.connect(
             self.onPushDirectory)
+        self.pane_favorites.pushDirectorySecondary.connect(
+            self.onPushSecondaryDirectory)
 
         self.splitter = QSplitter(self)
         self.splitter.addWidget(self.pane_favorites)
@@ -4309,6 +4411,11 @@ class SyncMainWindow(QMainWindow):
         w = self.tabview.currentWidget()
         w.setPrimaryDirectory(path)
 
+    def onPushSecondaryDirectory(self, path):
+        w = self.tabview.currentWidget()
+        w.setSecondaryDirectory(path)
+        w.showSecondary(True)
+
     def onFocusChanged(self, focus):
 
         self.calendar.setEnabled(focus)
@@ -4381,6 +4488,9 @@ def main():
     app.setStyle("Fusion")
     # app.setStyle("windowsvista")
     # setDarkTheme(app)
+
+    # https://github.com/ppinard/qtango
+    # QIcon.setThemeName("tango")
 
     app.setQuitOnLastWindowClosed(True)
     app_icon = QIcon(':/img/icon.png')
