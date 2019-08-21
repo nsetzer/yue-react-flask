@@ -2190,8 +2190,11 @@ class FileTableView(TableView):
 
                 is_text = False
                 with self.ctxt.fs.open(ent.local_path, "rb") as rf:
-                    g = lambda v: v == 0xD or v == 0xA or v >= 0x20
-                    is_text = all(g(b) for b in rf.read(2014))
+                    #g = lambda v: v == 0xD or v == 0xA or v >= 0x20
+                    #is_text = all(g(b) for b in rf.read(2048))
+                    g = lambda v: v < 0x0A
+                    is_text = not any(g(b) for b in rf.read(2048))
+                    print("is text", is_text)
 
                 if is_text:
                     executeAction(text_action, [ent], self.ctxt.currentLocation())
@@ -3364,7 +3367,7 @@ class RemoveProgressThread(ProgressThread):
 
         discoveredSize = 0
         transferedSize = 0
-        generator = self.fs.remove_multiple(self.urls)
+        generator = self.fs.delete_multiple(self.urls)
 
         for url in self.urls:
             self.sendStatus(url)

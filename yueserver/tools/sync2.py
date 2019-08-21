@@ -735,7 +735,7 @@ class FileEnt(object):
         return FileState.ERROR
 
     def state(self):
-        if self._state is None:
+        if not self._state:
             self._state = self._get_state()
         return self._state
 
@@ -1207,7 +1207,6 @@ def _fetch(ctxt):
         pass
 
 def _check(ctxt, remote_base, local_base):
-
     if remote_base and not remote_base.endswith("/"):
         remote_base += "/"
 
@@ -1584,9 +1583,9 @@ def _sync_file_push(ctxt, attr, ent):
     if response.status_code != 200 and response.status_code != 201:
         raise SyncException("unexpected error: %s" % response.status_code)
 
-    # TODO: af should be update using response json values
-    print("push_file", response.json())
-    ent.af['version'] = version
+    data =  response.json()
+
+    ent.af['version'] = data['file_info']['version']
 
     record = RecordBuilder().local(**ent.af).remote(**ent.af).build()
     record['remote_encryption'] = crypt

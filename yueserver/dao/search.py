@@ -511,6 +511,10 @@ class LHSError(ParseError):
             msg += " : %s" % value
         super(LHSError, self).__init__(msg)
 
+def mktime(dt):
+    # Note: switched calendar.timegm to time.mktime
+    return int(time.mktime(dt.timetuple()))
+
 class FormatConversion(object):
     """
     FormatConversion handles conversion from string to another type.
@@ -573,7 +577,7 @@ class FormatConversion(object):
         dtn = self.datetime_now
         dt1 = self.computeDateDelta(dtn.year, dtn.month, dtn.day, dy, dm, dd)
         dt2 = dt1 + timedelta(1)
-        return time.mktime(dt1.timetuple()), time.mktime(dt2.timetuple())
+        return mktime(dt1), mktime(dt2)
 
     def computeDateDelta(self, y, m, d, dy, dm, dd=0):
         """
@@ -641,7 +645,7 @@ class FormatConversion(object):
         dt1 = datetime(y, m, d, H, M)
         dt2 = dt1 + timedelta(1)
 
-        result = time.mktime(dt1.timetuple()), time.mktime(dt2.timetuple())
+        result = mktime(dt1), mktime(dt2)
         return result
 
     def formatDate(self, sValue):
@@ -684,7 +688,7 @@ class FormatConversion(object):
             dt2 = dt1 + timedelta(1)
 
         # Note: switched calendar.timegm to time.mktime
-        result = time.mktime(dt1.timetuple()), time.mktime(dt2.timetuple())
+        result = mktime(dt1), mktime(dt2)
         return result
 
     def parseDuration(self, sValue):
@@ -718,10 +722,10 @@ class FormatConversion(object):
 
         dt = NLPDateRange(self.datetime_now).parse(value)
         if dt:
-            cf = time.mktime(dt[0].utctimetuple())
+            cf = mktime(dt[0])
             if cf < 0:
                 cf = 0
-            rf = time.mktime(dt[1].utctimetuple())
+            rf = mktime(dt[1])
             return cf, rf
         return None
 

@@ -375,7 +375,7 @@ class FileSystem(object):
 
         yield (FileSystem.FS_DIR, dir, 0)
 
-    def remove(self, src):
+    def delete(self, src):
 
         """
         """
@@ -392,7 +392,7 @@ class FileSystem(object):
         else:
             yield from self._remove_recursive(src)
 
-    def remove_multiple(self, urls):
+    def delete_multiple(self, urls):
 
         for url in urls:
             yield from self.remove(url)

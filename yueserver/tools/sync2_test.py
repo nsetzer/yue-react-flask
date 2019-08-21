@@ -7,7 +7,7 @@ import unittest
 from base64 import b64encode
 
 from ..dao.db import main_test
-from ..dao.filesys.filesys import FileSystem, MemoryFileSystemImpl
+from ..dao.filesys.filesys import FileSystem, MemoryFileSystemImpl, epoch_time, FileRecord
 
 from ..app import TestApp
 from ..framework.client import FlaskAppClient
@@ -87,7 +87,10 @@ def createTestFile(storageDao, fs, state, variant, rel_path, remote_base, local_
         info = fs.file_info(local_path)
         record = RecordBuilder() \
             .remoteFromInfo(info).remote(2).build()
+        print(record)
         storageDao.insert(remote_path, record)
+        print(remote_path)
+        print(storageDao.listdir(""))
     if state == FileState.CONFLICT_VERSION:
         if variant == 0:
             with fs.open(local_path, "wb") as wb:
@@ -106,10 +109,11 @@ def createTestFile(storageDao, fs, state, variant, rel_path, remote_base, local_
                 .remoteFromInfo(info).remote(1, len(content), -1).build()
             storageDao.insert(remote_path, record)
     if state == FileState.DELETE_BOTH:
-        with fs.open(local_path, "wb") as wb:
-            wb.write(content)
-        info = fs.file_info(local_path)
-        fs.remove(local_path)
+        #with fs.open(local_path, "wb") as wb:
+        #    wb.write(content)
+        #info = fs.file_info(local_path)
+        #fs.remove(local_path)
+        info = FileRecord(fs.split(local_path)[1], False, len(content), epoch_time())
         record = RecordBuilder() \
             .localFromInfo(info).local(1).build()
         storageDao.insert(remote_path, record)
@@ -121,10 +125,11 @@ def createTestFile(storageDao, fs, state, variant, rel_path, remote_base, local_
             .localFromInfo(info).local(1).build()
         storageDao.insert(remote_path, record)
     if state == FileState.DELETE_LOCAL:
-        with fs.open(local_path, "wb") as wb:
-            wb.write(content)
-        info = fs.file_info(local_path)
-        fs.remove(local_path)
+        #with fs.open(local_path, "wb") as wb:
+        #    wb.write(content)
+        #info = fs.file_info(local_path)
+        #fs.remove(local_path)
+        info = FileRecord(fs.split(local_path)[1], False, len(content), epoch_time())
         record = RecordBuilder() \
             .localFromInfo(info).local(1) \
             .remoteFromInfo(info).remote(1).build()
@@ -217,9 +222,10 @@ class CheckSyncTestCase(unittest.TestCase):
         result = _check(self.ctxt, "local", "mem://local")
 
         self.assertEqual(len(result.files), 1)
-        actual = result.files[0].state()
-        self.assertTrue(actual.startswith(state), actual)
         fent = result.files[0]
+        actual = fent.state()
+        msg = "%s\nactual:`%s`\nexpected:`%s`\naf: %s\nlf: %s\nrf: %s\n" % (fent.local_path, actual, state, fent.af, fent.lf, fent.rf)
+        self.assertTrue(actual.startswith(state), msg)
 
     def test_000_state_same(self):
         self.__check(FileState.SAME, 0)
@@ -298,21 +304,25 @@ class TestClient(object):
         self.storageDao = storageDao
 
     def files_upload(self, root, relpath, rb, mtime=None,
-      permission=None, crypt=None, headers=None):
+      permission=0, version=0, crypt=None, headers=None):
 
         path = "mem://remote/%s" % (relpath)
 
+        size = 0
         with self.fs.open(path, "wb") as wb:
             # for buf in iter(lambda: rb.read(2048), b""):
             #    wb.write(buf)
             for buf in rb:
                 wb.write(buf)
+                size += len(buf)
         # todo set perm
         # todo assert version
         self.fs.set_mtime(path, mtime)
 
         response = lambda: None
         response.status_code = 201
+        file_info = {'mtime': mtime, 'size': size, 'version': version+1, 'permission': permission}
+        response.json = lambda: {"file_info": file_info}
         return response
 
     def files_get_path(self, root, rel_path, stream=False, headers=None):
@@ -429,7 +439,9 @@ class SyncTestCase(unittest.TestCase):
 
         result = _check(self.ctxt, remote_base, local_base)
         fent = result.files[0]
-        self.assertTrue(fent.state().startswith(state))
+        actual_state = fent.state()
+        msg = "%s\nactual:`%s`\nexpected:`%s`\naf: %s\nlf: %s\nrf: %s\n" % (fent.local_path, actual_state, state, fent.af, fent.lf, fent.rf)
+        self.assertTrue(actual_state.startswith(state), msg)
 
         _sync_file_impl(self.ctxt, fent, True, False, True)
 
@@ -441,7 +453,9 @@ class SyncTestCase(unittest.TestCase):
         else:
             result2 = _check(self.ctxt, remote_base, local_base)
             fent2 = result2.files[0]
-            self.assertTrue(fent2.state().startswith(final_state), fent2.state())
+            actual_state = fent2.state()
+            msg = "%s\nactual:`%s`\nexpected:`%s`\naf: %s\nlf: %s\nrf: %s\n" % (fent2.local_path, actual_state, state, fent2.af, fent2.lf, fent2.rf)
+            self.assertTrue(actual_state.startswith(final_state), msg)
             self.assertTrue(self.fs.exists(remote_abs_path),
                 MemoryFileSystemImpl._mem_store.keys())
 
@@ -518,7 +532,9 @@ class SyncTestCase(unittest.TestCase):
 
         result = _check(self.ctxt, remote_base, local_base)
         fent = result.files[0]
-        self.assertTrue(fent.state().startswith(state))
+        actual_state = fent.state()
+        msg = "%s\nactual:`%s`\nexpected:`%s`\naf: %s\nlf: %s\nrf: %s\n" % (fent.local_path, actual_state, state, fent.af, fent.lf, fent.rf)
+        self.assertTrue(actual_state.startswith(state), msg)
 
         _sync_file_impl(self.ctxt, fent, False, True, True)
 

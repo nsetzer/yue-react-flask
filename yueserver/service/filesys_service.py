@@ -352,13 +352,23 @@ class FileSysService(object):
         except StorageNotFoundException as e:
             pass
 
-        if version == 0:
-            version = None # + 1 handled by dao layer
 
-        elif info is not None and info.version > 0 and version is not None:
-            if version < info.version:
+        # the new logic here avoids letting the dao layer decide
+        if info is not None:
+            # if the incoming version is lower than or equal to the
+            # current version, reject the upload, otherwise take the
+            # highest version number, and increment if necessary
+            if not version:
+                version = info.version + 1
+
+            elif version <= info.version:
                 raise FileSysServiceException(
                     "Version out of date (%d < %d)" % (version, info.version), 409)
+
+
+        elif not version:
+            # this is the first version
+            version = 1
 
         if storage_path is None:
             storage_path = self._getNewStoragePath(user, fs_name, path)
@@ -402,6 +412,7 @@ class FileSysService(object):
             mtime=mtime,
             encryption=encryption,
             permission=permission,
+            version=version,
         )
 
         return file_info

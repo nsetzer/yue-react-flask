@@ -47,7 +47,8 @@ from .search import SearchGrammar, \
         RHSError, \
         LHSError, \
         StrPos, \
-        naive_search
+        naive_search, \
+        mktime
 
 def extract(field, items):
     return set(item[field] for item in items)
@@ -308,19 +309,19 @@ class SearchGrammarTestCase(unittest.TestCase):
 
         t1,t2 = fc.formatDateDelta("1")
         dt = datetime.datetime(dtn.year,dtn.month,dtn.day-1)
-        self.assertEqual(t1,calendar.timegm(dt.timetuple()))
+        self.assertEqual(t1,mktime(dt))
 
         t1,t2 = fc.formatDateDelta("1d")
         dt = datetime.datetime(dtn.year,dtn.month,dtn.day-1)
-        self.assertEqual(t1,calendar.timegm(dt.timetuple()))
+        self.assertEqual(t1,mktime(dt))
 
         t1,t2 = fc.formatDateDelta("-1d")
         dt = datetime.datetime(dtn.year,dtn.month,dtn.day+1)
-        self.assertEqual(t1,calendar.timegm(dt.timetuple()))
+        self.assertEqual(t1,mktime(dt))
 
         t1,t2 = fc.formatDateDelta("1y1m1w1d")
         dt = datetime.datetime(dtn.year-1,dtn.month-1,dtn.day-8)
-        self.assertEqual(t1,calendar.timegm(dt.timetuple()))
+        self.assertEqual(t1,mktime(dt))
 
     def test_date_format(self):
 
@@ -328,25 +329,25 @@ class SearchGrammarTestCase(unittest.TestCase):
         self.sg.autoset_datetime = False
 
         t1,t2 = self.sg.fc.formatDate("15")
-        self.assertEqual(t1,calendar.timegm(datetime.datetime(2015,1,1).timetuple()))
+        self.assertEqual(t1,mktime(datetime.datetime(2015,1,1)))
 
         t1,t2 = self.sg.fc.formatDate("2015")
-        self.assertEqual(t1,calendar.timegm(datetime.datetime(2015,1,1).timetuple()))
+        self.assertEqual(t1,mktime(datetime.datetime(2015,1,1)))
 
         t1,t2 = self.sg.fc.formatDate("2015/6")
-        self.assertEqual(t1,calendar.timegm(datetime.datetime(2015,6,1).timetuple()))
+        self.assertEqual(t1,mktime(datetime.datetime(2015,6,1)))
 
         t1,t2 = self.sg.fc.formatDate("15/06/")
-        self.assertEqual(t1,calendar.timegm(datetime.datetime(2015,6,1).timetuple()))
+        self.assertEqual(t1,mktime(datetime.datetime(2015,6,1)))
 
         t1,t2 = self.sg.fc.formatDate("2015/6/15")
-        self.assertEqual(t1,calendar.timegm(datetime.datetime(2015,6,15).timetuple()))
+        self.assertEqual(t1,mktime(datetime.datetime(2015,6,15)))
 
         t1,t2 = self.sg.fc.formatDate("15/06/15")
-        self.assertEqual(t1,calendar.timegm(datetime.datetime(2015,6,15).timetuple()))
+        self.assertEqual(t1,mktime(datetime.datetime(2015,6,15)))
 
         t1,t2 = self.sg.fc.formatDate("75/06/15")
-        self.assertEqual(t1,calendar.timegm(datetime.datetime(1975,6,15).timetuple()))
+        self.assertEqual(t1,mktime(datetime.datetime(1975,6,15)))
 
         # todo: may want to delete the code that handles this case
         with self.assertRaises(ParseError):
@@ -384,12 +385,12 @@ class SearchGrammarTestCase(unittest.TestCase):
         fc = FormatConversion( dtn );
 
         t1, t2 = fc.parseNLPDate(StrPos("today",0,6))
-        self.assertEqual(t1,calendar.timegm(datetime.datetime(2015,6,15).timetuple()))
-        self.assertEqual(t2,calendar.timegm(datetime.datetime(2015,6,16).timetuple()))
+        self.assertEqual(t1,mktime(datetime.datetime(2015,6,15)))
+        self.assertEqual(t2,mktime(datetime.datetime(2015,6,16)))
 
         t1, t2 = fc.parseNLPDate(StrPos("older than last month",0,6))
         self.assertEqual(t1,0)
-        self.assertEqual(t2,calendar.timegm(datetime.datetime(2015,5,1).timetuple()))
+        self.assertEqual(t2,mktime(datetime.datetime(2015,5,1)))
 
     def test_tokenize(self):
 
@@ -435,8 +436,8 @@ class SearchGrammarTestCase(unittest.TestCase):
         self.assertTrue(isinstance(r, RangeSearchRule), type(r))
         dt1 = datetime.datetime(dtn.year,dtn.month,dtn.day)
         dt2 = datetime.datetime(dtn.year,dtn.month,dtn.day+1)
-        self.assertEqual(r.value_low,calendar.timegm(dt1.timetuple()))
-        self.assertEqual(r.value_high,calendar.timegm(dt2.timetuple()))
+        self.assertEqual(r.value_low,mktime(dt1))
+        self.assertEqual(r.value_high,mktime(dt2))
 
         r2 = self.sg.ruleFromString("(date = today)")
         self.assertEqual(str(r), str(r2))
