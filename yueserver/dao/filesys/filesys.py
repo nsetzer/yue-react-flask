@@ -395,7 +395,7 @@ class FileSystem(object):
     def delete_multiple(self, urls):
 
         for url in urls:
-            yield from self.remove(url)
+            yield from self.delete(url)
 
 
 
