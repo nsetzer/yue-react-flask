@@ -66,6 +66,7 @@ from yueserver.qtcommon.TableView import (
 )
 from yueserver.qtcommon.exceptions import installExceptionHook
 from yueserver.qtcommon import resource
+from yueserver.qtcommon import tango
 from yueserver.framework.config import BaseConfig, yload, ydump
 
 from yueserver.tools import sync2
@@ -1519,8 +1520,10 @@ class FileContextMenu(QMenu):
 
         self.addAction("Rename", self._action_rename)
 
-        act = self.addAction("Copy", lambda: self._action_copy(ents))
-        act = self.addAction("Cut", lambda: self._action_cut(ents))
+        ico = QIcon.fromTheme("edit-copy")
+        act = self.addAction(ico, "Copy", lambda: self._action_copy(ents))
+        ico = QIcon.fromTheme("edit-cut")
+        act = self.addAction(ico, "Cut", lambda: self._action_cut(ents))
 
         clipboard = QGuiApplication.clipboard();
         mimeData = clipboard.mimeData()
@@ -1529,7 +1532,8 @@ class FileContextMenu(QMenu):
         else:
             text = "Paste (0)"
 
-        act = self.addAction(text, self._action_paste)
+        ico = QIcon.fromTheme("edit-paste")
+        act = self.addAction(ico, text, self._action_paste)
         act.setEnabled(mimeData.hasUrls())
 
         #if self.ctxt.hasActiveContext():
@@ -4508,6 +4512,8 @@ def main():
 
     # https://github.com/ppinard/qtango
     # QIcon.setThemeName("tango")
+
+    QIcon.setThemeName("tango")
 
     app.setQuitOnLastWindowClosed(True)
     app_icon = QIcon(':/img/icon.png')
