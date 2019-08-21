@@ -37,10 +37,13 @@
 #   optional bold text mode
 # cli options
 #   $0 path1 [path2]
-#   $0 -o [path1, ...] open one or more tabs to a path
 #   $0 -e path1        open a file as if it was double clicked
 #   $0 -d path1 path2  diff two files or folders
-#
+# create a qobject - TaskQueue
+#   - include a cancel all queued tasks option
+#   - when a task completes emit an event containing the result
+# when rowScale >= 3: submit a task for all image rows to compute an icon
+# add a button to toggle row scale between two pre-defined values (normal, big)
 
 import os
 import sys
@@ -52,6 +55,8 @@ import shlex
 import subprocess
 import fnmatch
 import traceback
+import argparse
+
 from datetime import datetime
 
 from PyQt5.QtCore import *
@@ -301,10 +306,13 @@ class SyncConfig(BaseConfig):
         # mode: zero|single|multiple
         self.menu_actions = self.get_key(data, "menu_actions", default=[])
 
+        # an open action
+        self.diff_action = self.get_key(data, "diff_action", default={})
+
         self.showHiddenFiles = True
         self.showBlacklistFiles = True
 
-        self.rowScale = 1.75
+        self.rowScale = self.get_key(data, "rowScale", default=[])
 
     def save(self):
 
@@ -767,7 +775,13 @@ class AppContext(QObject):
         if kind in self._icon_ext:
             return self._icon_ext[kind]
 
-        icon = self._icon_provider.icon(kind)
+        if isinstance(kind, str):
+            icon = QIcon.fromTheme(kind)
+            if icon.isNull():
+                raise Exception("invalid icon: %s" % kind)
+        else:
+            icon = self._icon_provider.icon(kind)
+
         image = icon.pixmap(QSize(64, 64)).toImage()
         self._icon_ext[kind] = image
         return image
@@ -1490,7 +1504,12 @@ class FileContextMenu(QMenu):
                 act = item['action']
                 text = item['text']
                 g = lambda ents=ents, act=act: self._action_open_action(ents, act)
-                act = menu.addAction(text, g)
+
+                if 'icon' in item:
+                    icon = QIcon.fromTheme(item['icon'])
+                    act = menu.addAction(icon, text, g)
+                else:
+                    act = menu.addAction(text, g)
 
         if self.ctxt.hasActiveContext():
 
@@ -1580,7 +1599,12 @@ class FileContextMenu(QMenu):
                     tgt = groups[grp]
 
                 g = lambda ents=ents, act=act: self._action_menu_action(ents, act)
-                act = tgt.addAction(text, g)
+
+                if 'icon' in item:
+                    icon = QIcon.fromTheme(item['icon'])
+                    act = tgt.addAction(icon, text, g)
+                else:
+                    act = tgt.addAction(text, g)
 
     def _action_template(self):
         pass
@@ -2788,7 +2812,6 @@ class FavoritesListView(TableView):
 
         contextMenu.exec_(event.globalPos())
 
-
     def onMouseReleaseMiddle(self, event):
         pass
 
@@ -2812,7 +2835,6 @@ class FavoritesListView(TableView):
             path = os.path.expandvars(path)
             if path is not None:
                 self.pushDirectorySecondary.emit(path)
-
 
 class LocationView(QWidget):
 
@@ -3981,12 +4003,19 @@ class FavoritesPane(Pane):
             if section in self._hidden_sections:
                 continue
 
-            icon = QFileIconProvider.Folder
+            icon = None
+            kind = QFileIconProvider.Folder
             if 'icon' in row and isinstance(row['icon'], str):
                 if hasattr(QFileIconProvider, row['icon']):
-                    icon = getattr(QFileIconProvider, row['icon'])
+                    kind = getattr(QFileIconProvider, row['icon'])
+                else:
+                    temp = QIcon.fromTheme(row['icon'])
+                    if not temp.isNull():
+                        icon = temp.pixmap(64, 64).toImage()
 
-            icon = self.appCtxt.getIcon(icon)
+            if icon is None:
+                icon = self.appCtxt.getIcon(kind)
+
             data.append([icon, row['name'], row['path'], False])
 
         self.table_favorites.setNewData(data)
@@ -4503,6 +4532,31 @@ def main():
     if save:
         cfg.save()
 
+    parser = argparse.ArgumentParser(
+        description='',
+        epilog='')
+
+    group_ex = parser.add_mutually_exclusive_group()
+
+    group_ex.add_argument("-e", dest='edit', type=str, default=None, nargs=1,
+        help='open a file')
+
+    group_ex.add_argument("-d", dest='diff', type=str, default=None, nargs=2,
+        help='open a file')
+
+    parser.add_argument("paths", type=str, default=None, nargs='*',
+        help='open a file')
+
+    args = parser.parse_args()
+
+    if args.edit:
+        print(args)
+        return
+
+    if args.diff:
+        print(args)
+        return
+
     app = QApplication(sys.argv)
     app.setApplicationName("Yue-Sync")
     print(QStyleFactory.keys())
@@ -4526,7 +4580,16 @@ def main():
     window = SyncMainWindow(cfg)
     window.showWindow()
 
-    window.newTab()
+    if args.paths:
+        if len(args.paths) % 2 == 1:
+            args.paths.append(".")
+
+        for i in range(0, len(args.paths), 2):
+            window.addTab(args.paths[i], args.paths[i])
+
+    else:
+
+        window.newTab()
 
     sys.exit(app.exec_())
 
