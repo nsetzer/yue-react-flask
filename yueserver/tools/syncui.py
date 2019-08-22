@@ -61,6 +61,8 @@ import subprocess
 import fnmatch
 import traceback
 import argparse
+import struct
+import socket
 
 from datetime import datetime
 
@@ -88,6 +90,18 @@ from yueserver.dao.search import (
     PartialStringSearchRule, InvertedPartialStringSearchRule,
     Column, case_
 )
+
+# -----------------------------------------------------------------------------
+if os.name == 'nt':
+    cfg_base = os.path.join(os.getenv('APPDATA'))
+else:
+    cfg_base = os.path.expanduser("~/.config")
+
+if os.name == 'nt':
+    if 'HOME' not in os.environ:
+        os.environ['HOME'] = os.path.expanduser("~")
+
+# -----------------------------------------------------------------------------
 
 def openNative(url):
 
@@ -221,6 +235,39 @@ def executeAction(action, ents, pwd):
     args = [arg.format(**opts) for arg in args]
 
     return openProcess(args, pwd)
+
+def openAction(actions, pwd, ent):
+
+    ftype = getFileType(ent.local_path)
+
+    text_action = None
+    action = None
+    for act in actions:
+        supported = [stype.upper() for stype in act.get("types", [])]
+        if ftype in supported:
+            action = act.get("action", None)
+        if act.get('default', False):
+            text_action = act.get("action", None)
+
+    if action is not None:
+        executeAction(action, [ent], pwd)
+        return
+
+    if text_action is not None:
+
+        is_text = False
+        with self.ctxt.fs.open(ent.local_path, "rb") as rf:
+            #g = lambda v: v == 0xD or v == 0xA or v >= 0x20
+            #is_text = all(g(b) for b in rf.read(2048))
+            g = lambda v: v < 0x0A
+            is_text = not any(g(b) for b in rf.read(2048))
+            print("is text", is_text)
+
+        if is_text:
+            executeAction(text_action, [ent], pwd)
+            return
+
+    openNative(ent.local_path)
 
 def isSubPath(dir_path, file_path):
     return os.path.abspath(file_path).startswith(os.path.abspath(dir_path) + os.sep)
@@ -2244,37 +2291,7 @@ class FileTableView(TableView):
         if isinstance(ent, sync2.DirEnt):
             self.ctxt.pushChildDirectory(ent.name())
         else:
-
-            ftype = getFileType(ent.local_path)
-
-            text_action = None
-            action = None
-            for act in self.cfg.open_actions:
-                supported = [stype.upper() for stype in act.get("types", [])]
-                if ftype in supported:
-                    action = act.get("action", None)
-                if act.get('default', False):
-                    text_action = act.get("action", None)
-
-            if action is not None:
-                executeAction(action, [ent], self.ctxt.currentLocation())
-                return
-
-            if text_action is not None:
-
-                is_text = False
-                with self.ctxt.fs.open(ent.local_path, "rb") as rf:
-                    #g = lambda v: v == 0xD or v == 0xA or v >= 0x20
-                    #is_text = all(g(b) for b in rf.read(2048))
-                    g = lambda v: v < 0x0A
-                    is_text = not any(g(b) for b in rf.read(2048))
-                    print("is text", is_text)
-
-                if is_text:
-                    executeAction(text_action, [ent], self.ctxt.currentLocation())
-                    return
-
-            openNative(ent.local_path)
+            openAction(self.cfg.open_actions, self.ctxt.currentLocation(), ent)
 
     def onMouseReleaseRight(self, event):
 
@@ -3407,8 +3424,6 @@ class CopyProgressThread(ProgressThread):
             except Exception as e:
                 self.sendStatus("%s:\n %s" % (src, e))
 
-
-
         self.sendStatus("done", force=True)
 
     def _move_one(self, kind, src, dst):
@@ -4402,6 +4417,104 @@ class EventFilter(QObject):
             self.parent().onFocusChanged(self.parent().isActiveWindow())
         return super().eventFilter(obj, event)
 
+class RpcThread(QThread):
+
+    message_recieved = pyqtSignal(object)
+
+    def __init__(self, host=None, port=0, parent=None):
+        super(RpcThread, self).__init__(parent)
+
+        self.host = host or 'localhost'
+        self.port = 0 if port <= 0 else port
+
+        self.alive = True
+
+    def _connect(self):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+        try:
+
+            self.sock.bind((self.host, self.port))
+            self.sock.listen(1)
+            self.sock.settimeout(.5)
+        except OSError:
+            sys.stderr.write("unable to bind socket %s:%d\n"%(self.host, self.port))
+            self.alive = False
+
+    def run(self):
+
+        self._connect()
+
+        while self.alive:
+            try:
+                conn, addr = self.sock.accept()
+
+                self.handleConnection(conn, addr)
+
+            except socket.timeout as e:
+                pass
+            except Exception as e:
+                print(type(e),e)
+                break
+        sys.stderr.write("Remote Socket Thread has ended.\n")
+
+    def handleConnection(self, conn, addr):
+        version, size = struct.unpack(">bI", conn.recv(5))
+        data = conn.recv(size)
+
+        msg = RpcMessage.decode(data)
+
+        self.message_recieved.emit(msg)
+
+        conn.close()
+
+    def join(self):
+        self.alive = False
+        self.sock.close()
+        sys.stdout.write("closing socket\n")
+        self.wait()
+
+class RpcOpenTabMessage(object):
+    type = 1
+
+    def __init__(self, paths):
+        super(RpcOpenTabMessage, self).__init__()
+        self.paths = paths
+
+    def encode(self):
+        msg = b'\x00'.join([p.encode("utf-8") for p in self.paths])
+        return msg
+
+    @staticmethod
+    def decode(data):
+        paths = [p.decode('utf-8') for p in data.split(b'\x00')]
+        return RpcOpenTabMessage(paths)
+
+class RpcMessage(object):
+
+    types = {
+        RpcOpenTabMessage.type: RpcOpenTabMessage,
+    }
+
+    @staticmethod
+    def encode(rpcMsg):
+        type = struct.pack("<I", rpcMsg.type)
+        return type + rpcMsg.encode()
+
+    @staticmethod
+    def decode(data):
+        type, = struct.unpack("<I", data[:4])
+        return RpcMessage.types[type].decode(data[4:])
+
+    @staticmethod
+    def send(host, port, packet):
+        packet = struct.pack('<bI', 1, len(packet)) + packet
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect((host, port))
+        print("sent", sock.send(packet))
+        sock.close()
+
 class SyncMainWindow(QMainWindow):
 
     def __init__(self, cfg):
@@ -4441,6 +4554,10 @@ class SyncMainWindow(QMainWindow):
         self.setCentralWidget(self.splitter)
 
         self.installEventFilter(EventFilter(self))
+
+        self.rpc_thread = RpcThread('0.0.0.0', 20123, self)
+        self.rpc_thread.message_recieved.connect(self.onRpcMessage)
+        self.rpc_thread.start()
 
     def initMenuBar(self):
 
@@ -4530,12 +4647,16 @@ class SyncMainWindow(QMainWindow):
 
         self.tabview.addTab(pane, icon, "")
 
-        pane.setPrimaryDirectory(primaryPath)
-        pane.setSecondaryDirectory(secondaryPath)
-
         self.tabview.setTabsClosable(self.tabview.count()>1)
 
         self.tabview.setCurrentWidget(pane)
+
+        try:
+            # TODO: error if path does not exists...
+            pane.setPrimaryDirectory(primaryPath)
+            pane.setSecondaryDirectory(secondaryPath)
+        except Exception as e:
+            pass
 
     def onDirectoryChanged(self, pane, path):
 
@@ -4559,6 +4680,28 @@ class SyncMainWindow(QMainWindow):
 
         self.calendar.setEnabled(focus)
         self.clock.setEnabled(focus)
+
+    def onAboutToQuit(self):
+        procinfo = os.path.join(cfg_base, "yue-sync", ".procinfo")
+        if os.path.exists(procinfo):
+            os.remove(procinfo)
+
+    def focusWindow(self):
+        # todo: platform dependent options
+        #self.setFocus()
+        #self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def onRpcMessage(self, msg):
+        print(msg)
+
+        self.focusWindow()
+
+        if isinstance(msg, RpcOpenTabMessage):
+            for path in msg.paths:
+                if path:
+                    self.addTab(path, "")
 
 def setDarkTheme(app):
 
@@ -4604,16 +4747,9 @@ def setDarkTheme(app):
 
 def main():
 
-    if os.name == 'nt':
-        cfg_base = os.path.join(os.getenv('APPDATA'))
-    else:
-        cfg_base = os.path.expanduser("~/.config")
-
-    if os.name == 'nt':
-        if 'HOME' not in os.environ:
-            os.environ['HOME'] = os.path.expanduser("~")
-
     cfg_path = os.path.join(cfg_base, "yue-sync", "settings.yml")
+
+    procinfo = os.path.join(cfg_base, "yue-sync", ".procinfo")
 
     # load the config, or create a new one if it does not exist
     save = not os.path.exists(cfg_path)
@@ -4625,13 +4761,20 @@ def main():
         description='',
         epilog='')
 
+    parser.add_argument("--pwd", type=str, default=None,
+        help='open a file')
+
+    parser.add_argument("-p", type=str, default='', nargs=1,
+        help='open a file')
+
     group_ex = parser.add_mutually_exclusive_group()
 
     group_ex.add_argument("-e", dest='edit', type=str, default=None, nargs=1,
         help='open a file')
 
-    group_ex.add_argument("-d", dest='diff', type=str, default=None, nargs=2,
-        help='open a file')
+    if cfg.diff_action.get('action', None):
+        group_ex.add_argument("-d", dest='diff', type=str, default=None, nargs=2,
+            help='open a file')
 
     parser.add_argument("paths", type=str, default=None, nargs='*',
         help='open a file')
@@ -4639,12 +4782,28 @@ def main():
     args = parser.parse_args()
 
     if args.edit:
-        print(args)
+        ent = sync2.FileEnt(None, args.edit[0], None, None, None)
+        openAction(cfg.open_actions, os.getcwd(), ent)
         return
 
     if args.diff:
         print(args)
         return
+
+    if os.path.exists(procinfo):
+        paths = []
+        for path in args.paths:
+            # expand vars using THIS shell env, pass to the open window
+            path = os.path.expanduser(path)
+            path = os.path.expandvars(path)
+            paths.append(os.path.abspath(path))
+        msg  = RpcOpenTabMessage(paths)
+        try:
+            RpcMessage.send('0.0.0.0', 20123, RpcMessage.encode(msg))
+            return
+        except ConnectionRefusedError:
+            # assume window closed and open a new one
+            pass
 
     app = QApplication(sys.argv)
     app.setApplicationName("Yue-Sync")
@@ -4669,6 +4828,8 @@ def main():
     window = SyncMainWindow(cfg)
     window.showWindow()
 
+    app.aboutToQuit.connect(window.onAboutToQuit)
+
     if args.paths:
         if len(args.paths) % 2 == 1:
             args.paths.append(".")
@@ -4680,7 +4841,30 @@ def main():
 
         window.newTab()
 
+    with open(procinfo, "w") as wf:
+        wf.write("%s\n" % os.getpid())
+
     sys.exit(app.exec_())
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+        sys.exit(0)
+    except BaseException as e:
+        # log application startup errors
+
+        error_log_path = os.path.join(cfg_base, 'error.log')
+
+        with open(error_log_path, "w") as wf:
+            wf.write("\n\n")
+            wf.write(" ".join(sys.argv))
+            wf.write("\n\n")
+            wf.write(os.getcwd())
+            wf.write("\n\n")
+            lines = traceback.format_exception(*sys.exc_info())
+            for line in lines:
+                wf.write(line)
+            wf.write('%s' % e)
+
+        raise
+
