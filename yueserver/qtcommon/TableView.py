@@ -593,8 +593,6 @@ class TableModel(QAbstractTableModel):
             self.dataChanged.emit(index, index, [role, ])
         return success
 
-
-
     def headerData(self, section, orientation, role):
 
         view = self.parent()

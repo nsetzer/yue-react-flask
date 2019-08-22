@@ -42,8 +42,13 @@
 # create a qobject - TaskQueue
 #   - include a cancel all queued tasks option
 #   - when a task completes emit an event containing the result
+#   - thumb cache using hash of filepath in .config/thumbs/[:2]/[2:]
 # when rowScale >= 3: submit a task for all image rows to compute an icon
 # add a button to toggle row scale between two pre-defined values (normal, big)
+# if a process is running, opening an instance should open a new tab
+#       '$0' -> focus window
+#       '$0 ...' -> new tab(s)
+#       use QWidget::activateWindow
 
 import os
 import sys
@@ -437,6 +442,8 @@ def _load_default(fs, directory):
                 _dir_contents.append(ent)
             else:
                 ent = sync2.DirEnt(name, None, fullpath)
+                ent._permission = record.permission
+                ent._mtime = record.mtime
                 ent._state = sync2.FileState.SAME
                 _dir_contents.append(ent)
 
@@ -1883,8 +1890,8 @@ class FileTableRowItem(object):
 
             item = [
                 ent,                                      # 0
-                ctxt.getFileStateIcon(ent.state()),  # 1
-                ctxt.getFileIcon(ent.local_path),    # 2
+                ctxt.getFileStateIcon(ent.state()),       # 1
+                ctxt.getFileIcon(ent.local_path),         # 2
                 ent.name(),                               # 3
                 af['size'],                               # 4
                 rf['size'],                               # 5
@@ -1893,28 +1900,28 @@ class FileTableRowItem(object):
                 rf['public'],                             # 8
                 rf['encryption'],                         # 9
                 af['mtime'],                              # 10
-                rf['mtime'],                              #
-                getFileType(ent.name()),                  #
+                rf['mtime'],                              # 11
+                getFileType(ent.name()),                  # 12
                 ent.state()                               # 13
             ]
 
         elif isinstance(ent, sync2.DirEnt):
 
             item = [
-                ent,
-                ctxt.getFileStateIcon(ent.state()),
-                ctxt.getIcon(QFileIconProvider.Folder),
-                ent.name(),
-                0,
-                0,
-                0,
-                0,
-                "",
-                "",
-                0,
-                0,
-                "",
-                ent.state()
+                ent,                                       # 0
+                ctxt.getFileStateIcon(ent.state()),        # 1
+                ctxt.getIcon(QFileIconProvider.Folder),    # 2
+                ent.name(),                                # 3
+                0,                                         # 4
+                0,                                         # 5
+                ent._permission,                           # 6
+                0,                                         # 7
+                "",                                        # 8
+                "",                                        # 9
+                ent._mtime,                                # 10
+                0,                                         # 11
+                "",                                        # 12
+                ent.state()                                # 13
             ]
 
         return FileTableRowItem(item)
@@ -1935,6 +1942,8 @@ class FileTableView(TableView):
     moveEntries = pyqtSignal(list)
     pasteEntries = pyqtSignal()
 
+    loadDetails = pyqtSignal(QObject, QObject)  # table, base model
+
     def __init__(self, ctxt, cfg, parent=None):
         super(FileTableView, self).__init__(parent)
 
@@ -1944,7 +1953,6 @@ class FileTableView(TableView):
         fm = QFontMetrics(self.font())
         v = self.verticalHeader()
         v.setSectionResizeMode(QHeaderView.Fixed)
-        print(v.defaultSectionSize(), fm.height())
         v.setDefaultSectionSize(int(fm.height() * self.cfg.rowScale))
 
         self.setWordWrap(False)
@@ -2053,6 +2061,8 @@ class FileTableView(TableView):
         self.createEmptyFile.connect(self.onCreateEmptyFile)
         self.renameDirectory.connect(self.onRenameDirectory)
         self.renameFile.connect(self.onRenameFile)
+
+        self._detailed_view = False
 
     def getSortProxyModel(self):
         """
@@ -2179,6 +2189,8 @@ class FileTableView(TableView):
     def onLocationChanged(self, directory, target):
 
         self.setEnabled(True)
+
+        self._details_load_start = False
 
         data = []
         # todo change record to FileEnt..
@@ -2760,6 +2772,33 @@ class FileTableView(TableView):
 
         return None
 
+    def onToggleDetailedView(self):
+        self._detailed_view = not self._detailed_view
+
+        fm = QFontMetrics(self.font())
+        v = self.verticalHeader()
+
+        idx_icon = self.baseModel().getColumnIndexByName("icon")
+        idx_state = self.baseModel().getColumnIndexByName("state")
+
+        if self._detailed_view:
+            w = int(3 * fm.height() * self.cfg.rowScale)
+            v.setDefaultSectionSize(w)
+
+            self.setColumnWidth(idx_icon, w)
+            self.setColumnWidth(idx_state, w)
+        else:
+            w = int(fm.height() * self.cfg.rowScale)
+            v.setDefaultSectionSize(w)
+
+            self.setColumnWidth(idx_icon, 40)
+            self.setColumnWidth(idx_state, 40)
+
+
+        if not self._details_load_start:
+            self.loadDetails.emit(self, self.baseModel())
+            self._details_load_start = True
+
 class FavoritesDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
         super(FavoritesDelegate, self).__init__(parent)
@@ -2874,6 +2913,7 @@ class LocationView(QWidget):
 
     setFilterPattern = pyqtSignal(str)
     splitInterface = pyqtSignal()
+    toggleDetailedView = pyqtSignal()
 
     def __init__(self, ctxt, parent=None):
         super(LocationView, self).__init__(parent)
@@ -2914,6 +2954,11 @@ class LocationView(QWidget):
         self.btn_open.setIcon(self.style().standardIcon(QStyle.SP_ArrowForward))
         self.btn_open.setAutoRaise(True)
 
+        self.btn_details = QToolButton(self)
+        self.btn_details.setIcon(self.style().standardIcon(QStyle.SP_FileDialogDetailedView))
+        self.btn_details.setAutoRaise(True)
+
+
         self.btn_split = QToolButton(self)
         self.btn_split.clicked.connect(self.splitInterface)
 
@@ -2924,6 +2969,7 @@ class LocationView(QWidget):
         self.hbox1.addStretch(.3)
         #self.hbox1.addWidget(self.edit_location)
         self.hbox1.addWidget(self.edit_filter)
+        self.hbox1.addWidget(self.btn_details)
         self.hbox1.addWidget(self.btn_split)
 
         self.hbox3.addWidget(self.edit_location)
@@ -2956,6 +3002,7 @@ class LocationView(QWidget):
         self.btn_sync.clicked.connect(self.onSyncButtonPressed)
         self.btn_push.clicked.connect(self.onPushButtonPressed)
         self.btn_pull.clicked.connect(self.onPullButtonPressed)
+        self.btn_details.clicked.connect(self.toggleDetailedView)
         self.edit_filter.textChanged.connect(self.setFilterPattern)
         self.edit_location.returnPressed.connect(self.onOpenButtonPressed)
         self.ctxt.locationChanging.connect(self.onLocationChanging)
@@ -3050,7 +3097,6 @@ class LocationView(QWidget):
         self.setEnabled(False)
 
     def onLocationChanged(self, directory, target):
-
 
         print("min", self.minimumSize(), self.maximumSize())
         print(self.hbox1.sizeHint())
@@ -4114,12 +4160,14 @@ class LocationPane(Pane):
         self.table_file.copyEntries.connect(self.onCopyEntries)
         self.table_file.moveEntries.connect(self.onMoveEntries)
         self.table_file.pasteEntries.connect(self.onPasteEntries)
+        self.table_file.loadDetails.connect(self.onLoadDetails)
 
         self.ctxt.locationChanging.connect(self.onLocationChanging)
         self.ctxt.locationChanged.connect(self.onLocationChanged)
 
         self.view_location.setFilterPattern.connect(self.table_file.onSetFilterPattern)
         self.view_location.splitInterface.connect(self.splitInterface)
+        self.view_location.toggleDetailedView.connect(self.table_file.onToggleDetailedView)
 
     def setSplitIcon(self, bSplit):
         self.view_location.setSplitIcon(bSplit)
@@ -4295,6 +4343,13 @@ class LocationPane(Pane):
             dialog.setThread(thread)
             dialog.exec_()
             self.ctxt.reload()
+
+    def onLoadDetails(self, table, model):
+        # start a thread which updates the model
+        # replace the icon for image types with
+        # a representation of that image
+        print(table)
+        print(model)
 
 class DoubleLocationPane(QWidget):
 

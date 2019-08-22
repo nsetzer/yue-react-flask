@@ -571,6 +571,8 @@ class DirEnt(object):
         self.local_base = local_base
         self._name = name
         self._state = state or FileState.ERROR
+        self._permission = 0
+        self._mtime = 0
 
     def state(self):
         # if self.remote_base is None and self.local_base is None:
@@ -1236,21 +1238,33 @@ def _check(ctxt, remote_base, local_base):
         local_path = ctxt.fs.join(local_base, d)
         # check that the directory exists locally
 
+        permission = 0
+        mtime = 0
+
+        if d in _names:
+            permission = _names[d].permission
+            mtime = _names[d].mtime
+
         if attr.match(d):
             if ctxt.showHiddenNames:
                 state = FileState.IGNORE
             else:
                 continue
         elif d in _names:
+
             if _names[d].isDir:
                 state = FileState.SAME
             else:
                 state = FileState.CONFLICT_TYPE
+
             del _names[d]
         else:
             state = FileState.PULL
 
-        dirs.append(DirEnt(d, remote_path, local_path, state))
+        ent = DirEnt(d, remote_path, local_path, state)
+        ent._permission = permission
+        ent._mtime = mtime
+        dirs.append(ent)
 
     for f in _files:
         name = f['rel_path']
@@ -1323,7 +1337,10 @@ def _check(ctxt, remote_base, local_base):
             state = FileState.PUSH
 
         if record.isDir:
-            dirs.append(DirEnt(n, remote_path, local_path, state))
+            ent = DirEnt(n, remote_path, local_path, state)
+            ent._permission = _names[n].permission
+            ent._mtime = _names[n].mtime
+            dirs.append(ent)
         else:
             af = {
                 "version": record.version,
