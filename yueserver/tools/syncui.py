@@ -1130,6 +1130,15 @@ class LineEdit(QLineEdit):
 
         return super().keyPressEvent(event)
 
+class ClickableLabel(QLabel):
+    clicked = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super(ClickableLabel, self).__init__(parent)
+
+    def mouseReleaseEvent(self, event):
+        self.clicked.emit()
+
 class Calculator(QWidget):
     def __init__(self, parent=None):
         super(Calculator, self).__init__(parent)
@@ -1193,7 +1202,7 @@ class Calculator(QWidget):
         except Exception as e:
             self.lbl_result.setText(str(e))
 
-class Calendar(QLabel):
+class Calendar(ClickableLabel):
     def __init__(self, parent=None):
         super(Calendar, self).__init__(parent)
 
@@ -4063,10 +4072,13 @@ class FavoritesPane(Pane):
         self.view_image = ImageView(self)
 
         self.calculator = Calculator(self)
+        self.calendar = QCalendarWidget(self)
+        self.calendar.hide()
 
         self.addWidget(self.table_favorites)
         self.addWidget(self.view_image)
         self.addWidget(self.calculator)
+        self.addWidget(self.calendar)
 
         self._hidden_sections = set()
 
@@ -4123,6 +4135,15 @@ class FavoritesPane(Pane):
             self._hidden_sections.add(section)
 
         self.onFavoritesChanged()
+
+    def toggleCalendar(self):
+        if self.calendar.isHidden():
+            self.calendar.show()
+            self.calendar.setSelectedDate(QDate.currentDate())
+            self.calculator.hide()
+        else:
+            self.calendar.hide()
+            self.calculator.show()
 
 class LocationPane(Pane):
 
@@ -4573,6 +4594,7 @@ class SyncMainWindow(QMainWindow):
 
         self.calendar = Calendar(self)
         statusbar.addWidget(self.calendar)
+        self.calendar.clicked.connect(self.onToggleCalendar)
 
         self.clock = Clock(self)
         statusbar.addWidget(self.clock)
@@ -4620,6 +4642,9 @@ class SyncMainWindow(QMainWindow):
         # TODO: fix for multi tab views
         # run this function immediately after the event loop starts
         #
+
+    def onToggleCalendar(self):
+        self.pane_favorites.toggleCalendar()
 
     def onTabCloseRequest(self, idx):
 
