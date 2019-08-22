@@ -115,6 +115,30 @@ def openProcess(args, pwd=None, blocking=False):
     if blocking:
         proc.communicate()
 
+def executeDiffAction(action, pwd, ent1, ent2):
+
+    opts = {"pwd": pwd}
+
+    if isinstance(ent1, sync2.DirEnt):
+        path = ent1.local_base
+    else:
+        path = ent1.local_path
+
+    opts['left'] = path
+
+    if isinstance(ent2, sync2.DirEnt):
+        path = ent2.local_base
+    else:
+        path = ent2.local_path
+
+    opts['right'] = path
+
+    args = shlex.split(action)
+
+    args = [arg.format(**opts) for arg in args]
+
+    return openProcess(args, pwd)
+
 def executeAction(action, ents, pwd):
     """
     an action is a bash syntax string
@@ -191,7 +215,6 @@ def executeAction(action, ents, pwd):
 
     args = [arg.format(**opts) for arg in args]
 
-    print(args)
     return openProcess(args, pwd)
 
 def isSubPath(dir_path, file_path):
@@ -312,7 +335,7 @@ class SyncConfig(BaseConfig):
         self.showHiddenFiles = True
         self.showBlacklistFiles = True
 
-        self.rowScale = self.get_key(data, "rowScale", default=[])
+        self.rowScale = self.get_key(data, "rowScale", default=1.75)
 
     def save(self):
 
@@ -680,31 +703,20 @@ class LocationContext(QObject):
     def getFileIcon(self, path):
         return self.appCtxt.getFileIcon(path)
 
-    def setCutData(self, entries):
-        return self.appCtxt.setCutData(entries)
-
-    def setCopyData(self, entries):
-        return self.appCtxt.setCopyData(entries)
-
-    def pasteData(self):
-        return self.appCtxt.pasteData()
-
-    def clearPasteData(self):
-        return self.appCtxt.clearPasteData()
-
 class AppContext(QObject):
 
-    def __init__(self):
+    def __init__(self, cfg):
         super(AppContext, self).__init__()
 
+        self.cfg = cfg
         self.fs = FileSystem()
 
         self._icon_provider = QFileIconProvider()
         self._icon_ext = {}
 
-        self._paste_entries = None
-        self._paste_action = 0
         self._syncContext = {}
+
+        self._compare_left_entry = None
 
     def getSyncContext(self, directory):
         for local_base, ctxt in self._syncContext.items():
@@ -853,20 +865,17 @@ class AppContext(QObject):
         self._icon_ext[ext] = image
         return image
 
-    def setCutData(self, entries):
-        self._paste_entries = entries
-        self._paste_action = 1
+    def compareSetLeft(self, ent):
+        self._compare_left_entry = ent
 
-    def setCopyData(self, entries):
-        self._paste_entries = entries
-        self._paste_action = 2
+    def compareLeftSelected(self):
+        return self._compare_left_entry is not None
 
-    def pasteData(self):
-        return (self._paste_action, self._paste_entries)
+    def compareTo(self, pwd, ent):
 
-    def clearPasteData(self):
-        self._paste_entries = None
-        self._paste_action = 0
+        action = self.cfg.diff_action.get('action')
+        executeDiffAction(action, pwd, self._compare_left_entry, ent)
+        self._compare_left_entry = None
 
 class OverlayText(QWidget):
 
@@ -1572,6 +1581,24 @@ class FileContextMenu(QMenu):
 
         self.addSeparator()
 
+        diff_action = self.cfg.diff_action.get('action', None)
+        if diff_action:
+            act = self.addAction("Compare: Set Left File", lambda: self._action_compare_set_left(ents[0]))
+
+
+
+
+            icon_name = self.cfg.diff_action.get('icon', None)
+            if icon_name:
+                ico = QIcon.fromTheme(icon_name)
+                act = self.addAction(ico, "Compare Files", lambda: self._action_compare_files(ents[0]))
+            else:
+                act = self.addAction("Compare Files", lambda: self._action_compare_files(ents[0]))
+            act.setEnabled(self.ctxt.appCtxt.compareLeftSelected())
+
+
+        self.addSeparator()
+
         act = self.addAction("Open Current Directory",
             lambda: openNative(self.ctxt.currentLocation()))
 
@@ -1684,6 +1711,13 @@ class FileContextMenu(QMenu):
     def _action_rename(self):
 
         self.rename.emit()
+
+    def _action_compare_set_left(self, ent):
+        self.ctxt.appCtxt.compareSetLeft(ent)
+
+    def _action_compare_files(self, ent):
+
+        self.ctxt.appCtxt.compareTo(self.ctxt.currentLocation(), ent)
 
     def _action_toggle_show_hidden(self):
 
@@ -4323,7 +4357,7 @@ class SyncMainWindow(QMainWindow):
         self.initMenuBar()
         self.initStatusBar()
 
-        self.appCtxt = AppContext()
+        self.appCtxt = AppContext(self.cfg)
 
         self.btn_newTab = QToolButton(self)
         self.btn_newTab.clicked.connect(self.newTab)
