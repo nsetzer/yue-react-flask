@@ -587,7 +587,6 @@ class TableModel(QAbstractTableModel):
         j = index.column()
         c = self._columns[j]
         k = c.key()
-
         success = self.setModelData(i, c, value)
         if success:
             self.dataChanged.emit(index, index, [role, ])
@@ -1269,8 +1268,8 @@ class AbstractTableView(QTableView):
         row_end = bottomRight.row()
         col_start = topLeft.column()
         col_end = bottomRight.column()
-        print("onDataChanged", topLeft.row(), topLeft.column(),
-            bottomRight.row(), bottomRight.column(), roles)
+        #print("onDataChanged", topLeft.row(), topLeft.column(),
+        #   bottomRight.row(), bottomRight.column(), roles)
 
         for row in range(row_start, row_end + 1):
             self.rowChanged.emit(row)

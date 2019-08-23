@@ -63,6 +63,7 @@ import traceback
 import argparse
 import struct
 import socket
+import uuid
 
 from datetime import datetime
 
@@ -244,7 +245,8 @@ def openAction(actions, pwd, ent):
     action = None
     for act in actions:
         supported = [stype.upper() for stype in act.get("types", [])]
-        if ftype in supported:
+        # use first action
+        if action is None and ftype in supported:
             action = act.get("action", None)
         if act.get('default', False):
             text_action = act.get("action", None)
@@ -2284,6 +2286,11 @@ class FileTableView(TableView):
             # TODO: location change should emit a row to highlight
             self.setCurrentIndex(self.model().index(0, 0))
 
+        if self._detailed_view:
+            self.loadDetails.emit(self, self.baseModel())
+            self._details_load_start = True
+
+
     def onMouseDoubleClick(self, index):
 
         self.onOpenIndex(index)
@@ -2572,6 +2579,11 @@ class FileTableView(TableView):
             raise e
 
     def onRenameFile(self, index, value):
+
+        if index.column() != FileTableRowItem.COL_NAME:
+            print("error", index.row(), value)
+            return
+
         row = index.data(RowValueRole)
         ent = row[0]
 
@@ -2660,12 +2672,16 @@ class FileTableView(TableView):
             # todo: better dummy entry checking?
             if hasattr(ent, 'create'):
                 self.createDirectory.emit(index, value)
+            elif index.column() != FileTableRowItem.COL_NAME:
+                return True
             else:
                 self.renameDirectory.emit(index, value)
 
         if isinstance(ent, sync2.FileEnt):
             if hasattr(ent, 'create'):
                 self.createEmptyFile.emit(index, value)
+            elif index.column() != FileTableRowItem.COL_NAME:
+                return True
             else:
                 self.renameFile.emit(index, value)
 
@@ -2808,18 +2824,18 @@ class FileTableView(TableView):
         idx_state = self.baseModel().getColumnIndexByName("state")
 
         if self._detailed_view:
-            w = int(3 * fm.height() * self.cfg.rowScale)
+            w = int(4.5 * fm.height() * self.cfg.rowScale)
             v.setDefaultSectionSize(w)
-
+            print(w,w)
             self.setColumnWidth(idx_icon, w)
             self.setColumnWidth(idx_state, w)
         else:
             w = int(fm.height() * self.cfg.rowScale)
             v.setDefaultSectionSize(w)
+            print(40, w)
 
             self.setColumnWidth(idx_icon, 40)
             self.setColumnWidth(idx_state, 40)
-
 
         if not self._details_load_start:
             self.loadDetails.emit(self, self.baseModel())
@@ -4150,6 +4166,7 @@ class LocationPane(Pane):
     locationChanged = pyqtSignal(Pane, str)
     previewEntry = pyqtSignal(object)
     splitInterface = pyqtSignal()
+    submitBatchJob = pyqtSignal(object, list, object)
 
     def __init__(self, appCtxt, cfg, parent=None):
         super(LocationPane, self).__init__(parent)
@@ -4384,8 +4401,42 @@ class LocationPane(Pane):
         # start a thread which updates the model
         # replace the icon for image types with
         # a representation of that image
-        print(table)
-        print(model)
+
+
+        # TODO: only a mild case of thread unsafe-ty
+        seq = range(self.table_file.model().rowCount())
+        col = self.table_file.baseModel().getColumnIndexByName("icon")
+        data = [table.model().index(index, col) for index in seq]
+        self.submitBatchJob.emit(self.onExecuteTask, data, self.taskComplete)
+
+    def onExecuteTask(self, index):
+
+        row = index.data(RowValueRole)
+
+        ent = row[FileTableRowItem.COL_ENT]
+
+        if not isinstance(ent, sync2.FileEnt):
+            return None
+
+        path = ent.local_path
+        ftype = getFileType(path)
+
+        if ftype not in ['JPG', 'JPEG', 'BMP', 'PNG']:
+            return None
+
+        img = QImage(path)
+        img = img.scaled(QSize(128, 128), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+        return (index, img)
+
+    def taskComplete(self, result, ex):
+
+        if result is None:
+            return
+
+        index, img = result
+
+        self.table_file.model().setData(index, img)
 
 class DoubleLocationPane(QWidget):
 
@@ -4437,6 +4488,134 @@ class EventFilter(QObject):
         if event.type() == QEvent.ActivationChange:
             self.parent().onFocusChanged(self.parent().isActiveWindow())
         return super().eventFilter(obj, event)
+
+class ConditionVariable(QObject):
+    def __init__(self):
+        super(ConditionVariable, self).__init__()
+
+        self.lk = QMutex()
+        self.cv = QWaitCondition()
+
+    def __enter__(self):
+        self.lk.lock()
+        return self
+
+    def __exit__(self, *args):
+        self.lk.unlock()
+
+    def wait(self):
+        self.cv.wait(self.lk)
+
+    def notify_all(self):
+        self.cv.wakeAll()
+
+class _TaskThread(QThread):
+
+    def __init__(self, parent):
+        super(_TaskThread, self).__init__(parent)
+
+        self._cv = parent._cv
+
+        self._alive = True
+
+    def run(self):
+
+        tid = None
+        op = None
+        while self._alive:
+            with self._cv:
+                tid, op = self.main()
+
+            if op is not None:
+                retval = self.execute(*op)
+
+                with self._cv:
+                    self.delete(tid, retval)
+
+    def main(self):
+
+        while len(self.parent()._queue) == 0 and self._alive:
+            self._cv.wait()
+
+        if len(self.parent()._queue) > 0:
+
+            tid = self.parent()._queue.pop()
+            op = self.parent()._tasks[tid]
+
+            return tid, op
+
+        return None, None
+
+    def execute(self, fn, args, kwargs):
+
+        try:
+            return fn(*args, **kwargs), None, time.time()
+        except Exception as e:
+            return None, e, time.time()
+
+    def delete(self, tid, retval):
+        del self.parent()._tasks[tid]
+        self.parent().taskFinished.emit(tid, *retval)
+        self._cv.notify_all()
+
+class TaskQueue(QObject):
+
+    taskFinished = pyqtSignal(str, object, object, int)
+
+    def __init__(self, size, parent=None):
+        super(TaskQueue, self).__init__(parent)
+
+        self._cv = ConditionVariable()
+
+        self._queue = []
+        self._tasks = {}
+        self._threads = []
+
+        for i in range(size):
+            t = _TaskThread(self)
+            t.start()
+            self._threads.append(t)
+
+    def submit(self, fn, *args, **kwargs):
+
+        tid = str(uuid.uuid4())
+
+        if len(self._threads) == 0:
+            self._execute(tid, fn, args, kwargs)
+            return tid
+
+        with self._cv:
+
+            self._tasks[tid] = (fn, args, kwargs)
+            self._queue.append(tid)
+            self._cv.notify_all()
+
+        return tid
+
+    def reset_and_submit_batch(self, fn, arglist):
+
+        with self._cv:
+
+            for tid in self._queue:
+                del self._tasks[tid]
+            self._queue = []
+
+            for args in arglist:
+                tid = str(uuid.uuid4())
+                self._tasks[tid] = (fn, args, {})
+                self._queue.append(tid)
+
+            self._cv.notify_all()
+
+    def _execute(self, tid, fn, args, kwargs):
+
+        with self.cv_tasks:
+            try:
+                retval = (fn(*args, **kwargs), None, time.time())
+            except Exception as e:
+                retval = (None, e, time.time())
+
+        self.taskFinished.emit(tid, *retval)
 
 class RpcThread(QThread):
 
@@ -4536,6 +4715,15 @@ class RpcMessage(object):
         print("sent", sock.send(packet))
         sock.close()
 
+def _exec_task(fn, arg, cbk):
+
+    try:
+        result = fn(arg)
+    except Exception as e:
+        return cbk, None, e
+
+    return cbk, result, None
+
 class SyncMainWindow(QMainWindow):
 
     def __init__(self, cfg):
@@ -4579,6 +4767,9 @@ class SyncMainWindow(QMainWindow):
         self.rpc_thread = RpcThread('0.0.0.0', 20123, self)
         self.rpc_thread.message_recieved.connect(self.onRpcMessage)
         self.rpc_thread.start()
+
+        self.task_queue = TaskQueue(4)
+        self.task_queue.taskFinished.connect(self.onTaskFinished)
 
     def initMenuBar(self):
 
@@ -4669,6 +4860,8 @@ class SyncMainWindow(QMainWindow):
         pane.primary.previewEntry.connect(self.pane_favorites.previewEntry)
         pane.secondary.previewEntry.connect(self.pane_favorites.previewEntry)
         pane.primary.locationChanged.connect(self.onDirectoryChanged)
+        pane.primary.submitBatchJob.connect(self.submitBatch)
+        pane.secondary.submitBatchJob.connect(self.submitBatch)
 
         self.tabview.addTab(pane, icon, "")
 
@@ -4727,6 +4920,21 @@ class SyncMainWindow(QMainWindow):
             for path in msg.paths:
                 if path:
                     self.addTab(path, "")
+
+    def submitTask(self, fn, arg, cbk):
+
+        self.task_queue.submit(_exec_task, fn, arg, cbk)
+
+    def submitBatch(self, fn, arglist, cbk):
+
+        args = [(fn, arg, cbk) for arg in arglist]
+        self.task_queue.reset_and_submit_batch(_exec_task, args)
+
+    def onTaskFinished(self, tid, retval, e, time):
+
+        cbk, result, e = retval
+
+        cbk(result, e)
 
 def setDarkTheme(app):
 
@@ -4826,6 +5034,8 @@ def main():
         try:
             RpcMessage.send('0.0.0.0', 20123, RpcMessage.encode(msg))
             return
+        except OSError:
+            pass
         except ConnectionRefusedError:
             # assume window closed and open a new one
             pass
