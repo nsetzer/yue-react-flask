@@ -1,6 +1,5 @@
 #! cd ../.. && python3 -m yueserver.tools.syncui -n
 
-# conflict upload set correct version
 # pressing go to parent should center on the new child directory
 # remove
 # move/cut/copy/paste
@@ -246,7 +245,7 @@ def openAction(actions, pwd, ent):
     if text_action is not None:
 
         is_text = False
-        with self.ctxt.fs.open(ent.local_path, "rb") as rf:
+        with open(ent.local_path, "rb") as rf:
             #g = lambda v: v == 0xD or v == 0xA or v >= 0x20
             #is_text = all(g(b) for b in rf.read(2048))
             g = lambda v: v < 0x0A
@@ -635,7 +634,7 @@ class LocationContext(QObject):
         self.load(directory)
 
     def pushParentDirectory(self):
-        directory, _ = os.path.split(self._location)
+        directory, name = os.path.split(self._location)
 
         if directory == self._location:
             directory = ""
@@ -644,10 +643,10 @@ class LocationContext(QObject):
 
         # note buttons are enabled based on if there is history
         # but a failed load should not effect state
-        self._location_history.append((directory, None))
+        self._location_history.append((directory, name))
         self._location_pop_history = []
 
-        self.load(directory)
+        self.load(directory, name)
 
     def popDirectory(self):
 
@@ -674,7 +673,7 @@ class LocationContext(QObject):
         self.load(directory)
 
     def hasBackHistory(self):
-        return len(self._location_history) > 0
+        return len(self._location_history) > 1
 
     def hasForwardHistory(self):
         return len(self._location_pop_history) > 0
@@ -709,8 +708,6 @@ class LocationContext(QObject):
         else:
             new_local_path = local_path
 
-        print("***", local_path, "=>", new_local_path)
-
         if local_path == new_local_path:
             return None
 
@@ -721,8 +718,6 @@ class LocationContext(QObject):
             new_remote_path = posixpath.join(fpath, name)
         else:
             new_remote_path = remote_path
-
-        print("***", remote_path, "=>", new_remote_path)
 
         if isinstance(ent, sync2.DirEnt):
             new_ent = sync2.DirEnt(name, new_remote_path, new_local_path)
@@ -771,7 +766,6 @@ class AppContext(QObject):
         return None
 
     def _get_context(self, directory):
-        print("get", directory)
 
         # this duplicates the logic from get_ctxt
         try:
@@ -1018,8 +1012,6 @@ class Pane(QWidget):
 
     def setVisible(self, b):
         super().setVisible(b)
-
-        print(self.__class__.__name__, "visible", id(self), self._firstShow, b)
 
         if b and self._firstShow:
             self.onFirstShow()
@@ -2988,7 +2980,6 @@ class LocationView(QWidget):
         self.btn_details.setIcon(self.style().standardIcon(QStyle.SP_FileDialogDetailedView))
         self.btn_details.setAutoRaise(True)
 
-
         self.btn_split = QToolButton(self)
         self.btn_split.clicked.connect(self.splitInterface)
 
@@ -3128,9 +3119,6 @@ class LocationView(QWidget):
 
     def onLocationChanged(self, directory, target):
 
-        print("min", self.minimumSize(), self.maximumSize())
-        print(self.hbox1.sizeHint())
-
         self.setEnabled(True)
 
         self.btn_forward.setEnabled(self.ctxt.hasForwardHistory())
@@ -3141,6 +3129,25 @@ class LocationView(QWidget):
         self.wdt_syncPanel.setVisible(active)
 
         self.edit_location.setText(directory)
+
+    def resizeEvent(self, event):
+
+        # hide certain buttons as the ui shrinks
+        visible = self.width() > 250
+        isVisible = self.edit_filter.isVisible()
+
+        if visible != isVisible:
+            self.btn_back.setVisible(visible)
+            self.btn_forward.setVisible(visible)
+            self.edit_filter.setVisible(visible)
+
+        visible = self.width() > 150
+        isVisible = self.btn_open.isVisible()
+
+        if visible != isVisible:
+            self.btn_up.setVisible(visible)
+            self.btn_refresh.setVisible(visible)
+            self.btn_open.setVisible(visible)
 
 class ProgressThread(QThread):
 
@@ -4182,6 +4189,10 @@ class LocationPane(Pane):
         self.lbl_status_2.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         self.lbl_status_3.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
 
+        self.lbl_status_1.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        self.lbl_status_2.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        self.lbl_status_3.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+
         self.hbox_status = QHBoxLayout()
         self.hbox_status.addWidget(self.lbl_status_1)
         self.hbox_status.addWidget(self.lbl_status_2)
@@ -4412,8 +4423,11 @@ class LocationPane(Pane):
         if ftype not in ['JPG', 'JPEG', 'BMP', 'PNG']:
             return None
 
+        size = 128
         img = QImage(path)
-        img = img.scaled(QSize(128, 128), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        if img.width() > size or img.height() > size:
+            img = img.scaled(QSize(size, size),
+                Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
         return (index, img)
 
@@ -4546,6 +4560,13 @@ class _TaskThread(QThread):
         self.parent().taskFinished.emit(tid, *retval)
         self._cv.notify_all()
 
+    def join(self):
+        self._alive = False
+        with self._cv:
+            self._cv.notify_all()
+
+        self.wait()
+
 class TaskQueue(QObject):
 
     taskFinished = pyqtSignal(str, object, object, int)
@@ -4604,6 +4625,11 @@ class TaskQueue(QObject):
                 retval = (None, e, time.time())
 
         self.taskFinished.emit(tid, *retval)
+
+    def join(self):
+        for i, thread in enumerate(self._threads):
+            print("stopping thread %d" % i)
+            thread.join()
 
 class RpcThread(QThread):
 
@@ -4889,9 +4915,16 @@ class SyncMainWindow(QMainWindow):
         self.clock.setEnabled(focus)
 
     def onAboutToQuit(self):
+
+        self.hide()
+
         procinfo = os.path.join(cfg_base, "yue-sync", ".procinfo")
         if os.path.exists(procinfo):
             os.remove(procinfo)
+
+        self.rpc_thread.join()
+
+        self.task_queue.join()
 
     def focusWindow(self):
         # todo: platform dependent options
@@ -4942,6 +4975,14 @@ class SyncMainWindow(QMainWindow):
         cbk, result, e = retval
 
         cbk(result, e)
+
+    def resizeEvent(self, event):
+
+        visible = self.width() > 400
+        isVisible = self.pane_favorites.isVisible()
+
+        if visible != isVisible:
+            self.pane_favorites.setVisible(visible)
 
 def setDarkTheme(app):
 
