@@ -550,6 +550,9 @@ class TableModel(QAbstractTableModel):
         j = index.column()
         col = self._columns[j]
 
+        if not index.isValid():
+            return QVariant()
+
         if role == Qt.DisplayRole or role == Qt.EditRole:
             return col.data(self.tabledata, i)
         elif role == Qt.TextAlignmentRole:

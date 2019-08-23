@@ -1,4 +1,4 @@
-#! cd ../.. && python3 -m yueserver.tools.syncui
+#! cd ../.. && python3 -m yueserver.tools.syncui -n
 
 # conflict upload set correct version
 # pressing go to parent should center on the new child directory
@@ -6,7 +6,6 @@
 # move/cut/copy/paste
 #   samefile? keep both? keep all? replace? replace all?
 #   after a copy/move operation between sides, refresh both sources
-# drag and drop mime types
 # directory load robustness
 #   gracefully handle errors during load()
 #   pull files do not exist locally (ignore actions)
@@ -35,20 +34,7 @@
 #   display icon and text in single column
 #   both icon and text are optional
 #   optional bold text mode
-# cli options
-#   $0 path1 [path2]
-#   $0 -e path1        open a file as if it was double clicked
-#   $0 -d path1 path2  diff two files or folders
-# create a qobject - TaskQueue
-#   - include a cancel all queued tasks option
-#   - when a task completes emit an event containing the result
-#   - thumb cache using hash of filepath in .config/thumbs/[:2]/[2:]
-# when rowScale >= 3: submit a task for all image rows to compute an icon
-# add a button to toggle row scale between two pre-defined values (normal, big)
-# if a process is running, opening an instance should open a new tab
-#       '$0' -> focus window
-#       '$0 ...' -> new tab(s)
-#       use QWidget::activateWindow
+# remove the reference to the locationContext from the FileTableView, use signals
 
 import os
 import sys
@@ -64,6 +50,8 @@ import argparse
 import struct
 import socket
 import uuid
+if sys.platform == 'win32':
+    import win32gui # for SetWindowPos
 
 from datetime import datetime
 
@@ -4711,6 +4699,7 @@ class RpcMessage(object):
     def send(host, port, packet):
         packet = struct.pack('<bI', 1, len(packet)) + packet
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        print(host, port)
         sock.connect((host, port))
         print("sent", sock.send(packet))
         sock.close()
@@ -4906,9 +4895,27 @@ class SyncMainWindow(QMainWindow):
 
     def focusWindow(self):
         # todo: platform dependent options
+
+        if sys.platform == 'win32':
+
+            # https://forum.qt.io/topic/1939/activatewindow-does-not-send-window-to-front/5
+
+            SWP_NOMOVE = 0x0002
+            SWP_NOSIZE = 0x0001
+            SWP_SHOWWINDOW = 0x0040
+
+            HWND_TOPMOST = -1
+            HWND_NOTOPMOST = -2
+            win32gui.SetWindowPos(self.effectiveWinId(),
+                HWND_TOPMOST, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+            win32gui.SetWindowPos(self.effectiveWinId(),
+                HWND_NOTOPMOST, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+
         #self.setFocus()
         #self.showNormal()
-        self.raise_()
+        #self.raise_()
         self.activateWindow()
 
     def onRpcMessage(self, msg):
@@ -4997,10 +5004,14 @@ def main():
     parser.add_argument("--pwd", type=str, default=None,
         help='open a file')
 
+    # some platforms send this as an option
     parser.add_argument("-p", type=str, default='', nargs=1,
         help='open a file')
 
     group_ex = parser.add_mutually_exclusive_group()
+
+    group_ex.add_argument("-n", '--new', action='store_true',
+        help='open a file')
 
     group_ex.add_argument("-e", dest='edit', type=str, default=None, nargs=1,
         help='open a file')
@@ -5023,7 +5034,7 @@ def main():
         print(args)
         return
 
-    if os.path.exists(procinfo):
+    if not args.new and os.path.exists(procinfo):
         paths = []
         for path in args.paths:
             # expand vars using THIS shell env, pass to the open window
@@ -5032,13 +5043,18 @@ def main():
             paths.append(os.path.abspath(path))
         msg  = RpcOpenTabMessage(paths)
         try:
-            RpcMessage.send('0.0.0.0', 20123, RpcMessage.encode(msg))
+            RpcMessage.send('localhost', 20123, RpcMessage.encode(msg))
             return
-        except OSError:
+        except OSError as e:
+            print(e)
             pass
-        except ConnectionRefusedError:
+        except ConnectionRefusedError as e:
+            print(e)
             # assume window closed and open a new one
             pass
+
+    # TODO: experiment with os.fork() here on linux
+    # dissassociate from shell
 
     app = QApplication(sys.argv)
     app.setApplicationName("Yue-Sync")
