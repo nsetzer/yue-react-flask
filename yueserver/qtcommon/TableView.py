@@ -383,6 +383,7 @@ class TableColumn(QObject):
         super(TableColumn, self).__init__(model)
 
         self._key = key
+        self._decoration_key = None
         self._name = name
         self.__cached_name = None
         self.__cached_name_length = 0
@@ -421,14 +422,24 @@ class TableColumn(QObject):
     def setShortName(self, name):
         self._shortName = name
 
+    def setDecorationKey(self, key):
+        self._decoration_key = key
+
     def isEditable(self):
         return self._editable
 
-    def data(self, tabledata, row):
+    def data(self, tabledata, row, role=Qt.DisplayRole):
         _data = tabledata[row]
+
         if isinstance(_data, dict) and self._key not in _data:
             return None
-        return _data[self._key]
+
+        if role == Qt.DecorationRole:
+            if self._decoration_key is not None:
+                return _data[self._decoration_key]
+            return None
+        else:
+            return _data[self._key]
 
     def setData(self, tabledata, row, value):
         tabledata[row][self._key] = value
@@ -487,7 +498,7 @@ class TransformTableColumn(TableColumn):
         self.fTransform = fTransform
         self.rTransform = rTransform
 
-    def data(self, tabledata, row):
+    def data(self, tabledata, row, role=Qt.DisplayRole):
         return self.fTransform(tabledata, row, self._key)
 
     def setData(self, tabledata, row, value):
@@ -534,6 +545,10 @@ class TableModel(QAbstractTableModel):
         self._forgroundRules = []
         self._backgroundRules = []
 
+        self.isGridMode = False
+        self.gridModeTextColumn = -1
+        self.gridModeDecorationColumn = -1
+
     def rowCount(self, index):
         return len(self.tabledata)
 
@@ -542,8 +557,15 @@ class TableModel(QAbstractTableModel):
 
     def columnIndex(self, key):
         """ returns the index for a column, using the key as a look up
-        not a 1-to-1 mapping,not invertible, can't be implemented"""
+        not a 1-to-1 mapping,not invertible, can't be implemented
+        a user can define two columns with the same key and differnt transforms
+        """
         raise NotImplementedError()
+
+    #def setGridMode(self, gridModeTextColumn, gridModeDecorationColumn):
+    #    self.isGridMode = gridModeTextColumn >= 0 and gridModeDecorationColumn >= 0
+    #    self.gridModeTextColumn = gridModeTextColumn
+    #    self.gridModeDecorationColumn = gridModeDecorationColumn
 
     def data(self, index, role):
         i = index.row()
@@ -553,8 +575,19 @@ class TableModel(QAbstractTableModel):
         if not index.isValid():
             return QVariant()
 
-        if role == Qt.DisplayRole or role == Qt.EditRole:
-            return col.data(self.tabledata, i)
+        #if self.isGridMode:
+        #    print(",", i, j)
+        #    if role == Qt.DisplayRole:
+        #        return self.tabledata[i][self.gridModeTextColumn]
+        #        #return self._columns[self.gridModeTextColumn].data(self.tabledata, i)
+        #    if role == Qt.DecorationRole:
+        #        return self.tabledata[i][self.gridModeDecorationColumn]
+        #        #return self._columns[self.gridModeDecorationColumn].data(self.tabledata, i)
+
+        if role == Qt.DisplayRole or role == Qt.EditRole or role == Qt.DecorationRole:
+            data = col.data(self.tabledata, i, role)
+            #print(i,j,  role, data)
+            return data
         elif role == Qt.TextAlignmentRole:
             return col.textAlignment(index)
         elif role == RowValueIndexRole:

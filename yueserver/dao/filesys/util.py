@@ -78,7 +78,10 @@ class AbstractFileSystem(object):
         return self.impl.join(path, *args)
 
     def split(self, path):
-        return self.impl.split(path)
+        parts = self.impl.split(path)
+        if parts[0] == self.scheme.rstrip("//"):
+            return (path, "")
+        return parts
 
     def splitext(self, path):
         return self.impl.splitext(path)

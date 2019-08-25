@@ -1,4 +1,4 @@
-
+#! cd ../.. && python3 -m yueserver.qtcommon.GridView
 
 import os
 import sys
@@ -6,6 +6,8 @@ import sys
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
+
+from .TableView import TableModel, SortProxyModel
 
 # todo:
 # 1. try to use TableModel directly,
@@ -42,18 +44,52 @@ class GridModel(QAbstractItemModel):
         if role == Qt.DecorationRole:
             return self.iconProvider.icon(QFileIconProvider.File);
 
+"""
+        self.iconProvider = QFileIconProvider()
+
+        baseModel = TableModel(self)
+        baseModel.addColumn(1, "icon")
+        baseModel.addColumn(0, "text")
+
+        model = SortProxyModel(self)
+        model.setSourceModel(baseModel)
+
+        self.setModel(model)
+
+        baseModel.setGridMode(1, 0)
+
+        icon = self.iconProvider.icon(QFileIconProvider.File)
+        data = [
+            ("abc", icon),
+            ("abc", icon),
+            ("abc", icon),
+            ("abc", icon),
+            ("abc", icon),
+        ]
+        baseModel.setNewData(data)
+
+        #self._baseModel = GridModel(self)
+        #self.setModel(self._baseModel)
+"""
 class GridView(QListView):
 
     def __init__(self, parent=None):
         super(GridView, self).__init__(parent)
 
-        self._baseModel = GridModel(self)
-        self.setModel(self._baseModel)
-
         self.setViewMode(QListView.IconMode)
         self.setUniformItemSizes(True)
         self.setResizeMode(QListView.Adjust)
-        self.setGridSize(QSize(80, 80))
+        self.setIconSize(QSize(128, 128))
+        self.setGridSize(QSize(192, 192))
+
+    def resizeEvent(self, event):
+
+        s = 80
+        n = self.width()//s
+        p = self.width()%s//n
+        self.setSpacing(p)
+        #print(p)
+        super().resizeEvent(event)
 
 class _DemoMainWindow(QMainWindow):
 

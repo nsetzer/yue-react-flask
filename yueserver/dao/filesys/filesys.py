@@ -101,12 +101,9 @@ class LocalFileSystemImpl(AbstractFileSystem):
         raise FileNotFoundError(path)
 
     def remove(self, path):
-
+        # TODO: test and remove dir
         os.remove(path)
-
-        dir, _ = self.split(path)
-        if len(self.listdir(dir)) == 0:
-            os.rmdir(dir)
+        os.rmdir(dir)
 
     def drive(self, patha):
         """ returns a meaningless but unique drive identifier (str or int) """
@@ -166,6 +163,7 @@ class MemoryFileSystemImpl(AbstractFileSystem):
         raise ValueError("Invalid mode: %s" % mode)
 
     def _scandir_impl(self, path):
+        visited = set()
         if not path.endswith("/"):
             path += self.impl.sep
         for fpath, (f, mtime) in MemoryFileSystemImpl._mem_store.items():
@@ -173,7 +171,9 @@ class MemoryFileSystemImpl(AbstractFileSystem):
                 name = fpath.replace(path, "")
                 if '/' in name:
                     name = name.split('/')[0]
-                    yield FileRecord(name, True, 0, 0)
+                    if name not in name:
+                        yield FileRecord(name, True, 0, 0)
+                        visited.add(name)
                 else:
                     yield FileRecord(name, False, len(f.getvalue()), mtime)
 
@@ -193,7 +193,6 @@ class MemoryFileSystemImpl(AbstractFileSystem):
         _, name = self.split(path)
 
         if path not in MemoryFileSystemImpl._mem_store:
-            # guess tha
             temp = path
             if not temp.endswith("/"):
                 temp += "/"
@@ -204,13 +203,16 @@ class MemoryFileSystemImpl(AbstractFileSystem):
 
         f, mtime = MemoryFileSystemImpl._mem_store[path]
 
-        return FileRecord(name, False, len(f.getvalue()), mtime)
+        return FileRecord(name, mtime==0, len(f.getvalue()), mtime)
 
     def remove(self, path):
         if path not in MemoryFileSystemImpl._mem_store:
             raise FileNotFoundError(path)
 
         del MemoryFileSystemImpl._mem_store[path]
+
+    def makedirs(self, path):
+        MemoryFileSystemImpl._mem_store[path] = [io.BytesIO(), 0]
 
     @staticmethod
     def clear():
@@ -397,7 +399,21 @@ class FileSystem(object):
         for url in urls:
             yield from self.delete(url)
 
+    def getFileType(self, path):
+        _, name = self.split(path)
 
+        if name.startswith("."):
+            return "DOT FILE"
+
+        if '.' not in name:
+            return "FILE"
+
+        name, ext = self.splitext(name)
+
+        if not ext:
+            return "FILE"
+
+        return ext.lstrip(".").upper()
 
 
 

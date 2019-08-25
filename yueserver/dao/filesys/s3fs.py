@@ -249,6 +249,10 @@ class BotoFileSystemImpl(AbstractFileSystem):
         bucket_name, key = path.split("/", 1)
         return bucket_name, key
 
+    def islocal(self, path):
+        return False
+
+
     def samefile(self, patha, pathb):
         """ returns true if the path exists and are the same object"""
         return self.exists(patha) and patha == pathb

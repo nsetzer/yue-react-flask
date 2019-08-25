@@ -1,5 +1,6 @@
 #! cd ../.. && python3 -m yueserver.tools.syncui -n
 
+# status bar showing address and count is gone
 # pressing go to parent should center on the new child directory
 # remove
 # move/cut/copy/paste
@@ -34,7 +35,7 @@
 #   both icon and text are optional
 #   optional bold text mode
 # remove the reference to the locationContext from the FileTableView, use signals
-
+# filter allow `kind = ?` where kind is image, video, document, folder
 import os
 import sys
 import time
@@ -49,6 +50,9 @@ import argparse
 import struct
 import socket
 import uuid
+
+import PIL
+
 if sys.platform == 'win32':
     import win32gui # for SetWindowPos
 
@@ -60,6 +64,8 @@ from PyQt5.QtGui import *
 
 from yueserver.dao.filesys.filesys import FileSystem
 from yueserver.dao.filesys.drives import get_drives
+from yueserver.dao.filesys.s3fs import BotoFileSystemImpl
+from yueserver.qtcommon.GridView import GridView
 from yueserver.qtcommon.TableView import (
     TableError, TableModel, TableView, RowValueRole, ImageDelegate,
     SortProxyModel, RowSortValueRole, ListView, EditItemDelegate
@@ -224,9 +230,9 @@ def executeAction(action, ents, pwd):
 
     return openProcess(args, pwd)
 
-def openAction(actions, pwd, ent):
+def openAction(fs, actions, pwd, ent):
 
-    ftype = getFileType(ent.local_path)
+    ftype = fs.getFileType(ent.local_path)
 
     text_action = None
     action = None
@@ -258,24 +264,45 @@ def openAction(actions, pwd, ent):
 
     openNative(ent.local_path)
 
-def isSubPath(dir_path, file_path):
-    return os.path.abspath(file_path).startswith(os.path.abspath(dir_path) + os.sep)
+def gif_extract_position(path, pos=.5):
 
-def getFileType(path):
-    _, name = os.path.split(path)
+    """
+    in a single pass through a file, extract one frame
 
-    if name.startswith("."):
-        return "DOT FILE"
+    a gif may have partial updates, that are applied to the previous frame
+    """
+    img = PIL.Image.open(path)
 
-    if '.' not in name:
-        return "FILE"
+    last_frame = img.convert('RGBA')
+    global_palette = img.getpalette()
 
-    name, ext = os.path.splitext(name)
+    for i in range(int(img.n_frames*pos)):
 
-    if not ext:
-        return "FILE"
+        if not img.getpalette():
+            img.putpalette(global_palette)
 
-    return ext.lstrip(".").upper()
+        # check for a partial update
+        update_region_dims = img.size
+        if img.tile:
+            tile = img.tile[0]
+            update_region = tile[1]
+            update_region_dims = update_region[2:]
+
+        if update_region_dims != img.size:
+            new_frame = PIL.Image.new('RGBA', img.size)
+            new_frame.paste(last_frame)
+            new_frame.paste(img, (0,0), img.convert('RGBA'))
+        else:
+            new_frame = img.convert('RGBA')
+
+        last_frame = new_frame
+
+        try:
+            img.seek(img.tell() + 1)
+        except EOFError:
+            break;
+
+    return img.convert('RGBA')
 
 byte_labels = ['B', 'KB', 'MB', 'GB']
 def format_bytes(b):
@@ -316,6 +343,49 @@ def format_mode(mode):
         o = format_mode_part(mode)      # other
         return u + g + o
     return ""
+
+def scale_image(size, img):
+
+    # scale large images down to given size
+    # scale smaller images up to the given size
+    if img.width() > size or img.height() > size:
+        img = img.scaled(QSize(size, size),
+            Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+    if img.width() < size and img.height() < size:
+        x = (size - img.width()) // 2
+        y = (size - img.height()) // 2
+        img2 = QImage(size, size, QImage.Format_ARGB32)
+        img2.fill(Qt.transparent)
+        painter = QPainter()
+        painter.begin(img2)
+        painter.drawImage(QPoint(x,y), img)
+        painter.end()
+        img = img2
+
+    elif img.width() < size:
+        x = (size - img.width()) // 2
+        y = 0
+        img2 = QImage(size, size, QImage.Format_ARGB32)
+        img2.fill(Qt.transparent)
+        painter = QPainter()
+        painter.begin(img2)
+        painter.drawImage(QPoint(x,y), img)
+        painter.end()
+        img = img2
+
+    elif img.height() < size:
+        x = 0
+        y = (size - img.height()) // 2
+        img2 = QImage(size, size, QImage.Format_ARGB32)
+        img2.fill(Qt.transparent)
+        painter = QPainter()
+        painter.begin(img2)
+        painter.drawImage(QPoint(x,y), img)
+        painter.end()
+        img = img2
+
+    return img
 
 def _dummy_fetch_iter(ctxt):
 
@@ -377,6 +447,9 @@ class SyncConfig(BaseConfig):
         self.showBlacklistFiles = True
 
         self.rowScale = self.get_key(data, "rowScale", default=1.75)
+        self.iconSize = self.get_key(data, "iconSize", default=128)
+
+        self.buckets = self.get_key(data, "buckets", default=[])
 
     def save(self):
 
@@ -385,9 +458,12 @@ class SyncConfig(BaseConfig):
             "state": self.state,
             "open_actions": self.open_actions,
             "menu_actions": self.menu_actions,
+            "diff_action": self.diff_action,
             "showHiddenFiles": self.showHiddenFiles,
             "showBlacklistFiles": self.showBlacklistFiles,
             "rowScale": self.rowScale,
+            "iconSize": self.iconSize,
+            "buckets": self.buckets,
         }
 
         ydump(self._cfg_path, obj)
@@ -447,8 +523,8 @@ def _load_context(ctxt, directory):
 def _load_default(fs, directory):
 
     _dir_contents = []
-    for name in os.listdir(directory):
-        fullpath = os.path.join(directory, name)
+    for name in fs.listdir(directory):
+        fullpath = fs.join(directory, name)
 
         try:
             try:
@@ -600,7 +676,8 @@ class LocationContext(QObject):
 
     def _access(self, directory):
         if directory:
-            self.fs.file_info(directory)
+            if self.fs.islocal(directory):
+                self.fs.file_info(directory)
 
     def reload(self):
 
@@ -622,7 +699,7 @@ class LocationContext(QObject):
 
     def pushChildDirectory(self, dirname):
 
-        directory = os.path.join(self._location, dirname)
+        directory = self.fs.join(self._location, dirname)
 
         self._access(directory)
 
@@ -634,10 +711,12 @@ class LocationContext(QObject):
         self.load(directory)
 
     def pushParentDirectory(self):
-        directory, name = os.path.split(self._location)
+        directory, name = self.fs.split(self._location)
+        print(directory, name)
 
-        if directory == self._location:
+        if self.fs.islocal(directory) and directory == self._location:
             directory = ""
+            name = None
 
         self._access(directory)
 
@@ -750,6 +829,13 @@ class AppContext(QObject):
         self.cfg = cfg
         self.fs = FileSystem()
 
+        self.fs.makedirs("mem://test")
+        self.fs.makedirs("mem://test/subfolder")
+        self.fs.open("mem://test/file.txt", "wb").close()
+        self.fs.open("mem://test/subfolder/file.txt", "wb").close()
+
+        self.initIcons(cfg.iconSize)
+
         self._icon_provider = QFileIconProvider()
         self._icon_ext = {}
 
@@ -757,9 +843,14 @@ class AppContext(QObject):
 
         self._compare_left_entry = None
 
+    def _isSubPath(dir_path, file_path):
+        return os.path.abspath(file_path).startswith(os.path.abspath(dir_path) + os.sep)
+
     def getSyncContext(self, directory):
+        if not self.fs.islocal(directory):
+            return None
         for local_base, ctxt in self._syncContext.items():
-            if isSubPath(local_base, directory):
+            if _isSubPath(local_base, directory):
                 return ctxt
         else:
             return self._get_context(directory)
@@ -775,7 +866,7 @@ class AppContext(QObject):
             return None
 
         try:
-            db_path = os.path.join(
+            db_path = self.fs.join(
                 userdata['local_base'], ".yue", "database.sqlite")
 
             db = sync2.db_connect("sqlite:///" + db_path)
@@ -893,7 +984,7 @@ class AppContext(QObject):
 
     def getFileIcon(self, path):
 
-        _, ext = os.path.splitext(path)
+        _, ext = self.fs.splitext(path)
         if ext and ext in self._icon_ext:
             return self._icon_ext[ext]
 
@@ -914,6 +1005,16 @@ class AppContext(QObject):
         action = self.cfg.diff_action.get('action')
         executeDiffAction(action, pwd, self._compare_left_entry, ent)
         self._compare_left_entry = None
+
+    def initIcons(self, size):
+
+        icon = QFileIconProvider().icon(QFileIconProvider.Folder)
+        img = icon.pixmap(QSize(size, size)).toImage()
+        self._icon_folder = scale_image(size, img)
+
+        icon = QFileIconProvider().icon(QFileIconProvider.File)
+        img = icon.pixmap(QSize(size, size)).toImage()
+        self._icon_file = scale_image(size, img)
 
 class OverlayText(QWidget):
 
@@ -1897,8 +1998,9 @@ class FileTableRowItem(object):
     COL_R_MTIME    = 11
     COL_TYPE       = 12
     COL_STATE      = 13
+    COL_ICON2      = 14
 
-    COL_COUNT      = 13  # number of columns
+    COL_COUNT      = 14  # number of columns
 
     def __init__(self, data=None):
         super(FileTableRowItem, self).__init__()
@@ -1939,8 +2041,9 @@ class FileTableRowItem(object):
                 rf['encryption'],                         # 9
                 af['mtime'],                              # 10
                 rf['mtime'],                              # 11
-                getFileType(ent.name()),                  # 12
-                ent.state()                               # 13
+                ctxt.fs.getFileType(ent.name()),          # 12
+                ent.state(),                              # 13
+                ctxt.appCtxt._icon_file                   # 14
             ]
 
         elif isinstance(ent, sync2.DirEnt):
@@ -1959,7 +2062,8 @@ class FileTableRowItem(object):
                 ent._mtime,                                # 10
                 0,                                         # 11
                 "",                                        # 12
-                ent.state()                                # 13
+                ent.state(),                               # 13
+                ctxt.appCtxt._icon_folder                  # 14
             ]
 
         return FileTableRowItem(item)
@@ -1975,6 +2079,7 @@ class FileTableView(TableView):
     createEmptyFile = pyqtSignal(QModelIndex, object)
     renameDirectory = pyqtSignal(QModelIndex, object)
     renameFile = pyqtSignal(QModelIndex, object)
+    openEntry = pyqtSignal(object)
 
     copyEntries = pyqtSignal(list)
     moveEntries = pyqtSignal(list)
@@ -2009,7 +2114,7 @@ class FileTableView(TableView):
         idx = model.addColumn(2, "icon", editable=False)
         self.setDelegate(idx, ImageDelegate(self))
         model.getColumn(idx).setDisplayName("")
-        model.getColumn(idx).setSortTransform(lambda data, row: os.path.splitext(data[row][3])[-1])
+        model.getColumn(idx).setSortTransform(lambda data, row: self.ctxt.fs.splitext(data[row][3])[-1])
 
         idx = model.addColumn(1, "state", editable=False)
         self.setDelegate(idx, ImageDelegate(self))
@@ -2022,6 +2127,7 @@ class FileTableView(TableView):
 
         model.getColumn(idx).setShortName("Name")
         model.getColumn(idx).setDisplayName("File Name")
+        model.getColumn(idx).setDecorationKey(None)
 
         idx = model.addTransformColumn(4, "local_size", self._fmt_size)
         model.getColumn(idx).setDefaultTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -2284,10 +2390,7 @@ class FileTableView(TableView):
 
         ent = row[0]
 
-        if isinstance(ent, sync2.DirEnt):
-            self.ctxt.pushChildDirectory(ent.name())
-        else:
-            openAction(self.cfg.open_actions, self.ctxt.currentLocation(), ent)
+        self.openEntry.emit(ent)
 
     def onMouseReleaseRight(self, event):
 
@@ -2393,7 +2496,7 @@ class FileTableView(TableView):
 
         try:
 
-            path = os.path.join(self.ctxt.currentLocation(), value)
+            path = self.ctxt.fs.join(self.ctxt.currentLocation(), value)
 
             if self.ctxt.hasActiveContext():
                 abspath, relpath = self.ctxt.activeContext().normPath(path)
@@ -2401,10 +2504,10 @@ class FileTableView(TableView):
                 abspath = path
                 relpath = ""
 
-            if os.path.exists(abspath):
+            if self.ctxt.fs.exists(abspath):
                 raise Exception("exists %s" % abspath)
 
-            os.makedirs(abspath)
+            self.ctxt.fs.makedirs(abspath)
 
             # construct a new ent to replace the dummy
             ent = sync2.DirEnt(value, relpath, abspath, sync2.FileState.PUSH)
@@ -2433,7 +2536,7 @@ class FileTableView(TableView):
         """
 
         col = self.baseModel().getColumnIndexByName("filename")
-        path = os.path.join(self.ctxt.currentLocation(), "newfile.txt")
+        path = self.ctxt.fs.join(self.ctxt.currentLocation(), "newfile.txt")
         ent = sync2.FileEnt(None, path, None, None, None)
         ent.create = True
         item = FileTableRowItem.fromEntry(self.ctxt, ent)
@@ -2460,7 +2563,7 @@ class FileTableView(TableView):
 
         try:
 
-            path = os.path.join(self.ctxt.currentLocation(), value)
+            path = self.ctxt.fs.join(self.ctxt.currentLocation(), value)
 
             if self.ctxt.hasActiveContext():
                 abspath, relpath = self.ctxt.activeContext().normPath(path)
@@ -2468,7 +2571,7 @@ class FileTableView(TableView):
                 abspath = path
                 relpath = None
 
-            if os.path.exists(abspath):
+            if self.ctxt.fs.exists(abspath):
                 raise Exception("exists %s" % abspath)
 
             open(abspath, "w").close()
@@ -2517,7 +2620,7 @@ class FileTableView(TableView):
 
         try:
 
-            path = os.path.join(self.ctxt.currentLocation(), value)
+            path = self.ctxt.fs.join(self.ctxt.currentLocation(), value)
 
             if self.ctxt.hasActiveContext():
                 abspath, relpath = self.ctxt.activeContext().normPath(path)
@@ -2525,8 +2628,8 @@ class FileTableView(TableView):
                 abspath = path
                 relpath = ""
 
-            if os.path.exists(abspath):
-                if os.path.samefile(path, abspath):
+            if self.ctxt.fs.exists(abspath):
+                if self.ctxt.fs.samefile(path, abspath):
                     # new name is the same as the old name
                     return
                 raise Exception(abspath)
@@ -2569,7 +2672,7 @@ class FileTableView(TableView):
 
         try:
 
-            path = os.path.join(self.ctxt.currentLocation(), value)
+            path = self.ctxt.fs.join(self.ctxt.currentLocation(), value)
 
             if self.ctxt.hasActiveContext():
                 abspath, relpath = self.ctxt.activeContext().normPath(path)
@@ -2577,8 +2680,8 @@ class FileTableView(TableView):
                 abspath = path
                 relpath = None
 
-            if os.path.exists(abspath):
-                if os.path.samefile(path, abspath):
+            if self.ctxt.fs.exists(abspath):
+                if self.ctxt.fs.samefile(path, abspath):
                     # new name is the same as the old name
                     return
                 raise Exception(abspath)
@@ -2742,7 +2845,7 @@ class FileTableView(TableView):
 
         row = index.data(RowValueRole)
         ent = row[0]
-        state = row[-1].split(":")[0]
+        state = row[FileTableRowItem.COL_STATE].split(":")[0]
 
         if not self.ctxt.hasActiveContext():
             return
@@ -2804,12 +2907,14 @@ class FileTableView(TableView):
         idx_state = self.baseModel().getColumnIndexByName("state")
 
         if self._detailed_view:
+
             w = int(4.5 * fm.height() * self.cfg.rowScale)
             v.setDefaultSectionSize(w)
             print(w,w)
             self.setColumnWidth(idx_icon, w)
             self.setColumnWidth(idx_state, w)
         else:
+
             w = int(fm.height() * self.cfg.rowScale)
             v.setDefaultSectionSize(w)
             print(40, w)
@@ -2821,6 +2926,29 @@ class FileTableView(TableView):
             self.loadDetails.emit(self, self.baseModel())
             self._details_load_start = True
 
+        return self._detailed_view
+
+
+class FileGridView(GridView):
+
+    openEntry = pyqtSignal(object)
+
+    def __init__(self, parent=None):
+        super(FileGridView, self).__init__(parent)
+
+        self.doubleClicked.connect(self.onOpenIndex)
+
+
+    def onOpenIndex(self, index):
+
+        row = index.data(RowValueRole)
+
+        if row is None:
+            return
+
+        ent = row[0]
+
+        self.openEntry.emit(ent)
 class FavoritesDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
         super(FavoritesDelegate, self).__init__(parent)
@@ -2944,9 +3072,7 @@ class LocationView(QWidget):
         self.vbox = QVBoxLayout(self)
         self.hbox1 = QHBoxLayout()
         self.hbox3 = QHBoxLayout()
-        self.wdt_syncPanel = QWidget(self)
-        self.wdt_syncPanel.setVisible(False)
-        self.hbox2 = QHBoxLayout(self.wdt_syncPanel)
+        self.hbox2 = QHBoxLayout()
         self.hbox2.setContentsMargins(0, 0, 0, 0)
 
         # https://joekuan.wordpress.com/2015/09/23/list-of-qt-icons/
@@ -3011,8 +3137,7 @@ class LocationView(QWidget):
         self.hbox2.addWidget(self.btn_pull)
         self.hbox2.addStretch(1)
 
-        # self.vbox.addLayout(self.hbox2)
-        self.vbox.addWidget(self.wdt_syncPanel)
+        self.vbox.addLayout(self.hbox2)
 
         self.btn_back.clicked.connect(self.onBackButtonPressed)
         self.btn_forward.clicked.connect(self.onForwardButtonPressed)
@@ -3067,10 +3192,12 @@ class LocationView(QWidget):
         directory = os.path.expanduser(directory)
         directory = os.path.expandvars(directory)
 
-        if not os.path.exists(directory):
-            print("directory", directory)
+        print(directory, self.ctxt.fs.islocal(directory))
+        print(directory, self.ctxt.fs.exists(directory))
+        if self.ctxt.fs.islocal(directory) and not self.ctxt.fs.exists(directory):
+            print("directory does not exist", directory)
             # TODO: change bar to red background color until successful load
-            return
+            #return
 
         self.ctxt.pushDirectory(directory)
 
@@ -3126,14 +3253,17 @@ class LocationView(QWidget):
 
         active = self.ctxt.hasActiveContext()
 
-        self.wdt_syncPanel.setVisible(active)
+        self.btn_fetch.setVisible(active)
+        self.btn_sync.setVisible(active)
+        self.btn_push.setVisible(active)
+        self.btn_pull.setVisible(active)
 
         self.edit_location.setText(directory)
 
     def resizeEvent(self, event):
 
         # hide certain buttons as the ui shrinks
-        visible = self.width() > 250
+        visible = self.width() > 350
         isVisible = self.edit_filter.isVisible()
 
         if visible != isVisible:
@@ -3141,7 +3271,7 @@ class LocationView(QWidget):
             self.btn_forward.setVisible(visible)
             self.edit_filter.setVisible(visible)
 
-        visible = self.width() > 150
+        visible = self.width() > 200
         isVisible = self.btn_open.isVisible()
 
         if visible != isVisible:
@@ -4174,6 +4304,12 @@ class LocationPane(Pane):
 
         self.view_location = LocationView(self.ctxt, self)
         self.table_file = FileTableView(self.ctxt, self.cfg, self)
+        #self.table_file.hide()
+        self.grid_file = FileGridView(self)
+        idx = self.table_file.baseModel().getColumnIndexByName("filename")
+        self.grid_file.setModel(self.table_file.model())
+        self.grid_file.setModelColumn(idx)
+        self.grid_file.hide()
 
         self.spinner = OverlaySpinner(self.table_file)
         self.spinner.hide()
@@ -4185,13 +4321,21 @@ class LocationPane(Pane):
         self.lbl_status_1 = QLabel(self)
         self.lbl_status_2 = QLabel(self)
         self.lbl_status_3 = QLabel(self)
-        self.lbl_status_1.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-        self.lbl_status_2.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
-        self.lbl_status_3.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        #self.lbl_status_1.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        #self.lbl_status_2.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        #self.lbl_status_3.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
 
-        self.lbl_status_1.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
-        self.lbl_status_2.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
-        self.lbl_status_3.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        self.lbl_status_1.setMinimumSize(1, 1)
+        self.lbl_status_2.setMinimumSize(1, 1)
+        self.lbl_status_3.setMinimumSize(1, 1)
+
+        #self.lbl_status_1.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        #self.lbl_status_2.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        #self.lbl_status_3.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+
+        self.lbl_status_3.setFrameShape(QFrame.Box);
+        self.lbl_status_3.setFrameShadow(QFrame.Raised);
+
 
         self.hbox_status = QHBoxLayout()
         self.hbox_status.addWidget(self.lbl_status_1)
@@ -4201,6 +4345,7 @@ class LocationPane(Pane):
 
         self.addWidget(self.view_location)
         self.addWidget(self.table_file)
+        self.addWidget(self.grid_file)
         self.vbox.addLayout(self.hbox_status)
 
         self.table_file.locationChanged.connect(self.onTableLocationChanged)
@@ -4213,13 +4358,16 @@ class LocationPane(Pane):
         self.table_file.moveEntries.connect(self.onMoveEntries)
         self.table_file.pasteEntries.connect(self.onPasteEntries)
         self.table_file.loadDetails.connect(self.onLoadDetails)
+        self.table_file.openEntry.connect(self.onOpenEntry)
+
+        self.grid_file.openEntry.connect(self.onOpenEntry)
 
         self.ctxt.locationChanging.connect(self.onLocationChanging)
         self.ctxt.locationChanged.connect(self.onLocationChanged)
 
         self.view_location.setFilterPattern.connect(self.table_file.onSetFilterPattern)
         self.view_location.splitInterface.connect(self.splitInterface)
-        self.view_location.toggleDetailedView.connect(self.table_file.onToggleDetailedView)
+        self.view_location.toggleDetailedView.connect(self.onToggleDetailedView)
 
     def setSplitIcon(self, bSplit):
         self.view_location.setSplitIcon(bSplit)
@@ -4267,6 +4415,12 @@ class LocationPane(Pane):
 
     def onLocationChanging(self):
         self.timer.start(333)
+
+    def onOpenEntry(self, ent):
+        if isinstance(ent, sync2.DirEnt):
+            self.ctxt.pushChildDirectory(ent.name())
+        else:
+            openAction(self.ctxt.fs, self.cfg.open_actions, self.ctxt.currentLocation(), ent)
 
     def onLocationChanged(self, directory, target):
 
@@ -4396,16 +4550,35 @@ class LocationPane(Pane):
             dialog.exec_()
             self.ctxt.reload()
 
+    def onToggleDetailedView(self):
+
+
+        idx = self.table_file.baseModel().getColumnIndexByName("filename")
+        self.grid_file.setModelColumn(idx)
+
+        if self.table_file.onToggleDetailedView():
+
+            self.table_file.baseModel().getColumn(idx).setDecorationKey(FileTableRowItem.COL_ICON2)
+            #self.table_file.baseModel().setGridMode(
+            #    FileTableRowItem.COL_NAME, FileTableRowItem.COL_ICON2)
+            self.table_file.hide()
+            self.grid_file.show()
+
+        else:
+            self.table_file.baseModel().getColumn(idx).setDecorationKey(None)
+            #self.table_file.baseModel().setGridMode(-1, -1)
+            self.table_file.show()
+            self.grid_file.hide()
+
     def onLoadDetails(self, table, model):
         # start a thread which updates the model
         # replace the icon for image types with
         # a representation of that image
 
-
         # TODO: only a mild case of thread unsafe-ty
-        seq = range(self.table_file.model().rowCount())
+        seq = range(self.table_file.baseModel().rowCount(QModelIndex()))
         col = self.table_file.baseModel().getColumnIndexByName("icon")
-        data = [table.model().index(index, col) for index in seq]
+        data = [table.baseModel().index(index, col) for index in seq]
         self.submitBatchJob.emit(self.onExecuteTask, data, self.taskComplete)
 
     def onExecuteTask(self, index):
@@ -4414,21 +4587,48 @@ class LocationPane(Pane):
 
         ent = row[FileTableRowItem.COL_ENT]
 
+        size = 128
+
         if not isinstance(ent, sync2.FileEnt):
             return None
 
         path = ent.local_path
-        ftype = getFileType(path)
+        ftype = self.ctxt.fs.getFileType(path)
+
+        if ftype == "GIF":
+            try:
+                frame = PIL.Image.open(path)
+                frame = gif_extract_position(path)
+                data = frame.tobytes("raw","RGBA")
+                image = QImage(data, frame.size[0], frame.size[1], QImage.Format_RGBA8888)
+                frame.close()
+
+                image = scale_image(size, image)
+
+                # https://gist.github.com/BigglesZX/4016539
+                # example for correctly rendering frames
+
+                #if frame.is_animated:
+                #    skip = int(frame.n_frames * .75)
+                #    for i in range(skip):
+                #        frame.seek(frame.tell()+1)
+                #        print(skip, frame.tell())
+
+                # image = frame.toqimage()
+                #frame = frame.convert("RGBA")
+                #data = frame.tobytes("raw","RGBA")
+                #image = QImage(data, frame.size[0], frame.size[1], QImage.Format_RGBA8888)
+
+                return(index, image)
+            except Exception as e:
+                print(e)
+
 
         if ftype not in ['JPG', 'JPEG', 'BMP', 'PNG']:
             return None
 
-        size = 128
         img = QImage(path)
-        if img.width() > size or img.height() > size:
-            img = img.scaled(QSize(size, size),
-                Qt.KeepAspectRatio, Qt.SmoothTransformation)
-
+        img = scale_image(size, img)
         return (index, img)
 
     def taskComplete(self, result, ex):
@@ -4438,7 +4638,15 @@ class LocationPane(Pane):
 
         index, img = result
 
-        self.table_file.model().setData(index, img)
+        item = index.data(RowValueRole)
+
+        # item = FileTableRowItem.fromEntry(self.ctxt, ent)
+        #print(index, img.width(), img.height())
+        # consider replace whole row to fix visual issue
+        #self.table_file.model().setData(index, img)
+
+        item[FileTableRowItem.COL_ICON2] = img
+        self.table_file.replaceRow(index.row(), item)
 
 class DoubleLocationPane(QWidget):
 
@@ -4675,6 +4883,13 @@ class RpcThread(QThread):
 
     def handleConnection(self, conn, addr):
         version, size = struct.unpack(">bI", conn.recv(5))
+
+        # drop connections with large amounts of data
+        if size > 10240:
+            print("error: size")
+            conn.close()
+            return
+
         data = conn.recv(size)
 
         msg = RpcMessage.decode(data)
@@ -4686,7 +4901,7 @@ class RpcThread(QThread):
     def join(self):
         self.alive = False
         self.sock.close()
-        sys.stdout.write("closing socket\n")
+        print("closing socket\n")
         self.wait()
 
 class RpcOpenTabMessage(object):
@@ -4743,6 +4958,9 @@ class SyncMainWindow(QMainWindow):
 
     def __init__(self, cfg):
         super(SyncMainWindow, self).__init__()
+
+        # useful for debugging layouts
+        # self.setStyleSheet("QWidget {border: 1px solid red}")
 
         self.cfg = cfg
 
@@ -4859,11 +5077,12 @@ class SyncMainWindow(QMainWindow):
             self.tabview.setTabsClosable(self.tabview.count()>1)
 
     def newTab(self):
-        path = os.path.join(os.getcwd(), "playground")
-        if os.path.exists(path):
-            self.addTab(path, path, None)
-        else:
-            self.addTab(os.getcwd(), os.getcwd(), None)
+        #path = os.path.join(os.getcwd(), "playground")
+        #if os.path.exists(path):
+        #    self.addTab(path, path, None)
+        #else:
+        #    self.addTab(os.getcwd(), os.getcwd(), None)
+        self.addTab("mem://test", os.getcwd(), None)
 
     def addTab(self, primaryPath, secondaryPath, icon=None):
 
@@ -4918,7 +5137,7 @@ class SyncMainWindow(QMainWindow):
 
         self.hide()
 
-        procinfo = os.path.join(cfg_base, "yue-sync", ".procinfo")
+        procinfo = os.path.join(cfg_base, "yue-sync", ".pid")
         if os.path.exists(procinfo):
             os.remove(procinfo)
 
@@ -4973,12 +5192,13 @@ class SyncMainWindow(QMainWindow):
     def onTaskFinished(self, tid, retval, e, time):
 
         cbk, result, e = retval
-
+        if e:
+            print("task %s: %s" % (tid, e))
         cbk(result, e)
 
     def resizeEvent(self, event):
 
-        visible = self.width() > 400
+        visible = self.width() > 450
         isVisible = self.pane_favorites.isVisible()
 
         if visible != isVisible:
@@ -5030,7 +5250,7 @@ def main():
 
     cfg_path = os.path.join(cfg_base, "yue-sync", "settings.yml")
 
-    procinfo = os.path.join(cfg_base, "yue-sync", ".procinfo")
+    procinfo = os.path.join(cfg_base, "yue-sync", ".pid")
 
     # load the config, or create a new one if it does not exist
     save = not os.path.exists(cfg_path)
@@ -5068,7 +5288,7 @@ def main():
 
     if args.edit:
         ent = sync2.FileEnt(None, args.edit[0], None, None, None)
-        openAction(cfg.open_actions, os.getcwd(), ent)
+        openAction(self.ctxt.fs, cfg.open_actions, os.getcwd(), ent)
         return
 
     if args.diff:
@@ -5096,6 +5316,24 @@ def main():
 
     # TODO: experiment with os.fork() here on linux
     # dissassociate from shell
+
+    for bucket in cfg.buckets:
+
+        s3fs = BotoFileSystemImpl(
+            bucket['endpoint'],
+            bucket['region'],
+            bucket['access_key'],
+            bucket['secret_key']
+        )
+
+        scheme = BotoFileSystemImpl.scheme
+        if 'scheme' in bucket:
+            scheme = bucket['scheme']
+            s3fs.scheme = scheme
+
+        print(scheme, bucket)
+        FileSystem.register(scheme, s3fs)
+
 
     app = QApplication(sys.argv)
     app.setApplicationName("Yue-Sync")
