@@ -4,6 +4,7 @@
 # move/cut/copy/paste
 #   samefile? keep both? keep all? replace? replace all?
 #   after a copy/move operation between sides, refresh both sources
+# move/copy/remove/rename should not cause a full refresh
 # directory load robustness
 #   gracefully handle errors during load()
 #   pull files do not exist locally (ignore actions)
@@ -101,7 +102,7 @@ def openNative(url):
     if os.name == "nt":
         os.startfile(url)
     elif sys.platform == "darwin":
-        os.system("open %s" % url)
+        os.system("open \"%s\"" % url)
     else:
         # could also use kde-open, gnome-open etc
         # TODO: implement code that tries each one until one works
@@ -342,44 +343,37 @@ def format_mode(mode):
         return u + g + o
     return ""
 
-def scale_image(size, img):
+def scale_image(size, img, upscale=False):
 
     # scale large images down to given size
-    # scale smaller images up to the given size
     if img.width() > size or img.height() > size:
         img = img.scaled(QSize(size, size),
             Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
-    if img.width() < size and img.height() < size:
-        x = (size - img.width()) // 2
-        y = (size - img.height()) // 2
-        img2 = QImage(size, size, QImage.Format_ARGB32)
-        img2.fill(Qt.transparent)
-        painter = QPainter()
-        painter.begin(img2)
-        painter.drawImage(QPoint(x,y), img)
-        painter.end()
-        img = img2
+    # allow icons to be upscaled by at most 2x
+    if upscale and (img.width() < size and img.height() < size):
+        s = size
+        if (size / img.width() > 2):
+            s = img.width() * 2
+        img = img.scaled(QSize(s, s),
+            Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
-    elif img.width() < size:
-        x = (size - img.width()) // 2
-        y = 0
-        img2 = QImage(size, size, QImage.Format_ARGB32)
-        img2.fill(Qt.transparent)
-        painter = QPainter()
-        painter.begin(img2)
-        painter.drawImage(QPoint(x,y), img)
-        painter.end()
-        img = img2
+    # scale smaller images up to the given size
+    x = 0
+    y = 0
 
-    elif img.height() < size:
-        x = 0
+    if img.width() < size:
+        x = (size - img.width()) // 2
+
+    if img.height() < size:
         y = (size - img.height()) // 2
+
+    if x > 0 or y > 0:
         img2 = QImage(size, size, QImage.Format_ARGB32)
         img2.fill(Qt.transparent)
         painter = QPainter()
         painter.begin(img2)
-        painter.drawImage(QPoint(x,y), img)
+        painter.drawImage(QPoint(x, y), img)
         painter.end()
         img = img2
 
@@ -1014,11 +1008,11 @@ class AppContext(QObject):
 
         icon = QFileIconProvider().icon(QFileIconProvider.Folder)
         img = icon.pixmap(QSize(size, size)).toImage()
-        self._icon_folder = scale_image(size, img)
+        self._icon_folder = scale_image(size, img, True)
 
         icon = QFileIconProvider().icon(QFileIconProvider.File)
         img = icon.pixmap(QSize(size, size)).toImage()
-        self._icon_file = scale_image(size, img)
+        self._icon_file = scale_image(size, img, True)
 
 class OverlayText(QWidget):
 
@@ -1159,8 +1153,9 @@ class ImageView(QLabel):
             _, ext = os.path.splitext(path)
             if ext.lower() in self.image_extensions:
                 image = QImage(path)
-                self.setImage(image)
-                return
+                if not image.isNull():
+                    self.setImage(image)
+                    return
         except Exception as e:
             print("failed to set image: %s" % e)
         self.setHidden(True)
@@ -2384,7 +2379,7 @@ class FileTableView(TableView):
                 row = index.data(RowValueRole)
                 if row[0].name() == target:
                     current_index = index
-                    break;
+                    break
             if current_index is not None:
                 self.setCurrentIndex(current_index)
                 self.scrollToRow(current_index.row())
@@ -2398,7 +2393,6 @@ class FileTableView(TableView):
         if self._detailed_view:
             self.loadDetails.emit(self, self.baseModel())
             self._details_load_start = True
-
 
     def onMouseDoubleClick(self, index):
 
@@ -2488,6 +2482,16 @@ class FileTableView(TableView):
             self.scrollToRow(0)
         elif event.key() == Qt.Key_End:
             self.scrollToRow(self.rowCount()-1)
+        elif Qt.Key_A <= event.key() <= Qt.Key_Z:
+            # scroll to the next file that starts with letter
+            # loop to the beginning if needed, set the current index
+            # to always follow the item names
+            col = self.baseModel().getColumnIndexByName("filename")
+            index = self.currentIndex()
+            if index.column() != col:
+                self.setCurrentIndex(self.model().index(index.row(), col))
+
+            super().keyPressEvent(event)
         else:
             super().keyPressEvent(event)
 
@@ -2662,7 +2666,7 @@ class FileTableView(TableView):
                 raise Exception(abspath)
 
             print("rename %s -> %s" % (ent.local_base, abspath))
-            ctxt.fs.rename(ent.local_base, abspath)
+            self.ctxt.fs.rename(ent.local_base, abspath)
 
             # construct a new ent to replace the dummy
             ent = sync2.DirEnt(value, relpath, abspath, sync2.FileState.PUSH)
@@ -4285,6 +4289,9 @@ class FavoritesPane(Pane):
 
         if isinstance(ent, sync2.FileEnt):
             self.view_image.setPath(ent.local_path)
+        else:
+            self.view_image.setPath(None)
+
 
     def onFavoritesChanged(self):
 
@@ -4451,7 +4458,10 @@ class LocationPane(Pane):
 
         if count == 1:
             ent = self.table_file.getSelection()[0][FileTableRowItem.COL_ENT]
-            self.previewEntry.emit(ent)
+            if isinstance(ent, sync2.FileEnt) and self.ctxt.fs.islocal(ent.local_path):
+                self.previewEntry.emit(ent)
+            else:
+                self.previewEntry.emit(None)
 
     def onTriggerSave(self):
 
