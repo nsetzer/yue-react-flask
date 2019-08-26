@@ -31,7 +31,6 @@ class FileSystemError(Exception):
 class FileSystemExistsError(FileSystemError):
     pass
 
-
 class LocalFileSystemImpl(AbstractFileSystem):
     """docstring for LocalFileSystemImpl"""
     scheme = "file://"
@@ -61,8 +60,10 @@ class LocalFileSystemImpl(AbstractFileSystem):
             try:
                 entries.append(self.file_info(fullpath))
             except FileNotFoundError:
-                pass
-
+                # TODO set to type UNK, instead of not dir
+                entries.append(FileRecord(name, False, 0, 0, 0, 0))
+            except OSError as e:
+                entries.append(FileRecord(name, False, 0, 0, 0, 0))
         return entries
 
     def makedirs(self, path):
@@ -103,7 +104,12 @@ class LocalFileSystemImpl(AbstractFileSystem):
     def remove(self, path):
         # TODO: test and remove dir
         os.remove(path)
+
+    def rmdir(self, path):
         os.rmdir(dir)
+
+    def rename(self, patha, pathb):
+        os.rename(patha, pathb)
 
     def drive(self, patha):
         """ returns a meaningless but unique drive identifier (str or int) """
@@ -114,6 +120,10 @@ class LocalFileSystemImpl(AbstractFileSystem):
         else:
             return os.stat(patha).st_dev
 
+    def url(self, path):
+        if not path.startswith(self.scheme):
+            return "%s/%s" % (self.scheme, path)
+        return path
 
 class MemoryFileSystemImpl(AbstractFileSystem):
     """An In-Memory filesystem
@@ -167,13 +177,13 @@ class MemoryFileSystemImpl(AbstractFileSystem):
         if not path.endswith("/"):
             path += self.impl.sep
         for fpath, (f, mtime) in MemoryFileSystemImpl._mem_store.items():
+            print(fpath)
             if fpath.startswith(path):
                 name = fpath.replace(path, "")
                 if '/' in name:
                     name = name.split('/')[0]
-                    if name not in name:
-                        yield FileRecord(name, True, 0, 0)
-                        visited.add(name)
+                    yield FileRecord(name, True, 0, 0)
+                    visited.add(name)
                 else:
                     yield FileRecord(name, False, len(f.getvalue()), mtime)
 
@@ -211,8 +221,23 @@ class MemoryFileSystemImpl(AbstractFileSystem):
 
         del MemoryFileSystemImpl._mem_store[path]
 
+    def rmdir(self, path):
+        pass
+
     def makedirs(self, path):
-        MemoryFileSystemImpl._mem_store[path] = [io.BytesIO(), 0]
+        pass
+
+    def rename(self, patha, pathb):
+        try:
+            if pathb not in MemoryFileSystemImpl._mem_store:
+                MemoryFileSystemImpl._mem_store[pathb] = \
+                    MemoryFileSystemImpl._mem_store[patha]
+                del MemoryFileSystemImpl._mem_store[patha]
+                return
+        except Exception as e:
+            pass
+
+        raise OSError(pathb)
 
     @staticmethod
     def clear():
@@ -230,7 +255,7 @@ class FileSystem(object):
     FS_UNK = 0
     FS_REG = 1
     FS_DIR = 2
-    FS_LNK = 3
+    FS_LNK = 4  # e.g. FS_LNK|FS_DIR or FS_LNK|FS_REG
 
     default_fs = {"s3://": None}
 
@@ -304,7 +329,7 @@ class FileSystem(object):
 
         yield directories before contants so that directories can be created
         """
-
+        print(src, dst_dir)
         _, name = self.split(src)
         tgt = self.join(dst_dir, name)
 
@@ -415,20 +440,16 @@ class FileSystem(object):
 
         return ext.lstrip(".").upper()
 
-
-
 def main():
 
     fs = FileSystem()
 
-    for kind, src, dst, size in fs.copy(r"D:\Storage\secure", "C:\\followme"):
-        print("%d % 8d %s => %s" % (kind, size, src, dst))
-    print("--")
-    for kind, src, dst, size in fs.move(r"D:\Storage\secure", "D:\\followme"):
-        print("%d % 8d %s => %s" % (kind, size, src, dst))
-    print("--")
-    for kind, src, dst, size in fs.copy(r"D:\Storage\secure\.yueattr", "C:\\followme"):
-        print("%d % 8d %s => %s" % (kind, size, src, dst))
+    fs.open("mem://test/file.txt", "wb").close()
+    fs.open("mem://test/folder/file.txt", "wb").close()
+
+    print(fs.listdir("mem://test"))
+
+
 
 if __name__ == '__main__':
     main()

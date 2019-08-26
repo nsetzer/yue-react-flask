@@ -597,6 +597,8 @@ class DirEnt(object):
             self.remote_base, self.local_base, self._state)
 
     def local_url(self):
+        # deprecated
+        # TODO: remove this
         if self.local_base:
             return "file:///%s" % self.local_base
         return None

@@ -1,7 +1,5 @@
 #! cd ../.. && python3 -m yueserver.tools.syncui -n
 
-# status bar showing address and count is gone
-# pressing go to parent should center on the new child directory
 # remove
 # move/cut/copy/paste
 #   samefile? keep both? keep all? replace? replace all?
@@ -9,8 +7,12 @@
 # directory load robustness
 #   gracefully handle errors during load()
 #   pull files do not exist locally (ignore actions)
+#   loading directories with many keys over slow network (partial results, cancel)
 # os.path => ctxt.fs; eliminate os.* and os.path.*
 # s3 file paths
+#   support copy from s3 to local
+#   support remove
+#   support rename of FILE but not directory
 # improve directory push / pop (implementation stack is confusing)
 # on exit save session to session.yml in config dir
 # create a FileSystemTableView from which sync table view inherits from
@@ -26,16 +28,10 @@
 #   menu_action may need a "fork": [true|default: false] option
 #   or "blocking", wait until tar, 7z finish, but launch cmd, terminal
 # replace FileRecord -> FileSystemEntry -> {FileEntry, DirEntry}
-# no reason to have meta actions
-#   hard code special case for `compare set left `
-#   hard code diff option, configure via {left} and {right}
-#
-# IconTextDelegate for FavoritesView
-#   display icon and text in single column
-#   both icon and text are optional
-#   optional bold text mode
+#   use FS_UNK, FS_REG, FS_DIR, FS_LNK
 # remove the reference to the locationContext from the FileTableView, use signals
 # filter allow `kind = ?` where kind is image, video, document, folder
+
 import os
 import sys
 import time
@@ -50,6 +46,8 @@ import argparse
 import struct
 import socket
 import uuid
+
+ts_start = time.time()
 
 import PIL
 
@@ -523,22 +521,24 @@ def _load_context(ctxt, directory):
 def _load_default(fs, directory):
 
     _dir_contents = []
-    for name in fs.listdir(directory):
-        fullpath = fs.join(directory, name)
+    ts = time.time()
+    for record in fs.scandir(directory):
+        fullpath = fs.join(directory, record.name)
 
         try:
-            try:
-                record = fs.file_info(fullpath)
-            except FileNotFoundError as e:
-                print("not found: %s" % e)
-                ent = sync2.DirEnt(name, None, fullpath, sync2.FileState.ERROR)
-                _dir_contents.append(ent)
-                continue
-            except OSError as e:
-                print(type(e), e, fullpath)
-                ent = sync2.DirEnt(name, None, fullpath, sync2.FileState.ERROR)
-                _dir_contents.append(ent)
-                continue
+            # assuming listdir was used
+            #try:
+            #    record = fs.file_info(fullpath)
+            #except FileNotFoundError as e:
+            #    print("not found: %s" % e)
+            #    ent = sync2.DirEnt(name, None, fullpath, sync2.FileState.ERROR)
+            #    _dir_contents.append(ent)
+            #    continue
+            #except OSError as e:
+            #    print(type(e), e, fullpath)
+            #    ent = sync2.DirEnt(name, None, fullpath, sync2.FileState.ERROR)
+            #    _dir_contents.append(ent)
+            #    continue
 
             if not record.isDir:
 
@@ -553,7 +553,7 @@ def _load_default(fs, directory):
                 ent._state = sync2.FileState.SAME
                 _dir_contents.append(ent)
             else:
-                ent = sync2.DirEnt(name, None, fullpath)
+                ent = sync2.DirEnt(record.name, None, fullpath)
                 ent._permission = record.permission
                 ent._mtime = record.mtime
                 ent._state = sync2.FileState.SAME
@@ -561,6 +561,8 @@ def _load_default(fs, directory):
 
         except FileNotFoundError:
             pass
+    te = time.time()
+    print("load %.3f %s" % (te - ts, directory))
     return _dir_contents
 
 class LoadThread(QThread):
@@ -636,6 +638,10 @@ class LocationContext(QObject):
 
             self._active_context = ctxt
             self._dir_contents = content
+
+            stats = self.fs.fsstats(directory)
+            if stats:
+                print(stats)
 
         except Exception as e:
             print("error changing directory")
@@ -790,7 +796,7 @@ class LocationContext(QObject):
         if local_path == new_local_path:
             return None
 
-        os.rename(local_path, new_local_path)
+        self.fs.rename(local_path, new_local_path)
 
         if remote_path:
             fpath, fname = posixpath.split(remote_path)
@@ -829,8 +835,6 @@ class AppContext(QObject):
         self.cfg = cfg
         self.fs = FileSystem()
 
-        self.fs.makedirs("mem://test")
-        self.fs.makedirs("mem://test/subfolder")
         self.fs.open("mem://test/file.txt", "wb").close()
         self.fs.open("mem://test/subfolder/file.txt", "wb").close()
 
@@ -843,14 +847,14 @@ class AppContext(QObject):
 
         self._compare_left_entry = None
 
-    def _isSubPath(dir_path, file_path):
+    def _isSubPath(self, dir_path, file_path):
         return os.path.abspath(file_path).startswith(os.path.abspath(dir_path) + os.sep)
 
     def getSyncContext(self, directory):
         if not self.fs.islocal(directory):
             return None
         for local_base, ctxt in self._syncContext.items():
-            if _isSubPath(local_base, directory):
+            if self._isSubPath(local_base, directory):
                 return ctxt
         else:
             return self._get_context(directory)
@@ -1641,13 +1645,15 @@ class FileContextMenu(QMenu):
         self.ctxt = ctxt
         self.cfg = cfg
 
+        isLocal = self.ctxt.fs.islocal(self.ctxt.currentLocation())
+
         ents = [row[0] for row in selection]
 
         menu = self.addMenu("New")
         menu.addAction("Directory", self._action_new_directory)
         menu.addAction("Empty File", self._action_new_file)
 
-        if len(selection) == 1:
+        if isLocal and len(selection) == 1:
             ent = selection[0][0]
             menu = self.addMenu("Open")
             act = menu.addAction("Native", lambda: self._action_open_native(ent))
@@ -1666,21 +1672,25 @@ class FileContextMenu(QMenu):
                 else:
                     act = menu.addAction(text, g)
 
-        if self.ctxt.hasActiveContext():
+        if isLocal and self.ctxt.hasActiveContext():
 
             menu = self.addMenu("Sync")
             act = menu.addAction("Sync", lambda: self._action_sync(ents))
             act = menu.addAction("Push", lambda: self._action_push(ents))
             act = menu.addAction("Pull", lambda: self._action_pull(ents))
 
-            if self.cfg.showBlacklistFiles:
-                menu.addAction("Hide Blacklist Files", self._action_toggle_show_blacklist)
-            else:
-                menu.addAction("Show Blacklist Files", self._action_toggle_show_blacklist)
-
         if len(selection) == 1:
             ico = self.style().standardIcon(QStyle.SP_FileDialogInfoView)
             act = self.addAction(ico, "Properties", lambda: self._action_info(ents[0]))
+
+        self.addSeparator()
+
+        if isLocal and self.ctxt.hasActiveContext():
+
+            if self.cfg.showBlacklistFiles:
+                self.addAction("Hide Blacklist Files", self._action_toggle_show_blacklist)
+            else:
+                self.addAction("Show Blacklist Files", self._action_toggle_show_blacklist)
 
         if self.cfg.showHiddenFiles:
             self.addAction("Hide Hidden Files", self._action_toggle_show_hidden)
@@ -1727,12 +1737,10 @@ class FileContextMenu(QMenu):
 
         self.addSeparator()
 
+
         diff_action = self.cfg.diff_action.get('action', None)
-        if diff_action:
+        if isLocal and diff_action:
             act = self.addAction("Compare: Set Left File", lambda: self._action_compare_set_left(ents[0]))
-
-
-
 
             icon_name = self.cfg.diff_action.get('icon', None)
             if icon_name:
@@ -1745,10 +1753,11 @@ class FileContextMenu(QMenu):
 
         self.addSeparator()
 
-        act = self.addAction("Open Current Directory",
-            lambda: openNative(self.ctxt.currentLocation()))
+        if isLocal:
+            act = self.addAction("Open Current Directory",
+                lambda: openNative(self.ctxt.currentLocation()))
 
-        if self.cfg.menu_actions:
+        if isLocal:
             groups = {}
             for item in self.cfg.menu_actions:
                 act = item['action']
@@ -1900,10 +1909,14 @@ class FileContextMenu(QMenu):
 
         urls = []
         for ent in ents:
-            url = ent.local_url()
-            if url:
-                urls.append(QUrl(url))
+            if isinstance(ent, sync2.DirEnt):
+                path = ent.local_base
+            else:
+                path = ent.local_path
+            if path:
+                urls.append(QUrl(self.ctxt.fs.url(path)))
 
+        print(urls)
         if urls:
 
             mimeData = QMimeData()
@@ -1919,9 +1932,12 @@ class FileContextMenu(QMenu):
 
         urls = []
         for ent in ents:
-            url = ent.local_url()
-            if url:
-                urls.append(QUrl(url))
+            if isinstance(ent, sync2.DirEnt):
+                path = ent.local_base
+            else:
+                path = ent.local_path
+            if path:
+                urls.append(QUrl(self.ctxt.fs.url(path)))
 
         if urls:
 
@@ -1955,7 +1971,10 @@ class FileContextMenu(QMenu):
         if mimeData.hasUrls():
             urls = []
             for url in mimeData.urls():
-                urls.append(url.toLocalFile())
+                if url.isLocalFile():
+                    urls.append(url.toLocalFile())
+                else:
+                    urls.append(url.url())
 
             dialog = SyncProgressDialog()
             thread = CopyProgressThread(self.ctxt.fs, urls, self.ctxt.currentLocation(), dropAction, self)
@@ -2028,10 +2047,14 @@ class FileTableRowItem(object):
             rf = ent.rf or df
             af = ent.af or df
 
+            if ctxt.fs.islocal(ent.local_path):
+                icon = ctxt.getFileIcon(ent.local_path)
+            else:
+                icon = ctxt.getIcon(QFileIconProvider.File)
             item = [
                 ent,                                      # 0
                 ctxt.getFileStateIcon(ent.state()),       # 1
-                ctxt.getFileIcon(ent.local_path),         # 2
+                icon,         # 2
                 ent.name(),                               # 3
                 af['size'],                               # 4
                 rf['size'],                               # 5
@@ -2426,9 +2449,13 @@ class FileTableView(TableView):
         urls = []
         for row in selection:
             ent = row[FileTableRowItem.COL_ENT]
-            url = ent.local_url()
-            if url:
-                urls.append(QUrl(url))
+
+            if isinstance(ent, sync2.DirEnt):
+                path = ent.local_base
+            else:
+                path = ent.local_path
+            if path:
+                urls.append(QUrl(self.ctxt.fs.url(path)))
 
         if urls:
             drag = QDrag(self)
@@ -2634,7 +2661,8 @@ class FileTableView(TableView):
                     return
                 raise Exception(abspath)
 
-            os.rename(ent.local_base, abspath)
+            print("rename %s -> %s" % (ent.local_base, abspath))
+            ctxt.fs.rename(ent.local_base, abspath)
 
             # construct a new ent to replace the dummy
             ent = sync2.DirEnt(value, relpath, abspath, sync2.FileState.PUSH)
@@ -2663,9 +2691,9 @@ class FileTableView(TableView):
 
     def onRenameFile(self, index, value):
 
-        if index.column() != FileTableRowItem.COL_NAME:
-            print("error", index.row(), value)
-            return
+        #if index.column() != FileTableRowItem.COL_NAME:
+        #    print("error", index.row(), value)
+        #    return
 
         row = index.data(RowValueRole)
         ent = row[0]
@@ -2686,7 +2714,7 @@ class FileTableView(TableView):
                     return
                 raise Exception(abspath)
 
-            os.rename(ent.local_path, abspath)
+            self.ctxt.fs.rename(ent.local_path, abspath)
 
             # construct a new ent to replace the dummy
             if self.ctxt.hasActiveContext():
@@ -2750,12 +2778,13 @@ class FileTableView(TableView):
         row = index.data(RowValueRole)
         ent = row[0]
 
+        colidx = self.baseModel().getColumnIndexByName("filename")
         # todo: on editor close remove dummy ents if not committing
         if isinstance(ent, sync2.DirEnt):
             # todo: better dummy entry checking?
             if hasattr(ent, 'create'):
                 self.createDirectory.emit(index, value)
-            elif index.column() != FileTableRowItem.COL_NAME:
+            elif index.column() != colidx:
                 return True
             else:
                 self.renameDirectory.emit(index, value)
@@ -2763,7 +2792,7 @@ class FileTableView(TableView):
         if isinstance(ent, sync2.FileEnt):
             if hasattr(ent, 'create'):
                 self.createEmptyFile.emit(index, value)
-            elif index.column() != FileTableRowItem.COL_NAME:
+            elif index.column() != colidx:
                 return True
             else:
                 self.renameFile.emit(index, value)
@@ -2928,16 +2957,21 @@ class FileTableView(TableView):
 
         return self._detailed_view
 
-
 class FileGridView(GridView):
 
     openEntry = pyqtSignal(object)
 
-    def __init__(self, parent=None):
+    def __init__(self, cfg, parent=None):
         super(FileGridView, self).__init__(parent)
 
+        self.cfg = cfg
         self.doubleClicked.connect(self.onOpenIndex)
 
+        s1 = self.cfg.iconSize
+        s2 = self.cfg.iconSize * 1.5
+        self.setIconSize(QSize(s1, s1))
+        self.setGridSize(QSize(s2, s2))
+        self.setSpacing(100)
 
     def onOpenIndex(self, index):
 
@@ -2949,6 +2983,16 @@ class FileGridView(GridView):
         ent = row[0]
 
         self.openEntry.emit(ent)
+
+
+    def resizeEvent(self, event):
+
+        #s = 80
+        #n = self.width()//s
+        #p = self.width()%s//n
+        #print(p)
+        super().resizeEvent(event)
+
 class FavoritesDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
         super(FavoritesDelegate, self).__init__(parent)
@@ -3003,18 +3047,19 @@ class FavoritesListView(TableView):
         self.setVerticalHeaderVisible(False)
         self.setHorizontalHeaderVisible(False)
 
-        idx = self.baseModel().addColumn(0, "icon")
-        self.setDelegate(idx, ImageDelegate(self))
+        #idx = self.baseModel().addColumn(0, "icon")
+        #self.setDelegate(idx, ImageDelegate(self))
         idx = self.baseModel().addColumn(1, "favorites")
         self.setDelegate(idx, FavoritesDelegate(self))
+        self.model().getColumn(idx).setDecorationKey(0)
 
         self.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
 
     def setVisible(self, b):
         super().setVisible(b)
 
-        idx = self.baseModel().getColumnIndexByName("icon")
-        self.setColumnWidth(idx, 32)
+        #idx = self.baseModel().getColumnIndexByName("icon")
+        #self.setColumnWidth(idx, 32)
 
     def onMouseDoubleClick(self, index):
         data = index.data(RowValueRole)
@@ -3257,6 +3302,11 @@ class LocationView(QWidget):
         self.btn_sync.setVisible(active)
         self.btn_push.setVisible(active)
         self.btn_pull.setVisible(active)
+
+
+        active = self.ctxt.fs.islocal(directory)
+
+        self.btn_details.setEnabled(active)
 
         self.edit_location.setText(directory)
 
@@ -3583,9 +3633,9 @@ class CopyProgressThread(ProgressThread):
             return
 
         if kind == FileSystem.FS_DIR:
-            os.rename(src, dst)
+            self.fs.rename(src, dst)
         elif kind == FileSystem.FS_REG:
-            os.rename(src, dst)
+            self.fs.rename(src, dst)
 
     def _copy_one(self, kind, src, dst):
 
@@ -3674,13 +3724,11 @@ class RemoveProgressThread(ProgressThread):
 
     def _remove_dir(self, src):
 
-        files = os.listdir(src)
-        if len(files) == 0:
-            os.rmdir(src)
+        self.fs.rmdir(src)
 
     def _remove_reg(self, src):
 
-        os.remove(src)
+        self.fs.remove(src)
 
 class SyncOptionsDialog(QDialog):
 
@@ -3893,7 +3941,7 @@ class FileEntryInfoDialog(QDialog):
         self.lbl_status_image = QLabel(self)
         self.lbl_status_image.setFixedHeight(32)
         self.lbl_status_image.setFixedWidth(32)
-        self.lbl_status_image.setFrameStyle(QFrame.Panel | QFrame.Raised)
+        #self.lbl_status_image.setFrameStyle(QFrame.Panel | QFrame.Raised)
 
         self.lbl_disk = QLabel("Disk", self)
         self.lbl_disk.setAlignment(Qt.AlignCenter)
@@ -4259,10 +4307,10 @@ class FavoritesPane(Pane):
                 else:
                     temp = QIcon.fromTheme(row['icon'])
                     if not temp.isNull():
-                        icon = temp.pixmap(64, 64).toImage()
+                        icon = temp.pixmap(22, 22).toImage()
 
             if icon is None:
-                icon = self.appCtxt.getIcon(kind)
+                icon = self.appCtxt.getIcon(kind).scaled(22, 22, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
             data.append([icon, row['name'], row['path'], False])
 
@@ -4305,7 +4353,7 @@ class LocationPane(Pane):
         self.view_location = LocationView(self.ctxt, self)
         self.table_file = FileTableView(self.ctxt, self.cfg, self)
         #self.table_file.hide()
-        self.grid_file = FileGridView(self)
+        self.grid_file = FileGridView(self.cfg, self)
         idx = self.table_file.baseModel().getColumnIndexByName("filename")
         self.grid_file.setModel(self.table_file.model())
         self.grid_file.setModelColumn(idx)
@@ -4318,9 +4366,9 @@ class LocationPane(Pane):
         self.timer.setSingleShot(True)
         self.timer.timeout.connect(lambda: self.spinner.show())
 
-        self.lbl_status_1 = QLabel(self)
-        self.lbl_status_2 = QLabel(self)
-        self.lbl_status_3 = QLabel(self)
+        self.lbl_status_1 = QLabel(self) # display dir content info
+        self.lbl_status_2 = QLabel(self) # display selection info
+        self.lbl_status_3 = QLabel(self) # display address
         #self.lbl_status_1.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         #self.lbl_status_2.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         #self.lbl_status_3.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
@@ -4333,8 +4381,9 @@ class LocationPane(Pane):
         #self.lbl_status_2.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         #self.lbl_status_3.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
 
-        self.lbl_status_3.setFrameShape(QFrame.Box);
-        self.lbl_status_3.setFrameShadow(QFrame.Raised);
+
+        #self.lbl_status_3.setFrameShape(QFrame.Box);
+        #self.lbl_status_3.setFrameShadow(QFrame.Raised);
 
 
         self.hbox_status = QHBoxLayout()
@@ -4417,10 +4466,12 @@ class LocationPane(Pane):
         self.timer.start(333)
 
     def onOpenEntry(self, ent):
+
         if isinstance(ent, sync2.DirEnt):
             self.ctxt.pushChildDirectory(ent.name())
         else:
-            openAction(self.ctxt.fs, self.cfg.open_actions, self.ctxt.currentLocation(), ent)
+            if self.ctxt.fs.islocal(ent.local_path):
+                openAction(self.ctxt.fs, self.cfg.open_actions, self.ctxt.currentLocation(), ent)
 
     def onLocationChanged(self, directory, target):
 
@@ -4472,7 +4523,10 @@ class LocationPane(Pane):
 
             urls = []
             for url in event.mimeData().urls():
-                urls.append(url.toLocalFile())
+                if url.isLocalFile():
+                    urls.append(url.toLocalFile())
+                else:
+                    urls.append(url.url())
             event.accept()
 
             dialog = SyncProgressDialog()
@@ -4486,9 +4540,13 @@ class LocationPane(Pane):
 
         urls = []
         for item in entries:
-            url = item[FileTableRowItem.COL_ENT].local_url()
-            if url:
-                urls.append(QUrl(url))
+            ent = item[FileTableRowItem.COL_ENT]
+            if isinstance(ent, sync2.DirEnt):
+                path = ent.local_base
+            else:
+                path = ent.local_path
+            if path:
+                urls.append(QUrl(self.ctxt.fs.url(path)))
 
         print("copy", urls)
         if urls:
@@ -4506,9 +4564,12 @@ class LocationPane(Pane):
 
         urls = []
         for ent in entries:
-            url = ent.local_url()
-            if url:
-                url.append(QUrl(url))
+            if isinstance(ent, sync2.DirEnt):
+                path = ent.local_base
+            else:
+                path = ent.local_path
+            if path:
+                urls.append(QUrl(self.ctxt.fs.url(path)))
 
         if urls:
 
@@ -4542,7 +4603,10 @@ class LocationPane(Pane):
         if mimeData.hasUrls():
             urls = []
             for url in mimeData.urls():
-                urls.append(url.toLocalFile())
+                if url.isLocalFile():
+                    urls.append(url.toLocalFile())
+                else:
+                    urls.append(url.url())
 
             dialog = SyncProgressDialog()
             thread = CopyProgressThread(self.ctxt.fs, urls, self.ctxt.currentLocation(), dropAction, self)
@@ -4587,7 +4651,7 @@ class LocationPane(Pane):
 
         ent = row[FileTableRowItem.COL_ENT]
 
-        size = 128
+        size = self.cfg.iconSize
 
         if not isinstance(ent, sync2.FileEnt):
             return None
@@ -4623,12 +4687,15 @@ class LocationPane(Pane):
             except Exception as e:
                 print(e)
 
-
         if ftype not in ['JPG', 'JPEG', 'BMP', 'PNG']:
+            #info = QFileInfo(path)
+            #icon = self.appCtxt._icon_provider.icon(info)
+            #img = icon.pixmap(QSize(size, size)).toImage()
+            #img = scale_image(size, img)
             return None
-
-        img = QImage(path)
-        img = scale_image(size, img)
+        else:
+            img = QImage(path)
+            img = scale_image(size, img)
         return (index, img)
 
     def taskComplete(self, result, ex):
@@ -5077,12 +5144,11 @@ class SyncMainWindow(QMainWindow):
             self.tabview.setTabsClosable(self.tabview.count()>1)
 
     def newTab(self):
-        #path = os.path.join(os.getcwd(), "playground")
-        #if os.path.exists(path):
-        #    self.addTab(path, path, None)
-        #else:
-        #    self.addTab(os.getcwd(), os.getcwd(), None)
-        self.addTab("mem://test", os.getcwd(), None)
+        path = os.path.join(os.getcwd(), "playground")
+        if os.path.exists(path):
+            self.addTab(path, path, None)
+        else:
+            self.addTab(os.getcwd(), os.getcwd(), None)
 
     def addTab(self, primaryPath, secondaryPath, icon=None):
 
@@ -5357,6 +5423,8 @@ def main():
 
     window = SyncMainWindow(cfg)
     window.showWindow()
+
+    print("startup time: %f" % (time.time() - ts_start))
 
     app.aboutToQuit.connect(window.onAboutToQuit)
 

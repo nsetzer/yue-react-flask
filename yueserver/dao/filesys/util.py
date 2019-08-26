@@ -65,6 +65,9 @@ class AbstractFileSystem(object):
     def __init__(self):
         super(AbstractFileSystem, self).__init__()
 
+    def fsstats(self, path):
+        return {}
+
     def islocal(self, path):
         return False
 
@@ -148,6 +151,15 @@ class AbstractFileSystem(object):
 
     def remove(self, path):
         raise NotImplementedError(path)
+
+    def rmdir(self, path):
+        raise NotImplementedError(path)
+
+    def drive(self, patha):
+        raise NotImplementedError(patha)
+
+    def url(self, path):
+        return path
 
 class _ProcFile(object):
     """A file-like object which writes to a process
