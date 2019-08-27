@@ -20,6 +20,7 @@
 #   FileSystemTableView(fs)
 #   contains a private class as a SignalHandler for private signals (e.g. rename)
 #   takes care of basic file system operations
+# eliminate icon cache, and use row height for generating icons: set Decoration
 # icons
 #   shortcut delighter for link file types
 #   favorites icon as path to png
@@ -1630,6 +1631,7 @@ class FileContextMenu(QMenu):
     createDirectory = pyqtSignal()
     createEmptyFile = pyqtSignal()
     rename = pyqtSignal()
+    copyUrls = pyqtSignal(list, object)
 
     showHiddenFiles = pyqtSignal(bool)
     showBlacklistFiles = pyqtSignal(bool)
@@ -1971,11 +1973,7 @@ class FileContextMenu(QMenu):
                 else:
                     urls.append(url.url())
 
-            dialog = SyncProgressDialog()
-            thread = CopyProgressThread(self.ctxt.fs, urls, self.ctxt.currentLocation(), dropAction, self)
-            dialog.setThread(thread)
-            dialog.exec_()
-            self.ctxt.reload()
+            self.copyUrls.emit(urls, dropAction)
 
     def _action_remove(self, ents):
 
@@ -2099,9 +2097,10 @@ class FileTableView(TableView):
     renameFile = pyqtSignal(QModelIndex, object)
     openEntry = pyqtSignal(object)
 
-    copyEntries = pyqtSignal(list)
+    copyEntries = pyqtSignal(list)  # deprecate?
     moveEntries = pyqtSignal(list)
     pasteEntries = pyqtSignal()
+    copyUrls = pyqtSignal(list, object)
 
     loadDetails = pyqtSignal(QObject, QObject)  # table, base model
 
@@ -2415,6 +2414,7 @@ class FileTableView(TableView):
 
         contextMenu = FileContextMenu(self.ctxt, self.cfg, rows, self)
 
+        contextMenu.copyUrls.connect(self.copyUrls)
         contextMenu.createDirectory.connect(self.onBeginCreateDirectory)
         contextMenu.createEmptyFile.connect(self.onBeginCreateEmptyFile)
         contextMenu.rename.connect(self.onBeginRename)
@@ -3583,6 +3583,8 @@ class CopyProgressThread(ProgressThread):
         self.dst = dst
         self.action = action
 
+        self._new_names = []
+
     def main(self):
 
         #index = self.getUserChoice("Text", "click a button",
@@ -3643,6 +3645,7 @@ class CopyProgressThread(ProgressThread):
 
     def _copy_one(self, kind, src, dst):
 
+
         if kind == FileSystem.FS_DIR:
             self.fs.makedirs(dst)
 
@@ -3652,6 +3655,12 @@ class CopyProgressThread(ProgressThread):
                 dst = self._safe_name(dst)
 
             self._copy_file(src, dst)
+
+        # discover new names in the root directory
+        parent, name = self.fs.split(dst)
+        if parent == self.dst:
+            self._new_names.append(name)
+
 
     def _safe_name(self, path):
         i = 1
@@ -4415,6 +4424,7 @@ class LocationPane(Pane):
         self.table_file.pasteEntries.connect(self.onPasteEntries)
         self.table_file.loadDetails.connect(self.onLoadDetails)
         self.table_file.openEntry.connect(self.onOpenEntry)
+        self.table_file.copyUrls.connect(self.onCopyUrls)
 
         self.grid_file.openEntry.connect(self.onOpenEntry)
 
@@ -4539,12 +4549,7 @@ class LocationPane(Pane):
                     urls.append(url.url())
             event.accept()
 
-            dialog = SyncProgressDialog()
-            thread = CopyProgressThread(self.ctxt.fs, urls,
-                self.ctxt.currentLocation(), dropAction, self)
-            dialog.setThread(thread)
-            dialog.exec_()
-            self.ctxt.reload()
+            self.onCopyUrls(urls, dropAction)
 
     def onCopyEntries(self, entries):
 
@@ -4618,11 +4623,19 @@ class LocationPane(Pane):
                 else:
                     urls.append(url.url())
 
-            dialog = SyncProgressDialog()
-            thread = CopyProgressThread(self.ctxt.fs, urls, self.ctxt.currentLocation(), dropAction, self)
-            dialog.setThread(thread)
-            dialog.exec_()
-            self.ctxt.reload()
+            self.onCopyUrls(urls, dropAction)
+
+    def onCopyUrls(self, urls, dropAction):
+
+        # TODO: in order to not reload, get the list of new urls
+        # in the currentLocation
+        dialog = SyncProgressDialog()
+        thread = CopyProgressThread(self.ctxt.fs, urls, self.ctxt.currentLocation(), dropAction, self)
+        dialog.setThread(thread)
+        dialog.exec_()
+        # given this list of names, one could refresh only these files
+        print(thread._new_names)
+        self.ctxt.reload()
 
     def onToggleDetailedView(self):
 
