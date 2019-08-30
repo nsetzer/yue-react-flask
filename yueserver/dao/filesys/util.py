@@ -4,7 +4,7 @@ import os
 import sys
 import posixpath
 
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 from threading import Thread, Condition, Lock, current_thread
 
 class FileRecord(object):
@@ -65,8 +65,10 @@ class AbstractFileSystem(object):
     def __init__(self):
         super(AbstractFileSystem, self).__init__()
 
+        self._statistics = defaultdict(int)
+
     def fsstats(self, path):
-        return {}
+        return self._statistics
 
     def islocal(self, path):
         return False

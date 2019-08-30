@@ -243,10 +243,6 @@ class BotoFileSystemImpl(AbstractFileSystem):
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key)
 
-        self._count_file_info = 0
-        self._count_exists = 0
-        self._count_scandir = 0
-
     def _parse_path(self, path):
         """extract bucket name and key from the path"""
         if not path.startswith(self.scheme):
@@ -256,14 +252,6 @@ class BotoFileSystemImpl(AbstractFileSystem):
             return path, ""
         bucket_name, key = path.split("/", 1)
         return bucket_name, key
-
-    def fsstats(self, path):
-        # return statistics on function calls
-        return {
-            "file_info": self._count_file_info,
-            "exists": self._count_exists,
-            "scandir": self._count_scandir
-        }
 
     def islocal(self, path):
         return False
@@ -293,7 +281,7 @@ class BotoFileSystemImpl(AbstractFileSystem):
 
     def exists(self, path):
         """ returns true if the key exists """
-        self._count_exists += 1
+        self._statistics['exists'] += 1
         bucket_name, key = self._parse_path(path)
         bucket = self.s3.Bucket(bucket_name)
         for obj in bucket.objects.filter(Prefix=key, Delimiter="/"):
@@ -311,6 +299,8 @@ class BotoFileSystemImpl(AbstractFileSystem):
         Reading mode (rb) returns a readble object which will
         stream data down from s3.
         """
+        self._statistics['open'] += 1
+
         if 'b' not in mode:
             raise Exception(mode)
 
@@ -362,7 +352,7 @@ class BotoFileSystemImpl(AbstractFileSystem):
         when trying to determine validity of the path.
 
         """
-        self._count_file_info += 1
+        self._statistics['file_info'] += 1
         bucket_name, key = self._parse_path(path)
         bucket = self.s3.Bucket(bucket_name)
 
@@ -403,7 +393,7 @@ class BotoFileSystemImpl(AbstractFileSystem):
 
     def _scandir_impl(self, bucket_name, key):
 
-        self._count_scandir += 1
+        self._statistics['_scandir_impl'] += 1
 
         if key == "/":
             key = ""

@@ -1,5 +1,6 @@
 #! cd ../.. && python3 -m yueserver.tools.syncui -n
 
+# syncui cmd push arg with relative path `syncui .` does not work
 # remove
 # move/cut/copy/paste
 #   samefile? keep both? keep all? replace? replace all?
@@ -33,7 +34,8 @@
 #   use FS_UNK, FS_REG, FS_DIR, FS_LNK
 # remove the reference to the locationContext from the FileTableView, use signals
 # filter allow `kind = ?` where kind is image, video, document, folder
-
+# formalize stats collection of FS implementations
+#
 import os
 import sys
 import time
@@ -2225,6 +2227,9 @@ class FileTableView(TableView):
 
         self._detailed_view = False
 
+        self._wheel_accumulator = QPoint(0, 0)
+        self._wheel_counter = 0
+
     def getSortProxyModel(self):
         """
         returns a new instance of SortProxyModel, used for
@@ -2960,6 +2965,49 @@ class FileTableView(TableView):
             self._details_load_start = True
 
         return self._detailed_view
+
+    def wheelEvent(self, event):
+        """
+        some platforms / mice (windows) send angle increments
+        of +/- 120 degrees other platforms send updates more frequently.
+
+        capture the angle events in an accumulator and supress events
+        until some threshold has been met
+        """
+
+        # bar = self.horizontalScrollBar()
+        # print(bar.value(), "|", bar.minimum(), bar.maximum(), bar.singleStep(), bar.pageStep())
+        #
+
+        xdelta_thresh = 40
+        ydelta_thresh = 120
+
+        self._wheel_accumulator += event.angleDelta()
+        self._wheel_counter += 1
+
+        dx = self._wheel_accumulator.x() // xdelta_thresh
+        dy = self._wheel_accumulator.y() // ydelta_thresh
+
+        if dx != 0 or dy != 0:
+            rx = self._wheel_accumulator.x() % xdelta_thresh
+            ry = self._wheel_accumulator.y() % ydelta_thresh
+
+            event = QWheelEvent(
+                event.pos(),
+                event.globalPos(),
+                event.pixelDelta(),
+                QPoint(xdelta_thresh * dx, ydelta_thresh * dy),
+                event.buttons(),
+                event.modifiers(),
+                event.phase(),
+                event.inverted(),
+                event.source())
+
+            super().wheelEvent(event)
+            self._wheel_accumulator = QPoint(rx, ry)
+            # print(self._wheel_counter, dx, dy, rx, ry)
+
+            self._wheel_counter = 0
 
 class FileGridView(GridView):
 
@@ -4940,8 +4988,9 @@ class RpcThread(QThread):
         self.port = 0 if port <= 0 else port
 
         self.alive = True
+        self.sock = None
 
-    def _connect(self):
+    def connect(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
@@ -4956,8 +5005,6 @@ class RpcThread(QThread):
 
     def run(self):
 
-        self._connect()
-
         while self.alive:
             try:
                 conn, addr = self.sock.accept()
@@ -4967,15 +5014,19 @@ class RpcThread(QThread):
             except socket.timeout as e:
                 pass
             except Exception as e:
-                print(type(e),e)
+                print(type(e), e)
+                self.sock.close()
+                self.sock = None
                 break
         sys.stderr.write("Remote Socket Thread has ended.\n")
 
     def handleConnection(self, conn, addr):
-        version, size = struct.unpack(">bI", conn.recv(5))
+        dat = conn.recv(5)
+        version, size = struct.unpack("<bI", dat)
 
         # drop connections with large amounts of data
         if size > 10240:
+            print(dat)
             print("error: size")
             conn.close()
             return
@@ -4990,7 +5041,8 @@ class RpcThread(QThread):
 
     def join(self):
         self.alive = False
-        self.sock.close()
+        if self.sock is not None:
+            self.sock.close()
         print("closing socket\n")
         self.wait()
 
@@ -5008,6 +5060,7 @@ class RpcOpenTabMessage(object):
     @staticmethod
     def decode(data):
         paths = [p.decode('utf-8') for p in data.split(b'\x00')]
+        print('decode', paths)
         return RpcOpenTabMessage(paths)
 
 class RpcMessage(object):
@@ -5046,13 +5099,14 @@ def _exec_task(fn, arg, cbk):
 
 class SyncMainWindow(QMainWindow):
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, procinfo=None):
         super(SyncMainWindow, self).__init__()
 
         # useful for debugging layouts
         # self.setStyleSheet("QWidget {border: 1px solid red}")
 
         self.cfg = cfg
+        self._procinfo_path = procinfo
 
         self.initMenuBar()
         self.initStatusBar()
@@ -5087,9 +5141,14 @@ class SyncMainWindow(QMainWindow):
 
         self.installEventFilter(EventFilter(self))
 
+        self._rpc_msg_count = 0
         self.rpc_thread = RpcThread('0.0.0.0', 20123, self)
         self.rpc_thread.message_recieved.connect(self.onRpcMessage)
-        self.rpc_thread.start()
+        self.rpc_thread.started.connect(self.onRpcStarted)
+        self.rpc_thread.finished.connect(self.onRpcFailed)
+        if self._procinfo_path is not None:
+            self.rpc_thread.connect()
+            self.rpc_thread.start()
 
         self.task_queue = TaskQueue(4)
         self.task_queue.taskFinished.connect(self.onTaskFinished)
@@ -5112,6 +5171,9 @@ class SyncMainWindow(QMainWindow):
 
         self.clock = Clock(self)
         statusbar.addWidget(self.clock)
+
+        self.lbl_rpc = QLabel(self)
+        statusbar.addWidget(self.lbl_rpc)
 
     def showWindow(self):
 
@@ -5226,9 +5288,8 @@ class SyncMainWindow(QMainWindow):
 
         self.hide()
 
-        procinfo = os.path.join(cfg_base, "yue-sync", ".pid")
-        if os.path.exists(procinfo):
-            os.remove(procinfo)
+        if self._procinfo_path and os.path.exists(self._procinfo_path):
+            os.remove(self._procinfo_path)
 
         self.rpc_thread.join()
 
@@ -5249,18 +5310,20 @@ class SyncMainWindow(QMainWindow):
             HWND_NOTOPMOST = -2
             win32gui.SetWindowPos(self.effectiveWinId(),
                 HWND_TOPMOST, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)
             win32gui.SetWindowPos(self.effectiveWinId(),
                 HWND_NOTOPMOST, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)
 
-        #self.setFocus()
-        #self.showNormal()
-        #self.raise_()
+        self.setFocus()
+        self.showNormal()
+        self.raise_()
         self.activateWindow()
 
     def onRpcMessage(self, msg):
-        print(msg)
+        print(msg.encode())
+
+        self._rpc_msg_count += 1
 
         self.focusWindow()
 
@@ -5268,6 +5331,15 @@ class SyncMainWindow(QMainWindow):
             for path in msg.paths:
                 if path:
                     self.addTab(path, "")
+
+        self.lbl_rpc.setText("RPC: 20123 (%d)" % self._rpc_msg_count)
+
+    def onRpcStarted(self):
+        self.lbl_rpc.setText("RPC: 20123")
+
+    def onRpcFailed(self):
+        self.yue
+        lbl_rpc.setText("RPC: failed")
 
     def submitTask(self, fn, arg, cbk):
 
@@ -5386,14 +5458,18 @@ def main():
 
     if not args.new and os.path.exists(procinfo):
         paths = []
+        if args.pwd:
+            os.chdir(args.pwd)
+
         for path in args.paths:
             # expand vars using THIS shell env, pass to the open window
             path = os.path.expanduser(path)
             path = os.path.expandvars(path)
             paths.append(os.path.abspath(path))
+        print(paths)
         msg  = RpcOpenTabMessage(paths)
         try:
-            RpcMessage.send('localhost', 20123, RpcMessage.encode(msg))
+            RpcMessage.send('0.0.0.0', 20123, RpcMessage.encode(msg))
             return
         except OSError as e:
             print(e)
@@ -5403,8 +5479,9 @@ def main():
             # assume window closed and open a new one
             pass
 
-    # TODO: experiment with os.fork() here on linux
-    # dissassociate from shell
+    if args.new:
+        # clear this variable, this process does not have a pid file
+        procinfo = None
 
     for bucket in cfg.buckets:
 
@@ -5423,16 +5500,12 @@ def main():
         print(scheme, bucket)
         FileSystem.register(scheme, s3fs)
 
-
     app = QApplication(sys.argv)
     app.setApplicationName("Yue-Sync")
     print(QStyleFactory.keys())
     app.setStyle("Fusion")
     # app.setStyle("windowsvista")
     # setDarkTheme(app)
-
-    # https://github.com/ppinard/qtango
-    # QIcon.setThemeName("tango")
 
     QIcon.setThemeName("tango")
 
@@ -5444,12 +5517,16 @@ def main():
 
     installExceptionHook()
 
-    window = SyncMainWindow(cfg)
+    window = SyncMainWindow(cfg, procinfo=procinfo)
     window.showWindow()
 
     print("startup time: %f" % (time.time() - ts_start))
 
     app.aboutToQuit.connect(window.onAboutToQuit)
+
+    if procinfo is not None:
+        with open(procinfo, "w") as wf:
+            wf.write("%s\n" % os.getpid())
 
     if args.paths:
         if len(args.paths) % 2 == 1:
@@ -5462,19 +5539,15 @@ def main():
 
         window.newTab()
 
-    with open(procinfo, "w") as wf:
-        wf.write("%s\n" % os.getpid())
-
     sys.exit(app.exec_())
 
 if __name__ == '__main__':
     try:
         main()
-        sys.exit(0)
     except BaseException as e:
         # log application startup errors
 
-        error_log_path = os.path.join(cfg_base, 'error.log')
+        error_log_path = os.path.join(cfg_base, 'yue-sync', 'error.log')
 
         with open(error_log_path, "w") as wf:
             wf.write("\n\n")
@@ -5487,5 +5560,6 @@ if __name__ == '__main__':
                 wf.write(line)
             wf.write('%s' % e)
 
-        raise
+        sys.exit(1)
+    sys.exit(0)
 
