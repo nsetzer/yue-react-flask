@@ -106,7 +106,7 @@ class LocalFileSystemImpl(AbstractFileSystem):
         os.remove(path)
 
     def rmdir(self, path):
-        os.rmdir(dir)
+        os.rmdir(path)
 
     def rename(self, patha, pathb):
         os.rename(patha, pathb)

@@ -509,11 +509,22 @@ def _load_drives():
     return _dir_contents
 
 def _load_context(ctxt, directory):
-    abspath, relpath = ctxt.normPath(directory)
-    result = sync2._check(ctxt, relpath, abspath)
 
-    _dir_contents = result.dirs + result.files
-    return _dir_contents
+    close = False
+    if not ctxt.sameThread():
+        ctxt = ctxt.clone()
+        close = True
+
+    try:
+        abspath, relpath = ctxt.normPath(directory)
+        result = sync2._check(ctxt, relpath, abspath)
+
+        _dir_contents = result.dirs + result.files
+        return _dir_contents
+
+    finally:
+        if close:
+            ctxt.close()
 
 def _load_default(fs, directory):
 
@@ -614,7 +625,10 @@ class LocationContext(QObject):
 
         self.locationChanging.emit()
 
-        QApplication.processEvents()
+        # TODO: remove processEvents, once threaded loading is complete
+        # QApplication.processEvents()
+        # to test slow loading directories
+        # QThread.msleep(2000)
 
         try:
 
@@ -732,15 +746,28 @@ class LocationContext(QObject):
 
     def popDirectory(self):
 
-        if len(self._location_history) <= 1:
-            return
+        # return to the previous directory
+        # if the history stack is empty, go to the parent directory
 
-        # note buttons are enabled based on if there is history
-        # but a failed load should not effect state
-        directory, _ = self._location_history[-2]
-        _, name = self._location_history[-1]
+        if len(self._location_history) <= 1:
+            directory, name = self.fs.split(self._location)
+
+            if self.fs.islocal(directory) and directory == self._location:
+                directory = ""
+                name = None
+
+            self._location_pop_history.append((self._location, None))
+            print(self._location_pop_history)
+        else:
+
+            # note buttons are enabled based on if there is history
+            # but a failed load should not effect state
+            directory, _ = self._location_history[-2]
+            _, name = self._location_history[-1]
+
+            self._location_pop_history.append(self._location_history.pop())
+
         self._access(directory)
-        self._location_pop_history.append(self._location_history.pop())
 
         self.load(directory, name)
 
@@ -749,7 +776,7 @@ class LocationContext(QObject):
         if len(self._location_pop_history) < 1:
             return
 
-        directory, name = self._location_pop_history.pop(0)
+        directory, name = self._location_pop_history.pop()
         self._access(directory)
         self._location_history.append((directory, name))
         self.load(directory)
@@ -914,8 +941,8 @@ class AppContext(QObject):
         https://doc.qt.io/qt-5/qfileiconprovider.html
 
         """
-        if kind in self._icon_ext:
-            return self._icon_ext[kind]
+        #if kind in self._icon_ext:
+        #    return self._icon_ext[kind]
 
         if isinstance(kind, str):
             icon = QIcon.fromTheme(kind)
@@ -925,7 +952,7 @@ class AppContext(QObject):
             icon = self._icon_provider.icon(kind)
 
         image = icon.pixmap(QSize(64, 64)).toImage()
-        self._icon_ext[kind] = image
+        #self._icon_ext[kind] = image
         return image
 
     def getImage(self, path):
@@ -1130,6 +1157,9 @@ class Pane(QWidget):
 
 class ImageView(QLabel):
 
+    image_extensions = [".png", ".jpg", "jpeg", ".bmp"]
+    movie_extensions = [".gif"]
+
     def __init__(self, parent=None):
         super(ImageView, self).__init__(parent)
 
@@ -1141,29 +1171,26 @@ class ImageView(QLabel):
         self.setFixedHeight(128)
         self.setHidden(True)
 
-        self.image_extensions = [".png", ".jpg", "jpeg", ".bmp"]
-
         self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         self.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
 
     def setPath(self, path):
 
-        if path is None:
-            self.setHidden(True)
-            return
-
         try:
-            _, ext = os.path.splitext(path)
-            if ext.lower() in self.image_extensions:
-                image = QImage(path)
-                if not image.isNull():
-                    self.setImage(image)
-                    return
+            image = ImageView.loadPath(path)
+            if image is not None:
+                self.setImage(image)
+                return
         except Exception as e:
             print("failed to set image: %s" % e)
         self.setHidden(True)
 
     def setImage(self, image):
+
+        if image is None:
+            self.setHidden(True)
+            return
+
         self.image = image
         if image.width() > self.width() or \
            image.height() > self.height():
@@ -1175,6 +1202,29 @@ class ImageView(QLabel):
             self.pixmap = QPixmap.fromImage(image)
         super().setPixmap(self.pixmap)
         self.setHidden(False)
+
+    @staticmethod
+    def loadPath(path):
+
+        if path is None:
+            return None
+
+        _, ext = os.path.splitext(path)
+
+        if ext.lower() in ImageView.image_extensions:
+            image = QImage(path)
+            if not image.isNull():
+                return image
+
+        elif ext.lower() in ImageView.movie_extensions:
+            frame = gif_extract_position(path)
+            data = frame.tobytes("raw","RGBA")
+            image = QImage(data, frame.size[0], frame.size[1], QImage.Format_RGBA8888)
+            if not image.isNull():
+                return image
+
+        return None
+
 
 class TabWidget(QTabWidget):
     def __init__(self, parent = None):
@@ -2088,6 +2138,7 @@ class FileTableRowItem(object):
 
 class FileTableView(TableView):
 
+    loadLocation = pyqtSignal(str, str)  # async load, mode, dir
     locationChanged = pyqtSignal(str, int, int)  # dir, dcount, fcount
 
     triggerSave = pyqtSignal()
@@ -2209,14 +2260,11 @@ class FileTableView(TableView):
 
         self.xcut_refresh = QShortcut(QKeySequence(QKeySequence.Refresh), self)
         self.xcut_refresh.setContext(Qt.WidgetShortcut)
-        self.xcut_refresh.activated.connect(lambda : self.ctxt.reload())
+        self.xcut_refresh.activated.connect(lambda: self.loadLocation("reload", None))
 
         self.xcut_delete = QShortcut(QKeySequence(QKeySequence.Delete), self)
         self.xcut_delete.setContext(Qt.WidgetShortcut)
         self.xcut_delete.activated.connect(self.onRemoveSelection)
-
-        self.ctxt.locationChanging.connect(self.onLocationChanging)
-        self.ctxt.locationChanged.connect(self.onLocationChanged)
 
         self.selectionChangedEvent.connect(self.onSelectionChanged)
 
@@ -2435,11 +2483,11 @@ class FileTableView(TableView):
 
     def onMouseReleaseBack(self, event):
 
-        self.ctxt.popDirectory()
+        self.loadLocation.emit("pop", None)
 
     def onMouseReleaseForward(self, event):
 
-        self.ctxt.unpopDirectory()
+        self.loadLocation.emit("unpop", None)
 
     def onDragBegin(self):
 
@@ -2482,7 +2530,7 @@ class FileTableView(TableView):
             if len(row_indices) == 1:
                 self.onOpenIndex(row_indices[0])
         elif event.key() == Qt.Key_Backspace:
-            self.ctxt.pushParentDirectory()
+            self.loadLocation.emit("push-parent", None)
         elif event.key() == Qt.Key_Home:
             self.scrollToRow(0)
         elif event.key() == Qt.Key_End:
@@ -2506,7 +2554,7 @@ class FileTableView(TableView):
         """
         col = self.baseModel().getColumnIndexByName("filename")
         # todo: check for unique name
-        ent = sync2.DirEnt("newfile.txt", "", "")
+        ent = sync2.DirEnt("New Directory", "", "")
         ent.create = True
         item = FileTableRowItem.fromEntry(self.ctxt, ent)
         self.insertRow(0, item)
@@ -2541,7 +2589,10 @@ class FileTableView(TableView):
                 relpath = ""
 
             if self.ctxt.fs.exists(abspath):
-                raise Exception("exists %s" % abspath)
+                QMessageBox.information(self, "Create Directory",
+                    f"`{value}` already exists")
+                self.loadLocation.emit("reload", None)
+                return
 
             self.ctxt.fs.makedirs(abspath)
 
@@ -2563,7 +2614,7 @@ class FileTableView(TableView):
             self.scrollToRow(current_index.row())
 
         except Exception as e:
-            self.ctxt.reload()
+            self.loadLocation.emit("reload", None)
             raise e
 
     def onBeginCreateEmptyFile(self):
@@ -2608,7 +2659,10 @@ class FileTableView(TableView):
                 relpath = None
 
             if self.ctxt.fs.exists(abspath):
-                raise Exception("exists %s" % abspath)
+                QMessageBox.information(self, "Create File",
+                    f"`{value}` already exists")
+                self.loadLocation.emit("reload", None)
+                return
 
             open(abspath, "w").close()
 
@@ -2633,7 +2687,7 @@ class FileTableView(TableView):
             self.scrollToRow(current_index.row())
 
         except Exception as e:
-            self.ctxt.reload()
+            self.loadLocation.emit("reload", None)
             raise e
 
     def onBeginRename(self):
@@ -2695,7 +2749,7 @@ class FileTableView(TableView):
             self.scrollToRow(current_index.row())
 
         except Exception as e:
-            self.ctxt.reload()
+            self.loadLocation.emit("reload", None)
             raise e
 
     def onRenameFile(self, index, value):
@@ -2750,7 +2804,7 @@ class FileTableView(TableView):
             self.scrollToRow(current_index.row())
 
         except Exception as e:
-            self.ctxt.reload()
+            self.loadLocation.emit("reload", None)
             raise e
 
     def onRemoveSelection(self):
@@ -2770,7 +2824,7 @@ class FileTableView(TableView):
         thread = RemoveProgressThread(self.ctxt.fs, paths, self)
         dialog.setThread(thread)
         dialog.exec_()
-        self.ctxt.reload()
+        self.loadLocation.emit("reload", None)
 
     def onSetFilterPattern(self, pattern):
         self.model().setFilterGlobPattern(pattern)
@@ -2977,7 +3031,9 @@ class FileTableView(TableView):
 
         # bar = self.horizontalScrollBar()
         # print(bar.value(), "|", bar.minimum(), bar.maximum(), bar.singleStep(), bar.pageStep())
-        #
+
+        if sys.platform == 'win32':
+            return super().wheelEvent(event)
 
         xdelta_thresh = 40
         ydelta_thresh = 120
@@ -3003,11 +3059,10 @@ class FileTableView(TableView):
                 event.inverted(),
                 event.source())
 
-            super().wheelEvent(event)
             self._wheel_accumulator = QPoint(rx, ry)
-            # print(self._wheel_counter, dx, dy, rx, ry)
-
             self._wheel_counter = 0
+
+            return super().wheelEvent(event)
 
 class FileGridView(GridView):
 
@@ -3158,6 +3213,7 @@ class FavoritesListView(TableView):
 
 class LocationView(QWidget):
 
+    loadLocation = pyqtSignal(str, str)  # async load, mode, dir
     setFilterPattern = pyqtSignal(str)
     splitInterface = pyqtSignal()
     toggleDetailedView = pyqtSignal()
@@ -3272,16 +3328,16 @@ class LocationView(QWidget):
         self.btn_split.setAutoRaise(True)
 
     def onBackButtonPressed(self):
-        self.ctxt.popDirectory()
+        self.loadLocation.emit("pop", None)
 
     def onForwardButtonPressed(self):
-        self.ctxt.unpopDirectory()
+        self.loadLocation.emit("unpop", None)
 
     def onUpButtonPressed(self):
-        self.ctxt.pushParentDirectory()
+        self.loadLocation.emit("push-parent", None)
 
     def onRefreshButtonPressed(self):
-        self.ctxt.reload()
+        self.loadLocation.emit("reload", None)
 
     def onOpenButtonPressed(self):
         directory = self.edit_location.text().strip()
@@ -3289,14 +3345,12 @@ class LocationView(QWidget):
         directory = os.path.expanduser(directory)
         directory = os.path.expandvars(directory)
 
-        print(directory, self.ctxt.fs.islocal(directory))
-        print(directory, self.ctxt.fs.exists(directory))
         if self.ctxt.fs.islocal(directory) and not self.ctxt.fs.exists(directory):
             print("directory does not exist", directory)
             # TODO: change bar to red background color until successful load
             #return
 
-        self.ctxt.pushDirectory(directory)
+        self.loadLocation.emit("push", directory)
 
     def _getEnt(self):
         path = self.ctxt.currentLocation()
@@ -3310,7 +3364,7 @@ class LocationView(QWidget):
         thread = FetchProgressThread(self.ctxt, dialog)
         dialog.setThread(thread, "Fetching...")
         dialog.exec_()
-        self.ctxt.reload()
+        self.loadLocation.emit("reload", None)
 
     def _onSyncButtonPressedImpl(self, push, pull):
 
@@ -3326,7 +3380,7 @@ class LocationView(QWidget):
                 dialog)
             dialog.setThread(thread, "Syncing...")
             dialog.exec_()
-            self.ctxt.reload()
+            self.loadLocation.emit("reload", None)
 
     def onSyncButtonPressed(self):
         self._onSyncButtonPressedImpl(True, True)
@@ -3354,7 +3408,6 @@ class LocationView(QWidget):
         self.btn_sync.setVisible(active)
         self.btn_push.setVisible(active)
         self.btn_pull.setVisible(active)
-
 
         active = self.ctxt.fs.islocal(directory)
 
@@ -3784,7 +3837,6 @@ class RemoveProgressThread(ProgressThread):
             self._remove_reg(src)
 
     def _remove_dir(self, src):
-
         self.fs.rmdir(src)
 
     def _remove_reg(self, src):
@@ -4347,6 +4399,7 @@ class FavoritesPane(Pane):
         if isinstance(ent, sync2.FileEnt):
             self.view_image.setPath(ent.local_path)
         else:
+            logging.info(f"cannot create preview for entry {ent}")
             self.view_image.setPath(None)
 
 
@@ -4449,7 +4502,6 @@ class LocationPane(Pane):
         #self.lbl_status_3.setFrameShape(QFrame.Box);
         #self.lbl_status_3.setFrameShadow(QFrame.Raised);
 
-
         self.hbox_status = QHBoxLayout()
         self.hbox_status.addWidget(self.lbl_status_1)
         self.hbox_status.addWidget(self.lbl_status_2)
@@ -4473,12 +4525,18 @@ class LocationPane(Pane):
         self.table_file.loadDetails.connect(self.onLoadDetails)
         self.table_file.openEntry.connect(self.onOpenEntry)
         self.table_file.copyUrls.connect(self.onCopyUrls)
+        self.table_file.loadLocation.connect(self.onLoadLocation)
+
+        # TODO: this could be reworked
+        self.ctxt.locationChanging.connect(self.table_file.onLocationChanging)
+        self.ctxt.locationChanged.connect(self.table_file.onLocationChanged)
 
         self.grid_file.openEntry.connect(self.onOpenEntry)
 
         self.ctxt.locationChanging.connect(self.onLocationChanging)
         self.ctxt.locationChanged.connect(self.onLocationChanged)
 
+        self.view_location.loadLocation.connect(self.onLoadLocation)
         self.view_location.setFilterPattern.connect(self.table_file.onSetFilterPattern)
         self.view_location.splitInterface.connect(self.splitInterface)
         self.view_location.toggleDetailedView.connect(self.onToggleDetailedView)
@@ -4531,12 +4589,14 @@ class LocationPane(Pane):
         self.table_file.setColumnState(self.cfg.state)
 
     def onLocationChanging(self):
+        print("location change begin: start spinner")
         self.timer.start(333)
 
     def onOpenEntry(self, ent):
 
         if isinstance(ent, sync2.DirEnt):
-            self.ctxt.pushChildDirectory(ent.name())
+            # self.ctxt.pushChildDirectory(ent.name())
+            self.onLoadLocation("child", ent.name())
         else:
             if self.ctxt.fs.islocal(ent.local_path):
                 openAction(self.ctxt.fs, self.cfg.open_actions, self.ctxt.currentLocation(), ent)
@@ -4705,6 +4765,31 @@ class LocationPane(Pane):
             self.table_file.show()
             self.grid_file.hide()
 
+    def onLoadLocation(self, mode, directory):
+        self.submitBatchJob.emit(self.onLoadLocationTask, [(mode, directory)], self.onLoadLocationTaskComplete)
+
+    def onLoadLocationTask(self, args):
+
+        mode, directory = args
+
+        if mode == "push":
+            self.ctxt.pushDirectory(directory)
+        elif mode == "child":
+            self.ctxt.pushChildDirectory(directory) # actually a name, not dir
+        elif mode == "reload":
+            self.ctxt.reload()
+        elif mode == "pop":
+            self.ctxt.popDirectory()
+        elif mode == "unpop":
+            self.ctxt.unpopDirectory()
+        elif mode == "push-parent":
+            self.ctxt.pushParentDirectory()
+        else:
+            print(f"unknown mode {mode} for {directory}")
+
+    def onLoadLocationTaskComplete(self, result, ex):
+        print(result, ex)
+
     def onLoadDetails(self, table, model):
         # start a thread which updates the model
         # replace the icon for image types with
@@ -4714,9 +4799,9 @@ class LocationPane(Pane):
         seq = range(self.table_file.baseModel().rowCount(QModelIndex()))
         col = self.table_file.baseModel().getColumnIndexByName("icon")
         data = [table.baseModel().index(index, col) for index in seq]
-        self.submitBatchJob.emit(self.onExecuteTask, data, self.taskComplete)
+        self.submitBatchJob.emit(self.onLoadDetailsTask, data, self.onLoadDetailsTaskComplete)
 
-    def onExecuteTask(self, index):
+    def onLoadDetailsTask(self, index):
 
         row = index.data(RowValueRole)
 
@@ -4769,7 +4854,7 @@ class LocationPane(Pane):
             img = scale_image(size, img)
         return (index, img)
 
-    def taskComplete(self, result, ex):
+    def onLoadDetailsTaskComplete(self, result, ex):
 
         if result is None:
             return
@@ -4947,8 +5032,24 @@ class TaskQueue(QObject):
 
         return tid
 
+    def submit_batch(self, fn, arglist):
+
+        tids = []
+        with self._cv:
+
+            for args in arglist:
+                tid = str(uuid.uuid4())
+                self._tasks[tid] = (fn, args, {})
+                self._queue.append(tid)
+                tids.append(tid)
+
+            self._cv.notify_all()
+
+        return tids
+
     def reset_and_submit_batch(self, fn, arglist):
 
+        tids = []
         with self._cv:
 
             for tid in self._queue:
@@ -4959,8 +5060,10 @@ class TaskQueue(QObject):
                 tid = str(uuid.uuid4())
                 self._tasks[tid] = (fn, args, {})
                 self._queue.append(tid)
+                tids.append(tid)
 
             self._cv.notify_all()
+        return tids
 
     def _execute(self, tid, fn, args, kwargs):
 
@@ -5242,8 +5345,8 @@ class SyncMainWindow(QMainWindow):
 
         pane = DoubleLocationPane(self.appCtxt, self.cfg, self)
 
-        pane.primary.previewEntry.connect(self.pane_favorites.previewEntry)
-        pane.secondary.previewEntry.connect(self.pane_favorites.previewEntry)
+        pane.primary.previewEntry.connect(self.onPreviewEntry)
+        pane.secondary.previewEntry.connect(self.onPreviewEntry)
         pane.primary.locationChanged.connect(self.onDirectoryChanged)
         pane.primary.submitBatchJob.connect(self.submitBatch)
         pane.secondary.submitBatchJob.connect(self.submitBatch)
@@ -5341,6 +5444,20 @@ class SyncMainWindow(QMainWindow):
         self.yue
         lbl_rpc.setText("RPC: failed")
 
+    def onPreviewEntry(self, ent):
+        if ent is None:
+            self.pane_favorites.previewEntry(None)
+
+        else:
+            # todo: add job cancel, or tag to reject completed jobs
+            # quickly browsing over two files in a row can
+            # have results resolve out of order
+            self.submitTask(ImageView.loadPath, ent.local_path, self.onPreviewEntryLoadComplete)
+
+    def onPreviewEntryLoadComplete(self, image, e):
+
+        self.pane_favorites.view_image.setImage(image)
+
     def submitTask(self, fn, arg, cbk):
 
         self.task_queue.submit(_exec_task, fn, arg, cbk)
@@ -5348,7 +5465,7 @@ class SyncMainWindow(QMainWindow):
     def submitBatch(self, fn, arglist, cbk):
 
         args = [(fn, arg, cbk) for arg in arglist]
-        self.task_queue.reset_and_submit_batch(_exec_task, args)
+        self.task_queue.submit_batch(_exec_task, args)
 
     def onTaskFinished(self, tid, retval, e, time):
 

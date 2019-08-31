@@ -48,6 +48,8 @@ import logging
 import json
 import datetime, time
 import getpass
+import threading
+
 from fnmatch import fnmatch
 
 import yueserver
@@ -402,6 +404,14 @@ class SyncContext(object):
         self.storageDao.db.conn.close()
         self.storageDao.db.session.close()
         self.storageDao.db.engine.dispose()
+
+    def sameThread(self):
+        """
+        this object must be cloned() if this returns false
+        database can only be accessed from the thread that created the connection
+        """
+        current_ident = threading.current_thread().ident
+        return self.storageDao.db.thread_ident == current_ident
 
 class RecordBuilder(object):
     """docstring for RecordBuilder"""
@@ -1065,6 +1075,7 @@ def db_connect(connection_string):
     db.create_all = lambda: db.metadata.create_all(engine)
     db.delete = lambda table: db.session.execute(delete(table))
     db.url = connection_string
+    db.thread_ident = threading.current_thread().ident
 
     path = connection_string[len("sqlite:///"):]
     if path and not os.access(path, os.W_OK):
