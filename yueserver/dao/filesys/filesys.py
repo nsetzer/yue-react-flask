@@ -425,17 +425,18 @@ class FileSystem(object):
             yield from self.delete(url)
 
     def getFileType(self, path):
+        """
+        pure-path computation, determine type of file
+        """
         _, name = self.split(path)
-
-        if name.startswith("."):
-            return "DOT FILE"
-
-        if '.' not in name:
-            return "FILE"
 
         name, ext = self.splitext(name)
 
         if not ext:
+            if name == 'Makefile':
+                return 'MAKEFILE'
+            if name.startswith("."):
+                return "DOTFILE"
             return "FILE"
 
         return ext.lstrip(".").upper()

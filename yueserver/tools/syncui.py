@@ -348,31 +348,40 @@ def format_mode(mode):
 
 def scale_image(size, img, upscale=False):
 
+    if isinstance(size, QSize):
+        xsize = size.width()
+        ysize = size.height()
+    else:
+        xsize = ysize = size
+
     # scale large images down to given size
-    if img.width() > size or img.height() > size:
-        img = img.scaled(QSize(size, size),
+    if img.width() > xsize or img.height() > ysize:
+        img = img.scaled(QSize(xsize, ysize),
             Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
     # allow icons to be upscaled by at most 2x
-    if upscale and (img.width() < size and img.height() < size):
-        s = size
-        if (size / img.width() > 2):
+    if upscale and (img.width() < xsize and img.height() < ysize):
+        x = xsize
+        if (xsize / img.width() > 2):
             s = img.width() * 2
-        img = img.scaled(QSize(s, s),
+        y = ysize
+        if (ysize / img.height() > 2):
+            y = img.height() * 2
+        img = img.scaled(QSize(x, y),
             Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
     # scale smaller images up to the given size
     x = 0
     y = 0
 
-    if img.width() < size:
-        x = (size - img.width()) // 2
+    if img.width() < xsize:
+        x = (xsize - img.width()) // 2
 
-    if img.height() < size:
-        y = (size - img.height()) // 2
+    if img.height() < ysize:
+        y = (ysize - img.height()) // 2
 
     if x > 0 or y > 0:
-        img2 = QImage(size, size, QImage.Format_ARGB32)
+        img2 = QImage(xsize, ysize, QImage.Format_ARGB32)
         img2.fill(Qt.transparent)
         painter = QPainter()
         painter.begin(img2)
@@ -623,7 +632,8 @@ class LocationContext(QObject):
 
     def load(self, directory, target=None):
 
-        self.locationChanging.emit()
+        # don't emit here when using threads to load
+        # self.locationChanging.emit()
 
         # TODO: remove processEvents, once threaded loading is complete
         # QApplication.processEvents()
@@ -664,6 +674,8 @@ class LocationContext(QObject):
             self._location = directory
             self.locationChanged.emit(directory, target)
 
+        return 0
+
     def threaded_load(self, directory):
         """
         TODO: requires a reopen of sqlite objects
@@ -702,17 +714,20 @@ class LocationContext(QObject):
         # load the parent directory instead
         try:
             self._access(self._location)
-            self.load(self._location)
+            return self.load(self._location)
         except OSError:
-            self.pushParentDirectory()
+            return self.pushParentDirectory()
 
     def pushDirectory(self, directory):
 
         self._access(directory)
 
-        self.load(directory)
+        retval = self.load(directory)
+
         self._location_history.append((directory, None))
         self._location_pop_history = []
+
+        return retval
 
     def pushChildDirectory(self, dirname):
 
@@ -725,11 +740,10 @@ class LocationContext(QObject):
         self._location_history.append((directory, dirname))
         self._location_pop_history = []
 
-        self.load(directory)
+        return self.load(directory)
 
     def pushParentDirectory(self):
         directory, name = self.fs.split(self._location)
-        print(directory, name)
 
         if self.fs.islocal(directory) and directory == self._location:
             directory = ""
@@ -742,7 +756,7 @@ class LocationContext(QObject):
         self._location_history.append((directory, name))
         self._location_pop_history = []
 
-        self.load(directory, name)
+        return self.load(directory, name)
 
     def popDirectory(self):
 
@@ -757,7 +771,6 @@ class LocationContext(QObject):
                 name = None
 
             self._location_pop_history.append((self._location, None))
-            print(self._location_pop_history)
         else:
 
             # note buttons are enabled based on if there is history
@@ -769,17 +782,17 @@ class LocationContext(QObject):
 
         self._access(directory)
 
-        self.load(directory, name)
+        return self.load(directory, name)
 
     def unpopDirectory(self):
 
         if len(self._location_pop_history) < 1:
-            return
+            raise Exception("no history")
 
         directory, name = self._location_pop_history.pop()
         self._access(directory)
         self._location_history.append((directory, name))
-        self.load(directory)
+        return self.load(directory)
 
     def hasBackHistory(self):
         return len(self._location_history) > 1
@@ -842,6 +855,7 @@ class LocationContext(QObject):
         return new_ent
 
     # -----------------------------------------
+
     def getIcon(self, kind):
         return self.appCtxt.getIcon(kind)
 
@@ -850,6 +864,11 @@ class LocationContext(QObject):
 
     def getFileIcon(self, path):
         return self.appCtxt.getFileIcon(path)
+
+    def clearContext(self):
+
+        self._dir_contents = []
+        self.locationChanged.emit(self.currentLocation(), None)
 
 class AppContext(QObject):
 
@@ -1192,14 +1211,9 @@ class ImageView(QLabel):
             return
 
         self.image = image
-        if image.width() > self.width() or \
-           image.height() > self.height():
-            self.pixmap = QPixmap.fromImage(image).scaled(
-                self.size(),
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation)
-        else:
-            self.pixmap = QPixmap.fromImage(image)
+
+        self.pixmap = QPixmap.fromImage(scale_image(self.size(), image))
+
         super().setPixmap(self.pixmap)
         self.setHidden(False)
 
@@ -1224,7 +1238,6 @@ class ImageView(QLabel):
                 return image
 
         return None
-
 
 class TabWidget(QTabWidget):
     def __init__(self, parent = None):
@@ -2260,7 +2273,7 @@ class FileTableView(TableView):
 
         self.xcut_refresh = QShortcut(QKeySequence(QKeySequence.Refresh), self)
         self.xcut_refresh.setContext(Qt.WidgetShortcut)
-        self.xcut_refresh.activated.connect(lambda: self.loadLocation("reload", None))
+        self.xcut_refresh.activated.connect(lambda: self.loadLocation.emit("reload", None))
 
         self.xcut_delete = QShortcut(QKeySequence(QKeySequence.Delete), self)
         self.xcut_delete.setContext(Qt.WidgetShortcut)
@@ -2400,6 +2413,7 @@ class FileTableView(TableView):
         self.setEnabled(False)
         self.setNewData([])
 
+    # @ ctxt
     def onLocationChanged(self, directory, target):
 
         self.setEnabled(True)
@@ -2461,6 +2475,7 @@ class FileTableView(TableView):
 
         self.openEntry.emit(ent)
 
+    # @ ctxt
     def onMouseReleaseRight(self, event):
 
         rows = self.getSelection()
@@ -2489,6 +2504,7 @@ class FileTableView(TableView):
 
         self.loadLocation.emit("unpop", None)
 
+    # @ ctxt
     def onDragBegin(self):
 
         selection = self.getSelection()
@@ -2548,6 +2564,7 @@ class FileTableView(TableView):
         else:
             super().keyPressEvent(event)
 
+    # @ ctxt
     def onBeginCreateDirectory(self):
         """
         create a dummy DirEnt and open an editor
@@ -2571,6 +2588,7 @@ class FileTableView(TableView):
         self.setCurrentIndex(current_index)
         self.edit(current_index)
 
+    # @ ctxt
     def onCreateDirectory(self, index, value):
         """
         modify the dummy DirEnt with the editor value
@@ -2617,6 +2635,7 @@ class FileTableView(TableView):
             self.loadLocation.emit("reload", None)
             raise e
 
+    # @ ctxt
     def onBeginCreateEmptyFile(self):
         """
         create a dummy FileEnt and open an editor
@@ -2641,6 +2660,7 @@ class FileTableView(TableView):
         self.setCurrentIndex(current_index)
         self.edit(current_index)
 
+    # @ ctxt
     def onCreateEmptyFile(self, index, value):
         """
         modify the dummy FileEnt with the editor value
@@ -2704,6 +2724,7 @@ class FileTableView(TableView):
         self.setCurrentIndex(index)
         self.edit(index)
 
+    # @ ctxt
     def onRenameDirectory(self, index, value):
         row = index.data(RowValueRole)
         ent = row[0]
@@ -2752,6 +2773,7 @@ class FileTableView(TableView):
             self.loadLocation.emit("reload", None)
             raise e
 
+    # @ ctxt
     def onRenameFile(self, index, value):
 
         #if index.column() != FileTableRowItem.COL_NAME:
@@ -2807,6 +2829,7 @@ class FileTableView(TableView):
             self.loadLocation.emit("reload", None)
             raise e
 
+    # @ ctxt
     def onRemoveSelection(self):
 
         rows = self.getSelection()
@@ -2878,35 +2901,6 @@ class FileTableView(TableView):
                 else:
                     i += 1
 
-    def old_onCommitValidateData(self, index, value):
-        """
-        intercept the edit data request
-        to modify an entry and replace the entire row
-        """
-        row = index.data(RowValueRole)
-        ent = row[0]
-
-        idx = self.baseModel().getColumnIndexByName("filename")
-        print(index.column(), idx)
-        if index.column() != idx:
-            return False
-
-        try:
-            # TODO: renaming could result in inserting one value
-            #       in addition to replacing one row
-            new_ent = self.ctxt.renameEntry(ent, value)
-
-            if new_ent is None:
-                return False
-            item = FileTableRowItem.fromEntry(self.ctxt, new_ent)
-            self.replaceRow(index.row(), item)
-
-        except Exception as e:
-            print(e)
-            return False
-
-        return False
-
     def onSelectionChanged(self):
         pass
 
@@ -2933,6 +2927,7 @@ class FileTableView(TableView):
 
         return None
 
+    # @ ctxt
     def _backgroundRule(self, index, col):
 
         row = index.data(RowValueRole)
@@ -4766,9 +4761,27 @@ class LocationPane(Pane):
             self.grid_file.hide()
 
     def onLoadLocation(self, mode, directory):
-        self.submitBatchJob.emit(self.onLoadLocationTask, [(mode, directory)], self.onLoadLocationTaskComplete)
+
+        #if mode == 'pop' and not self.ctxt.hasBackHistory():
+        #    return
+
+        # this tasks will fail
+        if mode == 'unpop' and not self.ctxt.hasForwardHistory():
+            return
+
+        # emit before submitting the job
+        self.ctxt.locationChanging.emit()
+
+        # submit a single job
+        self.submitBatchJob.emit(
+            self.onLoadLocationTask,
+            [(mode, directory)],
+            self.onLoadLocationTaskComplete)
 
     def onLoadLocationTask(self, args):
+
+        # if any exception is raised it is passed to
+        # onLoadLocationTaskComplete, which can handle it
 
         mode, directory = args
 
@@ -4785,10 +4798,11 @@ class LocationPane(Pane):
         elif mode == "push-parent":
             self.ctxt.pushParentDirectory()
         else:
-            print(f"unknown mode {mode} for {directory}")
+            raise Exception(f"unknown mode {mode} for {directory}")
 
     def onLoadLocationTaskComplete(self, result, ex):
-        print(result, ex)
+        if ex is not None:
+            self.ctxt.clearContext()
 
     def onLoadDetails(self, table, model):
         # start a thread which updates the model
@@ -5658,7 +5672,7 @@ def main():
 
     sys.exit(app.exec_())
 
-if __name__ == '__main__':
+def wmain():
     try:
         main()
     except BaseException as e:
@@ -5679,4 +5693,8 @@ if __name__ == '__main__':
 
         sys.exit(1)
     sys.exit(0)
+
+if __name__ == '__main__':
+    wmain()
+
 
