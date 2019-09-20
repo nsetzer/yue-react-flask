@@ -475,7 +475,7 @@ class TableListColumn(TableColumn):
         # parent should be the model
         super(TableListColumn, self).__init__(model, None, name, editable=editable)
 
-    def data(self, tabledata, row):
+    def data(self, tabledata, row, role):
         return tabledata[row]
 
     def select(self, rowdata):

@@ -609,8 +609,12 @@ class DirEnt(object):
     def local_url(self):
         # deprecated
         # TODO: remove this
+
         if self.local_base:
-            return "file:///%s" % self.local_base
+            if osname() == 'nt':
+                return "file:///%s" % self.local_base
+            else:
+                return "file://%s" % self.local_base
         return None
 
 class FileEnt(object):
@@ -827,8 +831,11 @@ class FileEnt(object):
         return os.path.split(self.local_path)[0]
 
     def local_url(self):
-        if self.local_path:
-            return "file:///%s" % self.local_path
+        if self.local_base:
+            if osname() == 'nt':
+                return "file:///%s" % self.local_base
+            else:
+                return "file://%s" % self.local_base
         return None
 
 class DirAttr(object):
