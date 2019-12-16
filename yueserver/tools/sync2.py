@@ -92,7 +92,7 @@ def osname():
     if name == "posix":
         try:
             release = os.uname().release.lower()
-        except:
+        except Exception as e:
             pass
         if 'microsoft' in release:
             name = "nt"
@@ -1896,7 +1896,13 @@ def _copy_impl(ctxt, src, dst):
             mtime=info.mtime, permission=info.permission)
 
     else:
-        raise SyncException("invalid source and destiniation path")
+
+        with ctxt.fs.open(src, "rb") as rb:
+            with ctxt.fs.open(dst, "wb") as wb:
+                chunk = rb.read(2048)
+                while chunk:
+                    wb.write(chunk)
+                    chunk = rb.read(2048)
 
 def _list_impl(ctxt, root, path, verbose=False):
     """
@@ -2093,6 +2099,39 @@ def _remove_impl(ctxt, ents, local, remote):
         else:
             # ent does not exist locally
             print("fail", ent)
+
+def _merge_file_impl(ctxt, fent):
+    """
+    checkout the remote version and copy the local version
+    return the file path, and allow the user to choose their
+    own merge tool.
+    """
+
+    # insert the filename version before the file extension
+    # unless the file does not have an extension
+    path, name = os.path.split(fent.local_path)
+    name, ext = os.path.splitext(name)
+    if not name:
+        name = ext
+        ext = ""
+
+    lver = "%s/%s.l%d%s" % (path, name, fent.lf['version'], ext)
+    rver = "%s/%s.r%d%s" % (path, name, fent.rf['version'], ext)
+
+    _sync_get_file_impl(ctxt, fent.remote_path, rver)
+
+    _copy_impl(ctxt, fent.local_path, lver)
+
+    return lver, rver
+
+def _merge_impl(ctxt, paths):
+
+    for dent in paths:
+        if (ctxt.storageDao.isDir(dent.remote_base)) or (ctxt.fs.exists(dent.local_base) and ctxt.fs.isdir(dent.local_base)):
+            print("error, directory")
+        else:
+            fent = _check_file(ctxt, dent.remote_base, dent.local_base)
+            _merge_file_impl(ctxt, fent)
 
 def _attr_impl(ctxt, path):
 
@@ -2511,6 +2550,29 @@ class SyncCLI(object):
         _sync_impl(ctxt, paths, push=args.push, pull=args.pull,
             force=args.force, recursive=args.recursion)
 
+class MergeCLI(object):
+
+    def register(self, parser):
+
+        subparser = parser.add_parser('merge',
+            help="checkout both remote and local versions for merging")
+        subparser.set_defaults(func=self.execute, cli=self)
+
+        # TODO: sub-sub parser checkout, merge-local, merge-remote, revert
+        # last three commands clean up two files created by checkout
+        # merge-local and merge-remote fail if the expected file does not exist
+        # all commands require a user to fetch/pull prior and push after
+        subparser.add_argument("paths", nargs="*",
+            help="list of paths to check the status on")
+
+    def execute(self, args):
+        ctxt = get_ctxt(os.getcwd())
+
+        paths = _parse_path_args(ctxt.fs, ctxt.remote_base,
+            ctxt.local_base, args.paths)
+
+        _merge_impl(ctxt, paths)
+
 class InfoCLI(object):
     """
     print file count and quota information
@@ -2531,6 +2593,12 @@ class InfoCLI(object):
 
         ctxt = get_ctxt(os.getcwd())
 
+        sys.stdout.write("hostname:    %s\n" % ctxt.client.host())
+        sys.stdout.write("root:        %s\n" % ctxt.root)
+        sys.stdout.write("remote_base: %s\n" % ctxt.remote_base)
+        sys.stdout.write("local_base:  %s\n" % ctxt.local_base)
+        sys.stdout.write("\n")
+
         response = ctxt.client.files_quota()
 
         obj = response.json()['result']
@@ -2541,9 +2609,9 @@ class InfoCLI(object):
             cap = "%.1f MB" % (cap / 1024 / 1024)
             usage = "%.1f MB" % (usage / 1024 / 1024)
 
-        sys.stdout.write("file_count: %d\n" % obj['nfiles'])
-        sys.stdout.write("usage: %s\n" % usage)
-        sys.stdout.write("capacity: %s\n" % cap)
+        sys.stdout.write("file_count:  %d\n" % obj['nfiles'])
+        sys.stdout.write("usage:       %s\n" % usage)
+        sys.stdout.write("capacity:    %s\n" % cap)
 
 class ListCLI(object):
 
@@ -2779,6 +2847,7 @@ def _register_parsers(parser):
     FetchCLI().register(parser)
     StatusCLI().register(parser)
     SyncCLI().register(parser)
+    MergeCLI().register(parser)
     InfoCLI().register(parser)
     ListCLI().register(parser)
     MoveCLI().register(parser)
