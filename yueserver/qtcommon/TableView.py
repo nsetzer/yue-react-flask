@@ -545,10 +545,6 @@ class TableModel(QAbstractTableModel):
         self._forgroundRules = []
         self._backgroundRules = []
 
-        self.isGridMode = False
-        self.gridModeTextColumn = -1
-        self.gridModeDecorationColumn = -1
-
     def rowCount(self, index):
         return len(self.tabledata)
 
@@ -562,11 +558,6 @@ class TableModel(QAbstractTableModel):
         """
         raise NotImplementedError()
 
-    #def setGridMode(self, gridModeTextColumn, gridModeDecorationColumn):
-    #    self.isGridMode = gridModeTextColumn >= 0 and gridModeDecorationColumn >= 0
-    #    self.gridModeTextColumn = gridModeTextColumn
-    #    self.gridModeDecorationColumn = gridModeDecorationColumn
-
     def data(self, index, role):
         i = index.row()
         j = index.column()
@@ -575,14 +566,12 @@ class TableModel(QAbstractTableModel):
         if not index.isValid():
             return QVariant()
 
-        #if self.isGridMode:
-        #    print(",", i, j)
-        #    if role == Qt.DisplayRole:
-        #        return self.tabledata[i][self.gridModeTextColumn]
-        #        #return self._columns[self.gridModeTextColumn].data(self.tabledata, i)
-        #    if role == Qt.DecorationRole:
-        #        return self.tabledata[i][self.gridModeDecorationColumn]
-        #        #return self._columns[self.gridModeDecorationColumn].data(self.tabledata, i)
+        if self.parent().state()==3 and role == Qt.EditRole:
+            print(self.tabledata[i], i, j)
+            self._xy = (i, j)
+
+        if hasattr(self, '_xy') and self._xy == (i, j):
+            print(role)
 
         if role == Qt.DisplayRole or role == Qt.EditRole or role == Qt.DecorationRole:
             data = col.data(self.tabledata, i, role)

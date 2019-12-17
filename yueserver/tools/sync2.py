@@ -940,7 +940,6 @@ class DirAttr(object):
         else:
             parent, name = os.path.split(directory)
             if parent == directory:
-
                 raise SyncException(parent)
             attr = DirAttr.openDir(local_root, parent)
             attr = attr.update(settings, patterns)

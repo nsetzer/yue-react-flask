@@ -51,6 +51,13 @@ import struct
 import socket
 import uuid
 
+import inspect
+
+def trace(*args, **kwargs):
+    frame = inspect.stack()[1]
+    filename = os.path.split(frame.filename)[-1]
+    print(f"{filename}:{frame.function}:{frame.lineno}", *args, **kwargs)
+
 ts_start = time.time()
 
 import PIL
@@ -258,7 +265,7 @@ def openAction(fs, actions, pwd, ent):
             #is_text = all(g(b) for b in rf.read(2048))
             g = lambda v: v < 0x0A
             is_text = not any(g(b) for b in rf.read(2048))
-            print("is text", is_text)
+            trace("is text", is_text)
 
         if is_text:
             executeAction(text_action, [ent], pwd)
@@ -547,12 +554,12 @@ def _load_default(fs, directory):
             #try:
             #    record = fs.file_info(fullpath)
             #except FileNotFoundError as e:
-            #    print("not found: %s" % e)
+            #    trace("not found: %s" % e)
             #    ent = sync2.DirEnt(name, None, fullpath, sync2.FileState.ERROR)
             #    _dir_contents.append(ent)
             #    continue
             #except OSError as e:
-            #    print(type(e), e, fullpath)
+            #    trace(type(e), e, fullpath)
             #    ent = sync2.DirEnt(name, None, fullpath, sync2.FileState.ERROR)
             #    _dir_contents.append(ent)
             #    continue
@@ -579,7 +586,7 @@ def _load_default(fs, directory):
         except FileNotFoundError:
             pass
     te = time.time()
-    print("load %.3f %s" % (te - ts, directory))
+    trace("load %.3f %s" % (te - ts, directory))
     return _dir_contents
 
 class LoadThread(QThread):
@@ -662,10 +669,10 @@ class LocationContext(QObject):
 
             stats = self.fs.fsstats(directory)
             if stats:
-                print(stats)
+                trace(stats)
 
         except Exception as e:
-            print("error changing directory")
+            trace("error changing directory")
             logging.exception(str(e))
             self._dir_contents = []
             self._active_context = None
@@ -681,7 +688,7 @@ class LocationContext(QObject):
         TODO: requires a reopen of sqlite objects
         """
         self.locationChanging.emit()
-        print("on load", directory)
+        trace("on load", directory)
 
         if directory == '':
             ctxt = None
@@ -919,7 +926,7 @@ class AppContext(QObject):
             db = sync2.db_connect("sqlite:///" + db_path)
 
             # TODO: emit connection details
-            print(userdata['hostname'])
+            trace(userdata['hostname'])
             client = sync2.connect(userdata['hostname'],
                 userdata['username'], userdata['password'])
 
@@ -939,12 +946,12 @@ class AppContext(QObject):
 
         except sync2.SyncException as e:
             #self.loadContextError.emit(directory, str(e))
-            print("ld ctxt error", str(e))
+            trace("ld ctxt error", str(e))
             return None
 
         except Exception as e:
             #self.loadContextError.emit(directory, str(e))
-            print("ld ctxt exception",str(e))
+            trace("ld ctxt exception",str(e))
             return None
 
         else:
@@ -987,7 +994,7 @@ class AppContext(QObject):
         state = state.split(":")[0]
         image = self._getFileStateIcon(state)
         if image is not None and image.isNull():
-            print("error loading image for ", state)
+            trace("error loading image for ", state)
         return image
 
     def _getFileStateIcon(self, state):
@@ -1201,7 +1208,7 @@ class ImageView(QLabel):
                 self.setImage(image)
                 return
         except Exception as e:
-            print("failed to set image: %s" % e)
+            trace("failed to set image: %s" % e)
         self.setHidden(True)
 
     def setImage(self, image):
@@ -1335,7 +1342,7 @@ class Calculator(QWidget):
         self.locals['fold'] = lambda initial,seq: sum(seq,initial)
         self.locals['sign'] = lambda x: 1 if x>=0 else -1
         self.locals['j'] = complex(0,1)
-        #print(' '.join(list(self.locals.keys())))
+        #trace(' '.join(list(self.locals.keys())))
 
     def evaluate(self):
 
@@ -1449,7 +1456,7 @@ class InvertedGlobStringSearchRule(ColumnSearchRule):
     def check(self, elem, ignoreCase=True):
         v1 = self.type_(case_(self.value, ignoreCase))
         v2 = self.type_(case_(elem[self.column.name], ignoreCase))
-        print(self.column, v2, v1)
+        trace(self.column, v2, v1)
         return not fnmatch.fnmatch(v2, v1)
 
     def __repr__(self):
@@ -1653,11 +1660,11 @@ class FileContentSortProxyModel(SortProxyModel):
         try:
             self._rule = self.grammar.ruleFromString(pattern)
             self._dir = 'dir' in self.grammar.meta_options
-            print("compiled rule:", self._rule, "match dirname:", self._dir)
+            trace("compiled rule:", self._rule, "match dirname:", self._dir)
         except Exception as e:
             self._rule = None
             self._dir = False
-            print("error compiling rule", type(e), e)
+            trace("error compiling rule", type(e), e)
 
         self.invalidateFilter()
 
@@ -1677,11 +1684,13 @@ class FileContentSortProxyModel(SortProxyModel):
         ent = item[FileTableRowItem.COL_ENT]
         state = item[FileTableRowItem.COL_STATE]
 
-        if not self._show_hidden and name.startswith("."):
-            return False
-
-        if not self._show_blacklist and state == sync2.FileState.IGNORE:
-            return False
+        if name.startswith("."):
+            if not self._show_hidden:
+                return False
+        # D:\Storage\public\code\python\ekanscrypt
+        if state == sync2.FileState.IGNORE:
+            if not self._show_blacklist:
+                return False
 
         if not self._rule:
             return True
@@ -1978,7 +1987,7 @@ class FileContextMenu(QMenu):
             if path:
                 urls.append(QUrl(self.ctxt.fs.url(path)))
 
-        print(urls)
+        trace(urls)
         if urls:
 
             mimeData = QMimeData()
@@ -2017,7 +2026,7 @@ class FileContextMenu(QMenu):
         clipboard = QGuiApplication.clipboard();
         mimeData = clipboard.mimeData()
 
-        # print(mimeData.formats())
+        # trace(mimeData.formats())
 
         data = mimeData.data("Preferred DropEffect")
 
@@ -2027,7 +2036,7 @@ class FileContextMenu(QMenu):
         elif data == b'\x05\x00\x00\x00':
             dropAction = Qt.CopyAction
         else:
-            print("unknown action:", data)
+            trace("unknown action:", data)
             return
 
         if mimeData.hasUrls():
@@ -2093,6 +2102,7 @@ class FileTableRowItem(object):
     def __setitem__(self, index, value):
         self._data[index] = value
 
+    # TODO: remove dependency on ctxt
     @staticmethod
     def fromEntry(ctxt, ent):
 
@@ -2324,7 +2334,7 @@ class FileTableView(TableView):
         self.setColumnWidth(idx, 200)
 
         w = fm1.width("XXXX XX")
-        print("set w", w)
+        trace("set w", w)
 
         idx = self.baseModel().getColumnIndexByName("local_size")
         self.setColumnWidth(idx, w * 1.25)
@@ -2333,7 +2343,7 @@ class FileTableView(TableView):
         self.setColumnWidth(idx, w * 1.25)
 
         w = fm1.width("---------")
-        print("set w", w)
+        trace("set w", w)
 
         idx = self.baseModel().getColumnIndexByName("local_permission")
         self.setColumnWidth(idx, w * 1.5) # 125
@@ -2342,7 +2352,7 @@ class FileTableView(TableView):
         self.setColumnWidth(idx, w * 1.5)
 
         w = fm1.width("XXXX-XX-XX XX:XX:XX")
-        print("set w", w)
+        trace("set w", w)
 
         idx = self.baseModel().getColumnIndexByName("local_mtime")
         self.setColumnWidth(idx, w * 1.25)
@@ -2362,7 +2372,7 @@ class FileTableView(TableView):
         idx = self.baseModel().getColumnIndexByName("type")
         self.setColumnWidth(idx, 100)
 
-        print("setting column widths")
+        trace("setting column widths")
 
     def onShowHeaderContextMenu(self, event):
 
@@ -2526,10 +2536,10 @@ class FileTableView(TableView):
             mimeData.setUrls(urls)
             drag.setMimeData(mimeData)
             action = drag.exec_(Qt.CopyAction|Qt.MoveAction|Qt.LinkAction, Qt.MoveAction)
-            print("drag exec action chosen is", action)
+            trace("drag exec action chosen is", action)
 
     def keyPressEvent(self, event):
-        # print(event.key(), self.state(), QTableView.EditingState)
+        # trace(event.key(), self.state(), QTableView.EditingState)
 
         # if the editor is open prevent firing open events
         if self.state() == QTableView.EditingState:
@@ -2717,11 +2727,18 @@ class FileTableView(TableView):
         if len(row_indices) == 0:
             return
 
+        trace("begin rename", row_indices)
         index = row_indices[0]
         col = self.baseModel().getColumnIndexByName("filename")
         index = self.model().index(index.row(), col)
 
-        self.setCurrentIndex(index)
+        palette = self.palette()
+        c = palette.color(QPalette.Active, QPalette.Highlight)
+        palette.setColor(QPalette.Inactive,QPalette.Highlight, c)
+        self.setPalette(palette)
+
+        # self.setCurrentIndex(index)
+        self.selectionModel().setCurrentIndex(index, QItemSelectionModel.NoUpdate)
         self.edit(index)
 
     # @ ctxt
@@ -2743,9 +2760,9 @@ class FileTableView(TableView):
                 if self.ctxt.fs.samefile(path, abspath):
                     # new name is the same as the old name
                     return
-                raise Exception(abspath)
+                return
 
-            print("rename %s -> %s" % (ent.local_base, abspath))
+            trace("rename %s -> %s" % (ent.local_base, abspath))
             self.ctxt.fs.rename(ent.local_base, abspath)
 
             # construct a new ent to replace the dummy
@@ -2777,7 +2794,7 @@ class FileTableView(TableView):
     def onRenameFile(self, index, value):
 
         #if index.column() != FileTableRowItem.COL_NAME:
-        #    print("error", index.row(), value)
+        #    trace("error", index.row(), value)
         #    return
 
         row = index.data(RowValueRole)
@@ -2797,8 +2814,9 @@ class FileTableView(TableView):
                 if self.ctxt.fs.samefile(path, abspath):
                     # new name is the same as the old name
                     return
-                raise Exception(abspath)
+                return
 
+            trace("rename %s -> %s" % (ent.local_path, abspath))
             self.ctxt.fs.rename(ent.local_path, abspath)
 
             # construct a new ent to replace the dummy
@@ -2855,33 +2873,72 @@ class FileTableView(TableView):
     def editRow(self, row, col):
         """ used by the edit delegate to edit next/previous row"""
         # todo: bounds checking?
+
+        palette = self.palette()
+        c = palette.color(QPalette.Active, QPalette.Highlight)
+        palette.setColor(QPalette.Inactive,QPalette.Highlight, c)
+        self.setPalette(palette)
+
         index = self.model().index(row, col)
         self.setCurrentIndex(index)
         self.edit(index)
 
     def onCommitValidateData(self, index, value):
 
-        row = index.data(RowValueRole)
-        ent = row[0]
 
         colidx = self.baseModel().getColumnIndexByName("filename")
-        # todo: on editor close remove dummy ents if not committing
-        if isinstance(ent, sync2.DirEnt):
-            # todo: better dummy entry checking?
-            if hasattr(ent, 'create'):
-                self.createDirectory.emit(index, value)
-            elif index.column() != colidx:
-                return True
-            else:
-                self.renameDirectory.emit(index, value)
+        if index.column() != colidx:
+            return True
 
-        if isinstance(ent, sync2.FileEnt):
-            if hasattr(ent, 'create'):
-                self.createEmptyFile.emit(index, value)
-            elif index.column() != colidx:
-                return True
+        trace(value)
+
+        selection = self.selectionModel().selectedRows()
+
+        if len(selection) < 2:
+            selection = [index]
+
+        trace(selection)
+        original_value = value
+
+        # TODO: this needs to be reworked
+        # when renaming multiple, emit a specific signal to handle that case
+
+        for count, index in enumerate(selection):
+
+            if count > 0:
+                a, b = os.path.splitext(original_value)
+                temp = f"{a} ({count}){b}"
             else:
-                self.renameFile.emit(index, value)
+                temp = original_value
+
+            trace(index.data(RowValueRole)[FileTableRowItem.COL_ENT].name(), '=>', temp)
+
+
+        for count, index in enumerate(selection):
+
+            row = index.data(RowValueRole)
+            ent = row[FileTableRowItem.COL_ENT]
+            trace(ent)
+
+            if count > 0:
+                a, b = os.path.splitext(original_value)
+                value = f"{a} ({count}){b}"
+            else:
+                value = original_value
+
+            # todo: on editor close remove dummy ents if not committing
+            if isinstance(ent, sync2.DirEnt):
+                # todo: better dummy entry checking?
+                if hasattr(ent, 'create'):
+                    self.createDirectory.emit(index, value)
+                else:
+                    self.renameDirectory.emit(index, value)
+
+            if isinstance(ent, sync2.FileEnt):
+                if hasattr(ent, 'create'):
+                    self.createEmptyFile.emit(index, value)
+                else:
+                    self.renameFile.emit(index, value)
 
         # always fail the validation, the row will be updated
         # during a successful rename
@@ -2900,6 +2957,12 @@ class FileTableView(TableView):
                     self.baseModel().removeRow(i)
                 else:
                     i += 1
+
+        trace("reset color")
+        palette = self.palette()
+        c = QApplication.instance().palette().color(QPalette.Inactive,QPalette.Highlight)
+        palette.setColor(QPalette.Inactive, QPalette.Highlight, c)
+        self.setPalette(palette)
 
     def onSelectionChanged(self):
         pass
@@ -2997,14 +3060,14 @@ class FileTableView(TableView):
 
             w = int(4.5 * fm.height() * self.cfg.rowScale)
             v.setDefaultSectionSize(w)
-            print(w,w)
+            trace(w,w)
             self.setColumnWidth(idx_icon, w)
             self.setColumnWidth(idx_state, w)
         else:
 
             w = int(fm.height() * self.cfg.rowScale)
             v.setDefaultSectionSize(w)
-            print(40, w)
+            trace(40, w)
 
             self.setColumnWidth(idx_icon, 40)
             self.setColumnWidth(idx_state, 40)
@@ -3025,7 +3088,7 @@ class FileTableView(TableView):
         """
 
         # bar = self.horizontalScrollBar()
-        # print(bar.value(), "|", bar.minimum(), bar.maximum(), bar.singleStep(), bar.pageStep())
+        # trace(bar.value(), "|", bar.minimum(), bar.maximum(), bar.singleStep(), bar.pageStep())
 
         if sys.platform == 'win32':
             return super().wheelEvent(event)
@@ -3092,7 +3155,7 @@ class FileGridView(GridView):
         #s = 80
         #n = self.width()//s
         #p = self.width()%s//n
-        #print(p)
+        #trace(p)
         super().resizeEvent(event)
 
 class FavoritesDelegate(QStyledItemDelegate):
@@ -3140,7 +3203,7 @@ class FavoritesListView(TableView):
         fm = QFontMetrics(self.font())
         v = self.verticalHeader()
         v.setSectionResizeMode(QHeaderView.Fixed)
-        print(v.defaultSectionSize(), fm.height())
+        trace(v.defaultSectionSize(), fm.height())
         v.setDefaultSectionSize(int(fm.height() * self.cfg.rowScale))
 
         self.setLastColumnExpanding(True)
@@ -3341,7 +3404,7 @@ class LocationView(QWidget):
         directory = os.path.expandvars(directory)
 
         if self.ctxt.fs.islocal(directory) and not self.ctxt.fs.exists(directory):
-            print("directory does not exist", directory)
+            trace("directory does not exist", directory)
             # TODO: change bar to red background color until successful load
             #return
 
@@ -3584,7 +3647,7 @@ class FetchProgressThread(ProgressThread):
                 self.sendStatus(text)
 
             except StopIteration as e:
-                print("stop iteration")
+                trace("stop iteration")
                 break
             except Exception as e:
                 # TODO: reraise in main thread
@@ -3686,7 +3749,7 @@ class CopyProgressThread(ProgressThread):
         #index = self.getUserChoice("Text", "click a button",
         #    QMessageBox.Information,
         #    ["Skip", "Replace", "Replace All", "Keep", "Keep All"])
-        #print("user chose", index)
+        #trace("user chose", index)
 
         discoveredSize = 0
         transferedSize = 0
@@ -4584,7 +4647,7 @@ class LocationPane(Pane):
         self.table_file.setColumnState(self.cfg.state)
 
     def onLocationChanging(self):
-        print("location change begin: start spinner")
+        trace("location change begin: start spinner")
         self.timer.start(333)
 
     def onOpenEntry(self, ent):
@@ -4666,7 +4729,7 @@ class LocationPane(Pane):
             if path:
                 urls.append(QUrl(self.ctxt.fs.url(path)))
 
-        print("copy", urls)
+        trace("copy", urls)
         if urls:
 
             mimeData = QMimeData()
@@ -4705,7 +4768,7 @@ class LocationPane(Pane):
         clipboard = QGuiApplication.clipboard();
         mimeData = clipboard.mimeData()
 
-        # print(mimeData.formats())
+        # trace(mimeData.formats())
 
         data = mimeData.data("Preferred DropEffect")
 
@@ -4715,7 +4778,7 @@ class LocationPane(Pane):
         elif data == b'\x05\x00\x00\x00':
             dropAction = Qt.CopyAction
         else:
-            print("unknown action:", data)
+            trace("unknown action:", data)
             return
 
         if mimeData.hasUrls():
@@ -4737,7 +4800,7 @@ class LocationPane(Pane):
         dialog.setThread(thread)
         dialog.exec_()
         # given this list of names, one could refresh only these files
-        print(thread._new_names)
+        trace(thread._new_names)
         self.ctxt.reload()
 
     def onToggleDetailedView(self):
@@ -4846,7 +4909,7 @@ class LocationPane(Pane):
                 #    skip = int(frame.n_frames * .75)
                 #    for i in range(skip):
                 #        frame.seek(frame.tell()+1)
-                #        print(skip, frame.tell())
+                #        trace(skip, frame.tell())
 
                 # image = frame.toqimage()
                 #frame = frame.convert("RGBA")
@@ -4855,7 +4918,7 @@ class LocationPane(Pane):
 
                 return(index, image)
             except Exception as e:
-                print(e)
+                trace(e)
 
         if ftype not in ['JPG', 'JPEG', 'BMP', 'PNG']:
             #info = QFileInfo(path)
@@ -4878,7 +4941,7 @@ class LocationPane(Pane):
         item = index.data(RowValueRole)
 
         # item = FileTableRowItem.fromEntry(self.ctxt, ent)
-        #print(index, img.width(), img.height())
+        #trace(index, img.width(), img.height())
         # consider replace whole row to fix visual issue
         #self.table_file.model().setData(index, img)
 
@@ -5091,7 +5154,7 @@ class TaskQueue(QObject):
 
     def join(self):
         for i, thread in enumerate(self._threads):
-            print("stopping thread %d" % i)
+            trace("stopping thread %d" % i)
             thread.join()
 
 class RpcThread(QThread):
@@ -5131,7 +5194,7 @@ class RpcThread(QThread):
             except socket.timeout as e:
                 pass
             except Exception as e:
-                print(type(e), e)
+                trace(type(e), e)
                 self.sock.close()
                 self.sock = None
                 break
@@ -5143,8 +5206,8 @@ class RpcThread(QThread):
 
         # drop connections with large amounts of data
         if size > 10240:
-            print(dat)
-            print("error: size")
+            trace(dat)
+            trace("error: size")
             conn.close()
             return
 
@@ -5160,7 +5223,7 @@ class RpcThread(QThread):
         self.alive = False
         if self.sock is not None:
             self.sock.close()
-        print("closing socket\n")
+        trace("closing socket\n")
         self.wait()
 
 class RpcOpenTabMessage(object):
@@ -5177,7 +5240,7 @@ class RpcOpenTabMessage(object):
     @staticmethod
     def decode(data):
         paths = [p.decode('utf-8') for p in data.split(b'\x00')]
-        print('decode', paths)
+        trace('decode', paths)
         return RpcOpenTabMessage(paths)
 
 class RpcMessage(object):
@@ -5200,9 +5263,9 @@ class RpcMessage(object):
     def send(host, port, packet):
         packet = struct.pack('<bI', 1, len(packet)) + packet
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        print(host, port)
+        trace(host, port)
         sock.connect((host, port))
-        print("sent", sock.send(packet))
+        trace("sent", sock.send(packet))
         sock.close()
 
 def _exec_task(fn, arg, cbk):
@@ -5438,7 +5501,7 @@ class SyncMainWindow(QMainWindow):
         self.activateWindow()
 
     def onRpcMessage(self, msg):
-        print(msg.encode())
+        trace(msg.encode())
 
         self._rpc_msg_count += 1
 
@@ -5485,7 +5548,7 @@ class SyncMainWindow(QMainWindow):
 
         cbk, result, e = retval
         if e:
-            print("task %s: %s" % (tid, e))
+            trace("task %s: %s" % (tid, e))
         cbk(result, e)
 
     def resizeEvent(self, event):
@@ -5540,6 +5603,13 @@ def setDarkTheme(app):
 
 def main():
 
+    if sys.stderr is None or sys.stdout is None:
+        class dummy_writer(object):
+            def write(self, *args, **kwargs):
+                pass
+        sys.stderr = dummy_writer()
+        sys.stdout = dummy_writer()
+
     cfg_path = os.path.join(cfg_base, "yue-sync", "settings.yml")
 
     procinfo = os.path.join(cfg_base, "yue-sync", ".pid")
@@ -5584,7 +5654,7 @@ def main():
         return
 
     if args.diff:
-        print(args)
+        trace(args)
         return
 
     if not args.new and os.path.exists(procinfo):
@@ -5597,16 +5667,16 @@ def main():
             path = os.path.expanduser(path)
             path = os.path.expandvars(path)
             paths.append(os.path.abspath(path))
-        print(paths)
+        trace(paths)
         msg  = RpcOpenTabMessage(paths)
         try:
             RpcMessage.send('0.0.0.0', 20123, RpcMessage.encode(msg))
             return
         except OSError as e:
-            print(e)
+            trace(e)
             pass
         except ConnectionRefusedError as e:
-            print(e)
+            trace(e)
             # assume window closed and open a new one
             pass
 
@@ -5628,12 +5698,12 @@ def main():
             scheme = bucket['scheme']
             s3fs.scheme = scheme
 
-        print(scheme, bucket)
+        trace(scheme, bucket)
         FileSystem.register(scheme, s3fs)
 
     app = QApplication(sys.argv)
     app.setApplicationName("Yue-Sync")
-    print(QStyleFactory.keys())
+    trace(QStyleFactory.keys())
     app.setStyle("Fusion")
     # app.setStyle("windowsvista")
     # setDarkTheme(app)
@@ -5651,7 +5721,7 @@ def main():
     window = SyncMainWindow(cfg, procinfo=procinfo)
     window.showWindow()
 
-    print("startup time: %f" % (time.time() - ts_start))
+    trace("startup time: %f" % (time.time() - ts_start))
 
     app.aboutToQuit.connect(window.onAboutToQuit)
 
