@@ -122,7 +122,10 @@ class LocalFileSystemImpl(AbstractFileSystem):
 
     def url(self, path):
         if not path.startswith(self.scheme):
-            return "%s/%s" % (self.scheme, path)
+            if os.name == 'nt':
+                return "%s/%s" % (self.scheme, path)
+            else:
+                return "%s%s" % (self.scheme, path)
         return path
 
 class MemoryFileSystemImpl(AbstractFileSystem):

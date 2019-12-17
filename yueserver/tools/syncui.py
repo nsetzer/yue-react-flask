@@ -4417,6 +4417,46 @@ class PasswordDialog(QDialog):
             return dialog.getPassword()
         return None
 
+class PreferencesListView(ListView):
+    def __init__(self, parent=None):
+        super(PreferencesListView, self).__init__(parent)
+
+        self.setNewData(["theme", "aws"])
+
+class PreferencesDialog(QDialog):
+    def __init__(self, cfg, parent=None):
+        super(PreferencesDialog, self).__init__(parent)
+
+        # list on the left hand side, displaying categories
+        # stacked widget on the right displays the preferences to edit
+
+        self.cfg = cfg
+
+        self._init_layout()
+
+        self.stack_sections.addWidget(QLabel("hello world"))
+
+        self.updateFromConfig()
+
+    def _init_layout(self):
+
+        self.lst_sections = PreferencesListView(self)
+        self.scroll_sections = QScrollArea(self)
+        self.scroll_sections.setWidgetResizable(True)
+        self.stack_sections = QStackedWidget(self)
+        self.scroll_sections.setWidget(self.stack_sections)
+        self.vbox = QVBoxLayout(self)
+        self.hbox = QHBoxLayout()
+        self.hbox.addWidget(self.lst_sections)
+        self.hbox.addWidget(self.scroll_sections)
+        self.vbox.addLayout(self.hbox)
+
+    def updateFromConfig(self):
+        pass
+
+    def updateConfig(self):
+        pass
+
 class FavoritesPane(Pane):
 
     pushDirectoryMain = pyqtSignal(str)
@@ -5526,7 +5566,7 @@ class SyncMainWindow(QMainWindow):
             self.pane_favorites.previewEntry(None)
 
         else:
-            # todo: add job cancel, or tag to reject completed jobs
+            # todo: add job cancel, or tasg to reject completed jobs
             # quickly browsing over two files in a row can
             # have results resolve out of order
             self.submitTask(ImageView.loadPath, ent.local_path, self.onPreviewEntryLoadComplete)
@@ -5639,6 +5679,9 @@ def main():
     group_ex.add_argument("-e", dest='edit', type=str, default=None, nargs=1,
         help='open a file')
 
+    group_ex.add_argument('--cfg', dest='cfg', action='store_true',
+        help='open configuration')
+
     if cfg.diff_action.get('action', None):
         group_ex.add_argument("-d", dest='diff', type=str, default=None, nargs=2,
             help='open a file')
@@ -5652,6 +5695,12 @@ def main():
         ent = sync2.FileEnt(None, args.edit[0], None, None, None)
         openAction(self.ctxt.fs, cfg.open_actions, os.getcwd(), ent)
         return
+
+    if args.cfg:
+        app = QApplication(sys.argv)
+        window = PreferencesDialog()
+        window.show()
+        sys.exit(app.exec_())
 
     if args.diff:
         trace(args)
@@ -5749,7 +5798,8 @@ def wmain():
         # log application startup errors
 
         error_log_path = os.path.join(cfg_base, 'yue-sync', 'error.log')
-
+        print(error_log_path)
+        print(e)
         with open(error_log_path, "w") as wf:
             wf.write("\n\n")
             wf.write(" ".join(sys.argv))
