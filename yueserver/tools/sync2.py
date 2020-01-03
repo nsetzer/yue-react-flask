@@ -1717,7 +1717,14 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
         pass
     elif FileState.IGNORE == state:
         pass
+
+    elif (FileState.PULL == state and push and not force):
+        # remote changes to the file will be overwritten
+        # ask the user to confirm they want to override
+        sys.stdout.write("use force to push %s\n" % ent.remote_path)
+
     elif (FileState.PUSH == state and push) or \
+         (FileState.PULL == state and push and force) or \
          (FileState.DELETE_REMOTE == state and not pull and push) or \
          (FileState.CONFLICT_MODIFIED == state and not pull and push) or \
          (FileState.CONFLICT_CREATED == state and not pull and push) or \
@@ -1729,7 +1736,13 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
 
         _sync_file_push(ctxt, attr, ent)
 
+    elif (FileState.PUSH == state and pull and not force):
+        # local changes to the file will be overwritten
+        # ask the user to confirm they want to override
+        sys.stdout.write("use force to pull %s\n" % ent.remote_path)
+
     elif (FileState.PULL == state and pull) or \
+         (FileState.PUSH == state and pull and force) or \
          (FileState.DELETE_LOCAL == state and pull and not push) or \
          (FileState.CONFLICT_MODIFIED == state and pull and not push) or \
          (FileState.CONFLICT_CREATED == state and pull and not push) or \
@@ -1769,7 +1782,7 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
         if (response.status_code == 200):
             ctxt.storageDao.remove(ent.remote_path)
     else:
-        message = "unknown %s\n" % ent.remote_path
+        message = "unknown %s %s %s %s %s\n" % (state, push, pull, force, ent.remote_path)
         sys.stdout.write(message)
 
     return SyncResult(ent, state, message)
@@ -2100,13 +2113,7 @@ def _remove_impl(ctxt, ents, local, remote):
             # ent does not exist locally
             print("fail", ent)
 
-def _merge_file_impl(ctxt, fent):
-    """
-    checkout the remote version and copy the local version
-    return the file path, and allow the user to choose their
-    own merge tool.
-    """
-
+def _merge_get_path(fent):
     # insert the filename version before the file extension
     # unless the file does not have an extension
     path, name = os.path.split(fent.local_path)
@@ -2115,8 +2122,21 @@ def _merge_file_impl(ctxt, fent):
         name = ext
         ext = ""
 
-    lver = "%s/%s.l%d%s" % (path, name, fent.lf['version'], ext)
-    rver = "%s/%s.r%d%s" % (path, name, fent.rf['version'], ext)
+    # regex: '^~(.*)\.[lr]@(\d+)(.*$)'
+    # original filename is group[0] + group[2]
+    lver = "%s/~%s.l@%d%s" % (path, name, fent.lf['version'], ext)
+    rver = "%s/~%s.r@%d%s" % (path, name, fent.rf['version'], ext)
+
+    return lver, rver
+
+def _merge_checkout_file_impl(ctxt, fent):
+    """
+    checkout the remote version and copy the local version
+    return the file path, and allow the user to choose their
+    own merge tool.
+    """
+
+    lver, rver = _merge_get_path(fent)
 
     _sync_get_file_impl(ctxt, fent.remote_path, rver)
 
@@ -2124,14 +2144,48 @@ def _merge_file_impl(ctxt, fent):
 
     return lver, rver
 
-def _merge_impl(ctxt, paths):
+def _merge_local_file_impl(ctxt, fent):
+    """
+    resolve the conflict by taking the remote version
+    including any user modifications
+    """
+
+    lver, rver = _merge_get_path(fent)
+
+    if os.path.exists(lver):
+        _copy_impl(ctxt, lver, fent.local_path)
+        ctxt.fs.remove(lver)
+
+    if os.path.exists(rver):
+        ctxt.fs.remove(rver)
+
+    return fent.local_path
+
+def _merge_remote_file_impl(ctxt, fent):
+    """
+    resolve the conflict by taking the local version
+    including any user modifications
+    """
+
+    lver, rver = _merge_get_path(fent)
+
+    if os.path.exists(rver):
+        _copy_impl(ctxt, rver, fent.local_path)
+        ctxt.fs.remove(rver)
+
+    if os.path.exists(lver):
+        ctxt.fs.remove(lver)
+
+    return fent.local_path
+
+def _merge_impl(ctxt, paths, action):
 
     for dent in paths:
         if (ctxt.storageDao.isDir(dent.remote_base)) or (ctxt.fs.exists(dent.local_base) and ctxt.fs.isdir(dent.local_base)):
-            print("error, directory")
+            print("error, directory", dent.remote_base)
         else:
             fent = _check_file(ctxt, dent.remote_base, dent.local_base)
-            _merge_file_impl(ctxt, fent)
+            action(ctxt, fent)
 
 def _attr_impl(ctxt, path):
 
@@ -2550,11 +2604,11 @@ class SyncCLI(object):
         _sync_impl(ctxt, paths, push=args.push, pull=args.pull,
             force=args.force, recursive=args.recursion)
 
-class MergeCLI(object):
+class MergeCheckoutCLI(object):
 
     def register(self, parser):
 
-        subparser = parser.add_parser('merge',
+        subparser = parser.add_parser('checkout', aliases=['co'],
             help="checkout both remote and local versions for merging")
         subparser.set_defaults(func=self.execute, cli=self)
 
@@ -2567,11 +2621,79 @@ class MergeCLI(object):
 
     def execute(self, args):
         ctxt = get_ctxt(os.getcwd())
+        paths = _parse_path_args(ctxt.fs, ctxt.remote_base,
+            ctxt.local_base, args.paths)
+        # TODO: if no args or for args that are directories -
+        #        scan for unique set of conflicted files and checkout
 
+        def action(ctxt, fent):
+            lver, rver = _merge_checkout_file_impl(ctxt, fent)
+            print(lver)
+            print(rver)
+
+        _merge_impl(ctxt, paths, action)
+
+class MergeLocalCLI(object):
+
+    def register(self, parser):
+
+        subparser = parser.add_parser('local',
+            help="resolve a merge by taking the local file")
+        subparser.set_defaults(func=self.execute, cli=self)
+
+        subparser.add_argument("paths", nargs="*",
+            help="list of paths to check the status on")
+
+    def execute(self, args):
+        ctxt = get_ctxt(os.getcwd())
         paths = _parse_path_args(ctxt.fs, ctxt.remote_base,
             ctxt.local_base, args.paths)
 
-        _merge_impl(ctxt, paths)
+        def action(ctxt, fent):
+
+            path = _merge_local_file_impl(ctxt, fent)
+            print("local", path)
+
+        _merge_impl(ctxt, paths, action)
+
+
+class MergeRemoteCLI(object):
+
+    def register(self, parser):
+
+        subparser = parser.add_parser('remote',
+            help="resolve a merge by taking the remote file")
+        subparser.set_defaults(func=self.execute, cli=self)
+
+        subparser.add_argument("paths", nargs="*",
+            help="list of paths to check the status on")
+
+    def execute(self, args):
+        ctxt = get_ctxt(os.getcwd())
+        paths = _parse_path_args(ctxt.fs, ctxt.remote_base,
+            ctxt.local_base, args.paths)
+
+        def action(ctxt, fent):
+            path = _merge_local_file_impl(ctxt, fent)
+            print("local", path)
+
+        _merge_impl(ctxt, paths, action)
+
+class MergeCLI(object):
+
+    def register(self, parser):
+
+        subparser = parser.add_parser('merge',
+            help="merge utility")
+
+        parser = subparser.add_subparsers()
+        MergeCheckoutCLI().register(parser)
+        MergeLocalCLI().register(parser)
+        MergeRemoteCLI().register(parser)
+
+    def execute(self, args):
+
+        print("test")
 
 class InfoCLI(object):
     """
