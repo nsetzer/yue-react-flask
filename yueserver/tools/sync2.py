@@ -947,7 +947,6 @@ class DirAttr(object):
         else:
             parent, name = os.path.split(directory)
             if parent == directory:
-
                 raise SyncException(parent)
             attr = DirAttr.openDir(local_root, parent)
             attr = attr.update(settings, patterns)
@@ -1718,7 +1717,7 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
     elif FileState.IGNORE == state:
         pass
 
-    elif (FileState.PULL == state and push and not force):
+    elif (FileState.PULL == state and push and not pull and not force):
         # remote changes to the file will be overwritten
         # ask the user to confirm they want to override
         sys.stdout.write("use force to push %s\n" % ent.remote_path)
@@ -1736,7 +1735,7 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
 
         _sync_file_push(ctxt, attr, ent)
 
-    elif (FileState.PUSH == state and pull and not force):
+    elif (FileState.PUSH == state and pull and not push and not force):
         # local changes to the file will be overwritten
         # ask the user to confirm they want to override
         sys.stdout.write("use force to pull %s\n" % ent.remote_path)
