@@ -11,7 +11,7 @@ server:
   secret_key: secret
 
   cors:
-    origin: "http://localhost:3000"
+    origin: "*"
 
   database:
     kind: "sqlite"

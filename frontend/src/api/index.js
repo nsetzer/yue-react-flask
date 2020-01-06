@@ -3,9 +3,11 @@
 import daedalus
 import api.requests
 
-// 0.0.0.0:4200 will fail cors
 export const env = {
-    baseUrl:"http://localhost:4200"
+    //`http://${window.location.hostname}:4200`
+    // baseUrl is empty when running in production
+    // for development set to the full qualified url of the backend
+    baseUrl: (daedalus.env && daedalus.env.baseUrl)?daedalus.env.baseUrl:""
 }
 
 let user_token = null

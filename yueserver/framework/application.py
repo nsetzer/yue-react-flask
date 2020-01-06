@@ -265,9 +265,10 @@ class FlaskApp(object):
         # curl -v -X OPTIONS -H "Origin: https://yueapp.duckdns.org" https://yueapp.duckdns.org
         origin = request.headers.get("Origin")
 
-        if origin and self.config.cors.origin == "*":
-            origin = "*"
-        if origin and self.config.cors.origin != "*":
+        # if the config specifies "*" then return the origin
+        # of the request. otherwise check the origin of the request
+        # against the whitelist given in the config
+        if self.config.cors.origin != "*":
             if origin not in self.config.cors.origin.split(","):
                 origin = None
 
