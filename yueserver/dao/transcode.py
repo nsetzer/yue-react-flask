@@ -50,7 +50,7 @@ def async_transcode(cmd, src, dst, ignore=False):
         proc = subprocess.Popen(cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            # stderr=subprocess.DEVNULL,
             shell=False)
 
         f1 = threading.Thread(target=_pushsrc, args=(src, proc.stdin))
@@ -261,7 +261,8 @@ class FFmpeg(object):
     def thumb(self, infile, outfile, args, scale):
         with io.BytesIO() as tmpfile:
             async_transcode(args, infile, tmpfile, True)
-            tmpfile.seek(0)
+            if tmpfile.tell() == 0:
+                raise Exception("failed to transcode file")
             return scale_image_stream(tmpfile, outfile, scale)
 
 
