@@ -534,7 +534,7 @@ class FileSysService(object):
         dst = self.getFilePath(user, fs_name, dstPath.lstrip('/'))
         return self.storageDao.moveFileLocation(user['id'], fs_id, src, dst)
 
-    def search(self, user, fs_name, fs_path, name_parts, limit=None, offset=None):
+    def search(self, user, fs_name, fs_path, terms, limit=None, offset=None):
         """
         fs_name: the file system root to search
         fs_path: path prefix or None
@@ -544,13 +544,26 @@ class FileSysService(object):
         fs_id = self.storageDao.getFilesystemId(
             user['id'], user['role_id'], fs_name)
 
-        records = self.storageDao.searchByFileName(
-            user['id'], fs_id, name_parts, limit, offset)
+        if fs_path:
+            os_root = '/'
+            abs_path = self.getFilePath(user, fs_name, fs_path)
+
+            if abs_path == os_root:
+                parent = os_root
+            else:
+                parent, _ = self.fs.split(abs_path)
+
+            if not abs_path.endswith("/"):
+                abs_path += "/"
+        else:
+            abs_path = ""
+
+        records = self.storageDao.search(
+            user['id'], fs_id, abs_path, terms, limit, offset)
 
         files = []
         for record in records:
             files.append({"name": record.name,
-                          "file_path": record.file_path[1:],
                           "file_path": record.file_path[1:],
                           "size": record.size,
                           "mtime": record.mtime,

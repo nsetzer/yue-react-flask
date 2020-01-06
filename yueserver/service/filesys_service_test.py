@@ -34,7 +34,7 @@ class FileServiceTestCase(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
 
-    def test_001a_saveFile(self):
+    def xtest_001a_saveFile(self):
 
         root = "mem"
         path = "test/test.txt"
@@ -51,7 +51,7 @@ class FileServiceTestCase(unittest.TestCase):
         result = self.service.listDirectory(self.app.USER, root, "test")
         print(result)
 
-    def test_001b_updateFile(self):
+    def xtest_001b_updateFile(self):
 
         # same test as 001a, but increment the version (upsert->update)
         root = "mem"
@@ -69,7 +69,7 @@ class FileServiceTestCase(unittest.TestCase):
         result = self.service.listDirectory(self.app.USER, root, "test")
         print(result)
 
-    def test_001c_index(self):
+    def xtest_001c_index(self):
 
         # same test as 001a, but increment the version (upsert->update)
         root = "mem"
@@ -80,7 +80,7 @@ class FileServiceTestCase(unittest.TestCase):
         result = self.service.listIndex(self.app.USER, root, "test", limit=10, offset=0)
         print(result)
 
-    def test_001d_deleteFiles(self):
+    def xtest_001d_deleteFiles(self):
 
         # same test as 001a, but increment the version (upsert->update)
         root = "mem"
@@ -94,7 +94,7 @@ class FileServiceTestCase(unittest.TestCase):
         with self.assertRaises(StorageNotFoundException):
             self.service.listDirectory(self.app.USER, root, "test")
 
-    def test_001e_doubleSave(self):
+    def xtest_001e_doubleSave(self):
 
         # saving to the same file twice should reuse the storage path
         root = "mem"
@@ -115,7 +115,7 @@ class FileServiceTestCase(unittest.TestCase):
 
         self.assertEqual(record1.storage_path, record2.storage_path)
 
-    def test_001f_updateVersion(self):
+    def xtest_001f_updateVersion(self):
 
         # same test as 001a, but increment the version (upsert->update)
         root = "mem"
@@ -136,7 +136,7 @@ class FileServiceTestCase(unittest.TestCase):
             self.service.saveFile(self.app.USER, root, path,
                 BytesIO(b"def456"), version = 2)
 
-    def test_002a_system(self):
+    def xtest_002a_system(self):
 
         key1 = self.service.getUserSystemPassword(self.app.USER)
         key2 = self.service.getUserSystemPassword(self.app.USER)
@@ -145,7 +145,7 @@ class FileServiceTestCase(unittest.TestCase):
         print("system", key2)
         print("system", len(key2))
 
-    def test_003_user_notes(self):
+    def xtest_003_user_notes(self):
 
         root = "mem"
         path = "public/notes/test_note.txt"
@@ -164,7 +164,7 @@ class FileServiceTestCase(unittest.TestCase):
         self.assertEqual(len(files), 1)
         self.assertEqual(files[0]['file_name'], 'test_note.txt')
 
-    def test_004_remove_file_and_previews(self):
+    def xtest_004_remove_file_and_previews(self):
         """
         removing a file should remove all meta data along with that file
         """
@@ -184,14 +184,14 @@ class FileServiceTestCase(unittest.TestCase):
         self.service.remove(self.app.USER, root, path)
         self.assertFalse(self.service.fs.exists(url))
 
-    def test_005_remove_all_files(self):
+    def xtest_005_remove_all_files(self):
         # prepare for next test
 
         for f in self.service.listIndex(self.app.USER, "mem", ""):
             print(f)
             self.service.remove(self.app.USER, "mem", f['path'])
 
-    def test_005a_quota(self):
+    def xtest_005a_quota(self):
 
         user_id = self.app.USER['id']
 
@@ -229,6 +229,31 @@ class FileServiceTestCase(unittest.TestCase):
 
         # _internalSave(user_id, storage_path, inputStream, chunk_size)
         # _internalCheckQuota(user_id, size, byte_index, uid)
+
+    def test_006_search(self):
+
+        user_id = self.app.USER['id']
+
+        dao = self.service.storageDao
+
+        self.service.saveFile(self.app.USER, "mem", "test1.txt", BytesIO(b"0" * 1024))
+        self.service.saveFile(self.app.USER, "mem", "folder/test1.txt", BytesIO(b"0" * 1024))
+        self.service.saveFile(self.app.USER, "mem", "test2.txt", BytesIO(b"0" * 4096))
+
+        results = self.service.search(self.app.USER, "mem", "", [], limit=None, offset=None)
+        self.assertEqual(len(results), 3)
+
+        #results = self.service.listDirectory(self.app.USER, "mem", "folder")
+        #for result in results['files']:
+        #    print(result)
+        #self.assertEqual(len(results['files']), 1)
+
+        results = self.service.search(self.app.USER, "mem", "folder", [], limit=None, offset=None)
+        self.assertEqual(len(results), 1)
+
+
+        results = self.service.search(self.app.USER, "mem", "", ['size > 1024'], limit=None, offset=None)
+        self.assertEqual(len(results), 1)
 
 if __name__ == '__main__':
     main_test(sys.argv, globals())

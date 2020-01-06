@@ -164,7 +164,6 @@ class Song(object):
         return ";" + ";".join([g for g in gen if g]) + ";"
 
 class SongSearchGrammar(SearchGrammar):
-    """docstring for SongSearchGrammar"""
 
     def __init__(self, dbtables, cols_song, cols_user):
         super(SongSearchGrammar, self).__init__()

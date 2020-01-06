@@ -62,6 +62,7 @@ from yueserver.tools.sync import SyncManager
 from yueserver.dao.filesys.filesys import FileSystem
 from yueserver.dao.filesys.crypt import cryptkey, decryptkey, recryptkey, \
     validatekey, FileEncryptorReader, FileDecryptorWriter, HEADER_SIZE
+from yueserver.dao.search import SearchGrammar, ParseError, Rule, AndSearchRule
 
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm.session import sessionmaker
@@ -152,6 +153,7 @@ class LocalStorageDao(object):
         super(LocalStorageDao, self).__init__()
         self.db = db
         self.dbtables = dbtables
+        self.grammar = StorageSearchGrammar(self.dbtables)
 
     def splitScheme(self, path):
         scheme = "file://localhost/"
@@ -259,6 +261,39 @@ class LocalStorageDao(object):
 
         return self.db.session.execute(query).fetchall()
 
+    def search(self, terms, path_prefix=None, limit=None, offset=None, delimiter='/'):
+
+        FsTab = self.dbtables.LocalStorageTable
+
+        where = None
+
+        if path_prefix:
+            if not path_prefix.endswith(delimiter):
+                path_prefix += delimiter
+
+            where = FsTab.c.rel_path.startswith(bindparam('path', path_prefix))
+
+        if terms:
+            rule = AndSearchRule([self.grammar.ruleFromString(term) for term in terms])
+            sql_rule = rule.sql()
+            if where is not None:
+                where = and_(where, sql_rule)
+            else:
+                where = sql_rule
+
+        query = select(['*']).select_from(FsTab)
+
+        if where is not None:
+            query = query.where(where)
+
+        if limit is not None:
+            query = query.limit(limit)
+
+        if offset is not None:
+            query = query.offset(offset).order_by(asc(FsTab.c.rel_path))
+
+        return self.db.session.execute(query).fetchall()
+
     def isDir(self, path):
         """
         return true if a given remote oath represents a directory
@@ -317,6 +352,62 @@ class LocalStorageDao(object):
         query = tab.select() \
             .where(tab.c.remote_version == 0)
         return self.db.session.execute(query)
+
+class StorageSearchGrammar(SearchGrammar):
+    """
+    TODO: allow the query `local_size != remote_size`
+    requires RHS resolution of column names
+    """
+
+    def __init__(self, dbtables):
+        super(StorageSearchGrammar, self).__init__()
+
+        # all_text is a meta-column name which is used to search all text fields
+        self.all_text = 'text'
+        self.text_fields = set([
+            'rel_path',
+            'remote_public',
+            'remote_encryption'
+        ])
+        self.number_fields = set([
+            'local_size',
+            'remote_size',
+            'local_version',
+            'remote_version',
+            'local_permission',
+            'remote_permission',
+        ])
+        self.date_fields = set(['local_mtime', 'remote_mtime'])
+        self.time_fields = set([])
+        self.year_fields = set([])
+
+        self.dbtables = dbtables
+
+        self.all_fields = self.text_fields | \
+            self.number_fields | \
+            self.date_fields | \
+            self.time_fields | \
+            self.year_fields | set([self.all_text])
+
+        self.transform_fields = {
+            "path": "rel_path"
+        }
+
+    def translateColumn(self, colid):
+
+        if colid in self.all_fields:
+            return colid
+
+        if colid in self.transform_fields:
+            return self.transform_fields[colid]
+
+        if hasattr(colid, 'pos'):
+            raise ParseError("Invalid column name `%s` at position %d" % (colid, colid.pos))
+        else:
+            raise ParseError("Invalid column name `%s` at position %d" % (colid))
+
+    def getColumnType(self, key):
+        return getattr(self.dbtables.LocalStorageTable.c, key)
 
 class SyncContext(object):
 
@@ -2370,6 +2461,47 @@ def _getpublic_impl(ctxt, paths):
         else:
             sys.stderr.write("error: %s\n" % ent.remote_base)
 
+def _search_impl(ctxt, terms):
+
+    print(ctxt.local_base)
+    print(ctxt.current_remote_base)
+    results = ctxt.storageDao.search(terms, path_prefix=ctxt.current_remote_base)
+    for item in results:
+        rel_path = item.rel_path[len(ctxt.current_remote_base):].lstrip("/")
+        local_path = ctxt.fs.join(ctxt.current_local_base, rel_path)
+
+        lf = {
+            "version": item.local_version,
+            "size": item.local_size,
+            "mtime": item.local_mtime,
+            "permission": item.local_permission,
+        }
+        rf = {
+            "version": item.remote_version,
+            "size": item.remote_size,
+            "mtime": item.remote_mtime,
+            "permission": item.remote_permission,
+            "encryption": item.remote_encryption
+        }
+
+        try:
+            record = ctxt.fs.file_info(local_path)
+
+            af = {
+                "version": record.version,
+                "size": record.size,
+                "mtime": record.mtime,
+                "permission": record.permission,
+            }
+        except FileNotFoundError:
+            af = None
+        except NotADirectoryError:
+            af = None
+
+        ent = FileEnt(item.rel_path, local_path, lf, rf, af)
+
+        _status_file_impl(ctxt, ent)
+
 class CLI(object):
     def __init__(self):
         super(CLI, self).__init__()
@@ -2654,7 +2786,6 @@ class MergeLocalCLI(object):
             print("local", path)
 
         _merge_impl(ctxt, paths, action)
-
 
 class MergeRemoteCLI(object):
 
@@ -2961,6 +3092,26 @@ class CopyCLI(object):
 
         _copy_impl(ctxt, ctxt, args.src, args.dst)
 
+class SearchCLI(object):
+
+    def register(self, parser):
+
+        subparser = parser.add_parser('search',
+            help="list files matching pattern rules")
+        subparser.set_defaults(func=self.execute, cli=self)
+
+        subparser.add_argument("-v", "--verbose", default=0,
+            action="count",
+            help="show detailed information")
+
+        subparser.add_argument('terms', nargs="*", help="search terms")
+
+    def execute(self, args):
+        ctxt = get_ctxt(os.getcwd())
+        ctxt.verbose = args.verbose
+
+        _search_impl(ctxt, args.terms)
+
 def _register_parsers(parser):
 
     RootsCLI().register(parser)
@@ -2978,6 +3129,7 @@ def _register_parsers(parser):
     SetKeyCLI().register(parser)
     SetPublicCLI().register(parser)
     GetPublicCLI().register(parser)
+    SearchCLI().register(parser)
 
     # GetCLI().register(parser)
     # PutCLI().register(parser)

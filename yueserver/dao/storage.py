@@ -117,6 +117,72 @@ class StorageException(BackendException):
 class StorageNotFoundException(StorageException):
     HTTP_STATUS = 404
 
+class StorageSearchGrammar(SearchGrammar):
+
+    def __init__(self, dbtables):
+        super(StorageSearchGrammar, self).__init__()
+
+        # all_text is a meta-column name which is used to search all text fields
+        self.all_text = 'text'
+        self.text_fields = set([
+            'id',
+            'user_id',
+            'filesystem_id',
+            'file_path',
+            'encryption',
+            'public_password',
+            'public',
+            'storage_path',
+            'preview_path'
+        ])
+        self.number_fields = set([
+            'permission',
+            'version',
+            'size',
+        ])
+        self.date_fields = set(['mtime', 'expired'])
+        self.time_fields = set([])
+        self.year_fields = set([])
+
+        self.dbtables = dbtables
+
+        self.all_fields = self.text_fields | \
+            self.number_fields | \
+            self.date_fields | \
+            self.time_fields | \
+            self.year_fields | set([self.all_text])
+
+        self.transform_fields = {
+            "user": "user_id",
+            "filesystem_id": "filesystem",
+            "path": "file_path",
+            "encryption": "enc",
+        }
+
+    def translateColumn(self, colid):
+        """
+        translate the given colid to an internal column name
+        e.g. user may type 'pcnt' which expands to 'play_count',
+        """
+
+        if colid in self.all_fields:
+            return colid
+
+        if colid in self.transform_fields:
+            return self.transform_fields[colid]
+
+        if hasattr(colid, 'pos'):
+            raise ParseError("Invalid column name `%s` at position %d" % (colid, colid.pos))
+        else:
+            raise ParseError("Invalid column name `%s` at position %d" % (colid))
+
+    def getColumnType(self, key):
+        """
+        translate the given colid to an internal column name
+        e.g. convert the string 'play_count' to `SongUserData.play_count`
+        """
+        return getattr(self.dbtables.FileSystemStorageTable.c, key)
+
 class StorageDao(object):
     """
 
@@ -130,6 +196,8 @@ class StorageDao(object):
         self.db = db
         self.dbtables = dbtables
         self.fs = FileSystem()
+
+        self.grammar = StorageSearchGrammar(self.dbtables)
 
     # FileSystem util
 
@@ -288,8 +356,50 @@ class StorageDao(object):
 
         self.updateFile(fsrc.id, {'file_path': dstPath}, commit)
 
-    def searchByFileName(self, user_id, fs_id, name_parts, limit=None, offset=None, delimiter='/'):
+    def search(self, user_id, fs_id, path_prefix, terms, limit=None, offset=None, delimiter='/'):
+        """
+        search for files
+            - optionally in a sub directory
+            - with one or more terms
 
+        path prefix should be absolute, i.e. /folder/
+        """
+        tab = self.dbtables.FileSystemStorageTable
+
+        sql_rule = and_(tab.c.user_id == user_id,
+            tab.c.filesystem_id == fs_id)
+
+        if len(terms) > 0:
+            print(terms)
+            rule = AndSearchRule([self.grammar.ruleFromString(term) for term in terms])
+
+            sql_rule = and_(sql_rule, rule.psql() if self.db.kind() == "postgresql" else rule.sql())
+
+        if path_prefix:
+            if not path_prefix.endswith(delimiter):
+                raise StorageException("invalid directory path. must end with `%s`" % delimiter)
+
+            sql_rule = and_(sql_rule, tab.c.file_path.startswith(bindparam('file_path', path_prefix)))
+
+        query = tab.select().where(sql_rule)
+
+        if limit is not None:
+            query = query.limit(limit)
+
+        if offset is not None:
+            query = query.offset(offset).order_by(asc(tab.c.file_path))
+
+        items = self.db.session.execute(query)
+
+        files = []
+        for item in items:
+            name = item.file_path.split(delimiter)[-1]
+            files.append(self._item2file(name, item))
+
+        return files
+
+    def searchByFileName(self, user_id, fs_id, name_parts, limit=None, offset=None, delimiter='/'):
+        # TODO: this is buggy and not fully implemented (doesn't support filepath prefix match)
         tab = self.dbtables.FileSystemStorageTable
 
         rule = AndSearchRule([
@@ -404,6 +514,8 @@ class StorageDao(object):
 
         if offset is not None:
             query = query.offset(offset).order_by(asc(FsTab.c.file_path))
+
+        print(path_prefix, query)
 
         dirs = set()
         count = 0

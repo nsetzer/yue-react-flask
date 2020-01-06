@@ -42,7 +42,6 @@ from .search import SearchGrammar, \
         MultiColumnSearchRule, \
         Rule, \
         BlankSearchRule, \
-        naive_search, \
         ParseError, \
         RHSError, \
         LHSError, \
