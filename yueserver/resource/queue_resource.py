@@ -10,10 +10,11 @@ from flask import jsonify, render_template, g, request, send_file
 
 from ..dao.library import Song
 from ..dao.util import parse_iso_format, pathCorrectCase
+from ..dao.shuffle import binshuffle
 
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, compressed, httpError, param, body, \
-    int_range, int_min
+    int_range, int_min, String, Integer, EmptyBodyOpenApiBody
 
 from .util import requires_auth, search_order_validator, \
     uuid_validator, uuid_list_validator
@@ -52,10 +53,8 @@ class QueueResource(WebResource):
         return jsonify(result=songs)
 
     @get("create")
-    @param("query", default=None)
-    @param("limit", type_=int_range(0, 500), default=50)
-    @param("page", type_=int_min(0), default=0)
-    @param("orderby", type_=search_order_validator, default=Song.artist)
+    @param("query", type_=String().default(None))
+    @param("limit", type_=Integer().min(1).max(500).default(50))
     @requires_auth("user_write")
     def create_queue(self):
         """ create a new queue using a query, return the new song list """
@@ -63,11 +62,10 @@ class QueueResource(WebResource):
         if g.args.query is None:
             g.args.query = self.audio_service.defaultQuery(g.current_user)
 
-        offset = g.args.limit * g.args.page
+        songs = self.audio_service.search(g.current_user, g.args.query)
 
-        songs = self.audio_service.search(g.current_user,
-            g.args.query, limit=g.args.limit, orderby=g.args.orderby,
-            offset=offset)
+        # TODO: have role based limits on queue size
+        songs = binshuffle(songs, lambda x: x['artist'])[:g.args.limit]
 
         song_ids = [song['id'] for song in songs]
         self.audio_service.setQueue(g.current_user, song_ids)
@@ -81,6 +79,7 @@ class QueueResource(WebResource):
         return jsonify(result=qstr)
 
     @post("query")
+    @body(EmptyBodyOpenApiBody())
     @requires_auth("user_write")
     def set_default_queue(self):
 

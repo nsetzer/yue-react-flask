@@ -81,8 +81,7 @@ from .resource.app_resource import AppResource
 from .resource.user_resource import UserResource
 from .resource.library_resource import LibraryResource
 from .resource.queue_resource import QueueResource
-from .resource.files_resource import FilesResource
-from .resource.gui_resource import AudioGuiResource
+from .resource.files_resource import FilesResource, NotesResource
 
 class YueApp(FlaskApp):
     """docstring for YueApp"""
@@ -113,8 +112,8 @@ class YueApp(FlaskApp):
         self.transcode_service = TranscodeService(config, self.db, self.db.tables)
         self.filesys_service = FileSysService(config, self.db, self.db.tables)
 
-        #self.add_resource(AppResource(self.config, self.db, self.db.tables))
-        self.add_resource(UserResource(self.user_service))
+        self.add_resource(AppResource(self.config, self.db, self.db.tables))
+        self.add_resource(UserResource(self, self.user_service))
         self.add_resource(LibraryResource(self.user_service,
                                           self.audio_service,
                                           self.transcode_service,
@@ -122,10 +121,7 @@ class YueApp(FlaskApp):
         self.add_resource(QueueResource(self.user_service,
                                         self.audio_service))
         self.add_resource(FilesResource(self.user_service, self.filesys_service))
-
-        self.gui_resource = AudioGuiResource(self.config, self.user_service,
-            self.audio_service, self.filesys_service, self.transcode_service)
-        self.add_resource(self.gui_resource)
+        self.add_resource(NotesResource(self.user_service, self.filesys_service))
 
         self.app.teardown_request(self.teardown_request)
         self.app.before_request(self.before_request)
@@ -171,6 +167,8 @@ class TestApp(YueApp):
 
         self.app_cfg = {
             'server': {
+                'build': './frontend/build',
+                'static': './frontend/build/static',
                 'host': 'localhost',
                 'port': 4200,
                 'env': 'production',

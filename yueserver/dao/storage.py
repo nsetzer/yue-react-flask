@@ -13,7 +13,7 @@ from .filesys.util import FileRecord
 from .filesys.crypt import cryptkey, decryptkey, recryptkey
 from .exception import BackendException
 from .util import format_storage_path, hash_password, check_password_hash
-
+from .search import AndSearchRule, PartialStringSearchRule
 import os
 import sys
 import datetime
@@ -263,6 +263,61 @@ class StorageDao(object):
 
         if commit:
             self.db.session.commit()
+
+    def moveFileLocation(self, user_id, fs_id, srcPath, dstPath, commit=True):
+        """
+        move a file, validating that:
+            - source exists
+            - destination is not a file or directory
+        """
+        fdst = None
+        try:
+            fdst = self.file_info(user_id, fs_id, dstPath)
+        except StorageNotFoundException as e:
+            pass
+
+        print(FileSystem()._mem())
+
+        if fdst:
+            raise StorageException("EEXISTS: %s" % dstPath)
+
+        fsrc = self.selectFile(user_id, fs_id, srcPath)
+
+        if not fsrc:
+            raise StorageException("NOT FOUND: %s" % srcPath)
+
+        self.updateFile(fsrc.id, {'file_path': dstPath}, commit)
+
+    def searchByFileName(self, user_id, fs_id, name_parts, limit=None, offset=None, delimiter='/'):
+
+        tab = self.dbtables.FileSystemStorageTable
+
+        rule = AndSearchRule([
+            PartialStringSearchRule(tab.c.file_path, part) for part in name_parts
+        ])
+
+        query = tab.select().where(
+                and_(tab.c.user_id == user_id,
+                     tab.c.filesystem_id == fs_id,
+                     rule.sql(),
+                     ))
+
+        query.order_by(tab.c.file_path)
+
+        if limit is not None:
+            query = query.limit(limit)
+
+        if offset is not None:
+            query = query.offset(offset)
+
+        items = self.db.session.execute(query)
+
+        files = []
+        for item in items:
+            name = item.file_path.split(delimiter)[-1]
+            files.append(self._item2file(name, item))
+
+        return files
 
     def _item2dir(self, name):
         return FileRecord(name, True, 0, 0)

@@ -1,10 +1,10 @@
 
 This guide will walk through the installation process of the web app
 on Ubuntu 18.04. Including installing a flask server using gunicorn,
-NginX, and PostgreSQL. Let's Encrypt will be used for generating SLL
+NginX, and PostgreSQL. Let's Encrypt will be used for generating SSL
 certificates
 
-This guide is based on the following two articals:
+This guide is based on the following articals:
 
 * [Digital Ocean Initial Setup](https://www.digitalocean.com/community/tutorials/initial-server-setup-with-ubuntu-18-04)
 * [Serve Flask Apps with Digital Ocean](https://www.digitalocean.com/community/tutorials/how-to-serve-flask-applications-with-gunicorn-and-nginx-on-ubuntu-18-04)
@@ -29,7 +29,6 @@ sudo usermod -aG yueapp adminuser
  > Note: you may need to update ~/.ssh/authorized_keys for the new admin user.
 
 
-
 ### Basic Installation
 
 ```bash
@@ -37,6 +36,7 @@ sudo usermod -aG yueapp adminuser
  apt install build-essential libssl-dev libffi-dev
  apt install python3-pip python3-dev python3-venv python3-setuptools
  apt install nginx
+ apt install nginx-extras
  apt install ffmpeg
 
 ```
@@ -113,7 +113,7 @@ chmod 600 crypt/rsa{.pem,.pub}
 ```
 
 ```bash
-$ ls -la ./crypt
+$ ls -la /opt/yueserver/crypt
 drwxr-xr-x 2 root root 4096 Sep 16 09:49 .
 -rw------- 1 root root 1674 Sep 16 09:50 rsa.pem
 -rw------- 1 root root  450 Sep 16 09:50 rsa.pub
@@ -287,6 +287,22 @@ open 80 and 443
 
 ### NginX Configuration
 
+Enable setting the Serve HTTP header
+This feature requires nginx-extras to be installed
+
+modify:
+
+/etc/nginx/nginx.conf
+
+```
+http {
+- # server_tokens off;
++ server_tokens off;
++ more_set_headers 'Server: yueapp';
+}
+```
+
+
 create:
 
 /etc/nginx/sites-available/yueapp
@@ -295,6 +311,7 @@ create:
 server {
     listen 80;
     server_name www.example.com 203.0.113.1;
+    error_log /var/log/nginx/error.log debug;
 
     location / {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -341,6 +358,14 @@ sudo certbot --nginx -d www.domain domain
 
 * enter an email
 * choose 2 to for redirect to https
+
+
+update nginx configuration to support http2
+
+```
+- listen 443 ssl; # managed by Certbot
++ listen 443 ssl http2; # managed by Certbot
+```
 
 
 ### PostgreSQL backup and restore

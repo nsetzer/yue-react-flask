@@ -11,7 +11,7 @@ from ..dao.storage import StorageDao
 from ..dao.library import LibraryDao
 from ..dao.settings import SettingsDao, Settings
 from ..dao.queue import SongQueueDao
-
+from ..dao.filesys.crypt import uuid_token_generate, uuid_token_verify, sha256
 from .exception import UserServiceException
 
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
@@ -164,12 +164,33 @@ class UserService(object):
 
         raise UserException("Invalid Token")
 
+    def getUserFromUUIDToken(self, token, features=None):
+
+        key = sha256(self.secret.encode('utf-8'))[:16]
+        uuid_str = uuid_token_verify(key, token)
+
+        user = self.userDao.findUserById(uuid_str)
+
+        if not user:
+            raise Exception("user %s does not exist or password incorrect" % email)
+
+        user_data = {
+            "id": user.id,
+            "email": user.email,
+            "domain_id": user.domain_id,
+            "role_id": user.role_id
+        }
+
+        self._validate_features(user_data, features)
+
+        return user_data
+
     def loginUser(self, email, password):
 
         user = self.getUserByPassword(email, password)
 
         if not user:
-            raise UserException("Unable to login user")
+            raise UserServiceException("Unable to login user", 401)
 
         return generate_token(self.secret, user, self.expiration)
 
@@ -189,6 +210,12 @@ class UserService(object):
             reason = "Expired Signature"
 
         return is_valid, reason
+
+    def generateUUIDToken(self, user, expiry):
+
+        key = sha256(self.secret.encode('utf-8'))[:16]
+        token = uuid_token_generate(key, user['id'], expiry)
+        return token
 
     def changeUserPassword(self, user, new_password):
 
@@ -260,7 +287,7 @@ class UserService(object):
 
     def _validate_features(self, user_data, features=None):
 
-        if features is not None:
+        if features is not None and features:
             if not self._validate_user_feature(user_data, features[0]):
                 raise UserException(
                     "failed to authenticate user %s with feature %s" % (

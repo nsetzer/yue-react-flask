@@ -4,13 +4,18 @@ An FFmpeg transcode class
 
 convert any audio format into an mp3
 """
-import os, sys
+import os
+import sys
+import io
 import subprocess
 import threading
 import logging
 from threading import Thread
 
+from .image import scale_image_stream, ImageScale
+
 from .filesys.util import sh_escape
+
 def find_ffmpeg():
     ffmpeg_paths = [
         '/bin/ffmpeg',
@@ -24,30 +29,44 @@ def find_ffmpeg():
             return path
     return None
 
-def _push(src, dst):
+# duplicate functions so that errors in the logs
+# will reflect which side of the channel failed
+def _pushsrc(src, dst):
     buf = src.read(2048)
     while buf:
         dst.write(buf)
         buf = src.read(2048)
 
-def async_transcode(cmd, src, dst):
+def _pushdst(src, dst):
+    buf = src.read(2048)
+    while buf:
+        dst.write(buf)
+        buf = src.read(2048)
+
+def async_transcode(cmd, src, dst, ignore=False):
 
         logging.debug(' '.join(cmd))
 
         proc = subprocess.Popen(cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            # stderr=subprocess.DEVNULL,
             shell=False)
 
-        f1 = threading.Thread(target=_push, args=(src, proc.stdin))
-        f2 = threading.Thread(target=_push, args=(proc.stdout, dst))
+        f1 = threading.Thread(target=_pushsrc, args=(src, proc.stdin))
+        f2 = threading.Thread(target=_pushdst, args=(proc.stdout, dst))
 
         f1.start()
         f2.start()
 
         f1.join()
-        proc.stdin.close()
+        try:
+            proc.stdin.close()
+        except BrokenPipeError as e:
+            # ignore broken pipes when extracting keyframes
+            if not ignore:
+                logging.exception("ok")
+                raise
 
         f2.join()
         proc.stdout.close()
@@ -216,9 +235,66 @@ class FFmpeg(object):
 
         return args
 
-    def transcode(self, infile, outfile, args):
-        if args:
-            logging.debug(' '.join(args))
+    def get_thumb_args(self, **kwargs):
 
+        args = [self.binpath, "-i", "pipe:0"]
+
+        # extract a key frame from 5 seconds into the video
+        args.append('-ss')
+        args.append('00:00:05.000')
+
+        # extract one key frame
+        args.append("-vframes")
+        args.append("1")
+
+        args.append("-f")
+        args.append("mjpeg")
+
+        # write output
+        args.append("pipe:1")
+
+        return args
+
+    def transcode(self, infile, outfile, args):
         async_transcode(args, infile, outfile)
 
+    def thumb(self, infile, outfile, args, scale):
+        with io.BytesIO() as tmpfile:
+            async_transcode(args, infile, tmpfile, True)
+            if tmpfile.tell() == 0:
+                raise Exception("failed to transcode file")
+            return scale_image_stream(tmpfile, outfile, scale)
+
+
+def main():
+
+    logging.basicConfig(level=logging.DEBUG)
+    binpath = find_ffmpeg()
+
+    transcoder = FFmpeg(binpath)
+
+    if len(sys.argv) != 4:
+        print("usage:")
+        print("   %s [transcode|thumb] src dst" % sys.argv[0])
+        sys.exit(1)
+
+    if sys.argv[1] == 'transcode':
+
+        args = transcoder.get_ogg_args()
+        with open(sys.argv[2], 'rb') as src:
+            with open(sys.argv[3], 'wb') as dst:
+                transcoder.transcode(args, src, dst)
+
+    elif sys.argv[1] == 'thumb':
+
+        args = transcoder.get_thumb_args()
+        with open(sys.argv[2], 'rb') as src:
+            with open(sys.argv[3], 'wb') as dst:
+                transcoder.thumb(src, dst, args, ImageScale.THUMB)
+
+    else:
+        print("unrecognized mode: %s" % sys.argv[1])
+        sys.exit(1)
+
+if __name__ == '__main__':
+    main()

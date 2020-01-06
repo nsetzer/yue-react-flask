@@ -41,6 +41,10 @@ class ImageScale(object):
         return ImageScale._scales[scale][0]
 
     @staticmethod
+    def names():
+        return [scale[0] for scale in ImageScale._scales]
+
+    @staticmethod
     def fromName(name):
         for i, (n, _) in enumerate(ImageScale._scales):
             if name == n:
@@ -51,6 +55,11 @@ def scale_image_stream(inputStream, outputStream, scale):
 
     img = Image.open(inputStream)
     img.load()
+
+    # prevents an error in expand below
+    # convert the pixel format so that the fill argument makes sense
+    if img.mode != 'RGBA':
+        img = img.convert('RGBA')
 
     width, height = img.size
 

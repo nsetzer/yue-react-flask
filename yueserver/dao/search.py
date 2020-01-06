@@ -37,6 +37,32 @@ class StrPos(str):
         inst.name = strval
         return inst
 
+class Column(object):
+    """
+    an object representing a column of data
+
+    usage: data[column.name] => value
+    """
+
+    def __init__(self, name):
+        super(Column, self).__init__()
+        self.name = name
+
+    def __str__(self):
+        return str(self.name)
+
+    def __repr__(self):
+        return "<%s>" % self.name
+
+    def ilike(self, value):
+        raise NotImplementedError()
+
+    def notilike(self, value):
+        return not self.ilike(value)
+
+    def op(self, name):
+        raise NotImplementedError()
+
 class Rule(object):
 
     def __init__(self):
@@ -485,6 +511,10 @@ class LHSError(ParseError):
             msg += " : %s" % value
         super(LHSError, self).__init__(msg)
 
+def mktime(dt):
+    # Note: switched calendar.timegm to time.mktime
+    return int(time.mktime(dt.timetuple()))
+
 class FormatConversion(object):
     """
     FormatConversion handles conversion from string to another type.
@@ -547,7 +577,7 @@ class FormatConversion(object):
         dtn = self.datetime_now
         dt1 = self.computeDateDelta(dtn.year, dtn.month, dtn.day, dy, dm, dd)
         dt2 = dt1 + timedelta(1)
-        return calendar.timegm(dt1.timetuple()), calendar.timegm(dt2.timetuple())
+        return mktime(dt1), mktime(dt2)
 
     def computeDateDelta(self, y, m, d, dy, dm, dd=0):
         """
@@ -590,6 +620,34 @@ class FormatConversion(object):
             y += 2000
         return y
 
+    def formatDateTime(self, sValue):
+
+        sDate, sTime = sValue.split(None, 1)
+
+        dParts = sDate.split('/')
+        if len(dParts) != 3:
+            raise ParseError("Invalid Date format `%s` at position %s." % (sValue, sValue.pos))
+
+        # timestamp > "2019/08/18 12:00"
+        tParts = sTime.split(":")
+        if len(tParts) < 2 or len(tParts) > 3:
+            raise ParseError("Invalid Time format `%s` at position %s." % (sValue, sValue.pos))
+
+        y = int(dParts[self.DATE_LOCALE_FMT_Y])
+        m = int(dParts[self.DATE_LOCALE_FMT_M])
+        d = int(dParts[self.DATE_LOCALE_FMT_D])
+        y = self.adjustYear(y)
+
+        H = int(tParts[0])
+        M = int(tParts[1])
+        # ignore seconds for now...
+
+        dt1 = datetime(y, m, d, H, M)
+        dt2 = dt1 + timedelta(1)
+
+        result = mktime(dt1), mktime(dt2)
+        return result
+
     def formatDate(self, sValue):
         """
         accepts strings of the following form:
@@ -629,7 +687,8 @@ class FormatConversion(object):
             dt1 = datetime(y, m, d)
             dt2 = dt1 + timedelta(1)
 
-        result = calendar.timegm(dt1.timetuple()), calendar.timegm(dt2.timetuple())
+        # Note: switched calendar.timegm to time.mktime
+        result = mktime(dt1), mktime(dt2)
         return result
 
     def parseDuration(self, sValue):
@@ -663,10 +722,10 @@ class FormatConversion(object):
 
         dt = NLPDateRange(self.datetime_now).parse(value)
         if dt:
-            cf = calendar.timegm(dt[0].utctimetuple())
+            cf = mktime(dt[0])
             if cf < 0:
                 cf = 0
-            rf = calendar.timegm(dt[1].utctimetuple())
+            rf = mktime(dt[1])
             return cf, rf
         return None
 
@@ -777,6 +836,7 @@ class Grammar(object):
         self.year_fields = set()  # integer that represents a year
         self.number_fields = set()
 
+        self.oldstyle_operator_default = PartialStringSearchRule
         self.compile_operators()
 
         self.autoset_datetime = True
@@ -1033,7 +1093,7 @@ class Grammar(object):
     def parseTokensOldStyle(self, tokens):
 
         current_col = self.all_text
-        current_opr = PartialStringSearchRule
+        current_opr = self.oldstyle_operator_default
 
         i = 0
         while i < len(tokens):
@@ -1076,6 +1136,8 @@ class Grammar(object):
                 self.meta_options[colid] = int(value)
             else:
                 raise ParseError("Illegal operation `%s` at position %d for option `%s`" % (tok, tok.pos, colid))
+        else:
+            self.meta_options[colid] = value
 
     # protected
 
@@ -1208,15 +1270,19 @@ class SearchGrammar(Grammar):
         > : farther into the past, excluding the given date
         = : exactly that day, from 00:00:00 to 23:59:59
         """
-        c = value.count('/')
+        c1 = value.count('/')
+        c2 = value.count(':')
 
         invert = False
         try:
-            if c > 0:
+            if c2 > 0:
+                # parse the string as some form of "YYYY/MM/DD HH:MM:SS"
+                epochtime, epochtime2 = self.fc.formatDateTime(value)
+            elif c1 > 0:
                 # if there are any slashes assume the user wants to
                 # parse the string as some form of YYYY/MM/DD
                 epochtime, epochtime2 = self.fc.formatDate(value)
-            elif c > 2:
+            elif c1 > 2:
                 # the user gave two many separators for the date to make sense
                 # TODO: create a special format for YY/MM/DD since that it can
                 # be modified for other orders

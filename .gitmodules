@@ -1,3 +1,8 @@
+
 [submodule "daedalus"]
 	path = daedalus
 	url = https://github.com/nsetzer/daedalus.git
+
+[submodule "react-native-web"]
+	path = react-native-web
+	url = https://github.com/nsetzer/react-native-web.git

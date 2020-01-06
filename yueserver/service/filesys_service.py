@@ -20,6 +20,7 @@ from ..dao.settings import Settings, SettingsDao
 from ..dao.image import ImageScale, scale_image_stream
 from .transcode_service import TranscodeService, ImageScale
 from ..dao.util import format_bytes
+from ..dao.transcode import FFmpeg
 
 from datetime import datetime
 
@@ -64,6 +65,13 @@ class FileSysService(object):
         # 2**20 : 1 MB
         # 2**26 : 64 MB
         self.byte_threshold = 2**26
+
+        path = config.transcode.audio.bin_path
+
+        if path and not os.path.exists(path):
+            raise FileNotFoundError(path)
+
+        self.transcoder = FFmpeg(path)
 
     @staticmethod
     def init(config, db, dbtables):
@@ -277,6 +285,21 @@ class FileSysService(object):
 
         return stream
 
+    def publicFileInfo(self, fileId):
+        record = self.storageDao.publicFileInfo(fileId)
+
+        obj = {
+            "name": record.name,
+            "size": record.size,
+            "mtime": record.mtime,
+            "permission": record.permission,
+            "version": record.version,
+            "public": record.public,
+            "encryption": record.encryption
+        }
+
+        return obj
+
     def loadPublicFile(self, fileId, password=None):
 
         # validate that the given password is correct
@@ -302,7 +325,7 @@ class FileSysService(object):
 
     # TODO: version defaulting to 0 may be a bug, change to None
     def saveFile(self, user, fs_name, path, stream,
-      mtime=None, version=0, permission=0, encryption=None):
+      mtime=None, version=None, permission=0, encryption=None):
 
         if self.fs.isabs(path):
             raise FileSysServiceException(path)
@@ -312,27 +335,46 @@ class FileSysService(object):
 
         os_root = '/'
 
-        storage_path = self._getNewStoragePath(user, fs_name, path)
         file_path = self.getFilePath(user, fs_name, path)
-
-        dirpath, _ = self.fs.split(storage_path)
-        self.fs.makedirs(dirpath)
 
         # the sync tool depends on an up-to-date local database
         # when uploading, the client knows what the next version of a file
         # will be. If the expected version is lower than reality (because
         # fetch needs to be run) reject the file. running a fetch
         # will likely reveal this file is in a conflict state
-        if version > 0:
-            try:
-                info = self.storageDao.file_info(user['id'], fs_id, file_path)
-                if info.version >= version:
-                    raise FileSysServiceException("invalid version", 409)
-            except StorageNotFoundException as e:
-                pass
-        else:
-            # dao layer expects None, or a valid version
-            version = None
+
+        info = None
+        storage_path = None
+
+        try:
+            info = self.storageDao.file_info(user['id'], fs_id, file_path)
+            storage_path = info.storage_path
+        except StorageNotFoundException as e:
+            pass
+
+
+        # the new logic here avoids letting the dao layer decide
+        if info is not None:
+            # if the incoming version is lower than or equal to the
+            # current version, reject the upload, otherwise take the
+            # highest version number, and increment if necessary
+            if not version:
+                version = info.version + 1
+
+            elif version <= info.version:
+                raise FileSysServiceException(
+                    "Version out of date (%d < %d)" % (version, info.version), 409)
+
+
+        elif not version:
+            # this is the first version
+            version = 1
+
+        if storage_path is None:
+            storage_path = self._getNewStoragePath(user, fs_name, path)
+            dirpath, _ = self.fs.split(storage_path)
+            self.fs.makedirs(dirpath)
+            logging.warning("creating new storage path: %s", storage_path)
 
         if mtime is None:
             mtime = int(time.time())
@@ -362,6 +404,18 @@ class FileSysService(object):
             user['id'], fs_id, file_path, data)
         # existing thumbnails need to be recomputed
         self.storageDao.previewInvalidate(user['id'], file_id)
+
+        # TODO: is it possible to return the new version ?
+        #       it is either info.version+1 or version or 1
+        file_info = dict(
+            size=size,
+            mtime=mtime,
+            encryption=encryption,
+            permission=permission,
+            version=version,
+        )
+
+        return file_info
 
     def _internalSave(self, user_id, storage_path, inputStream, chunk_size):
 
@@ -406,6 +460,8 @@ class FileSysService(object):
         finally:
             self.storageDao.tempFileRemove(user_id, uid)
 
+            logging.info("removing temp file. size: %d", size)
+
         return size
 
     def _internalCheckQuota(self, user_id, size, byte_index, uid):
@@ -417,7 +473,7 @@ class FileSysService(object):
         # meant data loss.
 
         index = size // self.byte_threshold
-        if byte_index ==-1 or index > byte_index:
+        if byte_index == -1 or index > byte_index:
             self.storageDao.tempFileUpdate(user_id, uid, size)
             _, temp_usage = self.storageDao.tempFileUsage(user_id)
             _, usage, quota = self.storageDao.userDiskUsage(user_id)
@@ -459,6 +515,51 @@ class FileSysService(object):
             logging.exception("unable to delete: %s" % path)
 
         raise FileSysServiceException(path)
+
+    def moveFile(self, user, fs_name, srcPath, dstPath):
+        """
+        move a file from src to dst
+        dst cannot exist
+        dst cannot be a partial path of an existing file
+
+        if /abc/def/123 exists
+            /abc/def      -- invalid
+            /abc/de       -- valid
+            /abc/de/123   -- valid
+        """
+        fs_id = self.storageDao.getFilesystemId(
+            user['id'], user['role_id'], fs_name)
+
+        src = self.getFilePath(user, fs_name, srcPath.lstrip('/'))
+        dst = self.getFilePath(user, fs_name, dstPath.lstrip('/'))
+        return self.storageDao.moveFileLocation(user['id'], fs_id, src, dst)
+
+    def search(self, user, fs_name, fs_path, name_parts, limit=None, offset=None):
+        """
+        fs_name: the file system root to search
+        fs_path: path prefix or None
+        name_parts: a list of file names or partial file names to search for
+        """
+
+        fs_id = self.storageDao.getFilesystemId(
+            user['id'], user['role_id'], fs_name)
+
+        records = self.storageDao.searchByFileName(
+            user['id'], fs_id, name_parts, limit, offset)
+
+        files = []
+        for record in records:
+            files.append({"name": record.name,
+                          "file_path": record.file_path[1:],
+                          "file_path": record.file_path[1:],
+                          "size": record.size,
+                          "mtime": record.mtime,
+                          "permission": record.permission,
+                          "version": record.version,
+                          "public": record.public,
+                          "encryption": record.encryption})
+
+        return files
 
     def getUserQuota(self, user):
 
@@ -574,20 +675,28 @@ class FileSysService(object):
             abs_path += "/"
         fs_id = self.storageDao.getFilesystemId(
             user['id'], user['role_id'], fs_name)
-        records = self.storageDao.listdir(user['id'], fs_id, abs_path)
 
-        files = []
-        for record in records:
-            if not record.isDir:
-                if record.name.endswith('.txt'):
-                    files.append({
-                        "file_name": record.name,
-                        "file_path": "%s/%s" % (dir_path, record.name),
-                        "size": record.size,
-                        "mtime": record.mtime,
-                        "encryption": record.encryption,
-                    })
-        files.sort(key=lambda f: f['file_name'])
+        try:
+            records = self.storageDao.listdir(user['id'], fs_id, abs_path)
+
+            files = []
+            for record in records:
+                if not record.isDir:
+                    if record.name.endswith('.txt'):
+                        # TODO: add the file id as a uid for the note
+                        #       allow renaming notes by uid
+                        #       add endpoint for creating note
+                        files.append({
+                            "file_name": record.name,
+                            "title": record.name[:-4].replace("_", " "),
+                            "file_path": "%s/%s" % (dir_path, record.name),
+                            "size": record.size,
+                            "mtime": record.mtime,
+                            "encryption": record.encryption,
+                        })
+
+        except StorageNotFoundException as e:
+            return []
 
         return files
 
@@ -618,49 +727,72 @@ class FileSysService(object):
             dst = self._getNewStoragePath(user, fs_name, path)
             ext = fileItem.file_path.split('.')[-1].lower()
 
-            if fileItem.encryption in (CryptMode.server, CryptMode.client):
-                raise FileSysServiceException("file is encrypted")
-            elif ext in ("jpg", "jpeg", "png", "gif"):
-                logging.info("creating preview %s %s" % (name, dst))
-                with self.fs.open(dst, "wb") as outputStream:
-                    if fileItem.encryption is not None:
-                        outputStream = self.encryptStream(user,
-                            password, outputStream, "w", fileItem.encryption)
-                    w, h, s = scale_image_stream(inputStream, outputStream, scale)
+            try:
+                if fileItem.encryption in (CryptMode.server, CryptMode.client):
+                    raise FileSysServiceException("file is encrypted")
+                elif ext in ("jpg", "jpeg", "png", "gif", 'bmp'):
+                    logging.info("creating preview %s %s" % (name, dst))
+                    with self.fs.open(dst, "wb") as outputStream:
+                        if fileItem.encryption is not None:
+                            outputStream = self.encryptStream(user,
+                                password, outputStream, "w", fileItem.encryption)
+                        w, h, s = scale_image_stream(inputStream, outputStream, scale)
 
-                    info = {
-                        'width': w,
-                        'height': h,
-                        'filesystem_id': fs_id,
-                        'size': s,
-                        'path': dst
-                    }
+                        info = {
+                            'width': w,
+                            'height': h,
+                            'filesystem_id': fs_id,
+                            'size': s,
+                            'path': dst
+                        }
 
-                    self.storageDao.previewUpsert(
-                        user['id'], fileItem.file_id, name, info)
+                        self.storageDao.previewUpsert(
+                            user['id'], fileItem.file_id, name, info)
 
-            elif ext in ("ogg", "mp3", "wav"):
-                raise FileSysServiceException("not implemented")
-            elif ext in ("webm", "mp4"):
-                raise FileSysServiceException("not implemented")
-            elif ext in ("pdf", "swf"):
-                raise FileSysServiceException("not implemented")
-            else:
-                raise FileSysServiceException("not implemented")
+                elif ext in ("ogg", "mp3", "wav"):
+                    raise FileSysServiceException("not implemented")
+                elif ext in ("webm", "mp4"):
+                    logging.info("creating preview %s %s" % (name, dst))
+                    with self.fs.open(dst, "wb") as outputStream:
+                        if fileItem.encryption is not None:
+                            outputStream = self.encryptStream(user,
+                                password, outputStream, "w", fileItem.encryption)
+                        args = self.transcoder.get_thumb_args()
+                        w, h, s = self.transcoder.thumb(inputStream, outputStream, args, scale)
 
-            # the resource path that is returned should be resource
-            # dependant. all audio files should have the same url
-            #
-            return dst
+                        info = {
+                            'width': w,
+                            'height': h,
+                            'filesystem_id': fs_id,
+                            'size': s,
+                            'path': dst
+                        }
+
+                        self.storageDao.previewUpsert(
+                            user['id'], fileItem.file_id, name, info)
+
+                elif ext in ("pdf", "swf"):
+                    raise FileSysServiceException("not implemented")
+                else:
+                    raise FileSysServiceException("not implemented")
+
+                # the resource path that is returned should be resource
+                # dependant. all audio files should have the same url
+                #
+                return dst
+            except Exception as e:
+
+                logging.exception("Failed to generate preview for %s `%s`" % (fs_name, abs_path))
+                raise e
 
         else:
             return previewItem.path
 
     def _removePreviewFiles(self, user_id, fs_id, file_path):
         # TODO: exception handling, eventual consistency
-        self.storageDao.previewInvalidate(user_id, fs_id)
         fileItem = self.storageDao.file_info(user_id, fs_id, file_path)
         file_id = fileItem.file_id
+        self.storageDao.previewInvalidate(user_id, file_id)
         for item in self.storageDao.previewFind(user_id, file_id, None):
             self.fs.remove(item.path)
-        self.storageDao.previewRemove(user_id, fs_id)
+        self.storageDao.previewRemove(user_id, file_id)

@@ -297,7 +297,7 @@ class AudioService(object):
         new_songs = self.search(user,
             query, limit=limit, orderby=Song.random)
 
-        songs = (songs + new_songs)[:50]
+        songs = (songs + new_songs)[:limit]
 
         song_ids = [song['id'] for song in songs]
         self.queueDao.set(user['id'], user['domain_id'], song_ids)
@@ -310,7 +310,15 @@ class AudioService(object):
 
         records: a list of objects containing a `song_id`, and `timestamp`.
         """
-        raise NotImplementedError()
+
+        for record in records:
+            self.libraryDao.incrementPlaycount(
+                user['id'], record['song_id'], commit=False)
+            self.historyDao.insert(user['id'],
+                                   record['song_id'],
+                                   record['timestamp'],
+                                   commit=False)
+        self.db.session.commit()
 
     def insertPlayHistory(self, user, records):
         """

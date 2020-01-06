@@ -79,6 +79,7 @@ class FlaskApp(object):
         self.app.after_request(self._add_cors_headers)
 
         self._registered_endpoints = []
+        self._registered_endpoints_v2 = []
         self._registered_websockets = []
         self._registered_resources = []
 
@@ -94,9 +95,9 @@ class FlaskApp(object):
 
         self._registered_resources.append(res)
 
-        for path, methods, name, func, params, headers, body in res.endpoints():
+        for path, methods, name, func, params, headers, body, returns, auth, scope in res.endpoints():
             self.register(path, name, func,
-                params=params, headers=headers, body=body, methods=methods)
+                params=params, headers=headers, body=body, returns=returns, auth=auth, scope=scope, methods=methods)
 
         websockets = res.websockets()
         if len(websockets) > 0:
@@ -109,7 +110,7 @@ class FlaskApp(object):
 
                 self._registered_websockets.append((name, event, namespace, func))
 
-    def register(self, path, name, callback, params=None, headers=None, body=None, **options):
+    def register(self, path, name, callback, params=None, headers=None, body=None, returns=None, auth=False, scope=None, **options):
         msg = ""
         try:
             self.app.add_url_rule(path, name, callback, **options)
@@ -117,10 +118,14 @@ class FlaskApp(object):
             body_name = None
             body_type = None
 
-            body = body or (None, None)
+            body = body or (None, None, None)
 
             if body[0] is not None:
-                body_name = body[0].__name__
+
+                if isinstance(body[0], list):
+                    body_name = 'null'
+                else:
+                    body_name = body[0].__name__
 
                 # if we have a body, determine the default mimetype
                 if body[1] is not None:
@@ -146,8 +151,14 @@ class FlaskApp(object):
                 new_headers.append(Parameter(**data))
 
             endpoint = RegisteredEndpoint(path, name, callback.__doc__,
-                options['methods'], new_params, new_headers, new_body)
+                options['methods'], new_params, new_headers, new_body, None, None, None)
+
             self._registered_endpoints.append(endpoint)
+
+            # stepping stone towards a true openapi implementation
+            endpoint = RegisteredEndpoint(path, name, callback.__doc__,
+                options['methods'], params, headers, body[0], returns, auth, scope)
+            self._registered_endpoints_v2.append(endpoint)
 
             return
         except AssertionError as e:
@@ -224,9 +235,47 @@ class FlaskApp(object):
 
     def _add_cors_headers(self, response):
 
-        response.headers["Access-Control-Allow-Origin"] = self.config.cors.origin
-        response.headers["Access-Control-Allow-Headers"] = self.config.cors.headers
-        response.headers["Access-Control-Allow-Methods"] = self.config.cors.methods
+        # general security (securityheaders.io)
+        # TODO investigate report-uri option for Expect-CT
+        # TODO investigate react native, removing unsafe-inline for CSP
+
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        response.headers["X-Xss-Protection"] = "1; mode=block"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Strict-Transport-Security"] = \
+            "max-age=31536000; includeSubDomains; preload"
+        response.headers["Feature-Policy"] = \
+            "speaker 'self'; fullscreen 'self'; autoplay 'self'"
+        response.headers["Content-Security-Policy"] = '; '.join([
+            "default-src 'none'",
+            "connect-src 'self'",
+            "manifest-src 'self'",
+            "img-src 'self'",
+            "media-src 'self'",
+            "object-src 'none'",
+            "script-src 'self' 'unsafe-inline' https://storage.googleapis.com",
+            "style-src 'self' 'unsafe-inline'",
+            "worker-src 'self' https://storage.googleapis.com",
+        ])
+
+        response.headers["Expect-CT"] = "max-age=86400, enforce"
+
+        # to debug the cors  requests
+        # curl -v -X OPTIONS -H "Origin: https://yueapp.duckdns.org" https://yueapp.duckdns.org
+        origin = request.headers.get("Origin")
+
+        if origin and self.config.cors.origin == "*":
+            origin = "*"
+        if origin and self.config.cors.origin != "*":
+            if origin not in self.config.cors.origin.split(","):
+                origin = None
+
+        if origin:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Headers"] = self.config.cors.headers
+            response.headers["Access-Control-Allow-Methods"] = self.config.cors.methods
+            response.headers["Access-Control-Allow-Credentials"] = 'true'
 
         return response
 

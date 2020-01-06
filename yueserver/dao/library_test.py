@@ -332,6 +332,37 @@ class LibraryTestCase(unittest.TestCase):
         self.assertEqual(song000["rating"], 5)
         self.assertEqual(song001["rating"], 3)
 
+    def test_003c_increment_playcount(self):
+
+        user000 = self.userDao.findUserByEmail("user000")
+        user001 = self.userDao.findUserByEmail("user001")
+
+        user_id = self.USER['id']
+        domain_id = self.USER['domain_id']
+
+        song = {
+            "artist": "test",
+            "title": "test",
+            "album": "test",
+            "rating": 5
+        }
+
+        song_id = self.libraryDao.insert(
+            user000['id'], user000['domain_id'], song)
+
+        self.libraryDao.incrementPlaycount(user000['id'], song_id)
+        self.libraryDao.incrementPlaycount(user000['id'], song_id)
+        self.libraryDao.incrementPlaycount(user001['id'], song_id)
+
+        song000 = self.libraryDao.search(
+            user000['id'], user000['domain_id'], "id=%s" % song_id)[0]
+
+        song001 = self.libraryDao.search(
+            user001['id'], user001['domain_id'], "id=%s" % song_id)[0]
+
+        self.assertEqual(song000[Song.play_count], 2)
+        self.assertEqual(song001[Song.play_count], 1)
+
     def test_004a_search_blocked(self):
 
         user000 = self.userDao.findUserByEmail("user000")

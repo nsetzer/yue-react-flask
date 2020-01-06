@@ -223,10 +223,14 @@ class BotoFileSystemImpl(AbstractFileSystem):
             boto3 = __import__("boto3")
             botocore = __import__("botocore")
 
+        self._region = region
+
         # -----------
         # TODO: there should be a global registry of
         # bucket names to s3 instances, to allow for multiple regions/secrets
         # note: buckets are unique to a region...
+        # NOTE: multiple instances of this class can be registered
+        # with a different scheme
         self.session = boto3.session.Session()
         self.s3 = self.session.resource('s3',
             region_name=region,
@@ -248,6 +252,9 @@ class BotoFileSystemImpl(AbstractFileSystem):
             return path, ""
         bucket_name, key = path.split("/", 1)
         return bucket_name, key
+
+    def islocal(self, path):
+        return False
 
     def samefile(self, patha, pathb):
         """ returns true if the path exists and are the same object"""
@@ -274,6 +281,7 @@ class BotoFileSystemImpl(AbstractFileSystem):
 
     def exists(self, path):
         """ returns true if the key exists """
+        self._statistics['exists'] += 1
         bucket_name, key = self._parse_path(path)
         bucket = self.s3.Bucket(bucket_name)
         for obj in bucket.objects.filter(Prefix=key, Delimiter="/"):
@@ -291,6 +299,8 @@ class BotoFileSystemImpl(AbstractFileSystem):
         Reading mode (rb) returns a readble object which will
         stream data down from s3.
         """
+        self._statistics['open'] += 1
+
         if 'b' not in mode:
             raise Exception(mode)
 
@@ -342,6 +352,7 @@ class BotoFileSystemImpl(AbstractFileSystem):
         when trying to determine validity of the path.
 
         """
+        self._statistics['file_info'] += 1
         bucket_name, key = self._parse_path(path)
         bucket = self.s3.Bucket(bucket_name)
 
@@ -368,7 +379,21 @@ class BotoFileSystemImpl(AbstractFileSystem):
         #if status_code == 204:  # no content
         #    raise FileNotFoundError(path)
 
+    def rmdir(self, path):
+        # nothing to do
+        pass
+
+    def rename(self, patha, pathb):
+        # not possible in s3
+        # not possible for directories: 'object storage'
+        # could copy / delete
+        #   self.s3.Object(bucket, key).copy_from(CopySource='bucket/key')
+        #   self.s3.Object(bucket, key).delete()
+        pass
+
     def _scandir_impl(self, bucket_name, key):
+
+        self._statistics['_scandir_impl'] += 1
 
         if key == "/":
             key = ""
@@ -397,3 +422,6 @@ class BotoFileSystemImpl(AbstractFileSystem):
                 epoch = epoch_time(content['LastModified'])
                 if name:
                     yield FileRecord(name, False, size, epoch)
+
+    def drive(self, patha):
+        raise self._region + ":" +self.scheme

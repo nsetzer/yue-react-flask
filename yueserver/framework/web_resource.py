@@ -4,10 +4,24 @@
 A Web Resource defines the mapping between a url endpoint and the function
 that will be executed. This file contains all of the python decorators
 for creating a resource.
+
+TODO:
+    allow registering an authentication strategy
+        e.g. resource.addAuthStrategy(strategy)
+        strategy := request => boolean
+
+    get/post/put/delete should wrap with an exception handler
+    allow registering aditional exception types and handlers
+        e.g. resource.registerException(FooException, FooHandler)
+        application.registerException would map the handler
+        to all registered resources
+
 """
 import os
 import sys
 import time
+import traceback
+
 from functools import wraps
 from flask import (after_this_request, request, g, jsonify,
     stream_with_context, Response, send_file as flask_send_file)
@@ -24,7 +38,7 @@ import mimetypes
 from re import findall
 
 WebEndpoint = namedtuple('WebEndpoint',
-    ['path', 'methods', 'name', 'method', 'params', 'headers', 'body'])
+    ['path', 'methods', 'name', 'method', 'params', 'headers', 'body', 'returns', 'auth', 'scope'])
 
 def validate(expr, value):
     if not expr:
@@ -50,13 +64,63 @@ def boolean(s):
 def httpError(code, message):
     # TODO: this should be at loglevel debug
     logging.error("[%3d] %s" % (code, message))
+    logging.error("request: %s" % (request.url))
+    logging.error("request: %s" % dict(request.headers))
+    # traceback.print_stack()
     return jsonify(error=message), code
+
+class ParameterNamespace(object):
+    pass
+
+class RequestNamespace(object):
+    def __init__(self, params, headers):
+        super(RequestNamespace, self).__init__()
+        self.params = params
+        self.headers = headers
+
+def _default_exception_handler(ex):
+    logging.exception("unhandled exception")
+    return httpError(500, "Unhandled Exception")
 
 def _endpoint_mapper(f):
 
+    if f.__name__ in globals():
+        # this causes a confusing error, for example:
+        #  @delete("/api/delete")
+        #  def delete(self):             <-------------------------------+
+        #      return "OK"                                               |
+        #  @delete("/api/delete2")   <-- this delete is now this method -+
+        #  def delete2(self):            and not the original imported
+        #      return "OK"               annotation
+        m = "Function name (%s) cannot be a web resource reserved word (%s)"
+        raise RuntimeError(m % (f.__qualname__, f.__name__))
+
     @wraps(f)
     def wrapper(*args, **kwargs):
-        g.args = lambda: None
+        t0 = time.time()
+
+        if len(args) == 0:
+            return httpError(500, "endpoint not registered correctly")
+        # first arg is always the web resource which
+        # registered the endpoint
+        resource = args[0]
+
+        scope = None
+        if hasattr(f, '_scope'):
+            scope = f._scope
+
+        # extract authentication tokens
+        if hasattr(f, '_security'):
+            for strategy in f._security:
+                namespace = RequestNamespace(request.args, request.headers)
+                if strategy(resource, scope, namespace):
+                    break
+            else:
+                logging.error("all auth strategies failed")
+                return httpError(401, "no authentication")
+
+        # extract request query parameters
+        g.args = ParameterNamespace()
         if hasattr(f, "_params"):
             for param in f._params:
                 if param.required and param.name not in request.args:
@@ -64,18 +128,24 @@ def _endpoint_mapper(f):
                         "required query parameter `%s` not found" % param.name)
 
                 # validate the query parameter and add it to the request args
+
                 try:
-                    if param.name in request.args:
+                    if param.repeated:
+                        value = [param.type(v) for v in request.args.getlist(param.name)]
+                    elif param.name in request.args:
                         value = param.type(request.args[param.name])
                     else:
                         value = param.default
+
+                    setattr(g.args, param.name, value)
+
                 except Exception as e:
                     logging.exception("%s" % e)
                     return httpError(400,
                         "unable to validate query parameter: %s=%s" % (
                             param.name, request.args[param.name]))
 
-                setattr(g.args, param.name, value)
+        # extract request header parameters
         g.headers = dict()
         if hasattr(f, "_headers"):
             for header in f._headers:
@@ -97,25 +167,72 @@ def _endpoint_mapper(f):
 
                 g.headers[header.name] = value
 
+        # extract the request body
+        g.body = None
         if hasattr(f, "_body"):
             try:
                 type_, content_type = f._body
-                if content_type == 'application/json':
+                # logging.info("body: %s %s %s", type_, content_type, request.headers['Content-Type'])
+                content_type = request.headers.get('Content-Type')
+                if content_type:
+                    content_type = content_type.split(';')
+                else:
+                    content_type = []
+                # TODO: dispatch type_ based on the content type
+                #       allow a default type_ when mimetype is not available
+
+                mimetypes = type_.mimetype()
+                if isinstance(mimetypes, str):
+                    mimetypes = [mimetypes]
+
+                req_is_json = 'application/json' in content_type
+                req_requires_json = 'application/json' in mimetypes
+
+                if req_is_json and req_requires_json:
+                    # only decode request as json if we are given json
+                    # and the request method is expecting json
                     g.body = type_(request.get_json())
                 else:
-                    g.body = type_(request.stream)
+                    # support for curl/form encoded data
+                    if 'application/x-www-form-urlencoded' in content_type:
+                        # as of python 3.4 BytesIO defers a data copy
+                        # until the data is mutated
+                        data_stream = BytesIO(request.get_data())
+                    else:
+                        # support streaming uploads
+                        data_stream = request.stream
+
+                    g.body = type_(data_stream)
+
             except Exception as e:
                 logging.exception("unable to validate body")
                 return httpError(400, "unable to validate body")
 
-        s = time.time()
-        return_value = f(*args, **kwargs)
-        e = time.time()
+        # extract custom exception handlers for this method
+        g.handlers = []
+        if hasattr(f, "_handlers"):
+            g.handlers = f._handlers
+
+        # execute the endpoint method
+        t1 = time.time()
+        try:
+            return_value = f(*args, **kwargs)
+        except BaseException as ex:
+
+            for handler in g.handlers:
+                if isinstance(ex, handler.type):
+                    return_value = handler.handle(ex)
+                    break
+            else:
+                return_value = _default_exception_handler(ex)
+
+        t2 = time.time()
         if hasattr(f, '_timeout'):
-            t = (e - s) * 1000
-            if t >= getattr(f, '_timeout'):
+            t = (t2 - t0) * 1000
+            if t >= f._timeout:
                 logging.warning("%s.%s ran for %.3fms", f.__module__,
-                    f.__wrapped__.__qualname__, t)
+                    f.__qualname__, t)
+
         return return_value
 
     return wrapper
@@ -188,29 +305,47 @@ def delete(path):
         return _endpoint_mapper(f)
     return decorator
 
-def param(name, type_=str, default=None, required=False, doc=""):
+def param(name, type_=str):
     """decorator which validates query parameters"""
 
     def decorator(f):
         if not hasattr(f, "_params"):
             f._params = []
-        f._params.append(Parameter(name, type_, default, required, doc))
+
+        if isinstance(type_, OpenApiParameter):
+            f._params.append(Parameter(name, type_,
+                type_.getDefault(),
+                type_.getRequired(),
+                type_.getRepeated(),
+                type_.getDescription()))
+        else:
+            # f._params.append(Parameter(name, type_, default, False, False, doc))
+            raise TypeError("%s" % type_)
         return f
     return decorator
 
-def header(name, type_=str, default=None, required=False, doc=""):
+def header(name, type_=None, default=None, required=False, doc=""):
     """decorator which validates query parameters"""
+
+    if type_ is None:
+        type_ = String().required(required).description(doc).default(default)
 
     def decorator(f):
         if not hasattr(f, "_headers"):
             f._headers = []
-        f._headers.append(Parameter(name, type_, default, required, doc))
+        f._headers.append(Parameter(name, type_, default, required, False, doc))
         return f
     return decorator
 
 def body(type_, content_type="application/json"):
     def decorator(f):
         f._body = (type_, content_type)
+        return f
+    return decorator
+
+def returns(obj):
+    def decorator(f):
+        f._returns = obj
         return f
     return decorator
 
@@ -444,8 +579,20 @@ class MetaWebResource(type):
                 if hasattr(func, "_headers"):
                     _headers = func._headers
 
+                _returns = None
+                if hasattr(func, "_returns"):
+                    _returns = func._returns
+
+                _auth = False
+                if hasattr(func, "_auth"):
+                    _auth = func._auth
+
+                _scope = []
+                if hasattr(func, '_scope'):
+                    _scope = func._scope
+
                 endpoint = WebEndpoint(path, methods, fname,
-                    func, _params, _headers, _body)
+                    func, _params, _headers, _body, _returns, _auth, _scope)
 
                 cls._class_endpoints.append(endpoint)
 
@@ -472,7 +619,7 @@ class WebResource(object, metaclass=MetaWebResource):
 
         endpoints = self.__endpoints[:]
 
-        for path, methods, name, func, _params, _headers, _body in self._class_endpoints:
+        for path, methods, name, func, _params, _headers, _body, _returns, _auth, _scope in self._class_endpoints:
             # get the instance of the method which is bound to self
             bound_method = getattr(self, func.__name__)
             if path == "":
@@ -481,7 +628,7 @@ class WebResource(object, metaclass=MetaWebResource):
                 path = (self.root + '/' + path).replace("//", "/")
 
             endpoints.append(WebEndpoint(path, methods, name,
-                bound_method, _params, _headers, _body))
+                bound_method, _params, _headers, _body, _returns, _auth, _scope))
 
         return endpoints
 
@@ -504,8 +651,11 @@ class WebResource(object, metaclass=MetaWebResource):
         _body = (None, None)
         _params = []
         _headers = []
+        _returns = None
+        _auth = False
+        _scope = False
         self.__endpoints.append(WebEndpoint(path, methods, name,
-            func, _params, _headers, _body))
+            func, _params, _headers, _body, _returns, _auth, _scope))
 
     def _start(self):
         """called just before the web listener is started"""
@@ -514,3 +664,350 @@ class WebResource(object, metaclass=MetaWebResource):
     def _end(self):
         """called while tearing down the resource"""
         pass
+
+class OpenApiParameter(object):
+    def __init__(self, type_):
+        super(OpenApiParameter, self).__init__()
+        self.attrs = {"type": type_}
+        self.__name__ = self.__class__.__name__
+        self._default = None
+        self._required = False
+        self._description = ""
+        self._case_sensitive = False
+        self._repeated = False
+
+    def __call__(self, obj):
+        raise NotImplementedError()
+
+    def schema(self):
+        obj = dict(self.attrs)
+
+        if self._repeated:
+            obj['type'] = 'array'
+            obj['items'] = {'type': self.attrs['type']}
+
+        if self._default is not None:
+          obj['default'] = self._default
+        return obj
+
+    def default(self, value):
+        self._default = value
+        return self
+
+    def getDefault(self):
+        return self._default
+
+    def description(self, value):
+        self._description = value
+        return self
+
+    def getDescription(self):
+        return self._description
+
+    def required(self, value=True):
+        self._required = value
+        return self
+
+    def not_required(self, value=False):
+        self._required = value
+        return self
+
+    def getRequired(self):
+        return self._required
+
+    def repeated(self, value=True):
+        """
+        the query parameter can be given multiple times
+        """
+        self._repeated = value
+        return self
+
+    def getRepeated(self):
+        return self._repeated
+
+    def enum(self, value, case_sensitive=False):
+
+        self._case_sensitive = case_sensitive
+
+        if not self._case_sensitive:
+            self.attrs['enum'] = set([s.lower() for s in value])
+        else:
+            self.attrs['enum'] = set(value)
+
+        return self
+
+class String(OpenApiParameter):
+    def __init__(self):
+        super(String, self).__init__("string")
+
+    def __call__(self, value):
+
+        v = str(value)
+
+        if 'enum' in self.attrs:
+
+            if not self._case_sensitive:
+                v = v.lower()
+
+            if v not in self.attrs['enum']:
+                raise Exception("invalid input. not in enum range")
+
+        return v
+
+class Boolean(OpenApiParameter):
+    def __init__(self):
+        super(Boolean, self).__init__("boolean")
+
+    def __call__(self, value):
+        s = value.lower()
+        if s == "true":
+            return True
+        if s == "false":
+            return False
+        try:
+            return int(s) != 0
+        except:
+            pass
+
+        raise Exception("Invalid input")
+
+class Integer(OpenApiParameter):
+    def __init__(self):
+        super(Integer, self).__init__("integer")
+
+    def __call__(self, value):
+
+        v = int(value)
+
+        if 'minimum' in self.attrs:
+            if v < self.attrs['minimum']:
+                raise Exception("invalid input. value >= %d" % self.attrs['minimum'])
+
+        if 'maximum' in self.attrs:
+            if v > self.attrs['maximum']:
+                raise Exception("invalid input. value <= %d" % self.attrs['maximum'])
+
+        if 'enum' in self.attrs:
+            if v not in self.attrs['enum']:
+                raise Exception("invalid input. not in enum range")
+
+        return v
+
+    def min(self, value):
+        self.attrs["minimum"] = value
+        return self
+
+    def max(self, value):
+        self.attrs["maximum"] = value
+        return self
+
+    def range(self, vmin, vmax):
+        self.attrs["minimum"] = vmin
+        self.attrs["maximum"] = vmax
+        return self
+
+class URI(String):
+
+    def __call__(self, s):
+
+        # https://en.wikipedia.org/wiki/Hostname
+
+        org = s
+
+        for prefix in ("http://", "https://"):
+            if s.startswith(prefix):
+                s = s[len(prefix):]
+                break
+
+        if '/' in s:
+            s, path = s.split('/', 1)
+
+        if ':' in s:
+
+            s, p = s.split(':', 1)
+
+            try:
+                port = int(p)
+            except Exception as e:
+                port = 0
+
+            if port <= 0 or port > 65536:
+                raise Exception("Invalid URI: port out of range")
+
+        if len(s.strip()) == 0:
+            return ""
+
+        # check that the hostname component is a dotted
+        # sequence of alphanumeric characters
+        if len(s) > 253:
+            raise Exception("Invalid URI: hostname too long")
+
+        for part in s.split('.'):
+            if len(s) > 63 or not part.isalnum():
+                raise Exception("Invalid URI: component part too long")
+
+        return org
+
+class OpenApiBody(object):
+    def __init__(self, mimetype=None):
+        super(OpenApiBody, self).__init__()
+        self._mimetype = mimetype
+
+        # todo legacy endpoint support
+        self.__name__ = self.__class__.__name__
+
+    def name(self):
+        return self.__class__.__name__.replace("OpenApiBody", "")
+
+    def __call__(self, obj):
+        raise NotImplementedError()
+
+    def type(self):
+        """openapi data type
+
+        string|integer|object
+        """
+        raise NotImplementedError()
+
+    def mimetype(self):
+        """ """
+        return self._mimetype
+
+    def schema(self):
+        raise NotImplementedError()
+
+class ArrayOpenApiBody(OpenApiBody):
+    def __init__(self, object):
+        super()
+        self.__name__ = self.__class__.__name__
+        self.object = object
+
+    def __call__(self, obj):
+
+        if not isinstance(obj, (tuple, list)):
+            raise Exception("invalid object")
+
+        for item in obj:
+            self.object(item)
+
+        return obj
+
+    def name(self):
+        return self.object.name() + self.__class__.__name__.replace("OpenApiBody", "")
+
+    def mimetype(self):
+        return "application/json"
+
+    def type(self):
+        return "array"
+
+    def schema(self):
+        obj = {
+            "type": self.object.type(),
+
+        }
+        if obj['type'] == 'object':
+            obj["properties"] = self.object.model()
+
+            obj['required'] = []
+            for key, value in obj["properties"].items():
+                if 'required' in value:
+                    if value['required']:
+                        obj['required'].append(key)
+                    del value['required']
+
+        return obj
+
+class StringOpenApiBody(OpenApiBody):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def __call__(self, obj):
+
+        if hasattr(obj, 'read'):
+            obj = obj.read().decode("utf-8").strip()
+
+        if not isinstance(obj, str):
+            raise Exception("invalid object: %s %s" % (type(obj), content_type))
+
+        return obj
+
+    def type(self):
+        return "string"
+
+class JsonOpenApiBody(OpenApiBody):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def __call__(self, obj):
+        model = self.model()
+        for key in model.keys():
+            if key not in obj and model[key].get('required', False):
+                raise Exception("invalid request body. missing: %s" % key)
+        return obj
+
+    def name(self):
+        return self.__class__.__name__.replace("OpenApiBody", "")
+
+    def mimetype(self):
+        return "application/json"
+
+    def type(self):
+        return "object"
+
+class EmptyBodyOpenApiBody(OpenApiBody):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def __call__(self, obj):
+        return obj
+
+    def mimetype(self):
+        return []
+
+    def type(self):
+        return "stream"
+
+class TextStreamOpenApiBody(OpenApiBody):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def __call__(self, obj):
+        return obj
+
+    def mimetype(self):
+        return ['text/plain', 'application/octet-stream', 'application/x-www-form-urlencoded']
+
+    def type(self):
+        return "stream"
+
+class BinaryStreamOpenApiBody(OpenApiBody):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def __call__(self, obj):
+        return obj
+
+    def mimetype(self):
+        return ['application/octet-stream', 'application/x-www-form-urlencoded']
+
+    def type(self):
+        return "stream"
+
+class BinaryStreamResponseOpenApiBody(OpenApiBody):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def __call__(self, obj):
+        return obj
+
+    def mimetype(self):
+        return 'application/octet-stream'
+
+    def type(self):
+        return "stream"

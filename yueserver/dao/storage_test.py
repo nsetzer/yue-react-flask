@@ -359,6 +359,16 @@ class StorageTestCase(unittest.TestCase):
                 count += 1
         self.assertEqual(len(names), count)
 
+    def test_002g_search(self):
+
+        user_id = self.USER['id']
+        files = self.storageDao.searchByFileName(user_id, self.fs_default_id,
+              ["txt"], limit=1, offset=0)
+
+        self.assertEqual(len(files), 1)
+        # output is guaranteed sorted
+        self.assertEqual(files[0].name, 'file1.txt')
+
     def test_003a_preview(self):
 
         user_id = self.USER['id']

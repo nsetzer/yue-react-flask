@@ -1,4 +1,4 @@
-
+#! cd ../../.. && python3 -m yueserver.dao.filesys.filesys
 """
 An Abstract File System API
 
@@ -19,10 +19,17 @@ import datetime
 import time
 import subprocess
 import logging
+import posixpath
 from ..util import epoch_time
-from stat import S_ISDIR, S_ISREG, S_IRGRP
+from stat import S_ISDIR, S_ISREG, S_IRGRP, S_ISLNK
 
 from .util import sh_escape, AbstractFileSystem, FileRecord
+
+class FileSystemError(Exception):
+    pass
+
+class FileSystemExistsError(FileSystemError):
+    pass
 
 class LocalFileSystemImpl(AbstractFileSystem):
     """docstring for LocalFileSystemImpl"""
@@ -53,8 +60,10 @@ class LocalFileSystemImpl(AbstractFileSystem):
             try:
                 entries.append(self.file_info(fullpath))
             except FileNotFoundError:
-                pass
-
+                # TODO set to type UNK, instead of not dir
+                entries.append(FileRecord(name, False, 0, 0, 0, 0))
+            except OSError as e:
+                entries.append(FileRecord(name, False, 0, 0, 0, 0))
         return entries
 
     def makedirs(self, path):
@@ -65,16 +74,25 @@ class LocalFileSystemImpl(AbstractFileSystem):
         os.utime(path, (mtime, mtime))
 
     def file_info(self, path):
-        st = os.stat(path)
+
+        _, name = self.split(path)
+
+        st = os.stat(path)  # throws OSError
 
         size = st.st_size
         permission = st.st_mode & 0o777
         mtime = int(st.st_mtime)
 
-        _, name = self.split(path)
+        # TODO check if current user has read access
+        #if not (st.st_mode & S_IRGRP):
+        #    raise FileNotFoundError("grp access: %s" % path)
 
-        if not (st.st_mode & S_IRGRP):
-            raise FileNotFoundError(path)
+        # todo fix the mistake of FileRecord
+        # replace isDir with an enum:
+        #   FS_UNK=0, FS_DIR=1, FS_REG=2
+        #   isLink = true|false
+        # use lstat, and if it is a link, use os.stat
+        # to figure out the kind of link
 
         is_dir = bool(S_ISDIR(st.st_mode))
 
@@ -84,12 +102,31 @@ class LocalFileSystemImpl(AbstractFileSystem):
         raise FileNotFoundError(path)
 
     def remove(self, path):
-
+        # TODO: test and remove dir
         os.remove(path)
 
-        dir, _ = self.split(path)
-        if len(self.listdir(dir)) == 0:
-            os.rmdir(dir)
+    def rmdir(self, path):
+        os.rmdir(path)
+
+    def rename(self, patha, pathb):
+        os.rename(patha, pathb)
+
+    def drive(self, patha):
+        """ returns a meaningless but unique drive identifier (str or int) """
+
+        if os.name == 'nt':
+            # todo: support for UNC paths
+            return patha[:2].upper()
+        else:
+            return os.stat(patha).st_dev
+
+    def url(self, path):
+        if not path.startswith(self.scheme):
+            if os.name == 'nt':
+                return "%s/%s" % (self.scheme, path)
+            else:
+                return "%s%s" % (self.scheme, path)
+        return path
 
 class MemoryFileSystemImpl(AbstractFileSystem):
     """An In-Memory filesystem
@@ -139,14 +176,17 @@ class MemoryFileSystemImpl(AbstractFileSystem):
         raise ValueError("Invalid mode: %s" % mode)
 
     def _scandir_impl(self, path):
+        visited = set()
         if not path.endswith("/"):
             path += self.impl.sep
         for fpath, (f, mtime) in MemoryFileSystemImpl._mem_store.items():
+            print(fpath)
             if fpath.startswith(path):
                 name = fpath.replace(path, "")
                 if '/' in name:
                     name = name.split('/')[0]
                     yield FileRecord(name, True, 0, 0)
+                    visited.add(name)
                 else:
                     yield FileRecord(name, False, len(f.getvalue()), mtime)
 
@@ -166,7 +206,6 @@ class MemoryFileSystemImpl(AbstractFileSystem):
         _, name = self.split(path)
 
         if path not in MemoryFileSystemImpl._mem_store:
-            # guess tha
             temp = path
             if not temp.endswith("/"):
                 temp += "/"
@@ -177,13 +216,31 @@ class MemoryFileSystemImpl(AbstractFileSystem):
 
         f, mtime = MemoryFileSystemImpl._mem_store[path]
 
-        return FileRecord(name, False, len(f.getvalue()), mtime)
+        return FileRecord(name, mtime==0, len(f.getvalue()), mtime)
 
     def remove(self, path):
         if path not in MemoryFileSystemImpl._mem_store:
             raise FileNotFoundError(path)
 
         del MemoryFileSystemImpl._mem_store[path]
+
+    def rmdir(self, path):
+        pass
+
+    def makedirs(self, path):
+        pass
+
+    def rename(self, patha, pathb):
+        try:
+            if pathb not in MemoryFileSystemImpl._mem_store:
+                MemoryFileSystemImpl._mem_store[pathb] = \
+                    MemoryFileSystemImpl._mem_store[patha]
+                del MemoryFileSystemImpl._mem_store[patha]
+                return
+        except Exception as e:
+            pass
+
+        raise OSError(pathb)
 
     @staticmethod
     def clear():
@@ -197,6 +254,12 @@ class FileSystem(object):
     """
 
     # by default s3 paths should fail, until registed
+
+    FS_UNK = 0
+    FS_REG = 1
+    FS_DIR = 2
+    FS_LNK = 4  # e.g. FS_LNK|FS_DIR or FS_LNK|FS_REG
+
     default_fs = {"s3://": None}
 
     def __init__(self):
@@ -234,3 +297,163 @@ class FileSystem(object):
     def _mem(self):
         return self._fs[MemoryFileSystemImpl.scheme]._mem_store
 
+    def samedrive(self, patha, pathb):
+        sta = self.drive(patha)
+        stb = self.drive(pathb)
+        return sta == stb
+
+    def find(self, dir):
+        """
+        yield items starting at dir
+        let the caller decide how to filter and display results
+        """
+
+        dirs = [dir]
+
+        while len(dirs) > 0:
+            dir = dirs.pop(0)
+
+            yield (FileSystem.FS_DIR, dir, 0)
+
+            for rec in self.scandir(dir):
+                path = self.join(dir, rec.name)
+                # todo: handle links, etc
+                if rec.isDir:
+                    dirs.append(path)
+                else:
+                    yield (FileSystem.FS_REG, path, rec.size)
+
+    def _copy_impl(self, src, dst_dir, move, followLinks):
+
+        """
+        yield pairs of (src,dst) names moving src into dst
+
+        a simple move across file systems may result in a complicated copy
+
+        yield directories before contants so that directories can be created
+        """
+        print(src, dst_dir)
+        _, name = self.split(src)
+        tgt = self.join(dst_dir, name)
+
+        if move and self.exists(tgt) and self.samefile(src, tgt):
+            # a copy operation should result in duplicating the file
+            pass
+        elif not self.isdir(src):
+            rec = self.file_info(src)
+            yield (FileSystem.FS_REG, src, tgt, rec.size)
+        elif move and self.samedrive(src, dst_dir):
+            # if just moving, between the same drive
+            # a simple rename should suffice
+            # if the move fails, the user can always just copy files instead
+            yield (FileSystem.FS_REG, src, tgt, 0)
+        else:
+
+            dirs = [(src, tgt)]
+            while len(dirs) > 0:
+                dir, dst = dirs.pop(0)
+
+                yield (FileSystem.FS_DIR, dir, dst, 0)
+
+                for rec in self.scandir(dir):
+                    path = self.join(dir, rec.name)
+                    tgt = self.join(dst, rec.name)
+                    # todo: handle links, etc
+                    if rec.isDir:
+                        dirs.append((path, tgt))
+                    else:
+                        yield (FileSystem.FS_REG, path, tgt, rec.size)
+
+    def copy(self, src, dst_dir):
+        return self._copy_impl(src, dst_dir, False, False)
+
+    def copy_multiple(self, urls, dst_dir):
+
+        for url in urls:
+            yield from self.copy(url, dst_dir)
+
+    def move(self, src, dst_dir):
+        return self._copy_impl(src, dst_dir, True, False)
+
+    def move_multiple(self, urls, dst_dir):
+
+        for url in urls:
+            yield from self.move(url, dst_dir)
+
+    def _remove_recursive(self, dir):
+
+        """
+        yield paths from a directory in an order such
+        that the content is returned first followed by
+        the directory, so that directories may be
+        deleted as they are emptied
+
+        """
+        for rec in self.scandir(dir):
+            path = self.join(dir, rec.name)
+            try:
+                rec = self.file_info(path)
+                # todo: handle links, etc
+                if rec.isDir:
+                    yield from self._remove_recursive(path)
+                else:
+                    yield (FileSystem.FS_REG, path, rec.size)
+
+            except FileNotFoundError as e:
+                yield (FileSystem.FS_UNK, src, 0)
+                continue
+
+        yield (FileSystem.FS_DIR, dir, 0)
+
+    def delete(self, src):
+
+        """
+        """
+        _, name = self.split(src)
+        tgt = self.join(src, name)
+
+        if not self.isdir(src):
+            try:
+                rec = self.file_info(src)
+                yield (FileSystem.FS_REG, src, rec.size)
+            except FileNotFoundError as e:
+                yield (FileSystem.FS_UNK, src, 0)
+
+        else:
+            yield from self._remove_recursive(src)
+
+    def delete_multiple(self, urls):
+
+        for url in urls:
+            yield from self.delete(url)
+
+    def getFileType(self, path):
+        """
+        pure-path computation, determine type of file
+        """
+        _, name = self.split(path)
+
+        name, ext = self.splitext(name)
+
+        if not ext:
+            if name == 'Makefile':
+                return 'MAKEFILE'
+            if name.startswith("."):
+                return "DOTFILE"
+            return "FILE"
+
+        return ext.lstrip(".").upper()
+
+def main():
+
+    fs = FileSystem()
+
+    fs.open("mem://test/file.txt", "wb").close()
+    fs.open("mem://test/folder/file.txt", "wb").close()
+
+    print(fs.listdir("mem://test"))
+
+
+
+if __name__ == '__main__':
+    main()

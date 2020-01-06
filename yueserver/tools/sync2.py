@@ -36,6 +36,10 @@ implement `syn mv`
     - when moving a folder compute the set of changes server side
     - then perform a bulk update
 
+implement `syn rm`
+    --local : remove the local file, and db entry, but preserve remote
+    --remote : remove the remote file, and db entry, but preserve local
+
 """
 import os, sys
 import argparse
@@ -44,6 +48,8 @@ import logging
 import json
 import datetime, time
 import getpass
+import threading
+
 from fnmatch import fnmatch
 
 import yueserver
@@ -66,7 +72,10 @@ from sqlalchemy import and_, or_, not_, select, column, \
     update, insert, delete, asc, desc
 from sqlalchemy.sql.expression import bindparam
 
-class SyncUserException(Exception):
+class SyncException(Exception):
+    pass
+
+class SyncUserException(SyncException):
     pass
 
 def osname():
@@ -83,7 +92,7 @@ def osname():
     if name == "posix":
         try:
             release = os.uname().release.lower()
-        except:
+        except Exception as e:
             pass
         if 'microsoft' in release:
             name = "nt"
@@ -118,17 +127,25 @@ def LocalStorageTable(metadata):
         Column('remote_size', Integer, default=0),
         Column('local_permission', Integer, default=0),
         Column('remote_permission', Integer, default=0),
-        Column('remote_public', String, default=0),
-        Column('remote_encryption', String, default=0),
+        Column('remote_public', String, default=""),
+        Column('remote_encryption', String, default=""),
 
         Column('local_mtime', Integer, default=0),
         Column('remote_mtime', Integer, default=0)
+    )
+
+def DirectoryStatusTable(metadata):
+    return Table('directory_status', metadata,
+        Column('rel_path', String, primary_key=True, nullable=False),
+        Column('valid', Integer, default=0),
+        Column('status', String, default=""),
     )
 
 class DatabaseTables(object):
     def __init__(self, metadata):
         super(DatabaseTables, self).__init__()
         self.LocalStorageTable = LocalStorageTable(metadata)
+        self.DirectoryStatusTable = DirectoryStatusTable(metadata)
 
 class LocalStorageDao(object):
     def __init__(self, db, dbtables):
@@ -189,12 +206,36 @@ class LocalStorageDao(object):
         query = delete(self.dbtables.LocalStorageTable) \
             .where(self.dbtables.LocalStorageTable.c.rel_path == rel_path)
 
-        self.db.session.execute(query)
+        result = self.db.session.execute(query)
 
         if commit:
             self.db.session.commit()
 
+        return result.rowcount > 0
+
     def listdir(self, path_prefix="", limit=None, offset=None, delimiter='/'):
+
+        dirs = set()
+        files = []
+
+        for item in self.listdir_files(path_prefix, limit, offset, delimiter):
+            item = dict(item)
+            path = item['rel_path'][len(path_prefix):]
+
+            if delimiter in path:
+                name, _ = path.split(delimiter, 1)
+                dirs.add(name)
+            else:
+                item['rel_path'] = path
+                files.append(item)
+
+        return dirs, files
+
+    def listdir_files(self, path_prefix="", limit=None, offset=None, delimiter='/'):
+        """
+        returns all files, including files in subdirectory
+        for a given path_prefix
+        """
 
         FsTab = self.dbtables.LocalStorageTable
 
@@ -216,24 +257,13 @@ class LocalStorageDao(object):
         if offset is not None:
             query = query.offset(offset).order_by(asc(FsTab.c.rel_path))
 
-        dirs = set()
-        files = []
-
-        # todo replace fetchall with paging
-        for item in self.db.session.execute(query).fetchall():
-            item = dict(item)
-            path = item['rel_path'][len(path_prefix):]
-
-            if delimiter in path:
-                name, _ = path.split(delimiter, 1)
-                dirs.add(name)
-            else:
-                item['rel_path'] = path
-                files.append(item)
-
-        return dirs, files
+        return self.db.session.execute(query).fetchall()
 
     def isDir(self, path):
+        """
+        return true if a given remote oath represents a directory
+            that exists on the remote server
+        """
         FsTab = self.dbtables.LocalStorageTable
 
         if not path:
@@ -244,9 +274,7 @@ class LocalStorageDao(object):
 
         where = FsTab.c.rel_path.startswith(bindparam('path', path))
 
-        query = select(['*']) \
-            .select_from(FsTab) \
-            .where(where).limit(1)
+        query = FsTab.select().where(where).limit(1)
 
         result = self.db.session.execute(query)
         item = result.fetchone()
@@ -291,7 +319,7 @@ class LocalStorageDao(object):
         return self.db.session.execute(query)
 
 class SyncContext(object):
-    """docstring for SyncContext"""
+
     def __init__(self, client, storageDao, fs, root, remote_base, local_base, verbose=0):
         super(SyncContext, self).__init__()
         self.client = client
@@ -307,12 +335,18 @@ class SyncContext(object):
         self.encryption_server_password = None
         self.encryption_client_key = None
 
+        self.showHiddenNames = False
+
     def attr(self, directory):
         return DirAttr.openDir(self.local_base, directory)
 
+    def getPassword(self, kind):
+
+        return get_pass("%s password: " % kind)
+
     def getEncryptionServerPassword(self):
         if self.encryption_server_password is None:
-            self.encryption_server_password = get_pass("server password: ")
+            self.encryption_server_password = self.getPassword('server')
         return self.encryption_server_password
 
     def getEncryptionClientKey(self):
@@ -327,17 +361,61 @@ class SyncContext(object):
             if response.status_code == 404:
                 raise SyncUserException("client key not set")
             if response.status_code != 200:
-                raise Exception("Unable to retreive key: %s" %
+                raise SyncException("Unable to retreive key: %s" %
                     response.status_code)
             key = response.json()['result']['key']
 
-            password = get_pass("client password: ")
+            client_key = None
 
-            self.encryption_client_key = decryptkey(password, key)
+            for i in range(3):
+                try:
+                    password = self.getPassword('client')
+                    client_key = decryptkey(password, key)
+                    break;
+                except ValueError:
+                    pass
+
+            if client_key is None:
+                raise ValueError("invalid password")
+
+            self.encryption_client_key = client_key
+
         return self.encryption_client_key
+
+    def normPath(self, path):
+        """return (abspath, relpath)"""
+        return _norm_path(
+            self.fs, self.remote_base, self.local_base,
+            path)
+
+    def clone(self):
+
+        db = db_connect(self.storageDao.db.url)
+
+        storageDao = LocalStorageDao(db, db.tables)
+
+        ctxt = SyncContext(self.client, storageDao, self.fs,
+            self.root, self.remote_base, self.local_base, self.verbose)
+
+        return ctxt
+
+    def close(self):
+
+        self.storageDao.db.conn.close()
+        self.storageDao.db.session.close()
+        self.storageDao.db.engine.dispose()
+
+    def sameThread(self):
+        """
+        this object must be cloned() if this returns false
+        database can only be accessed from the thread that created the connection
+        """
+        current_ident = threading.current_thread().ident
+        return self.storageDao.db.thread_ident == current_ident
 
 class RecordBuilder(object):
     """docstring for RecordBuilder"""
+
     def __init__(self, rel_path=None):
         super(RecordBuilder, self).__init__()
 
@@ -413,15 +491,16 @@ class FileState(object):
     DELETE_BOTH = "delete-both"
     DELETE_REMOTE = "delete-remote"
     DELETE_LOCAL = "delete-local"
+    IGNORE = "ignore"
 
     @staticmethod
     def symbol_short(state):
         if FileState.SAME == state:
             sym = "--"
         if FileState.PUSH == state:
-            sym = ">-"
+            sym = "=>"
         if FileState.PULL == state:
-            sym = "-<"
+            sym = "<="
         if FileState.ERROR == state:
             sym = "ee"
         if FileState.CONFLICT_MODIFIED == state:
@@ -438,6 +517,8 @@ class FileState(object):
             sym = "-x"
         if FileState.DELETE_LOCAL == state:
             sym = "x-"
+        if FileState.IGNORE == state:
+            sym = "??"
         return sym
 
     @staticmethod
@@ -464,6 +545,8 @@ class FileState(object):
             sym = "DREM"
         if FileState.DELETE_LOCAL == state:
             sym = "DLOC"
+        if FileState.IGNORE == state:
+            sym = "IGN_"
         return sym
 
     @staticmethod
@@ -472,23 +555,43 @@ class FileState(object):
             return FileState.symbol_verbose(state)
         return FileState.symbol_short(state)
 
+    @staticmethod
+    def states():
+        return [
+            FileState.SAME,
+            FileState.PUSH,
+            FileState.PULL,
+            FileState.ERROR,
+            FileState.CONFLICT_MODIFIED,
+            FileState.CONFLICT_CREATED,
+            FileState.CONFLICT_VERSION,
+            FileState.CONFLICT_TYPE,
+            FileState.DELETE_BOTH,
+            FileState.DELETE_REMOTE,
+            FileState.DELETE_LOCAL,
+            FileState.IGNORE,
+        ]
+
 class DirEnt(object):
     """docstring for DirEnt"""
+
     def __init__(self, name, remote_base, local_base, state=None):
         super(DirEnt, self).__init__()
         self.remote_base = remote_base
         self.local_base = local_base
         self._name = name
         self._state = state or FileState.ERROR
+        self._permission = 0
+        self._mtime = 0
 
     def state(self):
-        #if self.remote_base is None and self.local_base is None:
+        # if self.remote_base is None and self.local_base is None:
         #    return FileState.ERROR
-        #elif self.remote_base is None and self.local_base is not None:
+        # elif self.remote_base is None and self.local_base is not None:
         #    return FileState.PUSH
-        #elif self.remote_base is not None and self.local_base is None:
+        # elif self.remote_base is not None and self.local_base is None:
         #    return FileState.PULL
-        #elif self.remote_base is not None and self.local_base is not None:
+        # elif self.remote_base is not None and self.local_base is not None:
         #    return FileState.SAME
         return self._state
 
@@ -503,6 +606,17 @@ class DirEnt(object):
         return "<DirEnt(%s,%s,%s)>" % (
             self.remote_base, self.local_base, self._state)
 
+    def local_url(self):
+        # deprecated
+        # TODO: remove this
+
+        if self.local_base:
+            if osname() == 'nt':
+                return "file:///%s" % self.local_base
+            else:
+                return "file://%s" % self.local_base
+        return None
+
 class FileEnt(object):
     def __init__(self, remote_path, local_path, lf, rf, af):
         super(FileEnt, self).__init__()
@@ -513,6 +627,10 @@ class FileEnt(object):
         self.rf = rf
         self.af = af
 
+        self._state = None
+
+        self.state()  # set af version
+
     def __str__(self):
         return "FileEnt<%s,%s>" % (self.remote_path, self.local_path)
 
@@ -520,7 +638,10 @@ class FileEnt(object):
         return "FileEnt<%s,%s>" % (self.remote_path, self.local_path)
 
     def name(self):
-        return posixpath.split(self.remote_path)[1]
+        if self.remote_path is not None:
+            return posixpath.split(self.remote_path)[1]
+        else:
+            return os.path.split(self.local_path)[1]
 
     def _samefile(self, af, bf):
         b = af['mtime'] == bf['mtime'] and af['size'] == bf['size']
@@ -554,6 +675,7 @@ class FileEnt(object):
                 # file has changed locally
                 if self._samefile(self.lf, self.rf):
                     # local is newer
+                    self.af['version'] = self.lf['version'] + 1
                     return FileState.PUSH + ":3a"
                 else:
                     # both modified
@@ -561,7 +683,7 @@ class FileEnt(object):
 
             return FileState.ERROR + ":3b"
 
-    def state(self):
+    def _get_state(self):
 
         # this assumes that fetch properly updates the database
         # fetch needs to clear the remote version for files that are
@@ -585,12 +707,23 @@ class FileEnt(object):
         rfe = self.rf is not None
         afe = self.af is not None
 
+        if afe and lfe:
+            self.af['version'] = self.lf['version']
+
         # 0: error
+        # Note: one way to get into the error state is to:
+        #  in ctxt A: push files to remote
+        #  in ctxt B: fetch
+        #  in ctxt A: delete those files
+        #  in ctxt B: fetch
+        # ctxt B now has files with local version = 0
+        # that also do no exist on remote or locally
         if lfnull and rfnull and afnull:
             return FileState.ERROR
 
         # 1 : push
-        if lfnull and rfnull and afe:
+        elif lfnull and rfnull and afe:
+            self.af['version'] = 1
             return FileState.PUSH + ":1"
 
         # 2 : pull
@@ -619,22 +752,27 @@ class FileEnt(object):
 
         return FileState.ERROR
 
+    def state(self):
+        if not self._state:
+            self._state = self._get_state()
+        return self._state
+
     def data(self):
         lv = ("%2d" % self.lf.get('version', 0)) if self.lf else "--"
         rv = ("%2d" % self.rf.get('version', 0)) if self.rf else "--"
         av = ("%2d" % self.af.get('version', 0)) if self.af else "--"
 
-        lm = ("%10d" % self.lf.get('mtime', 0)) if self.lf else ("-"*10)
-        rm = ("%10d" % self.rf.get('mtime', 0)) if self.rf else ("-"*10)
-        am = ("%10d" % self.af.get('mtime', 0)) if self.af else ("-"*10)
+        lm = ("%10d" % self.lf.get('mtime', 0)) if self.lf else ("-" * 10)
+        rm = ("%10d" % self.rf.get('mtime', 0)) if self.rf else ("-" * 10)
+        am = ("%10d" % self.af.get('mtime', 0)) if self.af else ("-" * 10)
 
-        _ls = ("%10d" % self.lf.get('size', 0)) if self.lf else ("-"*10)
-        _rs = ("%10d" % self.rf.get('size', 0)) if self.rf else ("-"*10)
-        _as = ("%10d" % self.af.get('size', 0)) if self.af else ("-"*10)
+        _ls = ("%10d" % self.lf.get('size', 0)) if self.lf else ("-" * 10)
+        _rs = ("%10d" % self.rf.get('size', 0)) if self.rf else ("-" * 10)
+        _as = ("%10d" % self.af.get('size', 0)) if self.af else ("-" * 10)
 
-        lp = ("%5s"%oct(self.lf.get('permission', 0))) if self.lf else ("-"*5)
-        rp = ("%5s"%oct(self.rf.get('permission', 0))) if self.rf else ("-"*5)
-        ap = ("%5s"%oct(self.af.get('permission', 0))) if self.af else ("-"*5)
+        lp = ("%5s" % oct(self.lf.get('permission', 0))) if self.lf else ("-" * 5)
+        rp = ("%5s" % oct(self.rf.get('permission', 0))) if self.rf else ("-" * 5)
+        ap = ("%5s" % oct(self.af.get('permission', 0))) if self.af else ("-" * 5)
 
         if self.rf:
             public = self.rf.get('public', None) or ""
@@ -665,15 +803,15 @@ class FileEnt(object):
 
         """
 
-        st_lv = ("%4d" % self.lf.get('version', 0)) if self.lf else "--"
+        st_lv = ("%4d" % self.lf.get('version', 0)) if self.lf else "----"
         #st_am = ("%11d" % self.af.get('mtime', 0)) if self.af else ("-"*11)
         mtime = self.af.get('mtime', 0) if self.af else 0
         if mtime > 0:
             st_am = time.strftime('%y-%m-%d %H:%M:%S', time.localtime(mtime))
         else:
             st_am = "-" * 17
-        st_ap = ("%5s"%oct(self.af.get('permission', 0))) if self.af else ("-"*5)
-        st_as = ("%12d" % self.af.get('size', 0)) if self.af else ("-"*12)
+        st_ap = ("%5s" % oct(self.af.get('permission', 0))) if self.af else ("-" * 5)
+        st_as = ("%12d" % self.af.get('size', 0)) if self.af else ("-" * 12)
 
         if self.rf:
             enc = self.rf.get("encryption", None)
@@ -691,6 +829,14 @@ class FileEnt(object):
 
     def local_directory(self):
         return os.path.split(self.local_path)[0]
+
+    def local_url(self):
+        if self.local_base:
+            if osname() == 'nt':
+                return "file:///%s" % self.local_base
+            else:
+                return "file://%s" % self.local_base
+        return None
 
 class DirAttr(object):
     """collection of meta directory attributes
@@ -736,7 +882,7 @@ class DirAttr(object):
                 self.settings['encryption_mode'] = _mode1('encryption_mode')
                 modes = {'none', 'client', 'server', 'system'}
                 if self.settings['encryption_mode'] not in modes:
-                    raise Exception(
+                    raise SyncException(
                         "invalid encryption mode: %s" %
                         self.settings['encryption_mode'])
 
@@ -744,7 +890,7 @@ class DirAttr(object):
                 self.settings['public'] = _bool('public')
 
             else:
-                raise Exception("unkown setting: %s" % keyname)
+                raise SyncException("unkown setting: %s" % keyname)
 
         self.blacklist_patterns = self.blacklist_patterns | patterns
 
@@ -801,8 +947,7 @@ class DirAttr(object):
         else:
             parent, name = os.path.split(directory)
             if parent == directory:
-
-                raise Exception(parent)
+                raise SyncException(parent)
             attr = DirAttr.openDir(local_root, parent)
             attr = attr.update(settings, patterns)
 
@@ -836,9 +981,10 @@ class DirAttr(object):
         return settings, patterns
 
 class CheckResult(object):
-    def __init__(self, remote_base, dirs, files):
-        self.remote_base = remote_base
+    def __init__(self, remote_base, local_base, dirs, files):
         super(CheckResult, self).__init__()
+        self.remote_base = remote_base
+        self.local_base = local_base
         self.dirs = dirs
         self.files = files
 
@@ -934,6 +1080,8 @@ def db_connect(connection_string):
     db.conn.connection.create_function('REGEXP', 2, regexp)
     db.create_all = lambda: db.metadata.create_all(engine)
     db.delete = lambda table: db.session.execute(delete(table))
+    db.url = connection_string
+    db.thread_ident = threading.current_thread().ident
 
     path = connection_string[len("sqlite:///"):]
     if path and not os.access(path, os.W_OK):
@@ -961,7 +1109,7 @@ def get_cfg(directory):
 
     cfgdir = os.path.join(directory, '.yue')
     if not os.path.exists(cfgdir):
-        raise Exception("not found: %s" % cfgdir)
+        raise SyncException("not found: %s" % cfgdir)
 
     pemkey_path = os.path.join(cfgdir, 'rsa.pem')
     with open(pemkey_path, "rb") as rb:
@@ -975,7 +1123,7 @@ def get_cfg(directory):
     userdata['password'] = cm.decrypt64(pemkey,
         userdata['password']).decode("utf-8")
 
-    userdata['cfgdir'] = directory
+    userdata['cfgdir'] = cfgdir
     userdata['local_base'] = directory
     userdata['current_local_base'] = cwd
     userdata['current_remote_base'] = posixpath.join(userdata['remote_base'], relpath)
@@ -1002,8 +1150,11 @@ def get_ctxt(directory):
 
     return ctxt
 
-def _fetch(ctxt):
+def _fetch_iter(ctxt):
 
+    # TODO: fetch can be sped up by increasing the limit
+    #       possibly use a dynamic limit to keep request time
+    #       under 5 seconds
     page = 0
     limit = 500
 
@@ -1017,17 +1168,19 @@ def _fetch(ctxt):
                     ctxt.root, ctxt.remote_base, **params)
             except Exception as e:
                 logging.error("unable to fetch: %s" % e)
-                return
+                break
 
             if response.status_code != 200:
-                sys.stderr.write("fetch error...")
-                return
+                sys.stderr.write("fetch error [%d] %s" % (
+                    response.status_code, response.text))
+                break
 
             try:
                 files = response.json()['result']
             except Exception as e:
                 logging.exception(response.text)
                 raise e
+
             for f in files:
                 record = {
                     "remote_size": f['size'],
@@ -1044,6 +1197,12 @@ def _fetch(ctxt):
 
                 mode = ctxt.storageDao.upsert(f['path'], record, commit=False)
 
+                # important: yield at a point in time when
+                # not calling next on the generator would not
+                # case data loss
+
+                yield (f['path'], record, mode)
+
                 # indicate there are new files to pull
                 if mode == 'insert':
                     sys.stdout.write("+ %s\n" % f['path'])
@@ -1054,17 +1213,26 @@ def _fetch(ctxt):
 
         # indicate that there are files to delete on pull
         for item in ctxt.storageDao.markedForDelete():
+            yield (item['rel_path'], None, delete)
             sys.stdout.write("- %s\n" % item['rel_path'])
+
     except Exception as e:
         logging.exception(e)
         ctxt.storageDao.db.session.rollback()
     else:
         ctxt.storageDao.db.session.commit()
 
-def _check(ctxt, remote_base, local_base):
+def _fetch(ctxt):
 
+    for _ in _fetch_iter(ctxt):
+        pass
+
+def _check(ctxt, remote_base, local_base):
     if remote_base and not remote_base.endswith("/"):
         remote_base += "/"
+
+    if '\\' in remote_base:
+        print("warning: %s" % remote_base)
 
     attr = ctxt.attr(local_base)
 
@@ -1085,22 +1253,37 @@ def _check(ctxt, remote_base, local_base):
 
     for d in _dirs:
 
-        if attr.match(d):
-            continue
-
         remote_path = posixpath.join(remote_base, d)
         local_path = ctxt.fs.join(local_base, d)
         # check that the directory exists locally
+
+        permission = 0
+        mtime = 0
+
         if d in _names:
+            permission = _names[d].permission
+            mtime = _names[d].mtime
+
+        if attr.match(d):
+            if ctxt.showHiddenNames:
+                state = FileState.IGNORE
+            else:
+                continue
+        elif d in _names:
+
             if _names[d].isDir:
                 state = FileState.SAME
             else:
                 state = FileState.CONFLICT_TYPE
+
             del _names[d]
         else:
             state = FileState.PULL
 
-        dirs.append(DirEnt(d, remote_path, local_path, state))
+        ent = DirEnt(d, remote_path, local_path, state)
+        ent._permission = permission
+        ent._mtime = mtime
+        dirs.append(ent)
 
     for f in _files:
         name = f['rel_path']
@@ -1116,6 +1299,7 @@ def _check(ctxt, remote_base, local_base):
             else:
                 del _names[name]
 
+        # local (Cached) database info
         if f['local_version'] == 0:
             lf = None
         else:
@@ -1126,6 +1310,7 @@ def _check(ctxt, remote_base, local_base):
                 "permission": f['local_permission'],
             }
 
+        # remote database info
         if f['remote_version'] == 0:
             rf = None
         else:
@@ -1138,6 +1323,7 @@ def _check(ctxt, remote_base, local_base):
                 "encryption": f['remote_encryption'],
             }
 
+        # local (Actual) file info
         try:
             record = ctxt.fs.file_info(local_path)
 
@@ -1159,11 +1345,21 @@ def _check(ctxt, remote_base, local_base):
         local_path = ctxt.fs.join(local_base, n)
         record = ctxt.fs.file_info(local_path)
 
+        state = None
+
         if attr.match(n):
-            continue
+            if ctxt.showHiddenNames:
+                state = FileState.IGNORE
+            else:
+                continue
+        else:
+            state = FileState.PUSH
 
         if record.isDir:
-            dirs.append(DirEnt(n, remote_path, local_path, FileState.PUSH))
+            ent = DirEnt(n, remote_path, local_path, state)
+            ent._permission = _names[n].permission
+            ent._mtime = _names[n].mtime
+            dirs.append(ent)
         else:
             af = {
                 "version": record.version,
@@ -1171,9 +1367,11 @@ def _check(ctxt, remote_base, local_base):
                 "mtime": record.mtime,
                 "permission": record.permission,
             }
-            files.append(FileEnt(remote_path, local_path, None, None, af))
+            ent = FileEnt(remote_path, local_path, None, None, af)
+            ent._state = state
+            files.append(ent)
 
-    return CheckResult(remote_base, dirs, files)
+    return CheckResult(remote_base, local_base, dirs, files)
 
 def _check_file(ctxt, remote_path, local_path):
     """
@@ -1198,6 +1396,8 @@ def _check_file(ctxt, remote_path, local_path):
             "mtime": record.mtime,
             "permission": record.permission,
         }
+    except OSError:
+        af = None
     except FileNotFoundError:
         af = None
 
@@ -1238,6 +1438,46 @@ def _check_file(ctxt, remote_path, local_path):
 
     return ent
 
+def _check_recursive_impl(ctxt, remote_dir, local_dir, recursive):
+
+    result = _check(ctxt, remote_dir, local_dir)
+
+    results = [result]
+
+    while len(results) > 0:
+        result = results.pop(0)
+
+        for ent in result.dirs:
+            yield ent
+
+            if recursive:
+                rbase = posixpath.join(result.remote_base, ent.name())
+                lbase = ctxt.fs.join(result.local_base, ent.name())
+                results.append(_check(ctxt, rbase, lbase))
+
+        for ent in result.files:
+            yield ent
+
+def _norm_path(fs, remote_base, local_base, path):
+
+    if not os.path.isabs(path):
+        abspath = os.path.normpath(os.path.join(os.getcwd(), path))
+    else:
+        abspath = path
+
+    if not abspath.startswith(local_base):
+        raise FileNotFoundError("path spec does not match")
+
+    relpath = os.path.relpath(path, local_base)
+    if relpath == ".":
+        relpath = ""
+
+    if osname() == 'nt':
+        relpath = relpath.replace("\\", "/")
+    relpath = posixpath.join(remote_base, relpath)
+
+    return abspath, relpath
+
 def _parse_path_args(fs, remote_base, local_base, args_paths):
     """
     returns a collection of DirEnt {name, relpath, abspath}
@@ -1245,21 +1485,9 @@ def _parse_path_args(fs, remote_base, local_base, args_paths):
     paths = []
 
     for path in args_paths:
-        #if not fs.exists(path):
+        # if not fs.exists(path):
         #    raise FileNotFoundError(path)
-        if not os.path.isabs(path):
-            abspath = os.path.normpath(os.path.join(os.getcwd(), path))
-        else:
-            abspath = path
-
-        if not abspath.startswith(local_base):
-            raise FileNotFoundError("path spec does not match")
-
-        relpath = os.path.relpath(path, local_base)
-        if relpath == ".":
-            relpath = ""
-        relpath = posixpath.join(remote_base, relpath)
-
+        abspath, relpath = _norm_path(fs, remote_base, local_base, path)
         name = fs.split(abspath)[1]
         paths.append(DirEnt(name, relpath, abspath))
 
@@ -1272,6 +1500,15 @@ def _parse_path_args(fs, remote_base, local_base, args_paths):
 
 def _status_dir_impl(ctxt, remote_dir, local_dir, recursive):
 
+    """
+    for ent in _check_recursive_impl(ctxt, remote_dir, local_dir, recursive):
+
+        if isinstance(ent, DirEnt):
+            _status_directory_impl(ctxt, ent)
+        else:
+            _status_file_impl(ctxt, ent)
+    """
+
     result = _check(ctxt, remote_dir, local_dir)
 
     ents = list(result.dirs) + list(result.files)
@@ -1280,17 +1517,7 @@ def _status_dir_impl(ctxt, remote_dir, local_dir, recursive):
 
         if isinstance(ent, DirEnt):
 
-            state = ent.state()
-
-            if not (state == FileState.SAME and ctxt.verbose == 0):
-
-                sym = FileState.symbol(state, ctxt.verbose > 2)
-                path = ctxt.fs.relpath(ent.local_base, ctxt.current_local_base)
-
-                if ctxt.verbose > 1:
-                    sys.stdout.write("d%s %s %s/\n" % (sym, " " * 46, path))
-                else:
-                    sys.stdout.write("d%s %s/\n" % (sym, path))
+            _status_directory_impl(ctxt, ent)
 
             if recursive:
                 rbase = posixpath.join(remote_dir, ent.name())
@@ -1298,6 +1525,19 @@ def _status_dir_impl(ctxt, remote_dir, local_dir, recursive):
                 _status_dir_impl(ctxt, rbase, lbase, recursive)
         else:
             _status_file_impl(ctxt, ent)
+
+def _status_directory_impl(ctxt, ent):
+    state = ent.state()
+
+    if not (state == FileState.SAME and ctxt.verbose == 0):
+
+        sym = FileState.symbol(state, ctxt.verbose > 2)
+        path = ctxt.fs.relpath(ent.local_base, ctxt.current_local_base)
+
+        if ctxt.verbose > 1:
+            sys.stdout.write("d%s %s %s/\n" % (sym, " " * 46, path))
+        else:
+            sys.stdout.write("d%s %s/\n" % (sym, path))
 
 def _status_file_impl(ctxt, ent):
     state = ent.state().split(':')[0]
@@ -1313,15 +1553,12 @@ def _status_file_impl(ctxt, ent):
     if ctxt.verbose > 3:
         sys.stdout.write("%s\n" % ent.data())
 
-def _sync_file(ctxt, relpath, abspath, push=False, pull=False, force=False):
-
-    ent = _check_file(ctxt, relpath, abspath)
-
-    if ent.af is None and ent.rf is None and ent.lf is None:
-        sys.stderr.write("not found: %s\n" % ent.remote_path)
-        return
-
-    _sync_file_impl(ctxt, ent, push, pull, force)
+class SyncResult(object):
+    def __init__(self, ent, state, message):
+        super(SyncResult, self).__init__()
+        self.ent = ent
+        self.state = state
+        self.message = message
 
 def _sync_file_push(ctxt, attr, ent):
 
@@ -1332,10 +1569,15 @@ def _sync_file_push(ctxt, attr, ent):
     #    server response should include new version
     #    force flag to disable server side version check
     #    if only perm_ changed, send a metadata update instead
+
+    versions = []
+    for df in [ent.lf, ent.rf, ent.af]:
+        if ent.lf:
+            versions.append(ent.lf['version'])
+        else:
+            versions.append(0)
+
     version = ent.af['version']
-    if ent.lf is not None:
-        version = max(ent.lf['version'], version)
-    ent.af['version'] = version + 1
 
     mtime = ent.af['mtime']
     perm_ = ent.af['permission']
@@ -1361,14 +1603,25 @@ def _sync_file_push(ctxt, attr, ent):
 
     # if public attr set, subsequent call to set a public path if not set
     # public password attr should be be an encrypted string
+
+    # TODO: send version, use response to update parameters from remote
     response = ctxt.client.files_upload(ctxt.root, ent.remote_path, f,
-        mtime=mtime, permission=perm_, crypt=crypt, headers=headers)
+        mtime=mtime, version=version, permission=perm_, crypt=crypt, headers=headers)
 
     if response.status_code == 409:
-        raise SyncUserException("local database out of date. fetch first")
+        msg = "local database out of date. fetch first"
+        msg += "\n%s" % response.text
+        msg += "\n%s" % ent.local_path
+        msg += "\n%s" % ent.remote_path
+        msg += "\n%s" % versions
+        raise SyncUserException(msg)
 
     if response.status_code != 200 and response.status_code != 201:
-        raise Exception("unexpected error: %s" % response.status_code)
+        raise SyncException("unexpected error: %s" % response.status_code)
+
+    data =  response.json()
+
+    ent.af['version'] = data['file_info']['version']
 
     record = RecordBuilder().local(**ent.af).remote(**ent.af).build()
     record['remote_encryption'] = crypt
@@ -1407,7 +1660,7 @@ def _sync_file_pull(ctxt, attr, ent):
         logging.error("error %d for file %s/%s" % (
             response.status_code, ctxt.root, ent.remote_path))
 
-        raise Exception("error %d for file %s/%s" % (
+        raise SyncException("error %d for file %s/%s" % (
             response.status_code, ctxt.root, ent.remote_path))
 
     rv = int(response.headers.get('X-YUE-VERSION', "0"))
@@ -1419,7 +1672,7 @@ def _sync_file_pull(ctxt, attr, ent):
        ent.rf['mtime'] != rm:
         logging.error("error fetching metadata for %s/%s" % (
             ctxt.root, ent.remote_path))
-        raise Exception("local database out of date. fetch first")
+        raise SyncException("local database out of date. fetch first")
 
     dpath = ctxt.fs.split(ent.local_path)[0]
     if not ctxt.fs.exists(dpath):
@@ -1450,60 +1703,123 @@ def _sync_file_pull(ctxt, attr, ent):
 def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
 
     state = ent.state().split(':')[0]
-    sym = FileState.symbol(state)
 
     attr = ctxt.attr(ent.local_directory())
 
+    message = None
+
     if attr.match(ent.name()):
         if not force:
-            return
+            return SyncResult(ent, state, "force not enabled")
 
     if FileState.SAME == state:
         pass
+    elif FileState.IGNORE == state:
+        pass
+
+    elif (FileState.PULL == state and push and not pull and not force):
+        # remote changes to the file will be overwritten
+        # ask the user to confirm they want to override
+        sys.stdout.write("use force to push %s\n" % ent.remote_path)
+
     elif (FileState.PUSH == state and push) or \
+         (FileState.PULL == state and push and force) or \
          (FileState.DELETE_REMOTE == state and not pull and push) or \
          (FileState.CONFLICT_MODIFIED == state and not pull and push) or \
          (FileState.CONFLICT_CREATED == state and not pull and push) or \
          (FileState.CONFLICT_VERSION == state and not pull and push):
 
         if FileState.PUSH != state and not force:
-            sys.stdout.write("%s is in a conflict state.\n" % ent.remote_path)
+            message = "%s is in a conflict state.\n" % ent.remote_path
+            sys.stdout.write(message)
 
         _sync_file_push(ctxt, attr, ent)
 
+    elif (FileState.PUSH == state and pull and not push and not force):
+        # local changes to the file will be overwritten
+        # ask the user to confirm they want to override
+        sys.stdout.write("use force to pull %s\n" % ent.remote_path)
+
     elif (FileState.PULL == state and pull) or \
+         (FileState.PUSH == state and pull and force) or \
          (FileState.DELETE_LOCAL == state and pull and not push) or \
          (FileState.CONFLICT_MODIFIED == state and pull and not push) or \
          (FileState.CONFLICT_CREATED == state and pull and not push) or \
          (FileState.CONFLICT_VERSION == state and pull and not push):
 
         if FileState.PULL != state and not force:
-            sys.stdout.write("%s is in a conflict state.\n" % ent.remote_path)
+            message = "%s is in a conflict state.\n" % ent.remote_path
+            sys.stdout.write(message)
 
         _sync_file_pull(ctxt, attr, ent)
 
     elif FileState.ERROR == state:
-        sys.stdout.write("error %s\n" % ent.remote_path)
+        message = "delete error %s\n" % ent.remote_path
+        sys.stdout.write(message)
+        ctxt.storageDao.remove(ent.remote_path)
     elif FileState.CONFLICT_MODIFIED == state:
-        pass
+        message = "conflict modified - %s\n" % ent.remote_path
+        sys.stdout.write(message)
     elif FileState.CONFLICT_CREATED == state:
-        pass
+        message = "conflict created - %s\n" % ent.remote_path
+        sys.stdout.write(message)
     elif FileState.CONFLICT_VERSION == state:
-        pass
+        message = "conflict version - %s\n" % ent.remote_path
+        sys.stdout.write(message)
     elif FileState.DELETE_BOTH == state:
-        sys.stdout.write("delete     - %s\n" % ent.remote_path)
+        message = "delete both   - %s\n" % ent.remote_path
+        sys.stdout.write(message)
         ctxt.storageDao.remove(ent.remote_path)
     elif FileState.DELETE_REMOTE == state and pull:
-        sys.stdout.write("delete     - %s\n" % ent.remote_path)
+        message = "delete local  - %s\n" % ent.remote_path
         ctxt.fs.remove(ent.local_path)
         ctxt.storageDao.remove(ent.remote_path)
     elif FileState.DELETE_LOCAL == state and push:
-        sys.stdout.write("delete     - %s\n" % ent.remote_path)
-        ctxt.client.files_delete(ctxt.root, ent.remote_path)
-        ctxt.storageDao.remove(ent.remote_path)
+        message = "delete remote - %s\n" % ent.remote_path
+        sys.stdout.write(message)
+        response = ctxt.client.files_remove_file(ctxt.root, ent.remote_path)
+        if (response.status_code == 200):
+            ctxt.storageDao.remove(ent.remote_path)
     else:
-        sys.stdout.write("unknown %s\n" % ent.remote_path)
+        message = "unknown %s %s %s %s %s\n" % (state, push, pull, force, ent.remote_path)
+        sys.stdout.write(message)
 
+    return SyncResult(ent, state, message)
+
+def _sync_impl_iter(ctxt, paths, push=False, pull=False, force=False, recursive=False):
+    """ An iterator for syncing directories
+
+    yields a file entry followed by a boolean after syncing completes
+    i.e.
+        g = _sync_file_impl(...)
+        fent = next(g)
+        success = next(g)
+    """
+    paths = list(paths)
+    while len(paths) > 0:
+        dent = paths.pop(0)
+
+        if (ctxt.storageDao.isDir(dent.remote_base)) or (
+           ctxt.fs.exists(dent.local_base) and ctxt.fs.isdir(dent.local_base)):
+
+            check_result = _check(ctxt, dent.remote_base, dent.local_base)
+
+            for fent in check_result.files:
+                yield fent
+                result = _sync_file_impl(ctxt, fent, push, pull, force)
+                yield result
+
+            if recursive:
+                paths.extend(check_result.dirs)
+
+        else:
+            fent = _check_file(ctxt, dent.remote_base, dent.local_base)
+            yield fent
+
+            result = _sync_file_impl(ctxt, fent, push, pull, force)
+            yield result
+
+# TODO: deprecate this one
 def _sync_impl(ctxt, paths, push=False, pull=False, force=False, recursive=False):
 
     for dent in paths:
@@ -1521,8 +1837,9 @@ def _sync_impl(ctxt, paths, push=False, pull=False, force=False, recursive=False
                     force, recursive)
 
         else:
-            _sync_file(ctxt, dent.remote_base, dent.local_base,
-                push, pull, force)
+
+            fent = _check_file(ctxt, dent.remote_base, dent.local_base)
+            _sync_file_impl(ctxt, fent, push, pull, force)
 
 def _sync_get_file_impl(ctxt, rpath, lpath):
 
@@ -1550,10 +1867,10 @@ def _sync_put_file_impl(ctxt, lpath, rpath):
         mtime=record.mtime, permission=record.permission)
 
     if response.status_code == 409:
-        raise Exception("local database out of date. fetch first")
+        raise SyncException("local database out of date. fetch first")
 
     if response.status_code > 201:
-        raise Exception(response.text)
+        raise SyncException(response.text)
 
 def _copy_impl(ctxt, src, dst):
     """
@@ -1571,7 +1888,7 @@ def _copy_impl(ctxt, src, dst):
         root, remote_path = src[len(tag):].split("/", 1)
 
         if dst.startswith(tag):
-            raise Exception("invalid path: %s" % dst)
+            raise SyncException("invalid path: %s" % dst)
 
         response = ctxt.client.files_get_path(root, remote_path, stream=True)
         with ctxt.fs.open(dst, "wb") as wb:
@@ -1582,7 +1899,7 @@ def _copy_impl(ctxt, src, dst):
         root, remote_path = dst[len(tag):].split("/", 1)
 
         if src.startswith(tag) or not os.access(src, os.R_OK):
-            raise Exception("invalid path: %s" % src)
+            raise SyncException("invalid path: %s" % src)
 
         info = ctxt.fs.file_info(src)
 
@@ -1591,9 +1908,15 @@ def _copy_impl(ctxt, src, dst):
             mtime=info.mtime, permission=info.permission)
 
     else:
-        raise Exception("invalid source and destiniation path")
 
-def _list_impl(ctxt, root, path):
+        with ctxt.fs.open(src, "rb") as rb:
+            with ctxt.fs.open(dst, "wb") as wb:
+                chunk = rb.read(2048)
+                while chunk:
+                    wb.write(chunk)
+                    chunk = rb.read(2048)
+
+def _list_impl(ctxt, root, path, verbose=False):
     """
     list contents of a remote directory
     """
@@ -1605,26 +1928,39 @@ def _list_impl(ctxt, root, path):
         sys.exit(1)
 
     elif response.headers['content-type'] != "application/json":
-        raise Exception("Server responded with unexpected type: %s" %
+        raise SyncException("Server responded with unexpected type: %s" %
             response.headers['content-type'])
     else:
         data = response.json()['result']
 
         for dirname in sorted(data['directories']):
-            sys.stdout.write("%s%s/\n" % (" " * (41), dirname))
+            if verbose:
+                sys.stdout.write("%s%s/\n" % (" " * (41), dirname))
+            else:
+                sys.stdout.write("%s/\n" % dirname)
 
         for item in sorted(data['files'], key=lambda item: item['name']):
 
-            fvers = "%3d" % item['version']
-            fperm = oct(item.get('permission', 0))[2:].zfill(3)
-            ftime = time.localtime(item['mtime'])
-            fdate = time.strftime('%Y-%m-%d %H:%M:%S', ftime)
+            if verbose:
+                fvers = "%3d" % item['version']
+                fperm = oct(item.get('permission', 0))[2:].zfill(3)
+                ftime = time.localtime(item['mtime'])
+                fdate = time.strftime('%Y-%m-%d %H:%M:%S', ftime)
 
-            sys.stdout.write("%s %s %12d %s %s\n" % (
-                fvers, fdate, int(item['size']), fperm, item['name']))
+                sys.stdout.write("%s %s %12d %s %s\n" % (
+                    fvers, fdate, int(item['size']), fperm, item['name']))
+            else:
+                sys.stdout.write("%s\n" % (item['name']))
 
 def _move_get_actions(ctxt, ents, dst):
+    """
+    determines what actions, if any, to take given a list
+    of paths and a target directory or file location
 
+    returns two lists of items to act upon
+        dir_actions: a list of directory paths to move
+        file_actions: a list of file paths to move
+    """
     _d_actions = []
     _f_actions = []
 
@@ -1689,6 +2025,166 @@ def _move_impl(ctxt, ents, dst):
 
     for src, dst in _f_actions:
         _move_file_impl(ctxt, src, dst)
+
+def _remove_impl_local(ctxt, ent):
+    """remove db entry and local file"""
+    s1 = ctxt.storageDao.remove(ent.remote_base)
+
+    if os.path.exists(ent.local_base):
+        ctxt.fs.remove(ent.local_base)
+        s3 = True
+    else:
+        s3 = False
+
+    return s1 and s3
+
+def _remove_impl_remote(ctxt, ent):
+    """remove db entry and remote file"""
+
+    s1 = ctxt.storageDao.remove(ent.remote_base)
+
+    response = ctxt.client.files_remove_file(ctxt.root, ent.remote_base)
+    s2 = response.status_code == 200
+
+    return s1 and s2
+
+def _remove_impl_both(ctxt, ent):
+    """remove db entry, local file, and remote file"""
+
+    s1 = ctxt.storageDao.remove(ent.remote_base)
+
+    response = ctxt.client.files_remove_file(ctxt.root, ent.remote_base)
+    s2 = response.status_code == 200
+    if not s2:
+        print("%s: %s" % (response.status_code, response.text.strip()))
+
+    if os.path.exists(ent.local_base):
+        ctxt.fs.remove(ent.local_base)
+        s3 = True
+    else:
+        s3 = False
+
+    return s1 and s2 and s3
+
+def _remove_impl(ctxt, ents, local, remote):
+    """
+    mode:
+           delete both local and remote
+    local: delete local file and local db entry
+           the resulting state is as if the file had
+           never been pulled before
+    remote:delete remote file and local db entry
+           the resulting state is as if the file had
+           never been pushed before.
+    """
+
+    if local and remote:
+        raise ValueError()
+    elif local:
+        rm = _remove_impl_local
+    elif remote:
+        rm = _remove_impl_remote
+    else:
+        rm = _remove_impl_both
+
+    while len(ents) > 0:
+        ent = ents.pop(0)
+
+        # recursion on directories is hard
+
+        if ctxt.storageDao.isDir(ent.remote_base):
+            for item in ctxt.storageDao.listdir_files(ent.remote_base):
+                abs_path = ctxt.fs.join(ctxt.local_base, item.rel_path)
+                ents.append(DirEnt(None, item.rel_path, abs_path))
+            # ent is a directory
+            print("dir not implemented", ent)
+        elif ctxt.storageDao.file_info(ent.remote_base):
+            # ent is a file and exists on remote
+            if rm(ctxt, ent):
+                print(ent.remote_base)
+            else:
+                print("error removing: %s" % ent.remote_base)
+
+        elif ctxt.fs.exists(ent.local_base):
+            # ent is a file and exists locally
+            print("not tracked", ent)
+        else:
+            # ent does not exist locally
+            print("fail", ent)
+
+def _merge_get_path(fent):
+    # insert the filename version before the file extension
+    # unless the file does not have an extension
+    path, name = os.path.split(fent.local_path)
+    name, ext = os.path.splitext(name)
+    if not name:
+        name = ext
+        ext = ""
+
+    # regex: '^~(.*)\.[lr]@(\d+)(.*$)'
+    # original filename is group[0] + group[2]
+    lver = "%s/~%s.l@%d%s" % (path, name, fent.lf['version'], ext)
+    rver = "%s/~%s.r@%d%s" % (path, name, fent.rf['version'], ext)
+
+    return lver, rver
+
+def _merge_checkout_file_impl(ctxt, fent):
+    """
+    checkout the remote version and copy the local version
+    return the file path, and allow the user to choose their
+    own merge tool.
+    """
+
+    lver, rver = _merge_get_path(fent)
+
+    _sync_get_file_impl(ctxt, fent.remote_path, rver)
+
+    _copy_impl(ctxt, fent.local_path, lver)
+
+    return lver, rver
+
+def _merge_local_file_impl(ctxt, fent):
+    """
+    resolve the conflict by taking the remote version
+    including any user modifications
+    """
+
+    lver, rver = _merge_get_path(fent)
+
+    if os.path.exists(lver):
+        _copy_impl(ctxt, lver, fent.local_path)
+        ctxt.fs.remove(lver)
+
+    if os.path.exists(rver):
+        ctxt.fs.remove(rver)
+
+    return fent.local_path
+
+def _merge_remote_file_impl(ctxt, fent):
+    """
+    resolve the conflict by taking the local version
+    including any user modifications
+    """
+
+    lver, rver = _merge_get_path(fent)
+
+    if os.path.exists(rver):
+        _copy_impl(ctxt, rver, fent.local_path)
+        ctxt.fs.remove(rver)
+
+    if os.path.exists(lver):
+        ctxt.fs.remove(lver)
+
+    return fent.local_path
+
+def _merge_impl(ctxt, paths, action):
+
+    for dent in paths:
+        if (ctxt.storageDao.isDir(dent.remote_base)) or (ctxt.fs.exists(dent.local_base) and ctxt.fs.isdir(dent.local_base)):
+            print("error, directory", dent.remote_base)
+        else:
+            fent = _check_file(ctxt, dent.remote_base, dent.local_base)
+            action(ctxt, fent)
 
 def _attr_impl(ctxt, path):
 
@@ -1909,7 +2405,7 @@ class RootsCLI(CLI):
         response = client.files_get_roots()
 
         if response.status_code != 200:
-            raise Exception("unexpected error: %s" % response.status_code)
+            raise SyncException("unexpected error: %s" % response.status_code)
 
         roots = response.json()['result']
         for root in roots:
@@ -1936,6 +2432,9 @@ class InitCLI():
             default="",
             help="the relative path-prefix to checkout ("")")
 
+        subparser.add_argument('-f', '--force', action='store_true',
+            help="initialize even if the directory is not empty")
+
         subparser.add_argument('hostname')
         subparser.add_argument('root', nargs="?", default="default")
 
@@ -1952,7 +2451,7 @@ class InitCLI():
             return
         api_password = "APIKEY " + userinfo['apikey']
 
-        if len(os.listdir(args.local_base)):
+        if len(os.listdir(args.local_base)) and not args.force:
             sys.stderr.write("error: current directory is not empty\n")
             return
 
@@ -2104,12 +2603,104 @@ class SyncCLI(object):
         _sync_impl(ctxt, paths, push=args.push, pull=args.pull,
             force=args.force, recursive=args.recursion)
 
+class MergeCheckoutCLI(object):
+
+    def register(self, parser):
+
+        subparser = parser.add_parser('checkout', aliases=['co'],
+            help="checkout both remote and local versions for merging")
+        subparser.set_defaults(func=self.execute, cli=self)
+
+        # TODO: sub-sub parser checkout, merge-local, merge-remote, revert
+        # last three commands clean up two files created by checkout
+        # merge-local and merge-remote fail if the expected file does not exist
+        # all commands require a user to fetch/pull prior and push after
+        subparser.add_argument("paths", nargs="*",
+            help="list of paths to check the status on")
+
+    def execute(self, args):
+        ctxt = get_ctxt(os.getcwd())
+        paths = _parse_path_args(ctxt.fs, ctxt.remote_base,
+            ctxt.local_base, args.paths)
+        # TODO: if no args or for args that are directories -
+        #        scan for unique set of conflicted files and checkout
+
+        def action(ctxt, fent):
+            lver, rver = _merge_checkout_file_impl(ctxt, fent)
+            print(lver)
+            print(rver)
+
+        _merge_impl(ctxt, paths, action)
+
+class MergeLocalCLI(object):
+
+    def register(self, parser):
+
+        subparser = parser.add_parser('local',
+            help="resolve a merge by taking the local file")
+        subparser.set_defaults(func=self.execute, cli=self)
+
+        subparser.add_argument("paths", nargs="*",
+            help="list of paths to check the status on")
+
+    def execute(self, args):
+        ctxt = get_ctxt(os.getcwd())
+        paths = _parse_path_args(ctxt.fs, ctxt.remote_base,
+            ctxt.local_base, args.paths)
+
+        def action(ctxt, fent):
+
+            path = _merge_local_file_impl(ctxt, fent)
+            print("local", path)
+
+        _merge_impl(ctxt, paths, action)
+
+
+class MergeRemoteCLI(object):
+
+    def register(self, parser):
+
+        subparser = parser.add_parser('remote',
+            help="resolve a merge by taking the remote file")
+        subparser.set_defaults(func=self.execute, cli=self)
+
+        subparser.add_argument("paths", nargs="*",
+            help="list of paths to check the status on")
+
+    def execute(self, args):
+        ctxt = get_ctxt(os.getcwd())
+        paths = _parse_path_args(ctxt.fs, ctxt.remote_base,
+            ctxt.local_base, args.paths)
+
+        def action(ctxt, fent):
+            path = _merge_local_file_impl(ctxt, fent)
+            print("local", path)
+
+        _merge_impl(ctxt, paths, action)
+
+class MergeCLI(object):
+
+    def register(self, parser):
+
+        subparser = parser.add_parser('merge',
+            help="merge utility")
+
+        parser = subparser.add_subparsers()
+        MergeCheckoutCLI().register(parser)
+        MergeLocalCLI().register(parser)
+        MergeRemoteCLI().register(parser)
+
+    def execute(self, args):
+
+        print("test")
+
 class InfoCLI(object):
     """
     print file count and quota information
 
     verbose logging will print bytes instead of megabytes
     """
+
     def register(self, parser):
 
         subparser = parser.add_parser('info',
@@ -2123,6 +2714,12 @@ class InfoCLI(object):
 
         ctxt = get_ctxt(os.getcwd())
 
+        sys.stdout.write("hostname:    %s\n" % ctxt.client.host())
+        sys.stdout.write("root:        %s\n" % ctxt.root)
+        sys.stdout.write("remote_base: %s\n" % ctxt.remote_base)
+        sys.stdout.write("local_base:  %s\n" % ctxt.local_base)
+        sys.stdout.write("\n")
+
         response = ctxt.client.files_quota()
 
         obj = response.json()['result']
@@ -2133,9 +2730,9 @@ class InfoCLI(object):
             cap = "%.1f MB" % (cap / 1024 / 1024)
             usage = "%.1f MB" % (usage / 1024 / 1024)
 
-        sys.stdout.write("file_count: %d\n" % obj['nfiles'])
-        sys.stdout.write("usage: %s\n" % usage)
-        sys.stdout.write("capacity: %s\n" % cap)
+        sys.stdout.write("file_count:  %d\n" % obj['nfiles'])
+        sys.stdout.write("usage:       %s\n" % usage)
+        sys.stdout.write("capacity:    %s\n" % cap)
 
 class ListCLI(object):
 
@@ -2144,6 +2741,9 @@ class ListCLI(object):
         subparser = parser.add_parser('list', aliases=['ls'],
             help="list contents of a remote directory")
         subparser.set_defaults(func=self.execute, cli=self)
+
+        subparser.add_argument("-v", "--verbose", action='store_true',
+            help="show detailed file information")
 
         subparser.add_argument("--root", default=None,
             help="file system root to list")
@@ -2156,7 +2756,7 @@ class ListCLI(object):
         ctxt = get_ctxt(os.getcwd())
 
         root = args.root or ctxt.root
-        _list_impl(ctxt, root, args.path.strip("/"))
+        _list_impl(ctxt, root, args.path.strip("/"), args.verbose)
 
 class MoveCLI(object):
 
@@ -2183,6 +2783,30 @@ class MoveCLI(object):
             ctxt.local_base, [args.destination])[0]
 
         _move_impl(ctxt, paths, destination)
+
+class RemoveCLI(object):
+
+    def register(self, parser):
+
+        subparser = parser.add_parser('remove', aliases=['rm'],
+            help="move files or directories")
+        subparser.set_defaults(func=self.execute, cli=self)
+
+        group = subparser.add_mutually_exclusive_group()
+        group.add_argument('--local', action='store_true')
+        group.add_argument('--remote', action='store_true')
+
+        subparser.add_argument('paths', nargs="+",
+            help="relative remote path")
+
+    def execute(self, args):
+
+        ctxt = get_ctxt(os.getcwd())
+
+        paths = _parse_path_args(ctxt.fs, ctxt.remote_base,
+            ctxt.local_base, args.paths)
+
+        _remove_impl(ctxt, paths, args.local, args.remote)
 
 class AttrCLI(object):
 
@@ -2344,18 +2968,20 @@ def _register_parsers(parser):
     FetchCLI().register(parser)
     StatusCLI().register(parser)
     SyncCLI().register(parser)
+    MergeCLI().register(parser)
     InfoCLI().register(parser)
     ListCLI().register(parser)
     MoveCLI().register(parser)
+    RemoveCLI().register(parser)
     AttrCLI().register(parser)
     SetPassCLI().register(parser)
     SetKeyCLI().register(parser)
     SetPublicCLI().register(parser)
     GetPublicCLI().register(parser)
 
-    #GetCLI().register(parser)
-    #PutCLI().register(parser)
-    #CopyCLI().register(parser)
+    # GetCLI().register(parser)
+    # PutCLI().register(parser)
+    # CopyCLI().register(parser)
 
 def main():
 
@@ -2387,6 +3013,7 @@ def main():
         parser.print_help()
     else:
         args.func(args)
+
 
 if __name__ == '__main__':
     main()

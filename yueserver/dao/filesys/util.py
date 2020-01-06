@@ -4,7 +4,7 @@ import os
 import sys
 import posixpath
 
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 from threading import Thread, Condition, Lock, current_thread
 
 class FileRecord(object):
@@ -41,7 +41,6 @@ class FileRecord(object):
     def __repr__(self):
         return "FileRecord<%s@%s>" % (self.name, self.storage_path)
 
-
 def sh_escape(args):
     """
     print an argument list so that it can be copy and pasted to a terminal
@@ -66,6 +65,11 @@ class AbstractFileSystem(object):
     def __init__(self):
         super(AbstractFileSystem, self).__init__()
 
+        self._statistics = defaultdict(int)
+
+    def fsstats(self, path):
+        return self._statistics
+
     def islocal(self, path):
         return False
 
@@ -79,7 +83,10 @@ class AbstractFileSystem(object):
         return self.impl.join(path, *args)
 
     def split(self, path):
-        return self.impl.split(path)
+        parts = self.impl.split(path)
+        if parts[0] == self.scheme.rstrip("//"):
+            return (path, "")
+        return parts
 
     def splitext(self, path):
         return self.impl.splitext(path)
@@ -146,6 +153,15 @@ class AbstractFileSystem(object):
 
     def remove(self, path):
         raise NotImplementedError(path)
+
+    def rmdir(self, path):
+        raise NotImplementedError(path)
+
+    def drive(self, patha):
+        raise NotImplementedError(patha)
+
+    def url(self, path):
+        return path
 
 class _ProcFile(object):
     """A file-like object which writes to a process

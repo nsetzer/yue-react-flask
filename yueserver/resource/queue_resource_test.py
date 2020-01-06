@@ -68,8 +68,6 @@ class QueueResourceTestCase(unittest.TestCase):
             result = app.get('/api/queue/create', query_string=qs)
             self.assertEqual(result.status_code, 400, result)
 
-
-
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(QueueResourceTestCase)
     unittest.TextTestRunner().run(suite)

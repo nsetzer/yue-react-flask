@@ -7,9 +7,13 @@ mkdir -p dist
 cat <<EOF > backupdb.sh
 #!/bin/bash
 # backup:
-# $0 $dbuser $bucket
+# $0 $profile $dbuser $bucket
 # restore:
 # cat backup/backup-\$(date "+%y-%m-%d-%H-%M-%S").gz.* | gunzip | sudo -u yueapp psql yueapp
+
+if [ "$#" -ne 3 ];
+    echo "$0 profile dbuser bucket"
+fi
 
 cd \$(dirname \$0)
 profile=\$1
@@ -44,7 +48,7 @@ gunicorn=/opt/yueserver/yueserverenv/bin/gunicorn
 user=\$(stat -c '%U' wsgi.py)
 YUE_PRIVATE_KEY=\$(cat ./crypt/rsa.pem)
 export YUE_PRIVATE_KEY
-exec sudo -E -u "\$user" "\$gunicorn" -p"\${1:-production}" --worker-class eventlet -w 1 --bind unix:yueserver.sock wsgi:app
+exec sudo -E -u "\$user" "\$gunicorn" -t 240 -p"\${1:-production}" -w 2 --bind unix:yueserver.sock wsgi:app
 EOF
 
 cat <<EOF > start_debug.sh
@@ -61,7 +65,7 @@ cat <<EOF > uninstall.sh
 #!/bin/bash
 cd \$(dirname \$0)
 echo "uninstalling yueserver"
-rm -rf yueserver yueclient build
+rm -rf yueserver yueclient build frontend
 rm wsgi.py requirements.txt
 rm start.sh start_debug.sh uninstall.sh
 rm manage.sh backupdb.sh
@@ -78,7 +82,7 @@ __date__ = '$(date '+%Y-%m-%d %H:%M:%S')'
 EOF
 
 tar -czv --exclude='*.pyc' --exclude='__pycache__' \
-    config yueserver res wsgi.py requirements.txt setup.py \
+    config yueserver res wsgi.py requirements.txt setup.py frontend/build \
     start.sh start_debug.sh uninstall.sh manage.sh backupdb.sh | \
     cat util/installer.sh - > dist/yueserver-$version.tar.gz
 

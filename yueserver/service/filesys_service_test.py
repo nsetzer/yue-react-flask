@@ -94,6 +94,48 @@ class FileServiceTestCase(unittest.TestCase):
         with self.assertRaises(StorageNotFoundException):
             self.service.listDirectory(self.app.USER, root, "test")
 
+    def test_001e_doubleSave(self):
+
+        # saving to the same file twice should reuse the storage path
+        root = "mem"
+        path = "test/double.txt"
+
+        self.service.saveFile(self.app.USER, root, path, BytesIO(b"abc123"))
+
+        abs_path = self.service.getFilePath(self.app.USER, root, path)
+        fs_id = self.service.storageDao.getFilesystemId(
+            self.app.USER['id'], self.app.USER['role_id'], root)
+        record1 = self.service.storageDao.file_info(
+            self.app.USER['id'], fs_id, abs_path)
+
+        self.service.saveFile(self.app.USER, root, path, BytesIO(b"def456"))
+
+        record2 = self.service.storageDao.file_info(
+            self.app.USER['id'], fs_id, abs_path)
+
+        self.assertEqual(record1.storage_path, record2.storage_path)
+
+    def test_001f_updateVersion(self):
+
+        # same test as 001a, but increment the version (upsert->update)
+        root = "mem"
+        path = "test/test_version.txt"
+
+        self.service.saveFile(self.app.USER, root, path,
+            BytesIO(b"def456"), version = 3)
+        result = self.service.listSingleFile(self.app.USER, root, path)
+        self.assertEqual(result['files'][0]['version'], 3)
+
+
+        self.service.saveFile(self.app.USER, root, path,
+            BytesIO(b"def456"), version = 5)
+        result = self.service.listSingleFile(self.app.USER, root, path)
+        self.assertEqual(result['files'][0]['version'], 5)
+
+        with self.assertRaises(FileSysServiceException):
+            self.service.saveFile(self.app.USER, root, path,
+                BytesIO(b"def456"), version = 2)
+
     def test_002a_system(self):
 
         key1 = self.service.getUserSystemPassword(self.app.USER)
@@ -187,8 +229,6 @@ class FileServiceTestCase(unittest.TestCase):
 
         # _internalSave(user_id, storage_path, inputStream, chunk_size)
         # _internalCheckQuota(user_id, size, byte_index, uid)
-
-
 
 if __name__ == '__main__':
     main_test(sys.argv, globals())

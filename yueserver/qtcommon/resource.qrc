@@ -1,0 +1,14 @@
+ <!DOCTYPE RCC><RCC version="1.0">
+ <qresource>
+     <file>img/icon.png</file>
+     <file>img/fs_same.png</file>
+     <file>img/fs_push.png</file>
+     <file>img/fs_pull.png</file>
+     <file>img/fs_error.png</file>
+     <file>img/fs_conflict.png</file>
+     <file>img/fs_delete.png</file>
+     <file>img/fs_delete_remote.png</file>
+     <file>img/fs_ignore.png</file>
+     <file>img/fs_link.png</file>
+ </qresource>
+ </RCC>

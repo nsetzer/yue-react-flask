@@ -283,6 +283,7 @@ def _fetch_files(client, root):
         params = {'limit': limit, 'page': page}
         response = client.files_get_index_root(root, **params)
         if response.status_code != 200:
+            sys.stderr.write("%s\n" % response.text)
             sys.stderr.write("fetch songs error...\n")
             sys.exit(1)
 
@@ -303,7 +304,7 @@ def _fetch_songs(client):
     songs = dict()
 
     page = 0
-    limit = 500
+    limit = 2000
     while True:
 
         params = {
@@ -314,7 +315,7 @@ def _fetch_songs(client):
         }
         response = client.library_search_library(**params)
         if response.status_code != 200:
-            sys.stderr.write(response.text)
+            sys.stderr.write("%s\n" % response.text)
             sys.stderr.write("fetch songs error...\n")
             sys.exit(1)
 
@@ -425,3 +426,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+

@@ -389,6 +389,8 @@ class LibraryDao(object):
     def update(self, user_id, domain_id, song_id, song, commit=True):
 
         self.updateSongData(domain_id, song_id, song, commit=False)
+        # TODO: investigate what happens when this row does not yet exist
+        # see the implementation for incrementPlaycount
         self.updateUserData(user_id, song_id, song, commit=False)
 
         if commit:
@@ -437,6 +439,33 @@ class LibraryDao(object):
 
             if commit:
                 self.db.session.commit()
+
+    def incrementPlaycount(self, user_id, song_id, commit=True):
+
+        tab = self.dbtables.SongUserDataTable
+
+        query = tab.select().where(
+                and_(tab.c.song_id == song_id,
+                     tab.c.user_id == user_id))
+        result = self.db.session.execute(query).fetchone()
+
+        if result:
+            query = tab.update() \
+                .values({tab.c.play_count: tab.c.play_count + 1}) \
+                .where(
+                    and_(tab.c.song_id == song_id,
+                         tab.c.user_id == user_id))
+        else:
+            query = tab.insert() \
+                .values({
+                    tab.c.song_id: song_id,
+                    tab.c.user_id: user_id,
+                    tab.c.play_count: 1}) \
+
+        result = self.db.session.execute(query)
+
+        if commit:
+            self.db.session.commit()
 
     def findSongById(self, user_id, domain_id, song_id):
         results = self._query(user_id, domain_id,

@@ -6,6 +6,7 @@ import logging
 from functools import wraps
 from flask import after_this_request, request, jsonify, g
 import traceback
+import time
 from uuid import UUID
 
 from ..dao.util import parse_iso_format
@@ -14,7 +15,8 @@ from ..dao.exception import BackendException
 
 from ..service.exception import ServiceException
 
-from ..framework.web_resource import httpError
+from ..framework.web_resource import httpError, ArrayOpenApiBody, OpenApiParameter
+from ..service.transcode_service import ImageScale
 
 class HttpException(Exception):
     """docstring for HttpException"""
@@ -22,66 +24,77 @@ class HttpException(Exception):
         super(HttpException, self).__init__(message)
         self.status = code
 
-def _handle_exceptions(f, args, kwargs):
-    try:
-        return f(*args, **kwargs)
-    except HttpException as e:
-        traceback.print_exc()
-        return httpError(e.status, str(e))
+class _FileNotFoundError(object):
 
-    except FileNotFoundError as e:
+    type = FileNotFoundError
+
+    def handle(self, ex):
 
         reason = "File Not Found Error: "
+
         if hasattr(g, 'current_user') and g.current_user is not None:
-            reason = "Unhandled Exception (current user: %s): " % \
+            reason = "File Not Found (current user: %s): " % \
                 g.current_user['email']
 
-        return httpError(404, reason + str(e))
+        logging.exception(reason)
 
-    except BackendException as e:
+        return httpError(404, reason + str(ex))
+
+class _BackendException(object):
+
+    type = BackendException
+
+    def handle(self, ex):
 
         reason = "Unhandled Backend Exception: "
+
         if hasattr(g, 'current_user') and g.current_user is not None:
-            reason = "Unhandled Exception (current user: %s): " % \
+            reason = "Unhandled Backend Exception (current user: %s): " % \
                 g.current_user['email']
 
-        if e.HTTP_STATUS >= 500:
-            logging.exception(reason)
+        logging.exception(reason)
 
-        return httpError(e.HTTP_STATUS, reason + str(e))
+        return httpError(ex.HTTP_STATUS, reason + str(ex))
 
-    except ServiceException as e:
+class _ServiceException(object):
+
+    type = ServiceException
+
+    def handle(self, ex):
 
         reason = "Unhandled Service Exception: "
+
         if hasattr(g, 'current_user') and g.current_user is not None:
-            reason = "Unhandled Exception (current user: %s): " % \
+            reason = "Unhandled Service Exception (current user: %s): " % \
                 g.current_user['email']
 
-        #if e.HTTP_STATUS >= 500:
         logging.exception(reason)
 
-        return httpError(e.HTTP_STATUS, reason + str(e))
+        return httpError(ex.HTTP_STATUS, reason + str(ex))
 
-    except Exception as e:
-        # traceback.print_exc()
+class _Exception(object):
+
+    type = Exception
+
+    def handle(self, ex):
 
         reason = "Unhandled Exception: "
+
         if hasattr(g, 'current_user') and g.current_user is not None:
             reason = "Unhandled Exception (current user: %s): " % \
                 g.current_user['email']
 
         logging.exception(reason)
 
-        return httpError(500, reason + str(e))
+        return httpError(500, reason + str(ex))
 
-def get_request_header(req, header):
-    # TODO: can this method be deprecated?
-    if header in request.headers:
-        return request.headers[header]
-    elif header.lower() in request.headers:
-        return request.headers[header.lower()]
-    else:
-        raise HttpException("%s header not provided" % header, 401)
+_handlers = [
+    _FileNotFoundError(),
+    _BackendException(),
+    _BackendException(),
+    _ServiceException(),
+    _Exception()
+]
 
 __g_features = set()
 def __add_feature(features):
@@ -98,151 +111,176 @@ def __add_feature(features):
 def get_features():
     return frozenset(__g_features)
 
-def _requires_token_auth_impl(service, f, args, kwargs, features, token):
-    """
-    token based authentication for client side state management
+def SecurityBasic(resource, scope, request):
 
-    example:
-        curl -H "Authorization: TOKEN <token>" -X GET localhost:4200/api/user
+    token = request.headers.get("Authorization")
 
-    """
+    if token is None or not token.startswith('Basic '):
+        return False
 
-    try:
-        user_data = service.getUserFromToken(token, features)
-
-        g.current_user = user_data
-
-        return _handle_exceptions(f, args, kwargs)
-    except Exception as e:
-
-        logging.error("%s" % e)
-
-    return httpError(401, "failed to authenticate user")
-
-def _requires_basic_auth_impl(service, f, args, kwargs, features, token):
-    """
-    basic auth enables easy testing
-
-    example:
-        curl -u username:password -X GET localhost:4200/api/user
-        curl -H "Authorization: BASIC <token>" -X GET localhost:4200/api/user
-
-    """
+    token = token.encode('utf-8', 'ignore')
 
     try:
-        user_data = service.getUserFromBasicToken(token, features)
+        service = resource.user_service
+        g.current_user = service.getUserFromBasicToken(token, scope)
 
-        g.current_user = user_data
-
-        return _handle_exceptions(f, args, kwargs)
+        return True
     except Exception as e:
+        logging.exception("Basic Authentication Failed")
 
-        logging.error("%s" % e)
+    return False
 
-    return httpError(401, "failed to authenticate user")
+def SecurityToken(resource, scope, request):
 
-def _requires_apikey_auth_impl(service, f, args, kwargs, features, token):
-    """
-    basic auth enables easy testing
+    token = request.headers.get("Authorization")
 
-    example:
-        curl -H "Authorization: APIKEY <apikey>" -X GET localhost:4200/api/user
+    if token is None:
+        token = request.params.get('token', None)
 
-    """
+        if token is None:
+
+            return False
+
+    token = token.encode('utf-8', 'ignore')
 
     try:
-        user_data = service.getUserFromApikey(token, features)
+        service = resource.user_service
+        g.current_user = service.getUserFromToken(token, scope)
 
-        g.current_user = user_data
-
-        return _handle_exceptions(f, args, kwargs)
+        return True
     except Exception as e:
+        logging.exception("token error: %s" % e)
 
-        logging.error("%s" % e)
+    return False
 
-    return httpError(401, "failed to authenticate user")
+def SecurityApiKey(resource, scope, request):
+
+    token = request.headers.get("Authorization")
+
+    if token is None or not token.startswith('APIKEY '):
+
+        token = request.params.get('apikey', None)
+
+        if token is None:
+
+            return False
+
+        token = 'APIKEY ' + token
+
+    token = token.encode('utf-8', 'ignore')
+
+    try:
+        service = resource.user_service
+        g.current_user = service.getUserFromApikey(token, scope)
+
+        return True
+    except Exception as e:
+        pass
+
+    return False
+
+def SecurityUUIDToken(resource, scope, request):
+
+    token = request.headers.get("X-TOKEN")
+
+    if token is None:
+        return False
+
+    try:
+        service = resource.user_service
+        g.current_user = service.getUserFromUUIDToken(token, scope)
+
+        return True
+    except Exception as e:
+        pass
+
+    return False
+
+def requires_no_auth(f):
+    f._auth = False
+    f._handlers = _handlers
+    return f
 
 def requires_auth(features=None):
 
-    if isinstance(features, str):
+    if features is None:
+        features = []
+    elif isinstance(features, str):
         features = [features]
     __add_feature(features)
 
     def impl(f):
-        @wraps(f)
-        def wrapper(resource, *args, **kwargs):
+        f._auth = True
+        f._scope = features
+        f._security = [
+            SecurityBasic,
+            SecurityApiKey,
+            SecurityToken,
+            SecurityUUIDToken
+        ]
+        f._handlers = _handlers
 
-            args = list(args)
-            args.insert(0, resource)
-
-            service = resource.user_service
-
-            # check the request parameters for auth tokens
-
-            token = request.args.get('token', None)
-            if token is not None:
-                bytes_token = (token).encode("utf-8")
-                return _requires_token_auth_impl(service, f, args, kwargs,
-                    features, bytes_token)
-
-            token = request.args.get('apikey', None)
-            if token is not None:
-                bytes_token = ("APIKEY " + token).encode("utf-8")
-                return _requires_apikey_auth_impl(service, f, args, kwargs,
-                    features, bytes_token)
-
-            # check therequest headers for auth tokens
-
-            try:
-                token = get_request_header(request, "Authorization")
-            except HttpException as e:
-                return httpError(401, str(e))
-
-            token = request.headers['Authorization']
-            bytes_token = token.encode('utf-8', 'ignore')
-            if token.startswith("Basic "):
-                return _requires_basic_auth_impl(service, f, args, kwargs,
-                    features, bytes_token)
-            elif token.startswith("APIKEY "):
-                return _requires_apikey_auth_impl(service, f, args, kwargs,
-                    features, bytes_token)
-            return _requires_token_auth_impl(service, f, args, kwargs,
-                features, bytes_token)
-        return wrapper
+        return f
     return impl
 
-def datetime_validator(st):
-    t = 0
-    if st is not None:
-        try:
+class DateTimeType(OpenApiParameter):
+    def __init__(self):
+        super(DateTimeType, self).__init__("integer")
+
+        self.attrs["format"] = "date"
+
+    def __call__(self, value):
+
+        t = 0
+        if value is not None:
             try:
-                t = int(st)
-            except ValueError:
-                t = int(parse_iso_format(st).timestamp())
-            return t
-        except Exception as e:
-            logging.exception("unable to parse %s(%s) : %s" % (field, st, e))
-    raise Exception("Invalid datetime")
+                try:
+                    t = int(value)
+                except ValueError:
+                    t = int(parse_iso_format(value).timestamp())
+                return t
+            except Exception as e:
+                logging.exception("unable to parse (%r) : %s" % (value, e))
+        raise Exception("Invalid datetime")
 
 def search_order_validator(s):
     # todo: support multiple fields
+
+    if s.lower() == 'forest':
+        return [Song.artist_key, Song.album, Song.title]
+
     if s in Song.fields() or s.lower() == "random":
         return s
     raise Exception("Invalid column name")
 
-def uuid_validator(uuid_string):
-    try:
-        val = UUID(uuid_string, version=4)
-    except ValueError:
-        return False
+class UUIDOpenApiBody(object):
 
-    if str(val) != uuid_string:
-        raise Exception("Invalid uuid")
+    def __init__(self):
+        super()
+        self.__name__ = self.__class__.__name__
 
-    return uuid_string
+    def __call__(self, uuid_string):
+        try:
+            val = UUID(uuid_string, version=4)
+        except ValueError:
+            return False
 
-def uuid_list_validator(lst):
-    return [uuid_validator(s) for s in lst]
+        if str(val) != uuid_string:
+            raise Exception("Invalid uuid")
+
+        return uuid_string
+
+    def name(self):
+        return self.__class__.__name__.replace("OpenApiBody", "")
+
+    def mimetype(self):
+        return "application/json"
+
+    def type(self):
+        return "string"
+
+uuid_validator = UUIDOpenApiBody()
+uuid_list_validator = ArrayOpenApiBody(uuid_validator)
 
 def files_generator(fs, filepath, buffer_size=2048):
 
@@ -254,10 +292,38 @@ def files_generator(fs, filepath, buffer_size=2048):
 
 def files_generator_v2(stream, buffer_size=2048):
 
+    count = 0
+    success = False
+    start = time.time()
     try:
         buf = stream.read(buffer_size)
         while buf:
+            count += len(buf)
             yield buf
             buf = stream.read(buffer_size)
+        success = True
+    except BaseException:
+        logging.exception("exception while streaming data")
+        raise
     finally:
+        duration = (time.time() - start)
         stream.close()
+        if success:
+            logging.info("successfully transfered stream (%d bytes in %.3f seconds)", count, duration)
+        else:
+            logging.error("failed to transfered stream (%d bytes in %.3f seconds)", count, duration)
+
+class ImageScaleType(OpenApiParameter):
+    def __init__(self):
+        super(ImageScaleType, self).__init__("string")
+        self.enum(ImageScale.names())
+
+    def __call__(self, value):
+
+        index = ImageScale.fromName(value)
+        if index == 0:
+            raise Exception("invalid: %s" % value)
+        return index
+
+
+

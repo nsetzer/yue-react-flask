@@ -43,6 +43,66 @@ class UserResourceTestCase(unittest.TestCase):
 
             self.assertTrue(isok)
 
+    def test_login_baduser(self):
+
+        body = {
+            "email": "xxxxxx",
+            "password": "user000",
+        }
+
+        with self.app.test_client() as app:
+            result = app.post('/api/user/login',
+                             data=json.dumps(body),
+                             content_type='application/json')
+            self.assertEqual(result.status_code, 401)
+
+    def test_login_badpassword(self):
+
+        body = {
+            "email": "user000",
+            "password": "xxxxxx",
+        }
+
+        with self.app.test_client() as app:
+            result = app.post('/api/user/login',
+                             data=json.dumps(body),
+                             content_type='application/json')
+            self.assertEqual(result.status_code, 401)
+
+    def test_verify_token(self):
+
+        body = {
+            "email": "user000",
+            "password": "user000",
+        }
+
+        with self.app.test_client() as app:
+            result = app.post('/api/user/login',
+                             data=json.dumps(body),
+                             content_type='application/json')
+            self.assertEqual(result.status_code, 200)
+            data = json.loads(result.data.decode("utf-8"))
+            self.assertTrue("token" in data)
+
+            result = app.post('/api/user/token',
+                             data=json.dumps(data),
+                             content_type='application/json')
+            self.assertEqual(result.status_code, 200)
+
+    def test_verify_token_error(self):
+
+        with self.app.test_client() as app:
+            # no token field in json
+            result = app.post('/api/user/token',
+                             data=json.dumps({}),
+                             content_type='application/json')
+            self.assertEqual(result.status_code, 400)
+
+            # no json sent
+            result = app.post('/api/user/token',
+                             data=b"")
+            self.assertEqual(result.status_code, 400)
+
     def test_get_user_by_token(self):
         """ show that a user can log in, and make requests
         """
@@ -173,6 +233,43 @@ class UserResourceTestCase(unittest.TestCase):
             self.assertTrue('roles' in domain_info)
             self.assertTrue('users' in domain_info)
 
+    def test_uuid_token_login(self):
+        """ show that a user can log in, and make requests
+        """
+        two_weeks = 2 * 7 * 24 * 60 * 60
+        token = self.app.user_service.generateUUIDToken(self.app.USER, two_weeks)
+        headers = {"X-TOKEN": token}
+
+        with self.app.test_client() as app:
+            result = app.get('/api/user',
+                             headers=headers)
+            self.assertEqual(result.status_code, 200, result)
+            data = json.loads(result.data.decode("utf-8"))
+
+            self.assertTrue("result" in data)
+
+            user_info = data['result']
+
+            self.assertTrue('email' in user_info)
+            #an apikey is needed by non-clients
+            self.assertTrue('apikey' in user_info)
+            print(user_info)
+            # self.assertEqual(user_info['email'], username)
+
+    def test_uuid_token_create(self):
+        """ show that a user can log in, and make requests
+        """
+        username = "user000"
+        token = self.app.user_service.loginUser(username, username)
+        headers = {"Authorization": token}
+
+        with self.app.test_client() as app:
+            result = app.get('/api/user/token',
+                             headers=headers)
+            self.assertEqual(result.status_code, 200, result)
+            data = json.loads(result.data.decode("utf-8"))
+
+            self.assertTrue('X-TOKEN' in data['result'])
 
 def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(UserResourceTestCase)

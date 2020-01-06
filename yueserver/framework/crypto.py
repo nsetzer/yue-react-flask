@@ -53,11 +53,6 @@ class CryptoManager(object):
 
         return private_key, public_key
 
-    def load_key(self, outdir, name):
-        private_key = RSA.import_key(open("private.pem").read())
-        public_key = RSA.import_key(open("public.pem").read())
-        return private_key, public_key
-
     def encrypt(self, public_key, data):
         """ encrypt a block of data
 

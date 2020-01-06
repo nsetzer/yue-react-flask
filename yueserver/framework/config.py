@@ -14,6 +14,23 @@ import logging
 
 from .crypto import CipherConfigDecryptor, ParameterStoreConfigDecryptor
 
+def yload(path):
+
+    if not os.path.exists(path):
+        return {}
+
+    with open(path, "r") as rf:
+        return yaml.load(rf, Loader=Loader)
+
+def ydump(path, obj):
+    dir, _ = os.path.split(path)
+
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+
+    with open(path, "w") as wf:
+        yaml.dump(obj, wf, width=78, indent=4)
+
 class BaseConfig(object):
     def __init__(self):
         super(BaseConfig, self).__init__()
@@ -25,7 +42,7 @@ class BaseConfig(object):
             for k in keys:
                 p = p[k]
             return p
-        except:
+        except Exception:
             if not required:
                 return default
 
@@ -84,7 +101,7 @@ class CORSConfig(BaseConfig):
         self.origin = self.get_key(base, 'cors', 'origin',
             default="*")
         self.headers = self.get_key(base, 'cors', 'headers',
-            default="Origin, X-Requested-With, Content-Type, Accept")
+            default="Origin, X-Requested-With, Content-Type, Accept, Authorization")
         self.methods = self.get_key(base, 'cors', 'methods',
             default="GET, POST, PUT, DELETE, OPTIONS")
 
@@ -97,7 +114,6 @@ class LoggingConfig(BaseConfig):
         self.level = self.parse_loglevel(self.get_key(base, 'logging', 'level', default="error"))
 
 class ApplicationBaseConfig(BaseConfig):
-    """docstring for ApplicationBaseConfig"""
     def __init__(self, data):
         super(ApplicationBaseConfig, self).__init__()
 

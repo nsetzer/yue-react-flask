@@ -6,6 +6,8 @@ import os
 import sys
 import logging
 
+from calendar import timegm
+import time
 from flask import jsonify, render_template, g, request, send_file
 
 from ..dao.library import Song, LibraryException
@@ -13,81 +15,99 @@ from ..dao.util import pathCorrectCase
 
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, param, body, compressed, httpError, \
-    int_range, int_min, send_generator, null_validator
+    int_range, int_min, send_generator, null_validator, \
+    OpenApiParameter, Integer, String, Boolean, \
+    JsonOpenApiBody, ArrayOpenApiBody, StringOpenApiBody
 
-from .util import requires_auth, datetime_validator, search_order_validator, \
-    files_generator
+from .util import requires_auth, DateTimeType, files_generator, \
+    ImageScaleType
 
 from ..service.transcode_service import ImageScale
 
 from ..service.exception import AudioServiceException
 
-def song_validator(song):
+class SearchOrderType(String):
+    def __init__(self):
+        super(SearchOrderType, self).__init__()
+        items = list(Song.fields()) + ['forest', 'random', 'artist_key']
+        items.sort()
+        self.enum(items)
 
-    for field in [Song.artist, Song.album, Song.title]:
-        if field not in song:
-            raise Exception("missing field: %s" % field)
+    def __call__(self, value):
+        s = value.lower()
 
-    return song
+        if s == 'forest':
+            return [Song.artist_key, Song.album, Song.title]
 
-def song_list_validator(songs):
+        if s == 'random':
+            return s
 
-    if isinstance(songs, dict):
-        raise Exception("invalid song list: dictionary not expected")
+        return super().__call__(s)
 
-    for song in songs:
-        # every record must have a song id (to update), and
-        # at least one other field (that will be modified)
-        if Song.id not in song:
-            raise Exception("invalid song: missing id")
+class NewSongOpenApiBody(JsonOpenApiBody):
 
-        if len(song) < 2:
-            raise Exception("invalid song: missing field to update")
+    def model(self):
 
-    return songs
+        model = {}
 
-def song_audio_path_validator(info):
+        for key in Song.textFields():
+            model[key] = {"type": "string"}
 
-    if 'root' not in info:
-        raise Exception("Invalid request body: missing root")
+        for key in Song.numberFields():
+            model[key] = {"type": "integer"}
 
-    if 'path' not in info:
-        raise Exception("Invalid request body: missing path")
+        for key in Song.dateFields():
+            model[key] = {"type": "integer", "format": "date"}
 
-    return info
+        for key in [Song.artist, Song.album, Song.title]:
+            model[key]["required"] = True
 
-def image_scale_type(name):
+        return model
 
-    index = ImageScale.fromName(name)
-    if index == 0:
-        raise Exception("invalid: %s" % name)
-    return index
+class UpdateSongOpenApiBody(JsonOpenApiBody):
 
-def audio_format(s):
-    if s not in ("raw", "ogg", "mp3", "default"):
-        raise Exception("Invalid audio format: %s" % s)
-    return s
+    def model(self):
 
-def audio_channels(s):
-    if s not in ("stereo", "mono", "default"):
-        raise Exception("Invalid audio channel layout: %s" % s)
-    return s
+        model = {}
 
-def audio_quality(s):
-    if s not in ("low", "medium", "high"):
-        raise Exception("Invalid audio quality: %s" % s)
-    return s
+        for key in Song.textFields():
+            model[key] = {"type": "string"}
 
-def parameter_bool(s):
-    s = s.lower()
-    if s == "true":
-        return True
-    if s == "false":
-        return False
-    v = int(s)  # may throw
-    if v == 0:
-        return False
-    return True
+        for key in Song.numberFields():
+            model[key] = {"type": "integer"}
+
+        for key in Song.dateFields():
+            model[key] = {"type": "integer", "format": "date"}
+
+        for key in [Song.id]:
+            model[key]["required"] = True
+
+        return model
+
+class SongResourcePathOpenApiBody(JsonOpenApiBody):
+
+    def model(self):
+
+        return {
+            "root": {"type": "string", "required": True},
+            "path": {"type": "string", "required": True}
+        }
+
+class SongHistoryOpenApiBody(JsonOpenApiBody):
+    def model(self):
+
+        return {
+            "timestamp": {"type": "integer", "format": "date", "required": True},
+            "song_id": {"type": "string", "required": True}
+        }
+
+
+
+audio_format = String().enum(("raw", "ogg", "mp3", "default")).default("default")
+
+audio_channels = String().enum(("stereo", "mono", "default")).default("stereo")
+
+audio_quality = String().enum(("low", "medium", "high")).default("medium")
 
 class LibraryResource(WebResource):
     """LibraryResource
@@ -108,11 +128,11 @@ class LibraryResource(WebResource):
         self.filesys_service = filesys_service
 
     @get("")
-    @param("query", default=None)
-    @param("limit", type_=int_range(0, 500), default=50)
-    @param("page", type_=int_min(0), default=0)
-    @param("orderby", type_=search_order_validator, default=Song.artist)
-    @param("showBanished", type_=parameter_bool, default=False)
+    @param("query", type_=String().default(None))
+    @param("limit", type_=Integer().min(0).max(5000).default(50))
+    @param("page", type_=Integer().min(0).default(0))
+    @param("orderby", type_=SearchOrderType().default(Song.artist_key))
+    @param("showBanished", type_=Boolean().default(False))
     @requires_auth("library_read")
     @compressed
     def search_library(self):
@@ -132,7 +152,7 @@ class LibraryResource(WebResource):
         })
 
     @put("")
-    @body(song_list_validator)
+    @body(ArrayOpenApiBody(UpdateSongOpenApiBody()))
     @requires_auth("library_write")
     def update_song(self):
 
@@ -148,7 +168,7 @@ class LibraryResource(WebResource):
         return jsonify(result="OK"), 200
 
     @post("")
-    @body(song_validator)
+    @body(NewSongOpenApiBody())
     @requires_auth("library_write")
     def create_song(self):
 
@@ -181,12 +201,9 @@ class LibraryResource(WebResource):
         return jsonify(result=song)
 
     @get("<song_id>/audio")
-    @param("mode", type_=audio_format, default="default",
-        doc="one of raw|ogg|mp3|default")
-    @param("quality", type_=audio_quality, default="medium",
-        doc="one of low|medium|high")
-    @param("layout", type_=audio_channels, default="stereo",
-        doc="one of stereo|mono|default")
+    @param("mode", type_=audio_format)
+    @param("quality", type_=audio_quality)
+    @param("layout", type_=audio_channels)
     @requires_auth("library_read_song")
     def get_song_audio(self, song_id):
 
@@ -220,7 +237,7 @@ class LibraryResource(WebResource):
         return send_generator(go, name, file_size=size)
 
     @post("<song_id>/audio")
-    @body(song_audio_path_validator)
+    @body(SongResourcePathOpenApiBody())
     @requires_auth("library_write_song")
     def set_song_audio(self, song_id):
 
@@ -230,7 +247,7 @@ class LibraryResource(WebResource):
         return jsonify(result="OK"), 200
 
     @get("<song_id>/art")
-    @param("scale", type_=image_scale_type, default=ImageScale.MEDIUM)
+    @param("scale", type_=ImageScaleType().default(ImageScale.MEDIUM))
     @requires_auth("library_read_song")
     def get_song_art(self, song_id):
         """ get album art for a specific song
@@ -253,7 +270,7 @@ class LibraryResource(WebResource):
         return send_generator(go, record.name, file_size=record.size)
 
     @post("<song_id>/art")
-    @body(song_audio_path_validator)
+    @body(SongResourcePathOpenApiBody())
     @requires_auth("library_write_song")
     def set_song_art(self, song_id):
 
@@ -262,11 +279,30 @@ class LibraryResource(WebResource):
 
         return jsonify(result="OK"), 200
 
+    @post("history/increment")
+    @body(ArrayOpenApiBody(StringOpenApiBody()))
+    @requires_auth("library_write_song")
+    def increment_playcount(self):
+        """
+        curl -u admin:admin --header "Content-Type: application/json" \
+              -X POST -d '["7065c940-3c6f-429f-bfd9-27cccc402447"]' \
+              http://localhost:4200/api/library/history/increment
+        """
+
+        timestamp = timegm(time.localtime(time.time()))
+
+        records = [{'song_id': sid, 'timestamp': timestamp} for sid in g.body]
+
+        print(records)
+        self.audio_service.updatePlayCount(g.current_user, records)
+
+        return jsonify(result="OK"), 200
+
     @get("history")
-    @param("start", type_=datetime_validator, required=True)
-    @param("end", type_=datetime_validator, required=True)
-    @param("page", type_=int, default=0)
-    @param("page_size", type_=int, default=500)
+    @param("start", type_=DateTimeType().required(True))
+    @param("end", type_=DateTimeType().required(True))
+    @param("page", type_=Integer().default(0))
+    @param("page_size", type_=Integer().default(500))
     @requires_auth("user_read")
     def get_history(self):
         """
@@ -286,9 +322,25 @@ class LibraryResource(WebResource):
             "page": g.args.page,
             "page_size": g.args.page_size
         })
+        """
+        get song history between a date range
+        the start and end time can be an integer or ISO string.
+        """
+
+        offset = g.args.page * g.args.page_size
+
+        records = self.audio_service.getPlayHistory(
+            g.current_user, g.args.start, g.args.end,
+            offset=offset, limit=g.args.page_size)
+
+        return jsonify({
+            "result": records,
+            "page": g.args.page,
+            "page_size": g.args.page_size
+        })
 
     @post("history")
-    @body(null_validator)
+    @body(ArrayOpenApiBody(SongHistoryOpenApiBody()))
     @requires_auth("user_write")
     def update_history(self):
         """

@@ -14,7 +14,7 @@ function die() {
 
 function assert_fequal() {
     f1=$(cat $1 | md5sum | awk {'print $1'})
-    f2=$(cat $1 | md5sum | awk {'print $1'})
+    f2=$(cat $2 | md5sum | awk {'print $1'})
     [ "$f1" == "$f2" ] && echo "match: $1" || die "not equal: $1 $2"
 }
 

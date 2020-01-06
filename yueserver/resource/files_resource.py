@@ -16,18 +16,73 @@ from ..service.exception import FileSysServiceException
 from ..dao.settings import Settings, SettingsDao
 from ..dao.image import ImageScale, scale_image_stream
 
-from ..framework.web_resource import WebResource, \
+from ..framework.web_resource import WebResource, returns, \
     get, post, put, delete, body, header, compressed, param, httpError, \
-    int_range, int_min, send_generator, null_validator, boolean, timed
+    int_range, int_min, send_generator, null_validator, boolean, timed, \
+    OpenApiParameter, Integer, String, Boolean, \
+    JsonOpenApiBody, ArrayOpenApiBody, StringOpenApiBody, BinaryStreamOpenApiBody, \
+    BinaryStreamResponseOpenApiBody, TextStreamOpenApiBody, EmptyBodyOpenApiBody
 
-from .util import requires_auth, files_generator, files_generator_v2
+from .util import requires_auth, requires_no_auth, \
+    files_generator, files_generator_v2, ImageScaleType
 
-def validate_mode(s):
-    s = s.lower()
-    if s in [CryptMode.none, CryptMode.client,
-      CryptMode.server, CryptMode.system]:
-        return s
-    raise Exception("invalid encryption mode")
+validate_mode = String() \
+                    .enum((CryptMode.none, CryptMode.client,
+                           CryptMode.server, CryptMode.system),
+                          case_sensitive=False) \
+                    .default(None) \
+                    .description("encryption mode")
+
+validate_mode_client = String() \
+                    .enum((CryptMode.none, CryptMode.client,
+                           CryptMode.server, CryptMode.system),
+                          case_sensitive=False) \
+                    .default(CryptMode.client) \
+                    .description("encryption mode")
+
+validate_mode_system = String() \
+                    .enum((CryptMode.none, CryptMode.client,
+                           CryptMode.server, CryptMode.system),
+                          case_sensitive=False) \
+                    .default(CryptMode.system) \
+                    .description("encryption mode")
+
+class EncryptionKeyOpenApiBody(object):
+
+    def __init__(self):
+        super()
+        self.__name__ = self.__class__.__name__
+
+    def __call__(self, body):
+        """read the response body and decode the encryption key
+        validate that the key is well formed
+        """
+        content = request.headers.get('content-type')
+        if content and content != "text/plain":
+            # must be not given, or text/plain
+            raise Exception("invalid content type")
+        text = body.read().decode('utf-8')
+        return validatekey(text)
+
+    def name(self):
+        return self.__class__.__name__.replace("OpenApiBody", "")
+
+    def mimetype(self):
+        return "text/plain"
+
+    def type(self):
+        return "string"
+
+class MoveFileOpenApiBody(JsonOpenApiBody):
+
+    def model(self):
+
+        model = {
+            "src": {"type": "string"},
+            "dst": {"type": "string"},
+        }
+
+        return model
 
 def validate_key(body):
     """read the response body and decode the encryption key
@@ -40,18 +95,106 @@ def validate_key(body):
     text = body.read().decode('utf-8')
     return validatekey(text)
 
-def image_scale_type(name):
+def _list_path(service, root, path, list_=False, password=None, preview=None, dl=True):
+    # TODO: move this into the service layer
+    #       the argument against is it still depends on some flask features
 
-    if name.lower() in ('null', 'none'):
-        return None
+    # TODO: check for the header X-YUE-ENCRYPTION
+    # it should contain the base64 encoded password for the user
+    # use this to decrypt the file
 
-    index = ImageScale.fromName(name)
-    if index == 0:
-        raise Exception("invalid: %s" % name)
-    return index
+    abs_path = service.getFilePath(g.current_user, root, path)
+
+    isFile = False
+    try:
+        fs_id = service.storageDao.getFilesystemId(
+            g.current_user['id'], g.current_user['role_id'], root)
+        info = service.storageDao.file_info(
+            g.current_user['id'], fs_id, abs_path)
+        isFile = not info.isDir
+    except StorageNotFoundException as e:
+        pass
+
+    if isFile:
+
+        if list_:
+            result = service.listSingleFile(g.current_user, root, path)
+            return jsonify(result=result)
+        elif preview:
+
+            # cache control for preview files
+            # check the incoming request to see if the file has changed
+            ETag = "%s:%s" % (path, str(info.version))
+            if 'If-None-Match' in request.headers:
+                if request.headers['If-None-Match'] == ETag:
+                    return b"", 304
+
+            _, name = service.fs.split(info.file_path)
+            # todo: return a object containing size and path?
+            # table: file_id, preview_mode, preview_url, preview_size
+            # TODO: investigate this method, previewFile
+            # it is causing a significant amount of request latency
+            # even when the preview already exists
+            url = service.previewFile(g.current_user,
+                root, path, preview, password)
+
+            stream = service.fs.open(url, "rb")
+            if info.encryption in (CryptMode.server, CryptMode.system):
+                if not password and info.encryption == CryptMode.server:
+                    return httpError(400, "Invalid Password")
+                stream = service.decryptStream(g.current_user,
+                        password, stream, "r", info.encryption)
+            go = files_generator_v2(stream)
+            headers = {
+                'Cache-Control': 'max-age=31536000',
+                'ETag': ETag,
+                'X-YUE-ROOT': root,
+                'X-YUE-PATH': path,
+            }
+
+            return send_generator(go, '%s.%s.png' % (name, preview),
+                file_size=None, headers=headers, attachment=dl)
+        else:
+            ETag = "%s:%s" % (path, str(info.version))
+            if 'If-None-Match' in request.headers:
+                if request.headers['If-None-Match'] == ETag:
+                    return b"", 304
+
+            _, name = service.fs.split(info.file_path)
+            stream = service.fs.open(info.storage_path, "rb")
+            if info.encryption in (CryptMode.server, CryptMode.system):
+                if not password and info.encryption == CryptMode.server:
+                    return httpError(400, "Invalid Password")
+                stream = service.decryptStream(g.current_user,
+                    password, stream, "r", info.encryption)
+            go = files_generator_v2(stream)
+            headers = {
+                "X-YUE-VERSION": info.version,
+                "X-YUE-PERMISSION": info.permission,
+                "X-YUE-MTIME": info.mtime,
+                'Cache-Control': 'max-age=31536000',
+                'ETag': ETag,
+                'X-YUE-ROOT': root,
+                'X-YUE-PATH': path,
+                'X-YUE-NAME': name,
+            }
+            return send_generator(go, name,
+                file_size=None, headers=headers, attachment=dl)
+
+    try:
+        result = service.listDirectory(g.current_user, root, path)
+        return jsonify(result=result)
+    except StorageNotFoundException as e:
+        if path == "":
+            return jsonify(result={"name": root,
+                "path": "", "parent": "",
+                "files": [], "directories": []})
+
+        return httpError(404, "not found: root: `%s` path: `%s`" % (
+            root, path))
 
 class FilesResource(WebResource):
-    """QueueResource
+    """FilesResource
 
     features:
         filesystem_read  - user can read files/dirs
@@ -69,24 +212,43 @@ class FilesResource(WebResource):
     @timed(100)
     def get_path_root(self, root):
         password = g.headers.get('X-YUE-PASSWORD', None)
-        return self._list_path(root, "", password=password, preview=None)
+        return _list_path(self.filesys_service, root, "", password=password, preview=None)
 
     @get("<root>/path/<path:resPath>")
-    @param("list", type_=boolean, default=False,
-        doc="do not retrieve contents for files if true")
-    @param("preview", type_=image_scale_type, default=None,
-        doc="return a preview picture of the resource")
+    @param("list", type_=Boolean().default(False).description(
+        "do not retrieve contents for files if true"))
+    @param("preview", type_=ImageScaleType().description(
+        "return a preview picture of the resource"))
     @header("X-YUE-PASSWORD")
     @requires_auth("filesystem_read")
+    @param("dl", type_=Boolean().default(True))
+    @returns({200: BinaryStreamResponseOpenApiBody()})
     @timed(100)
     def get_path(self, root, resPath):
         password = g.headers.get('X-YUE-PASSWORD', None)
-        return self._list_path(root, resPath, g.args.list,
-            password=password, preview=g.args.preview)
+        return _list_path(self.filesys_service, root, resPath, g.args.list,
+            password=password, preview=g.args.preview, dl=g.args.dl)
+
+    @get("public/<fileId>/<name>")
+    @param("dl", type_=Boolean().default(True))
+    @param("info", type_=Boolean().default(False))
+    @header("X-YUE-PASSWORD")
+    @requires_no_auth
+    def get_public_named_file(self, fileId, name):
+        """
+        including a file name in the url is a browser hack to download
+        the file with the correct file name.
+        the name is not required for any other reason
+
+        it also allows for generating permanent links with meaningful urls
+        """
+        return self.get_public_file(fileId)
 
     @get("public/<fileId>")
-    @param("dl", type_=boolean, default=True)
+    @param("dl", type_=Boolean().default(True))
+    @param("info", type_=Boolean().default(False))
     @header("X-YUE-PASSWORD")
+    @requires_no_auth
     def get_public_file(self, fileId):
         """
         return a file that has a public access file identifier.
@@ -98,12 +260,16 @@ class FilesResource(WebResource):
 
         try:
 
-            password = g.headers.get('X-YUE-PASSWORD', None)
-            info, stream = self.filesys_service.loadPublicFile(
-                fileId, password)
-            go = files_generator_v2(stream)
-            return send_generator(go, info.name,
-                file_size=info.size, attachment=g.args.dl)
+            if g.args.info:
+                info = self.filesys_service.publicFileInfo(fileId)
+                return jsonify(result={'file': info})
+            else:
+                password = g.headers.get('X-YUE-PASSWORD', None)
+                info, stream = self.filesys_service.loadPublicFile(
+                    fileId, password)
+                go = files_generator_v2(stream)
+                return send_generator(go, info.name,
+                    file_size=info.size, attachment=g.args.dl)
 
         except FileSysServiceException:
             return httpError(401, "invalid file id or password")
@@ -112,7 +278,8 @@ class FilesResource(WebResource):
 
     @put("public/<root>/path/<path:resPath>")
     @header("X-YUE-PASSWORD")
-    @param("revoke", type_=boolean, default=False)
+    @param("revoke", type_=Boolean().default(False))
+    @body(EmptyBodyOpenApiBody())
     @requires_auth("filesystem_write")
     def make_public(self, root, resPath):
         """
@@ -135,8 +302,8 @@ class FilesResource(WebResource):
         })
 
     @get("<root>/index/")
-    @param("limit", type_=int_range(0, 500), default=50)
-    @param("page", type_=int_min(0), default=0)
+    @param("limit", type_=Integer().min(0).max(500).default(50))
+    @param("page", type_=Integer().min(0).default(0))
     @requires_auth("filesystem_read")
     @compressed
     def get_index_root(self, root):
@@ -154,8 +321,8 @@ class FilesResource(WebResource):
         })
 
     @get("<root>/index/<path:resPath>")
-    @param("limit", type_=int_range(0, 500), default=50)
-    @param("page", type_=int_min(0), default=0)
+    @param("limit", type_=Integer().min(0).max(500).default(50))
+    @param("page", type_=Integer().min(0).default(0))
     @requires_auth("filesystem_read")
     @compressed
     def get_index(self, root, resPath):
@@ -172,46 +339,88 @@ class FilesResource(WebResource):
             "page_size": g.args.limit,
         })
 
+    # mimetype="application/octet-stream"
+    # mimetype='application/x-www-form-urlencoded'
     @post("<root>/path/<path:resPath>")
-    @param("mtime", type_=int, doc="set file modified time")
-    @param("permission", type_=int, doc="unix file permissions", default=0o644)
-    @param("version", type_=int, doc="file version", default=0)
-    @param("crypt", type_=validate_mode, doc="encryption mode",
-        default=None)
+    @param("mtime", type_=Integer().description("set file modified time"))
+    @param("permission", type_=Integer().default(0o644).description("unix file permissions"))
+    @param("version", type_=Integer().default(0).description("file version"))
+    @param("crypt", type_=validate_mode)
     @header("X-YUE-PASSWORD")
-    @body(null_validator, content_type="application/octet-stream")
+    @body(BinaryStreamOpenApiBody(),
+          content_type="application/octet-stream")
+    @returns([200, 400, 401, 409])
     @requires_auth("filesystem_write")
     @timed(100)
     def upload(self, root, resPath):
         """
         mtime: on a successful upload, set the modified time to mtime,
                unix epoch time in seconds
-        versiom: if greater than 1, validate version
+        version: if greater than 1, validate version
 
         error codes:
             409: file already exists and is a newer version
         """
-        stream = g.body
+
+        stream = None
+        # support multi part form uploads that
+        # have exactly one file in the payload
+        # TODO: should we fail otherwise for uploads with more than 1 file
+
+        if request.files and len(request.files) == 1:
+            for key in request.files.keys():
+                stream = request.files.get(key)
+        else:
+            stream = g.body
 
         if g.args.crypt in (CryptMode.server, CryptMode.system):
             password = g.headers.get('X-YUE-PASSWORD', None)
             stream = self.filesys_service.encryptStream(g.current_user,
                 password, stream, "r", g.args.crypt)
 
-        self.filesys_service.saveFile(
+        data = self.filesys_service.saveFile(
             g.current_user, root, resPath, stream,
             mtime=g.args.mtime, version=g.args.version,
             permission=g.args.permission, encryption=g.args.crypt)
 
-        return jsonify(result="OK"), 200
+        return jsonify(result="OK", file_info=data)
 
     @delete("<root>/path/<path:resPath>")
     @requires_auth("filesystem_delete")
-    def delete(self, root, resPath):
+    def remove_file(self, root, resPath):
 
         self.filesys_service.remove(g.current_user, root, resPath)
 
         return jsonify(result="OK")
+
+    @post("<root>/move")
+    @body(MoveFileOpenApiBody())
+    @requires_auth("filesystem_write")
+    def move_file(self, root):
+        """
+        move or rename a file
+        """
+
+        self.filesys_service.moveFile(g.current_user,
+            root, g.body['src'], g.body['dst'])
+
+        return jsonify(result="OK"), 200
+
+    @get("<root>/search")
+    @param("path", type_=String().default(None))
+    @param("terms", type_=String().default("").repeated())
+    @param("limit", type_=Integer().min(0).max(2500).default(50))
+    @param("page", type_=Integer().min(0).default(0))
+    @requires_auth("filesystem_read")
+    def search(self, root):
+
+        limit = g.args.limit
+        offset = g.args.limit * g.args.page
+
+        records = self.filesys_service.search(
+            g.current_user, root, g.args.path, g.args.terms, limit, offset)
+
+        return jsonify(result={'files': records})
 
     @get("roots")
     @requires_auth("filesystem_read")
@@ -229,7 +438,7 @@ class FilesResource(WebResource):
     @put("change_password")
     @header("X-YUE-PASSWORD")
     @requires_auth("filesystem_write")
-    @body(null_validator, content_type="application/octet-stream")
+    @body(StringOpenApiBody(mimetype="application/octet-stream"), content_type="application/octet-stream")
     def change_password(self):
         """
         change the 'server' encryption key
@@ -239,7 +448,7 @@ class FilesResource(WebResource):
         """
 
         password = g.headers.get('X-YUE-PASSWORD', None)
-        new_password = g.body.read().decode("utf-8").strip()
+        new_password = g.body
 
         if not password:
             return httpError(400, "Invalid password 1")
@@ -252,7 +461,7 @@ class FilesResource(WebResource):
         return jsonify(result="OK"), 200
 
     @get("user_key")
-    @param("mode", type_=validate_mode, default=CryptMode.client)
+    @param("mode", type_=validate_mode_client)
     @requires_auth("filesystem_write")
     def user_key(self):
         """
@@ -267,7 +476,7 @@ class FilesResource(WebResource):
 
     @put("user_key")
     @requires_auth("filesystem_write")
-    @body(validate_key, content_type="text/plain")
+    @body(EncryptionKeyOpenApiBody(), content_type="text/plain")
     def set_user_key(self):
         """
         set the 'client' encryption key
@@ -279,72 +488,97 @@ class FilesResource(WebResource):
         self.filesys_service.setUserClientKey(g.current_user, g.body)
         return jsonify(result="OK"), 200
 
-    def _list_path(self, root, path, list_=False, password=None, preview=None):
-        # TODO: move this into the service layer
 
-        # TODO: check for the header X-YUE-ENCRYPTION
-        # it should contain the base64 encoded password for the user
-        # use this to decrypt the file
 
-        fs = self.filesys_service.fs
+class NotesResource(WebResource):
+    """NotesResource
 
-        abs_path = self.filesys_service.getFilePath(g.current_user, root, path)
+    features:
+        filesystem_read  - user can read files/dirs
+        filesystem_write - user can upload files
+    """
+    def __init__(self, user_service, filesys_service):
+        super(NotesResource, self).__init__("/api/fs")
 
-        isFile = False
-        try:
-            fs_id = self.filesys_service.storageDao.getFilesystemId(
-                g.current_user['id'], g.current_user['role_id'], root)
-            info = self.filesys_service.storageDao.file_info(
-                g.current_user['id'], fs_id, abs_path)
-            isFile = not info.isDir
-        except StorageNotFoundException as e:
-            pass
+        self.user_service = user_service
+        self.filesys_service = filesys_service
 
-        if isFile:
+    @get("notes")
+    @param("root", type_=String().default("default"))
+    @param("base", type_=String().default('public/notes'))
+    @requires_auth("filesystem_read")
+    def get_user_notes(self):
+        notes = self.filesys_service.getUserNotes(
+            g.current_user, g.args.root, dir_path=g.args.base)
+        # return note_id => note_info
+        payload = {note['file_name']: note for note in notes}
+        return jsonify(result=payload)
 
-            if list_:
-                result = self.filesys_service.listSingleFile(g.current_user, root, path)
-                return jsonify(result=result)
-            elif preview:
-                _, name = self.filesys_service.fs.split(info.file_path)
-                # todo: return a object containing size and path?
-                # table: file_id, preview_mode, preview_url, preview_size
-                url = self.filesys_service.previewFile(g.current_user,
-                    root, path, preview, password)
-                stream = self.filesys_service.fs.open(url, "rb")
-                if info.encryption in (CryptMode.server, CryptMode.system):
-                    if not password and info.encryption == CryptMode.server:
-                        return httpError(400, "Invalid Password")
-                    stream = self.filesys_service.decryptStream(g.current_user,
-                            password, stream, "r", info.encryption)
-                go = files_generator_v2(stream)
-                headers = {}
-                return send_generator(go, '%s.%s.png' % (name, preview),
-                    file_size=None, headers=headers)
-            else:
-                _, name = self.filesys_service.fs.split(info.file_path)
-                stream = self.filesys_service.fs.open(info.storage_path, "rb")
-                if info.encryption in (CryptMode.server, CryptMode.system):
-                    if not password and info.encryption == CryptMode.server:
-                        return httpError(400, "Invalid Password")
-                    stream = self.filesys_service.decryptStream(g.current_user,
-                        password, stream, "r", info.encryption)
-                go = files_generator_v2(stream)
-                headers = {
-                    "X-YUE-VERSION": info.version,
-                    "X-YUE-PERMISSION": info.permission,
-                    "X-YUE-MTIME": info.mtime,
-                }
-                return send_generator(go, name, file_size=None, headers=headers)
+    @post("notes")
+    @param("root", type_=String().default("default"))
+    @param("base", type_=String().default('public/notes'))
+    @param("title", type_=String().required())
+    @header("X-YUE-PASSWORD")
+    @body(TextStreamOpenApiBody(), content_type='text/plain')
+    @requires_auth("filesystem_write")
+    def create_user_note(self):
 
-        try:
-            result = self.filesys_service.listDirectory(g.current_user, root, path)
-            return jsonify(result=result)
-        except StorageNotFoundException as e:
-            if path == "":
-                return jsonify(result={"name": root,
-                    "path": "", "parent": "",
-                    "files": [], "directories": []})
+        # todo return the note id / file id after saving the note
 
-            return httpError(404, "not found: root: `%s` path: `%s`" % (
-                root, path))
+        file_name = title.replace(" ", "_") + '.txt'
+        resPath = self.filesys_service.fs.join(g.args.base, file_name)
+
+        stream = g.body
+        if g.args.crypt in (CryptMode.server, CryptMode.system):
+            password = g.headers.get('X-YUE-PASSWORD', None)
+            stream = self.filesys_service.encryptStream(g.current_user,
+                password, stream, "r", g.args.crypt)
+        self.filesys_service.saveFile(
+            g.current_user, g.args.root, resPath, stream,
+            encryption=g.args.crypt)
+
+        return jsonify(result="OK"), 200
+
+    @get("notes/<note_id>")
+    @param("root", type_=String().default("default"))
+    @param("base", type_=String().default('public/notes'))
+    @header("X-YUE-PASSWORD")
+    @requires_auth("filesystem_read")
+    def get_user_note_content(self, note_id):
+        password = g.headers.get('X-YUE-PASSWORD', None)
+        resPath = self.filesys_service.fs.join(g.args.base, note_id)
+        return _list_path(self.filesys_service, g.args.root, resPath,
+            False, password=password, preview=None)
+
+
+    @post("notes/<note_id>")
+    @param("root", type_=String().default("default"))
+    @param("base", type_=String().default('public/notes'))
+    @param("crypt", type_=validate_mode_system)
+    @header("X-YUE-PASSWORD")
+    @body(TextStreamOpenApiBody(), content_type='text/plain')
+    @requires_auth("filesystem_write")
+    def set_user_note_content(self, note_id):
+        """convenience function wrapping file upload"""
+        resPath = self.filesys_service.fs.join(g.args.base, note_id)
+
+        stream = g.body
+        if g.args.crypt in (CryptMode.server, CryptMode.system):
+            password = g.headers.get('X-YUE-PASSWORD', None)
+            stream = self.filesys_service.encryptStream(g.current_user,
+                password, stream, "r", g.args.crypt)
+        self.filesys_service.saveFile(
+            g.current_user, g.args.root, resPath, stream,
+            encryption=g.args.crypt)
+
+        return jsonify(result="OK"), 200
+
+    @delete("notes/<note_id>")
+    @param("root", type_=String().default("default"))
+    @param("base", type_=String().default('public/notes'))
+    @requires_auth("filesystem_write")
+    def delete_user_note(self, note_id):
+        """convenience function wrapping file delete"""
+        resPath = self.filesys_service.fs.join(g.args.base, note_id)
+        self.filesys_service.remove(g.current_user, g.args.root, resPath)
+        return jsonify(result="OK")

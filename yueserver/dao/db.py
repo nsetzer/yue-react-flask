@@ -231,7 +231,7 @@ def db_repopulate(db, dbtables, user_name, domain_name, json_objects):
     return True
 
 def db_health(db):
-    if db.connection_string.startswith("sqlite:"):
+    if db.kind() == "sqlite":
         return {"status": "OK", "stats": {}}
 
     try:
