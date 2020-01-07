@@ -119,11 +119,59 @@ const style = {
     }),
 
     encryption: {
-        "system": StyleSheet({width: '1em', 'border-color': '#000000', 'border-width': '1px', 'border-radius': '5px 0 0 5px', height: '60px', background: "#9b111e"}),
-        "server": StyleSheet({width: '1em', 'border-color': '#000000', 'border-width': '1px', 'border-radius': '5px 0 0 5px', height: '60px', background: "#0f52ba"}),
-        "client": StyleSheet({width: '1em', 'border-color': '#000000', 'border-width': '1px', 'border-radius': '5px 0 0 5px', height: '60px', background: "#FFD700"}),
-        "none":   StyleSheet({width: '1em', 'border-color': '#000000', 'border-width': '1px', 'border-radius': '5px 0 0 5px', height: '60px', background: "#000000"}),
-    }
+        "system": StyleSheet({'min-width': '1em', width: '1em', 'border-color': '#000000', 'border-width': '1px', 'border-radius': '5px 0 0 5px', height: '60px', background: "#9b111e"}),
+        "server": StyleSheet({'min-width': '1em', width: '1em', 'border-color': '#000000', 'border-width': '1px', 'border-radius': '5px 0 0 5px', height: '60px', background: "#0f52ba"}),
+        "client": StyleSheet({'min-width': '1em', width: '1em', 'border-color': '#000000', 'border-width': '1px', 'border-radius': '5px 0 0 5px', height: '60px', background: "#FFD700"}),
+        "none":   StyleSheet({'min-width': '1em', width: '1em', 'border-color': '#000000', 'border-width': '1px', 'border-radius': '5px 0 0 5px', height: '60px', background: "#000000"}),
+    },
+
+    svgDiv: StyleSheet({
+        'min-width': '80px',
+        'min-height': '60px',
+        'width': '80px',
+        'height': '60px',
+        'margin-right':  '0.5em'
+    }),
+
+    text: StyleSheet({
+        width: '100%',
+        'text-overflow': 'ellipsis',
+        'white-space':'nowrap',
+    }),
+    textSpacer: StyleSheet({
+        'margin-left': '0em',
+        'margin-right': '1em'
+    }),
+    // http://jsfiddle.net/4ah8ernc/2/
+    ellideMiddle: StyleSheet({
+        display: 'inline-flex',
+        'flex-wrap': 'nowrap',
+        'max-width': '100%',
+        'min-width': '0',
+    }),
+    ellideMiddleDiv1: StyleSheet({
+        flex: '0 1 auto',
+        'text-overflow': 'ellipsis',
+        overflow: 'hidden',
+        'white-space': 'nowrap',
+    }),
+    ellideMiddleDiv2: StyleSheet({
+        flex: '1 0 auto',
+        'white-space': 'nowrap',
+    }),
+    ellideMiddleLink: StyleSheet({
+        cursor: 'pointer', color: 'blue'
+    }),
+    center: StyleSheet({
+        'text-align': 'center',
+        'position': 'sticky',
+        'background': 'yellow',
+        top:0
+    }),
+    paddedText: StyleSheet({
+        'padding-top': '.5em',
+        'padding-bottom': '.5em',
+    }),
 }
 
 StyleSheet(`.${style.item}:hover`, {background: '#0000FF22'})
@@ -144,7 +192,7 @@ class SvgElement extends DomElement {
     }
 }
 
-class SvgIconElement extends DomElement {
+class SvgIconElementImpl extends DomElement {
     constructor(url1, url2, props) {
         super("img", {src:url1, width: 80, height: 60, ...props}, [])
 
@@ -158,6 +206,12 @@ class SvgIconElement extends DomElement {
         if (this.props.src != this.state.url2 && this.state.url2) {
             this.updateProps({src: this.state.url2})
         }
+    }
+}
+
+class SvgIconElement extends DomElement {
+    constructor(url1, url2, props) {
+        super("div", {className: style.svgDiv}, [new SvgIconElementImpl(url1, url2, props)])
     }
 }
 
@@ -182,13 +236,65 @@ class ListElement extends DomElement {
     }
 }
 
+class MiddleText extends DomElement {
+    constructor(text) {
+        super("div", {className: [style.textSpacer]}, [])
+
+        if (text.length > 4) {
+            const idx = text.length - 4;
+            const text1 = text.substr(0, idx);
+            const text2 = text.substr(idx, 4);
+
+            this.updateProps({className: [style.ellideMiddle, style.textSpacer]});
+
+            this.appendChild(new DomElement("div",
+                {className: style.ellideMiddleDiv1},
+                [new TextElement(text1)]));
+
+            this.appendChild(new DomElement("div",
+                {className: style.ellideMiddleDiv2},
+                [new TextElement(text2)]));
+        } else {
+            this.appendChild(new TextElement(text))
+        }
+
+    }
+
+    setText(text) {
+        const idx = text.length - 4;
+        const text1 = text.substr(0, idx);
+        const text2 = text.substr(idx, 4);
+        this.children[0].children[0].setText(text1)
+        this.children[1].children[0].setText(text2)
+    }
+}
+
+class MiddleTextLink extends MiddleText {
+    constructor(text, url) {
+        super(text)
+
+        this.state = {
+            url
+        }
+
+        this.props.className.push(style.ellideMiddleLink)
+    }
+
+    onClick() {
+        if (this.state.url.startsWith('http')) {
+            window.open(this.state.url, '_blank');
+        } else {
+            history.pushState({}, "", this.state.url)
+        }
+    }
+}
 class DirectoryElement extends DomElement {
     constructor(name, url) {
         super("div", {className: style.listItemDir}, [])
 
         this.appendChild(new DomElement("div", {className: style.encryption["none"]}, []))
         this.appendChild(new SvgIconElement('/static/icon/folder.svg', null, {className: style.icon1}))
-        this.appendChild(new LinkElement(name, url))
+        this.appendChild(new MiddleTextLink(name, url))
     }
 }
 
@@ -204,7 +310,11 @@ class FileElement extends DomElement {
             details: null,
         }
 
-        const elem = new DomElement("div", {onClick: this.handleShowDetails.bind(this)}, [new TextElement(fileInfo.name)])
+        const elem = new MiddleText(fileInfo.name);
+        elem.updateProps({onClick: this.handleShowDetails.bind(this)})
+        //const elem = new DomElement("div",
+        //    {className: style.text, onClick: this.handleShowDetails.bind(this)},
+        //    [new TextElement(fileInfo.name)])
 
         let url1 = '/static/icon/file.svg';
         let url2 = null;
@@ -232,6 +342,10 @@ class FileElement extends DomElement {
         if (this.attrs.details === null) {
             this.attrs.details = new DomElement("div", {className: style.fileDetailsShow}, [])
             this.appendChild(this.attrs.details)
+            this.attrs.details.appendChild(new DomElement('div', {className: style.paddedText}, [new LinkElement("Preview",
+                api.fsPathUrl(this.state.fileInfo.root, this.state.fileInfo.path + '/' + this.state.fileInfo.name, 0))]))
+            this.attrs.details.appendChild(new DomElement('div', {className: style.paddedText}, [new LinkElement("Download",
+                api.fsPathUrl(this.state.fileInfo.root, this.state.fileInfo.path + '/' + this.state.fileInfo.name, 1))]))
             this.attrs.details.appendChild(new DomElement('div', {}, [new TextElement(`Version: ${this.state.fileInfo.version}`)]))
             this.attrs.details.appendChild(new DomElement('div', {}, [new TextElement(`Size: ${this.state.fileInfo.size}`)]))
             this.attrs.details.appendChild(new DomElement('div', {}, [new TextElement(`Encryption: ${this.state.fileInfo.encryption}`)]))
@@ -286,7 +400,7 @@ export class StoragePage extends DomElement {
         super("div", {}, []);
 
         this.attrs = {
-            txt: new TextElement(""),
+            txt: new MiddleText("....."),
             regex: daedalus.patternToRegexp(":root?/:dirpath*", false),
             lst: new ListElement(),
             more: new MoreMenuShadow(this.handleHideFileMore.bind(this)),
@@ -294,7 +408,7 @@ export class StoragePage extends DomElement {
 
 
         this.appendChild(this.attrs.more)
-        this.appendChild(this.attrs.txt)
+        this.appendChild(new DomElement("div", {className: style.center}, [this.attrs.txt]))
 
         this.appendChild(this.attrs.lst)
 

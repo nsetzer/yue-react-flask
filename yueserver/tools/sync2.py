@@ -2481,6 +2481,7 @@ def _search_impl(ctxt, terms):
             "size": item.remote_size,
             "mtime": item.remote_mtime,
             "permission": item.remote_permission,
+            "public": item.remote_public,
             "encryption": item.remote_encryption
         }
 
@@ -3112,6 +3113,19 @@ class SearchCLI(object):
 
         _search_impl(ctxt, args.terms)
 
+class VersionCLI(object):
+
+    def register(self, parser):
+
+        subparser = parser.add_parser('version',
+            help="print version info")
+        subparser.set_defaults(func=self.execute, cli=self)
+
+    def execute(self, args):
+
+        print(yueserver.__version__)
+        print(yueserver.__date__)
+
 def _register_parsers(parser):
 
     RootsCLI().register(parser)
@@ -3130,6 +3144,7 @@ def _register_parsers(parser):
     SetPublicCLI().register(parser)
     GetPublicCLI().register(parser)
     SearchCLI().register(parser)
+    VersionCLI().register(parser)
 
     # GetCLI().register(parser)
     # PutCLI().register(parser)

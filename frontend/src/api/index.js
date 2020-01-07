@@ -63,6 +63,15 @@ export function fsPathPreviewUrl(root, path) {
     return url + params
 }
 
+export function fsPathUrl(root, path, dl) {
+    const url = env.baseUrl + '/api/fs/' + root +'/path/' + path;
+    const params = daedalus.util.serializeParameters({
+        'dl': dl,
+        'token': user_token,
+    })
+    return url + params
+}
+
 export function fsGetPath(root, path) {
     const url = env.baseUrl + '/api/fs/' + root +'/path/' + path;
     const cfg = getAuthConfig()

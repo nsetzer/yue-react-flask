@@ -1,4 +1,4 @@
-__version__ = '0.0.0'
-__branch__ = 'master'
-__githash__ = 'd819d2429fdc97d8a06c95ce3958b3c548ef0601'
-__date__ = '2019-02-24 09:34:36'
+__version__ = '0.1.0-00e9852e-feat-daedalus'
+__branch__ = 'feat/daedalus'
+__githash__ = '00e9852ed238e89eade37281e39b82dba9e27ca1'
+__date__ = '2020-01-06 20:07:33.351626'
