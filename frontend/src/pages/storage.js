@@ -172,6 +172,13 @@ const style = {
         'padding-top': '.5em',
         'padding-bottom': '.5em',
     }),
+    navBar: StyleSheet({
+        display: 'flex',
+        'flex-direction': 'row',
+        'justify-content': 'flex-start',
+        'align-items': 'center',
+        width: '100%'
+    }),
 }
 
 StyleSheet(`.${style.item}:hover`, {background: '#0000FF22'})
@@ -288,6 +295,7 @@ class MiddleTextLink extends MiddleText {
         }
     }
 }
+
 class DirectoryElement extends DomElement {
     constructor(name, url) {
         super("div", {className: style.listItemDir}, [])
@@ -323,7 +331,7 @@ class FileElement extends DomElement {
         const ext = fileInfo.name.split('.').pop()
         if (extPreview[ext]===true) {
             url2 = url1
-            url1 = api.fsPathPreviewUrl(fileInfo.root, fileInfo.path + '/' + fileInfo.name)
+            url1 = api.fsPathPreviewUrl(fileInfo.root, daedalus.util.joinpath(fileInfo.path, fileInfo.name))
             className = style.icon2
         }
 
@@ -340,12 +348,15 @@ class FileElement extends DomElement {
     handleShowDetails(event) {
         console.log(this.state.fileInfo)
         if (this.attrs.details === null) {
+            const fpath = daedalus.util.joinpath(this.state.fileInfo.path, this.state.fileInfo.name)
             this.attrs.details = new DomElement("div", {className: style.fileDetailsShow}, [])
             this.appendChild(this.attrs.details)
             this.attrs.details.appendChild(new DomElement('div', {className: style.paddedText}, [new LinkElement("Preview",
-                api.fsPathUrl(this.state.fileInfo.root, this.state.fileInfo.path + '/' + this.state.fileInfo.name, 0))]))
+                api.fsPathUrl(this.state.fileInfo.root, fpath, 0))]))
+            this.attrs.details.appendChild(new DomElement('div', {className: style.paddedText}, [new LinkElement("Text Preview",
+                api.fsGetPathContentUrl(this.state.fileInfo.root, fpath))]))
             this.attrs.details.appendChild(new DomElement('div', {className: style.paddedText}, [new LinkElement("Download",
-                api.fsPathUrl(this.state.fileInfo.root, this.state.fileInfo.path + '/' + this.state.fileInfo.name, 1))]))
+                api.fsPathUrl(this.state.fileInfo.root, fpath, 1))]))
             this.attrs.details.appendChild(new DomElement('div', {}, [new TextElement(`Version: ${this.state.fileInfo.version}`)]))
             this.attrs.details.appendChild(new DomElement('div', {}, [new TextElement(`Size: ${this.state.fileInfo.size}`)]))
             this.attrs.details.appendChild(new DomElement('div', {}, [new TextElement(`Encryption: ${this.state.fileInfo.encryption}`)]))
@@ -379,7 +390,7 @@ class MoreMenuShadow extends DomElement {
 
 class MoreMenuButton extends DomElement {
     constructor(text, callback) {
-        super("div", {className: [style.moreMenuButton]}, [new TextElement(text)])
+        super("div", {className: [style.moreMenuButton], onClick: callback}, [new TextElement(text)])
     }
 }
 
@@ -395,20 +406,113 @@ class MoreMenu extends DomElement {
     }
 }
 
+class StorageNavBar extends DomElement {
+    constructor() {
+        super("div", {className: style.navBar}, []);
+    }
+
+    addActionElement(element) {
+        this.appendChild(element)
+    }
+}
+
+class StorageUploadManager extends ListElement {
+    constructor() {
+        super();
+
+        this.attrs = {
+            files: {},
+            root: null,
+            dirpath: null,
+        }
+    }
+
+    startUpload(root, dirpath) {
+
+        api.fsUploadFile(
+            root,
+            dirpath,
+            {},
+            {crypt: 'system'},
+            this.handleUploadFileSuccess.bind(this),
+            this.handleUploadFileFailure.bind(this),
+            this.handleUploadFileProgress.bind(this))
+
+        this.attrs.root = root
+        this.attrs.dirpath = dirpath
+    }
+
+    handleUploadFileSuccess(msg) {
+        console.log(msg)
+        const item = this.attrs.files[msg.name]
+        //item.fileInfo.mtime = msg.lastModified
+        setTimeout(()=>this.handleRemove(msg), 1000)
+    }
+
+    handleUploadFileFailure(msg) {
+        console.log(msg)
+        setTimeout(()=>this.handleRemove(msg), 1000)
+    }
+
+    handleUploadFileProgress(msg) {
+        if (msg.first) {
+            const fileInfo = {
+                encryption: 'system',
+                mtime: 0,
+                name: msg.fileName,
+                path: this.attrs.root,
+                permission: 0,
+                public: "",
+                root: this.attrs.dirpath,
+                size: msg.fileSize,
+                version: 1,
+                bytesTransfered: msg.bytesTransfered
+            }
+            const node = new TextElement(msg.fileName)
+            this.attrs.files[msg.fileName] = {fileInfo, node}
+            this.appendChild(node)
+        } else {
+            const fileInfo = this.attrs.files[msg.fileName].fileInfo
+            fileInfo.bytesTransfered = msg.bytesTransfered
+        }
+    }
+
+    handleRemove(msg) {
+        const item = this.attrs.files[msg.fileName]
+
+        this.removeChild(item.node);
+        delete this.attrs.files[msg.fileName];
+        console.log(this.attrs);
+    }
+}
+
 export class StoragePage extends DomElement {
     constructor() {
         super("div", {}, []);
 
         this.attrs = {
-            txt: new MiddleText("....."),
+            txt: new MiddleText("....."), // TODO FIXME
             regex: daedalus.patternToRegexp(":root?/:dirpath*", false),
             lst: new ListElement(),
             more: new MoreMenuShadow(this.handleHideFileMore.bind(this)),
+            banner: new DomElement("div", {className: style.center}, []),
+            navBar: new StorageNavBar(),
+            uploadManager: new StorageUploadManager()
         }
 
+        this.state = {
+            parent_url: null,
+        }
 
         this.appendChild(this.attrs.more)
-        this.appendChild(new DomElement("div", {className: style.center}, [this.attrs.txt]))
+        this.appendChild(this.attrs.banner)
+
+        this.attrs.banner.appendChild(this.attrs.txt)
+        this.attrs.banner.appendChild(this.attrs.navBar)
+        this.attrs.banner.appendChild(this.attrs.uploadManager)
+
+        this.attrs.navBar.addActionElement(new MoreMenuButton("back", this.handleOpenParent.bind(this)))
+        this.attrs.navBar.addActionElement(new MoreMenuButton("upload", this.handleUploadFile.bind(this)))
 
         this.appendChild(this.attrs.lst)
 
@@ -420,62 +524,65 @@ export class StoragePage extends DomElement {
         // matching
         // note that the top level route could be instead: /u/storage/:root?/:dirpath*
         // this was written only to abuse the element api
-        if (newState.match && (!oldState.match || oldState.match.path !== newState.match.path)) {
-            const match = daedalus.locationMatch(this.attrs.regex, newState.match.path)
-            Object.assign(newState.match, match)
-            this.handleRouteChange(newState.match.root, newState.match.dirpath)
-        } else {
-            if (newState.match) {
-                Object.assign(newState.match, {root: "", dirpath: ""})
-            } else {
-                newState.match = {root: "", dirpath: ""}
+        if (newState.match) {
+            if (!oldState.match || oldState.match.path !== newState.match.path) {
+                const match = daedalus.locationMatch(this.attrs.regex, newState.match.path)
+                Object.assign(newState.match, match)
+
+                this.handleRouteChange(newState.match.root, newState.match.dirpath)
             }
+        } else {
+            newState.match = {root: "", dirpath: ""}
         }
 
-
+        //if (oldState.parent_url != newState.parent_url) {
+        //}
     }
 
     getRoots() {
         api.fsGetRoots()
             .then(data => {this.handleGetRoots(data.result)})
-            .catch(error => {console.error(error)})
+            .catch(error => {this.handleGetRootsError(error)})
     }
 
     handleGetRoots(result) {
-        console.log(result)
+        this.updateState({parent_url:null})
 
         this.attrs.lst.removeChildren()
 
         result.forEach(name => {
-            console.log(this.state.match, name)
             let url = '/u/storage/list/' + this.state.match.path + '/' + name
             url = url.replace(/\/\//, '/')
-            this.attrs.lst.appendChild(new DirectoryElement(name, url), null)
+            this.attrs.lst.appendChild(new DirectoryElement(name, url))
 
         })
+    }
 
+    handleGetRootsError(error) {
+        console.error(error)
+        this.updateState({parent_url:null})
+        this.attrs.lst.removeChildren()
+        this.attrs.lst.appendChild(new TextElement("error loading roots"))
     }
 
     getPath(root, dirpath) {
         api.fsGetPath(root, dirpath)
             .then(data => {this.handleGetPath(data.result)})
-            .catch(error => {console.error(error)})
+            .catch(error => {this.handleGetPathError(error)})
     }
 
     handleGetPath(result) {
+
         console.log(result)
-
-        this.attrs.lst.removeChildren()
-
         let url;
         if (result.parent === result.path) {
             url = daedalus.util.joinpath('/u/storage/list/')
         } else {
             url = daedalus.util.joinpath('/u/storage/list/', result.name, result.parent)
         }
-        console.log(url)
 
-        this.attrs.lst.appendChild(new DirectoryElement("up one level", url), null)
+        this.updateState({parent_url:url})
+        this.attrs.lst.removeChildren()
 
         result.directories.forEach(name => {
             let url = daedalus.util.joinpath('/u/storage/list/', this.state.match.path, name)
@@ -484,15 +591,42 @@ export class StoragePage extends DomElement {
         })
 
         result.files.forEach(item => {
-            let url = daedalus.util.joinpath('/u/storage/list/', this.state.match.path, item.name)
+            //let url = daedalus.util.joinpath('/u/storage/list/', this.state.match.path, item.name)
             const cbk = ()=>{this.handleShowFileMore(item)};
             item.root = this.state.match.root;
             item.path = this.state.match.dirpath;
             this.attrs.lst.appendChild(new FileElement(item, cbk))
 
         })
+    }
+
+    handleGetPathError(error) {
+        console.error(error)
+        this.updateState({parent_url:null}) // TODO FIXME
+        this.attrs.lst.removeChildren()
+        this.attrs.lst.appendChild(new TextElement("error loading roots"))
+    }
+
+    handleOpenParent() {
+        console.log(this.state.parent_url)
+        if (this.state.parent_url) {
+            history.pushState({}, "", this.state.parent_url)
+        }
+    }
+
+    handleUploadFile() {
+        console.log()
+        if (this.state.match.root !== "") {
+
+            this.attrs.uploadManager.startUpload(
+                this.state.match.root,
+                this.state.match.dirpath)
+
+        }
 
     }
+
+
 
     handleShowFileMore(item) {
         this.attrs.more.updateProps({className: [style.moreMenuShadow, style.moreMenuShow]})
@@ -512,4 +646,51 @@ export class StoragePage extends DomElement {
 
         this.attrs.txt.setText(root + "/" + dirpath)
     }
+}
+
+// formatted
+class FormattedText extends DomElement {
+    constructor(text) {
+        super("pre", {style:{margin:0}}, [new TextElement(text)]);
+    }
+
+    setText(text) {
+        this.children[0].setText(text)
+    }
+}
+
+export class StoragePreviewPage extends DomElement {
+    constructor() {
+        super("div", {}, [new FormattedText("")]);
+
+
+        this.attrs = {
+            regex: daedalus.patternToRegexp(":root?/:dirpath*", false),
+        }
+
+
+    }
+
+    elementUpdateState(oldState, newState) {
+        if (newState.match && (!oldState.match || oldState.match.path !== newState.match.path)) {
+            const match = daedalus.locationMatch(this.attrs.regex, newState.match.path)
+            Object.assign(newState.match, match)
+            this.handleRouteChange(newState.match.root, newState.match.dirpath)
+        } else {
+            if (newState.match) {
+                Object.assign(newState.match, {root: "", path: ""})
+            } else {
+                newState.match = {root: "", path: ""}
+            }
+        }
+    }
+
+    handleRouteChange(root, path) {
+        console.log(root, path)
+
+        api.fsGetPathContent(root, path)
+            .then(res=>this.children[0].setText(res))
+            .catch(err=>console.error(err))
+    }
+
 }

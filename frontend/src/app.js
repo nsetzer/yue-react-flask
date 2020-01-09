@@ -17,14 +17,14 @@ const styles = {
     body: StyleSheet({
         margin:0,
         padding:0,
-        background: {color: 'red'}
+        //background: {color: 'red'}
     }),
     root: StyleSheet({
         width: '100vw',
         height: '100vh',
-        margin: 0,
+        margin: {left: 0, top: 0, bottom: 0, right: 0},
         padding: 0,
-        background: {color: 'cyan'}
+        //background: {color: 'cyan'}
     }),
 }
 
@@ -47,7 +47,7 @@ function reqAuth(elem) {
         () => {},
         () => {history.pushState({}, "", "/")}
     )
-    element.updateProps({style: {height: '100%', width: '100%', 'background-color': '#00FF0033'}})
+    //element.updateProps({style: {height: '100%', width: '100%', 'background-color': '#00FF0033'}})
     return element;
 }
 
@@ -58,7 +58,7 @@ function reqNoAuth(elem) {
         () => {},
         () => {history.pushState({}, "", "/u/storage/list")}
     )
-    element.updateProps({style: {height: '100%', width: '100%', 'background-color': '#FFFF0033'}})
+    //element.updateProps({style: {height: '100%', width: '100%', 'background-color': '#FFFF0033'}})
     return element;
 }
 
@@ -73,7 +73,8 @@ export class Root extends DomElement {
         this.attrs = {
             main: () => new pages.LandingPage(),
             login: () => reqNoAuth(new pages.LoginPage()),
-            user_storage: () => reqAuth(new pages.StoragePage('div', {}, [])),
+            user_storage: () => reqAuth(new pages.StoragePage()),
+            user_storage_preview: () => reqAuth(new pages.StoragePreviewPage()),
             user: () => reqAuth(new DomElement('div', {}, [])),
             'public': () => new DomElement('div', {}, [])
         }
@@ -82,6 +83,7 @@ export class Root extends DomElement {
 
     buildRouter() {
         this.attrs.router = new Router([
+            {pattern: "/u/storage/preview/:path*",   element: this.attrs.user_storage_preview},
             {pattern: "/u/storage/:mode/:path*",   element: this.attrs.user_storage},
             {pattern: "/u/:path*",   element: this.attrs.user},
             {pattern: "/p/:path*",   element: this.attrs.public},
@@ -89,7 +91,10 @@ export class Root extends DomElement {
             {pattern: "/:path*",     element: this.attrs.main},
         ], ()=>{return new Home()})
 
-        this.attrs.router.updateProps({style: {height: '100%', width: '100%', 'background-color': '#FFFFFF33'}})
+        // TODO: RHS margin is browser and OS Dependant
+        this.attrs.router.updateProps({style: {'margin-right': '17px'}})
+
+        //this.attrs.router.updateProps({style: {height: '100%', width: '100%', 'background-color': '#FFFFFF33'}})
         this.appendChild(this.attrs.router)
     }
 

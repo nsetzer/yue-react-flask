@@ -54,7 +54,7 @@ export function fsGetRoots() {
 }
 
 export function fsPathPreviewUrl(root, path) {
-    const url = env.baseUrl + '/api/fs/' + root +'/path/' + path;
+    const url = env.baseUrl + daedalus.util.joinpath('/api/fs', root, 'path', path);
     const params = daedalus.util.serializeParameters({
         preview:'thumb',
         'dl': 0,
@@ -64,7 +64,8 @@ export function fsPathPreviewUrl(root, path) {
 }
 
 export function fsPathUrl(root, path, dl) {
-    const url = env.baseUrl + '/api/fs/' + root +'/path/' + path;
+
+    const url = env.baseUrl + daedalus.util.joinpath('/api/fs', root, 'path', path);
     const params = daedalus.util.serializeParameters({
         'dl': dl,
         'token': user_token,
@@ -73,9 +74,21 @@ export function fsPathUrl(root, path, dl) {
 }
 
 export function fsGetPath(root, path) {
-    const url = env.baseUrl + '/api/fs/' + root +'/path/' + path;
+    const url = env.baseUrl + daedalus.util.joinpath('/api/fs', root, 'path', path);
     const cfg = getAuthConfig()
     return api.requests.get_json(url, cfg);
+}
+
+export function fsGetPathContent(root, path) {
+    const url = env.baseUrl + daedalus.util.joinpath('/api/fs', root, 'path', path);
+    const cfg = getAuthConfig()
+    return api.requests.get_text(url, cfg);
+}
+
+export function fsGetPathContentUrl(root, path) {
+
+    const url = window.location.origin + daedalus.util.joinpath('/u/storage/preview', root, path);
+    return url;
 }
 
 export function fsSearch(root, path, terms, page, limit) {
@@ -101,4 +114,39 @@ export function fsPublicUriRevoke(root, path) {
 export function fsPublicUriInfo(file_id) {
     const url = env.baseUrl + '/api/fs/public/' + file_id + serialize({info: true})
     return api.requests.get_json(url);
+}
+
+
+/**
+ * params:
+ *   crypt: One of: client, server, system, none. default: none
+ *          client and system are not supported
+ *
+ *          none: no encryption is performed
+ *          client: file is encrypted, key is managed by the user client side
+ *            files are encrypted and decrypted by the client
+ *            files can only be decrypted by the owner
+ *            the server (and database) never have access to the decrypted key
+ *          server: file is encrypted, key is managed by the user server side
+ *            files are encrypted and decrypted by the server
+ *            files can only be decrypted by the owner
+ *            man in the middle attacks could determine the encryption key
+ *          system: file is encrypted, key is managed by the application
+ *            files are encrypted and decrypted by the server
+ *            files can be decrypted by users other than the file owner
+ *            the encryption key is compromised if the database is compromised
+ */
+export function fsUploadFile(root, path, headers, params, success=null, failure=null, progress=null) {
+
+    const urlbase = env.baseUrl + daedalus.util.joinpath('/api/fs', root, 'path', path)
+    const cfg = getAuthConfig()
+    return daedalus.uploadFile(
+        urlbase,
+        headers={...cfg.headers, ...headers},
+        params=params,
+        success,
+        failure,
+        progress
+    );
+
 }

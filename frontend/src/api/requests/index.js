@@ -1,4 +1,15 @@
 
+export function get_text(url, parameters) {
+
+    if (parameters === undefined) {
+        parameters = {}
+    }
+
+    parameters.method = "GET"
+
+    return fetch(url, parameters).then((response) => {return response.text()})
+}
+
 export function get_json(url, parameters) {
 
     if (parameters === undefined) {
