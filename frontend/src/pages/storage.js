@@ -4,6 +4,18 @@ SERVER SIDE TODO:
 - limit simultaneous transcodes using the task engine
   each request submits a task and waits until the task completes
   before returning the response
+
+- thumbnail images need a special class to handle concurrency better
+
+  new Thumb()         - enqueue this onto a work queue
+  Thumb.cancelWork()  - remove all elements from the work queue
+  use the idle request api to start a work look to process the work
+  to be done. When opening a new page cancel existing work, creating
+  the FileElements will create new Thumb() elements and enqueue the work
+  When the Thumb is created, the src prop is not set.
+  The work to be done is to set the src prop for a single image and
+  on success or failure move on to the next image.
+
 */
 import daedalus with {
     StyleSheet,
@@ -32,8 +44,6 @@ const extPreview = {
 }
 
 const style = {
-    item_hover: StyleSheet({background: '#0000CC22'}),
-    item: StyleSheet({}),
     item_file: StyleSheet({color: "blue", cursor: 'pointer'}),
 
     list: StyleSheet({display: 'flex', 'flex-direction': 'column'}),
@@ -162,6 +172,9 @@ const style = {
     ellideMiddleLink: StyleSheet({
         cursor: 'pointer', color: 'blue'
     }),
+    callbackLink: StyleSheet({
+        cursor: 'pointer', color: 'blue'
+    }),
     center: StyleSheet({
         'text-align': 'center',
         'position': 'sticky',
@@ -181,8 +194,8 @@ const style = {
     }),
 }
 
-StyleSheet(`.${style.item}:hover`, {background: '#0000FF22'})
 StyleSheet(`.${style.listItem}:hover`, {background: '#0000FF22'})
+StyleSheet(`.${style.listItemDir}:hover`, {background: '#0000FF22'})
 
 // order of these rules is important, hover before active
 StyleSheet(`.${style.moreMenuButton}:hover`, {
@@ -193,32 +206,100 @@ StyleSheet(`.${style.moreMenuButton}:active`, {
     'background-image': 'linear-gradient(#5E5E5E, #BCBCBC)';
 })
 
-class SvgElement extends DomElement {
-    constructor(url, props) {
-        super("img", {src:url, ...props}, [])
+
+/*
+the thumbnail_work_queue, combined with the functions
+thumbnail_DoProcessNext, thumbnail_ProcessNext, thumbnail_CancelQueue
+and classes SvgIconElementImpl, SvgIconElement work together
+to implement a way to lazy load thumbnails. Only one request to the
+backend is made at a time.
+
+when constructing instance of SvgIconElementImpl populate the queue
+The User must then manually start the process by calling thumbnail_ProcessNext
+Each time a thumbnail successfully or fails to load the next thumbnail
+will start loading.
+*/
+let thumbnail_work_queue = []
+
+function thumbnail_DoProcessNext() {
+
+    if (thumbnail_work_queue.length > 0) {
+        const elem = thumbnail_work_queue.pop()
+        if (elem.props.src != elem.state.url1) {
+            elem.updateProps({src: elem.state.url1})
+        } else {
+            thumbnail_ProcessNext()
+        }
     }
+}
+function thumbnail_ProcessNext() {
+
+    if (thumbnail_work_queue.length > 0) {
+        requestIdleCallback(thumbnail_DoProcessNext)
+    }
+}
+function thumbnail_CancelQueue() {
+    thumbnail_work_queue = []
 }
 
 class SvgIconElementImpl extends DomElement {
     constructor(url1, url2, props) {
-        super("img", {src:url1, width: 80, height: 60, ...props}, [])
+        super("img", {src:url2, width: 80, height: 60, ...props}, [])
 
         this.state = {
             url1, url2
         }
+
+        if (url1 !== url2 && url1 && url2) {
+            thumbnail_work_queue.push(this)
+        }
+    }
+
+    onLoad(event) {
+        // the backup image doesn't effect the work queue
+        if (this.props.src === this.state.url2) {
+            return
+        }
+
+        thumbnail_ProcessNext()
+
     }
 
     onError() {
         console.warn("error loading: ", this.props.src)
+
+        if (this.props.src === this.state.url2) {
+            return
+        }
+
         if (this.props.src != this.state.url2 && this.state.url2) {
             this.updateProps({src: this.state.url2})
         }
+
+        thumbnail_ProcessNext()
+
+
     }
 }
 
+
+
 class SvgIconElement extends DomElement {
     constructor(url1, url2, props) {
+        if (url2 === null) {
+            url2 = url1;
+        }
         super("div", {className: style.svgDiv}, [new SvgIconElementImpl(url1, url2, props)])
+
+
+    }
+
+
+}
+
+class SvgElement extends DomElement {
+    constructor(url, props) {
+        super("img", {src:url, ...props}, [])
     }
 }
 
@@ -237,7 +318,7 @@ class SvgMoreElement extends SvgElement {
     }
 }
 
-class ListElement extends DomElement {
+class StorageListElement extends DomElement {
     constructor(elem) {
         super("div", {className: style.list}, [])
     }
@@ -296,6 +377,20 @@ class MiddleTextLink extends MiddleText {
     }
 }
 
+class CallbackLink extends DomElement {
+    constructor(text, callback) {
+        super('div', {className: style.callbackLink}, [new TextElement(text)])
+
+        this.state = {
+            callback
+        }
+    }
+
+    onClick() {
+        this.state.callback()
+    }
+}
+
 class DirectoryElement extends DomElement {
     constructor(name, url) {
         super("div", {className: style.listItemDir}, [])
@@ -307,7 +402,7 @@ class DirectoryElement extends DomElement {
 }
 
 class FileElement extends DomElement {
-    constructor(fileInfo, callback) {
+    constructor(fileInfo, callback, delete_callback) {
         super("div", {className: style.listItem}, [])
 
         this.state = {
@@ -316,6 +411,7 @@ class FileElement extends DomElement {
         this.attrs = {
             main: this.appendChild(new DomElement("div", {className: style.listItemMain}, [])),
             details: null,
+            delete_callback,
         }
 
         const elem = new MiddleText(fileInfo.name);
@@ -328,10 +424,11 @@ class FileElement extends DomElement {
         let url2 = null;
         let className = style.icon1
 
-        const ext = fileInfo.name.split('.').pop()
+        const ext = daedalus.util.splitext(fileInfo.name)[1].substring(1).toLocaleLowerCase()
         if (extPreview[ext]===true) {
             url2 = url1
             url1 = api.fsPathPreviewUrl(fileInfo.root, daedalus.util.joinpath(fileInfo.path, fileInfo.name))
+            console.log(url1)
             className = style.icon2
         }
 
@@ -346,17 +443,18 @@ class FileElement extends DomElement {
     }
 
     handleShowDetails(event) {
-        console.log(this.state.fileInfo)
         if (this.attrs.details === null) {
             const fpath = daedalus.util.joinpath(this.state.fileInfo.path, this.state.fileInfo.name)
             this.attrs.details = new DomElement("div", {className: style.fileDetailsShow}, [])
             this.appendChild(this.attrs.details)
+            //this.attrs.details.appendChild(new DomElement('div', {className: style.paddedText}, [new LinkElement("Preview",
+            //    api.fsPathUrl(this.state.fileInfo.root, fpath, 0))]))
             this.attrs.details.appendChild(new DomElement('div', {className: style.paddedText}, [new LinkElement("Preview",
-                api.fsPathUrl(this.state.fileInfo.root, fpath, 0))]))
-            this.attrs.details.appendChild(new DomElement('div', {className: style.paddedText}, [new LinkElement("Text Preview",
                 api.fsGetPathContentUrl(this.state.fileInfo.root, fpath))]))
             this.attrs.details.appendChild(new DomElement('div', {className: style.paddedText}, [new LinkElement("Download",
                 api.fsPathUrl(this.state.fileInfo.root, fpath, 1))]))
+            this.attrs.details.appendChild(new DomElement('div', {className: style.paddedText}, [new CallbackLink("Delete",
+                this.attrs.delete_callback)]))
             this.attrs.details.appendChild(new DomElement('div', {}, [new TextElement(`Version: ${this.state.fileInfo.version}`)]))
             this.attrs.details.appendChild(new DomElement('div', {}, [new TextElement(`Size: ${this.state.fileInfo.size}`)]))
             this.attrs.details.appendChild(new DomElement('div', {}, [new TextElement(`Encryption: ${this.state.fileInfo.encryption}`)]))
@@ -416,14 +514,15 @@ class StorageNavBar extends DomElement {
     }
 }
 
-class StorageUploadManager extends ListElement {
-    constructor() {
+class StorageUploadManager extends StorageListElement {
+    constructor(insert_callback) {
         super();
 
         this.attrs = {
             files: {},
             root: null,
             dirpath: null,
+            insert_callback
         }
     }
 
@@ -443,15 +542,17 @@ class StorageUploadManager extends ListElement {
     }
 
     handleUploadFileSuccess(msg) {
-        console.log(msg)
-        const item = this.attrs.files[msg.name]
-        //item.fileInfo.mtime = msg.lastModified
+        const item = this.attrs.files[msg.fileName]
+        item.fileInfo.mtime = msg.lastModified
+        this.attrs.insert_callback(item.fileInfo)
+
         setTimeout(()=>this.handleRemove(msg), 1000)
+
     }
 
     handleUploadFileFailure(msg) {
-        console.log(msg)
-        setTimeout(()=>this.handleRemove(msg), 1000)
+        console.error(msg)
+        setTimeout(()=>this.handleRemove(msg), 3000)
     }
 
     handleUploadFileProgress(msg) {
@@ -471,9 +572,17 @@ class StorageUploadManager extends ListElement {
             const node = new TextElement(msg.fileName)
             this.attrs.files[msg.fileName] = {fileInfo, node}
             this.appendChild(node)
+        } else if (msg.finished) {
+            const item = this.attrs.files[msg.fileName]
+            if (msg.bytesTransfered == msg.fileSize) {
+                item.node.setText(`${msg.fileName}: upload success`)
+            } else {
+                item.node.setText(`${msg.fileName}: upload failed`)
+            }
         } else {
-            const fileInfo = this.attrs.files[msg.fileName].fileInfo
-            fileInfo.bytesTransfered = msg.bytesTransfered
+            const item = this.attrs.files[msg.fileName]
+            item.fileInfo.bytesTransfered = msg.bytesTransfered
+            item.node.setText(`${msg.fileName} ${(100.0*msg.bytesTransfered/msg.fileSize).toFixed(2)}%`)
         }
     }
 
@@ -482,7 +591,6 @@ class StorageUploadManager extends ListElement {
 
         this.removeChild(item.node);
         delete this.attrs.files[msg.fileName];
-        console.log(this.attrs);
     }
 }
 
@@ -493,11 +601,13 @@ export class StoragePage extends DomElement {
         this.attrs = {
             txt: new MiddleText("....."), // TODO FIXME
             regex: daedalus.patternToRegexp(":root?/:dirpath*", false),
-            lst: new ListElement(),
+            lst: new StorageListElement(),
             more: new MoreMenuShadow(this.handleHideFileMore.bind(this)),
             banner: new DomElement("div", {className: style.center}, []),
             navBar: new StorageNavBar(),
-            uploadManager: new StorageUploadManager()
+            uploadManager: new StorageUploadManager(this.handleInsertUploadFile.bind(this)),
+            search_input: new TextInputElement("", null, this.search.bind(this)),
+            filemap: {},
         }
 
         this.state = {
@@ -509,6 +619,7 @@ export class StoragePage extends DomElement {
 
         this.attrs.banner.appendChild(this.attrs.txt)
         this.attrs.banner.appendChild(this.attrs.navBar)
+        this.attrs.banner.appendChild(this.attrs.search_input)
         this.attrs.banner.appendChild(this.attrs.uploadManager)
 
         this.attrs.navBar.addActionElement(new MoreMenuButton("back", this.handleOpenParent.bind(this)))
@@ -516,6 +627,11 @@ export class StoragePage extends DomElement {
 
         this.appendChild(this.attrs.lst)
 
+    }
+
+    elementMounted() {
+        const params = daedalus.util.parseParameters()
+        this.attrs.search_input.setText((params.q && params.q[0]) || "")
     }
 
     elementUpdateState(oldState, newState) {
@@ -540,6 +656,8 @@ export class StoragePage extends DomElement {
     }
 
     getRoots() {
+        thumbnail_CancelQueue();
+        this.attrs.lst.removeChildren();
         api.fsGetRoots()
             .then(data => {this.handleGetRoots(data.result)})
             .catch(error => {this.handleGetRootsError(error)})
@@ -547,8 +665,6 @@ export class StoragePage extends DomElement {
 
     handleGetRoots(result) {
         this.updateState({parent_url:null})
-
-        this.attrs.lst.removeChildren()
 
         result.forEach(name => {
             let url = '/u/storage/list/' + this.state.match.path + '/' + name
@@ -561,11 +677,12 @@ export class StoragePage extends DomElement {
     handleGetRootsError(error) {
         console.error(error)
         this.updateState({parent_url:null})
-        this.attrs.lst.removeChildren()
         this.attrs.lst.appendChild(new TextElement("error loading roots"))
     }
 
     getPath(root, dirpath) {
+        thumbnail_CancelQueue();
+        this.attrs.lst.removeChildren();
         api.fsGetPath(root, dirpath)
             .then(data => {this.handleGetPath(data.result)})
             .catch(error => {this.handleGetPathError(error)})
@@ -573,7 +690,6 @@ export class StoragePage extends DomElement {
 
     handleGetPath(result) {
 
-        console.log(result)
         let url;
         if (result.parent === result.path) {
             url = daedalus.util.joinpath('/u/storage/list/')
@@ -582,40 +698,120 @@ export class StoragePage extends DomElement {
         }
 
         this.updateState({parent_url:url})
-        this.attrs.lst.removeChildren()
 
-        result.directories.forEach(name => {
-            let url = daedalus.util.joinpath('/u/storage/list/', this.state.match.path, name)
-            this.attrs.lst.appendChild(new DirectoryElement(name, url), null)
 
-        })
+        const filemap = {};
 
-        result.files.forEach(item => {
-            //let url = daedalus.util.joinpath('/u/storage/list/', this.state.match.path, item.name)
-            const cbk = ()=>{this.handleShowFileMore(item)};
-            item.root = this.state.match.root;
-            item.path = this.state.match.dirpath;
-            this.attrs.lst.appendChild(new FileElement(item, cbk))
 
-        })
+        if ((result.files.length + result.directories.length) === 0) {
+
+            this.attrs.lst.appendChild(new TextElement("Empty Directory"))
+
+        } else {
+            result.directories.forEach(name => {
+                let url = daedalus.util.joinpath('/u/storage/list/', this.state.match.path, name)
+                this.attrs.lst.appendChild(new DirectoryElement(name, url), null)
+            })
+
+            result.files.forEach(item => {
+                //let url = daedalus.util.joinpath('/u/storage/list/', this.state.match.path, item.name)
+                const cbk = ()=>{this.handleShowFileMore(item)};
+                item.root = this.state.match.root;
+                item.path = this.state.match.dirpath;
+                const elem = new FileElement(item, cbk, this.deleteElement.bind(this))
+                this.attrs.lst.appendChild(elem)
+                filemap[item.name] = elem
+
+            })
+        }
+
+        // the best order to process elements in would be from first to last
+        // the current implementation uses pop (last to first)
+        // shuffle the elements to help discover  bugs in the implementation
+        daedalus.util.shuffle(thumbnail_work_queue)
+        thumbnail_ProcessNext();
+
+        this.attrs.filemap = filemap;
     }
 
     handleGetPathError(error) {
-        console.error(error)
-        this.updateState({parent_url:null}) // TODO FIXME
-        this.attrs.lst.removeChildren()
-        this.attrs.lst.appendChild(new TextElement("error loading roots"))
+        let url = '/u/storage/list/'
+        console.log(error)
+        if (this.state.match && this.state.match.dirpath) {
+            const parts = daedalus.util.splitpath(this.state.match.dirpath)
+            parts.pop()
+            url =  daedalus.util.joinpath(url, this.state.match.root, ...parts)
+        }
+        this.updateState({parent_url:url})
+
+
+        this.attrs.lst.appendChild(new TextElement("Empty Directory (error)"))
+    }
+
+    search(text) {
+        console.log(text)
+
+        thumbnail_CancelQueue();
+        this.attrs.lst.removeChildren();
+
+        let root = this.state.match.root,
+            path = this.state.match.dirpath,
+            terms = text,
+            page = 0,
+            limit = 25;
+
+        api.fsSearch(root, path, terms, page, limit)
+            .then(this.handleSearchResult.bind(this))
+            .catch(this.handleSearchError.bind(this))
+    }
+
+    handleSearchResult(result) {
+        const files = result.result.files
+        console.log(files)
+
+        const filemap = {}
+
+        if (files.length === 0) {
+            this.attrs.lst.appendChild(new TextElement("No Results"))
+        } else {
+            try {
+                files.forEach(item => {
+                    //let url = daedalus.util.joinpath('/u/storage/list/', this.state.match.path, item.name)
+                    const cbk1 = ()=>{this.handleShowFileMore(item)};
+                    const cbk2 = this.deleteElement.bind(this);
+                    item.root = this.state.match.root
+                    const parts = daedalus.util.splitpath(item.file_path);
+                    parts.pop()
+                    item.path = parts.join("/");
+                    console.log(item)
+                    const elem = new FileElement(item, cbk1, cbk2)
+                    this.attrs.lst.appendChild(elem)
+                    filemap[item.name] = elem
+
+                })
+            } catch (e) {
+                console.log(e)
+            }
+        }
+
+        this.attrs.filemap = filemap;
+
+        daedalus.util.shuffle(thumbnail_work_queue)
+        thumbnail_ProcessNext();
+
+    }
+
+    handleSearchError(error) {
+        this.attrs.lst.appendChild(new TextElement("No Results"))
     }
 
     handleOpenParent() {
-        console.log(this.state.parent_url)
         if (this.state.parent_url) {
             history.pushState({}, "", this.state.parent_url)
         }
     }
 
     handleUploadFile() {
-        console.log()
         if (this.state.match.root !== "") {
 
             this.attrs.uploadManager.startUpload(
@@ -623,16 +819,15 @@ export class StoragePage extends DomElement {
                 this.state.match.dirpath)
 
         }
-
     }
 
-
-
     handleShowFileMore(item) {
+
         this.attrs.more.updateProps({className: [style.moreMenuShadow, style.moreMenuShow]})
     }
 
     handleHideFileMore() {
+
         this.attrs.more.updateProps({className: [style.moreMenuShadow, style.moreMenuHide]})
     }
 
@@ -646,6 +841,23 @@ export class StoragePage extends DomElement {
 
         this.attrs.txt.setText(root + "/" + dirpath)
     }
+
+    handleInsertUploadFile(fileInfo) {
+
+        if (this.attrs.filemap[fileInfo.name] === undefined) {
+            const elem = new FileElement(fileInfo, null, this.deleteElement.bind(this))
+            this.attrs.lst.insertChild(0, elem)
+        } else {
+            const elem = filemap[fileInfo.name]
+        }
+    }
+
+    deleteElement(elem, fileInfo) {
+        console.log(fileInfo)
+    }
+
+
+
 }
 
 // formatted
@@ -659,9 +871,25 @@ class FormattedText extends DomElement {
     }
 }
 
+const preview_formats = {
+    '.mp4': 'video',
+    '.webm': 'video',
+
+    '.jpg': 'image',
+    '.jpeg': 'image',
+    '.gif': 'image',
+    '.png': 'image',
+    '.bmp': 'image',
+
+    '.wav': 'audio',
+    '.mp3': 'audio',
+
+    '.pdf': 'pdf',
+}
+
 export class StoragePreviewPage extends DomElement {
     constructor() {
-        super("div", {}, [new FormattedText("")]);
+        super("div", {}, []);
 
 
         this.attrs = {
@@ -686,11 +914,33 @@ export class StoragePreviewPage extends DomElement {
     }
 
     handleRouteChange(root, path) {
-        console.log(root, path)
 
-        api.fsGetPathContent(root, path)
-            .then(res=>this.children[0].setText(res))
-            .catch(err=>console.error(err))
+        const [_, ext] = daedalus.util.splitext(path.toLocaleLowerCase())
+
+        const format = preview_formats[ext]
+
+        if (format === undefined) {
+            api.fsGetPathContent(root, path)
+                .then(res=>{this.appendChild(new FormattedText(res))})
+                .catch(err=>console.error(err))
+        } else if (format === 'image') {
+            // TODO: images should be centered, click/tap for full size
+            const url = api.fsPathUrl(root, path, 0)
+            this.appendChild(new DomElement("img", {src: url}, []))
+        } else if (format === 'video') {
+            // TODO: videos should be centered, click/tap for full size
+            const url = api.fsPathUrl(root, path, 0)
+            this.appendChild(new DomElement("video", {src: url, controls: 1}, []))
+        } else if (format === 'pdf') {
+            // TODO: videos should be centered, click/tap for full size
+            const url = api.fsPathUrl(root, path, 0)
+            console.warn(url)
+            this.appendChild(new DomElement("object", {
+                data: url,
+                type: 'application/pdf',
+                width: '100%',
+                height: '100%',
+            }, []))
+        }
     }
-
 }

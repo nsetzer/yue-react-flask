@@ -17,7 +17,7 @@ const styles = {
     body: StyleSheet({
         margin:0,
         padding:0,
-        //background: {color: 'red'}
+        //background: {color: '#43464b'}
     }),
     root: StyleSheet({
         width: '100vw',
@@ -75,6 +75,7 @@ export class Root extends DomElement {
             login: () => reqNoAuth(new pages.LoginPage()),
             user_storage: () => reqAuth(new pages.StoragePage()),
             user_storage_preview: () => reqAuth(new pages.StoragePreviewPage()),
+            user_storage_search: () => reqAuth(new pages.StorageSearchPage()),
             user: () => reqAuth(new DomElement('div', {}, [])),
             'public': () => new DomElement('div', {}, [])
         }
@@ -94,7 +95,6 @@ export class Root extends DomElement {
         // TODO: RHS margin is browser and OS Dependant
         this.attrs.router.updateProps({style: {'margin-right': '17px'}})
 
-        //this.attrs.router.updateProps({style: {height: '100%', width: '100%', 'background-color': '#FFFFFF33'}})
         this.appendChild(this.attrs.router)
     }
 

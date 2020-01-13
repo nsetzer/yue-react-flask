@@ -64,9 +64,9 @@ class FlaskApp(object):
             #static_folder=self.config.static_dir,
             #template_folder=self.config.build_dir)
 
-        # set the max upload file size limit to 250MB
+        # set the max upload file size limit to 1024MB
         # TODO: move to the application config file
-        self.app.config['MAX_CONTENT_LENGTH'] = 250 * 1024 * 1024
+        self.app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024
 
         self.log = self.app.logger
 
@@ -253,7 +253,7 @@ class FlaskApp(object):
             "manifest-src 'self'",
             "img-src 'self'",
             "media-src 'self'",
-            "object-src 'none'",
+            "object-src 'self'",
             "script-src 'self' 'unsafe-inline' https://storage.googleapis.com",
             "style-src 'self' 'unsafe-inline'",
             "worker-src 'self' https://storage.googleapis.com",
@@ -264,6 +264,8 @@ class FlaskApp(object):
         # to debug the cors  requests
         # curl -v -X OPTIONS -H "Origin: https://yueapp.duckdns.org" https://yueapp.duckdns.org
         origin = request.headers.get("Origin")
+        if not origin and 'HTTP_HOST' in request.environ:
+            origin = request.environ['HTTP_HOST']
 
         # if the config specifies "*" then return the origin
         # of the request. otherwise check the origin of the request

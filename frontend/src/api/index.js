@@ -10,6 +10,8 @@ export const env = {
     baseUrl: (daedalus.env && daedalus.env.baseUrl)?daedalus.env.baseUrl:""
 }
 
+env.origin = window.location.origin
+
 let user_token = null
 export function getUsertoken() {
     if (user_token === null) {
@@ -87,13 +89,13 @@ export function fsGetPathContent(root, path) {
 
 export function fsGetPathContentUrl(root, path) {
 
-    const url = window.location.origin + daedalus.util.joinpath('/u/storage/preview', root, path);
+    const url = env.origin + daedalus.util.joinpath('/u/storage/preview', root, path);
     return url;
 }
 
 export function fsSearch(root, path, terms, page, limit) {
     const params = daedalus.util.serializeParameters({path, terms, page, limit})
-    const url = env.baseUrl + '/api/fs/' + root +'/search/' + path + parms;
+    const url = env.baseUrl + '/api/fs/' + root +'/search' + params;
     const cfg = getAuthConfig()
     return api.requests.get_json(url, cfg);
 }

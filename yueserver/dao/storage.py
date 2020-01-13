@@ -370,9 +370,8 @@ class StorageDao(object):
             tab.c.filesystem_id == fs_id)
 
         if len(terms) > 0:
-            print(terms)
             rule = AndSearchRule([self.grammar.ruleFromString(term) for term in terms])
-
+            print(rule)
             sql_rule = and_(sql_rule, rule.psql() if self.db.kind() == "postgresql" else rule.sql())
 
         if path_prefix:
@@ -389,6 +388,7 @@ class StorageDao(object):
         if offset is not None:
             query = query.offset(offset).order_by(asc(tab.c.file_path))
 
+        print(query)
         items = self.db.session.execute(query)
 
         files = []

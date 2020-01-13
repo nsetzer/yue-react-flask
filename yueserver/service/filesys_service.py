@@ -441,6 +441,8 @@ class FileSysService(object):
         byte_index = 0
         size = 0
 
+        quota_enabled = False
+
         try:
             with self.fs.open(storage_path, "wb") as outputStream:
                 for buf in iter(lambda: inputStream.read(chunk_size), b""):
@@ -448,19 +450,22 @@ class FileSysService(object):
                     outputStream.write(buf)
                     size += len(buf)
 
-                    byte_index = self._internalCheckQuota(
-                        user_id, size, byte_index, uid)
+                    if quota_enabled:
+                        byte_index = self._internalCheckQuota(
+                            user_id, size, byte_index, uid)
 
-            self._internalCheckQuota(
-                user_id, size, -1, uid)
+            if quota_enabled:
+                self._internalCheckQuota(
+                    user_id, size, -1, uid)
 
         except Exception as e:
             self.fs.remove(storage_path)
             raise e
         finally:
-            self.storageDao.tempFileRemove(user_id, uid)
+            if quota_enabled:
+                logging.info("removing temp file. size: %d", size)
+                self.storageDao.tempFileRemove(user_id, uid)
 
-            logging.info("removing temp file. size: %d", size)
 
         return size
 

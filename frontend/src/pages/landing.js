@@ -3,6 +3,7 @@ import daedalus with {
     StyleSheet,
     DomElement,
     ButtonElement,
+    TextElement,
     TextInputElement,
     Router
 }
@@ -19,7 +20,8 @@ const styles = {
         'min-width': '9em',
         height: '50vh',
         'min-height': '6em',
-        background: {color: 'blue'}
+        background: 'radial-gradient(#43464b, #238e23)',
+        'text-align': 'center',
     }),
     btn_center: StyleSheet({
         'text-align': 'center',
@@ -40,7 +42,10 @@ export class LandingPage extends DomElement {
         }
 
         this.attrs.btn.updateProps({className: styles.btn_center})
+
         this.appendChild(this.attrs.btn)
+        console.log(daedalus.env)
+        this.appendChild(new TextElement(daedalus.env.buildDate))
     }
 
 }
