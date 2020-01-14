@@ -26,6 +26,7 @@ const styles = {
         padding: 0,
         //background: {color: 'cyan'}
     }),
+    margin: StyleSheet({'margin-right': '17px'})
 }
 
 function isAuthenticated() {
@@ -80,6 +81,8 @@ export class Root extends DomElement {
             'public': () => new DomElement('div', {}, [])
         }
 
+        //window.onresize = this.handleResize.bind(this)
+
     }
 
     buildRouter() {
@@ -93,7 +96,9 @@ export class Root extends DomElement {
         ], ()=>{return new Home()})
 
         // TODO: RHS margin is browser and OS Dependant
-        this.attrs.router.updateProps({style: {'margin-right': '17px'}})
+
+        this.updateMargin()
+
 
         this.appendChild(this.attrs.router)
     }
@@ -115,6 +120,23 @@ export class Root extends DomElement {
         } else {
             this.buildRouter()
         }
+    }
+
+
+    handleResize(event) {
+        this.updateMargin()
+    }
+
+    updateMargin() {
+
+        this.attrs.router.updateProps({className: styles.margin})
+        //console.log(document.body.scrollHeight , window.innerHeight)
+
+        //if (document.body.scrollHeight > window.innerHeight) {
+        //    this.attrs.router.updateProps({className: styles.margin})
+        //} else {
+        //    this.attrs.router.updateProps({className: null})
+        //}
     }
 }
 
