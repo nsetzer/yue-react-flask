@@ -125,9 +125,6 @@ class StorageSearchGrammar(SearchGrammar):
         # all_text is a meta-column name which is used to search all text fields
         self.all_text = 'text'
         self.text_fields = set([
-            'id',
-            'user_id',
-            'filesystem_id',
             'file_path',
             'encryption',
             'public_password',
@@ -154,7 +151,6 @@ class StorageSearchGrammar(SearchGrammar):
 
         self.transform_fields = {
             "user": "user_id",
-            "filesystem_id": "filesystem",
             "path": "file_path",
             "encryption": "enc",
         }
@@ -371,8 +367,8 @@ class StorageDao(object):
 
         if len(terms) > 0:
             rule = AndSearchRule([self.grammar.ruleFromString(term) for term in terms])
-            print(rule)
-            sql_rule = and_(sql_rule, rule.psql() if self.db.kind() == "postgresql" else rule.sql())
+            compiled_rule = rule.psql() if self.db.kind() == "postgresql" else rule.sql()
+            sql_rule = and_(sql_rule, compiled_rule)
 
         if path_prefix:
             if not path_prefix.endswith(delimiter):
@@ -388,7 +384,6 @@ class StorageDao(object):
         if offset is not None:
             query = query.offset(offset).order_by(asc(tab.c.file_path))
 
-        print(query)
         items = self.db.session.execute(query)
 
         files = []

@@ -15,6 +15,15 @@ serve:
 			--static ./resources \
 			src/app.js
 
+.PHONY: serve_prod
+serve_prod:
+	export PYTHONPATH=../daedalus; \
+		python3.8 -m daedalus serve \
+			--env baseUrl='https://yueapp.duckdns.org' \
+			--env buildDate="$(DATE)" \
+			--static ./resources \
+			src/app.js
+
 .PHONY: build
 build:
 	export PYTHONPATH=../daedalus; \

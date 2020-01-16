@@ -5,17 +5,6 @@ SERVER SIDE TODO:
   each request submits a task and waits until the task completes
   before returning the response
 
-- thumbnail images need a special class to handle concurrency better
-
-  new Thumb()         - enqueue this onto a work queue
-  Thumb.cancelWork()  - remove all elements from the work queue
-  use the idle request api to start a work look to process the work
-  to be done. When opening a new page cancel existing work, creating
-  the FileElements will create new Thumb() elements and enqueue the work
-  When the Thumb is created, the src prop is not set.
-  The work to be done is to set the src prop for a single image and
-  on success or failure move on to the next image.
-
 */
 import daedalus with {
     StyleSheet,
@@ -224,11 +213,13 @@ Each time a thumbnail successfully or fails to load the next thumbnail
 will start loading.
 */
 let thumbnail_work_queue = []
+// the number of active 'threads' performing work
+let thumbnail_work_count = 0
 
 function thumbnail_DoProcessNext() {
 
     if (thumbnail_work_queue.length > 0) {
-        const elem = thumbnail_work_queue.pop()
+        const elem = thumbnail_work_queue.shift()
         if (elem.props.src != elem.state.url1) {
             elem.updateProps({src: elem.state.url1})
         } else {
@@ -236,14 +227,33 @@ function thumbnail_DoProcessNext() {
         }
     }
 }
+
 function thumbnail_ProcessNext() {
 
     if (thumbnail_work_queue.length > 0) {
         requestIdleCallback(thumbnail_DoProcessNext)
+    } else {
+        thumbnail_work_count -= 1
     }
 }
+
+function thumbnail_ProcessStart() {
+
+    // run the work queue with two chains in parallel
+    if (thumbnail_work_queue.length >= 3) {
+        requestIdleCallback(thumbnail_DoProcessNext)
+        requestIdleCallback(thumbnail_DoProcessNext)
+        requestIdleCallback(thumbnail_DoProcessNext)
+        thumbnail_work_count = 3
+    } else if (thumbnail_work_queue.length > 0) {
+        requestIdleCallback(thumbnail_DoProcessNext)
+        thumbnail_work_count = 1
+    }
+}
+
 function thumbnail_CancelQueue() {
     thumbnail_work_queue = []
+    thumbnail_work_count = 0
 }
 
 class SvgIconElementImpl extends DomElement {
@@ -286,8 +296,6 @@ class SvgIconElementImpl extends DomElement {
     }
 }
 
-
-
 class SvgIconElement extends DomElement {
     constructor(url1, url2, props) {
         if (url2 === null) {
@@ -297,8 +305,6 @@ class SvgIconElement extends DomElement {
 
 
     }
-
-
 }
 
 class SvgElement extends DomElement {
@@ -434,7 +440,6 @@ class FileElement extends DomElement {
         if (thumbnailFormats[ext]===true) {
             url2 = url1
             url1 = api.fsPathPreviewUrl(fileInfo.root, daedalus.util.joinpath(fileInfo.path, fileInfo.name))
-            console.log(url1)
             className = style.icon2
         }
 
@@ -762,8 +767,8 @@ export class StoragePage extends DomElement {
         // the best order to process elements in would be from first to last
         // the current implementation uses pop (last to first)
         // shuffle the elements to help discover  bugs in the implementation
-        daedalus.util.shuffle(thumbnail_work_queue)
-        thumbnail_ProcessNext();
+        //daedalus.util.shuffle(thumbnail_work_queue)
+        thumbnail_ProcessStart();
 
         this.attrs.filemap = filemap;
     }
@@ -823,7 +828,7 @@ export class StoragePage extends DomElement {
             path = this.state.match.dirpath,
             terms = text,
             page = 0,
-            limit = 25;
+            limit = 100;
 
         api.fsSearch(root, path, terms, page, limit)
             .then(this.handleSearchResult.bind(this))
@@ -861,8 +866,8 @@ export class StoragePage extends DomElement {
 
         this.attrs.filemap = filemap;
 
-        daedalus.util.shuffle(thumbnail_work_queue)
-        thumbnail_ProcessNext();
+        //daedalus.util.shuffle(thumbnail_work_queue)
+        thumbnail_ProcessStart();
     }
 
     handleSearchError(error) {
