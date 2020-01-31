@@ -961,7 +961,7 @@ class Grammar(object):
                 if isinstance(tokens[i], BlankSearchRule):
                     tokens.pop(i)
                     continue
-            elif tok.startswith(self.sigil):
+            elif self.sigil and tok.startswith(self.sigil):
                 # old style query, replace consecutive words
                 # with rules built in the old-way
                 # intentionally ignores negate for legacy reasons
@@ -1100,7 +1100,7 @@ class Grammar(object):
             tok = tokens[i]
 
             if isinstance(tokens[i], str):
-                if tok.startswith(self.sigil):
+                if self.sigil and tok.startswith(self.sigil):
                     current_col = StrPos(tok[1:], tok.pos + 1, tok.end, tok.kind)
                     tokens.pop(i)
                     continue

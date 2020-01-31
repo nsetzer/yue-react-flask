@@ -123,6 +123,7 @@ class StorageSearchGrammar(SearchGrammar):
         super(StorageSearchGrammar, self).__init__()
 
         # all_text is a meta-column name which is used to search all text fields
+        self.sigil = None
         self.all_text = 'text'
         self.text_fields = set([
             'file_path',
