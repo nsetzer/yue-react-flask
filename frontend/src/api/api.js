@@ -3,6 +3,8 @@
 import daedalus
 import api.requests
 
+import './token.js'
+
 export const env = {
     //`http://${window.location.hostname}:4200`
     // baseUrl is empty when running in production
@@ -10,32 +12,8 @@ export const env = {
     baseUrl: (daedalus.env && daedalus.env.baseUrl)?daedalus.env.baseUrl:""
 }
 
+console.log(`base url: ${env.baseUrl}`)
 env.origin = window.location.origin
-
-let user_token = null
-export function getUsertoken() {
-    if (user_token === null) {
-        const token = window.localStorage.getItem("user_token")
-        if (token) {
-            user_token = token
-        }
-    }
-    return user_token;
-}
-
-export function setUsertoken(token) {
-    window.localStorage.setItem("user_token", token)
-    user_token = token;
-}
-
-export function clearUserToken(creds) {
-    window.localStorage.removeItem("user_token")
-    user_token = null;
-}
-
-export function getAuthConfig() {
-    return {credentials: 'include', headers: {Authorization: user_token}}
-}
 
 // returns {token: token}
 export function authenticate(email, password) {
@@ -60,7 +38,7 @@ export function fsPathPreviewUrl(root, path) {
     const params = daedalus.util.serializeParameters({
         preview:'thumb',
         'dl': 0,
-        'token': user_token,
+        'token': getAuthToken(),
     })
     return url + params
 }
@@ -70,7 +48,7 @@ export function fsPathUrl(root, path, dl) {
     const url = env.baseUrl + daedalus.util.joinpath('/api/fs', root, 'path', path);
     const params = daedalus.util.serializeParameters({
         'dl': dl,
-        'token': user_token,
+        'token': getAuthToken(),
     })
     return url + params
 }
@@ -116,6 +94,39 @@ export function fsPublicUriRevoke(root, path) {
 export function fsPublicUriInfo(file_id) {
     const url = env.baseUrl + '/api/fs/public/' + file_id + serialize({info: true})
     return api.requests.get_json(url);
+}
+
+export function queueGetQueue() {
+    const url = env.baseUrl + '/api/queue';
+    const cfg = getAuthConfig()
+    return api.requests.get_json(url, cfg);
+}
+
+export function queueSetQueue(songList) {
+    const url = env.baseUrl + '/api/queue';
+    const cfg = getAuthConfig()
+    return api.requests.post_json(url, songList, cfg);
+}
+
+export function queuePopulate() {
+    const url = env.baseUrl + '/api/queue/populate';
+    const cfg = getAuthConfig()
+    return api.requests.get_json(url, cfg);
+}
+
+export function queueCreate(query, limit=50) {
+    const params = daedalus.util.serializeParameters({query, limit})
+    const url = env.baseUrl + '/api/queue/create' + params;
+    const cfg = getAuthConfig()
+    return api.requests.get_json(url, cfg);
+}
+
+export function librarySongAudioUrl(songId) {
+    const url = env.baseUrl + `/api/library/${songId}/audio`;
+    const params = daedalus.util.serializeParameters({
+        'token': getAuthToken(),
+    })
+    return url + params
 }
 
 

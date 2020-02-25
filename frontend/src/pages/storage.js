@@ -5,7 +5,16 @@ SERVER SIDE TODO:
   each request submits a task and waits until the task completes
   before returning the response
 
+
 */
+
+/**
+
+download:
+    <a href="url" download></a>
+    <a href="url" download="filename"></a>
+*/
+
 import daedalus with {
     StyleSheet,
     DomElement,
@@ -16,6 +25,9 @@ import daedalus with {
     Router
 }
 import api
+import resources
+import components
+
 /*
 const encryptionColorMap = {
     system: "#9b111e",
@@ -52,13 +64,13 @@ const style = {
         width: '100%'
     }),
     listItemDir: StyleSheet({
-        padding: '.25em',
+        padding: '.25em', // TODO: causes view problems
         'border-bottom': {width: '1px', color: '#000000', 'style': 'solid'},
         display: 'flex',
         'flex-direction': 'row',
         'justify-content': 'flex-start',
         'align-items': 'center',
-        width: '100%'
+        //width: '100%'
     }),
     listItemMid: StyleSheet({
         'flex-grow': '1',
@@ -74,7 +86,7 @@ const style = {
     }),
     icon2: StyleSheet({
         'margin-right': '1em',
-        border: {width: '1px', color: '#000000', 'style': 'solid'}
+        //border: {width: '1px', color: '#000000', 'style': 'solid'}
     }),
     fileDetailsShow: StyleSheet({
         display: 'flex',
@@ -89,7 +101,7 @@ const style = {
         left: '0',
         background: 'rgba(0,0,0,0.33)',
         width: '100vw',
-        height: '100vh',
+        height: '120vh', // a little extra for mobile browsers
     }),
     moreMenu: StyleSheet({
         position: 'fixed',
@@ -143,26 +155,7 @@ const style = {
         'margin-left': '0em',
         'margin-right': '1em'
     }),
-    // http://jsfiddle.net/4ah8ernc/2/
-    ellideMiddle: StyleSheet({
-        display: 'inline-flex',
-        'flex-wrap': 'nowrap',
-        'max-width': '100%',
-        'min-width': '0',
-    }),
-    ellideMiddleDiv1: StyleSheet({
-        flex: '0 1 auto',
-        'text-overflow': 'ellipsis',
-        overflow: 'hidden',
-        'white-space': 'nowrap',
-    }),
-    ellideMiddleDiv2: StyleSheet({
-        flex: '1 0 auto',
-        'white-space': 'nowrap',
-    }),
-    ellideMiddleLink: StyleSheet({
-        cursor: 'pointer', color: 'blue'
-    }),
+
     callbackLink: StyleSheet({
         cursor: 'pointer', color: 'blue'
     }),
@@ -170,6 +163,7 @@ const style = {
         'text-align': 'center',
         'position': 'sticky',
         'background': '#238e23',
+        'padding-left': '2em',
         top:0
     }),
     paddedText: StyleSheet({
@@ -276,11 +270,10 @@ class SvgIconElementImpl extends DomElement {
         }
 
         thumbnail_ProcessNext()
-
     }
 
-    onError() {
-        console.warn("error loading: ", this.props.src)
+    onError(error) {
+        console.warn("error loading: ", this.props.src, JSON.stringify(error))
 
         if (this.props.src === this.state.url2) {
             return
@@ -291,8 +284,6 @@ class SvgIconElementImpl extends DomElement {
         }
 
         thumbnail_ProcessNext()
-
-
     }
 }
 
@@ -302,20 +293,13 @@ class SvgIconElement extends DomElement {
             url2 = url1;
         }
         super("div", {className: style.svgDiv}, [new SvgIconElementImpl(url1, url2, props)])
-
-
     }
 }
 
-class SvgElement extends DomElement {
-    constructor(url, props) {
-        super("img", {src:url, ...props}, [])
-    }
-}
-
-class SvgMoreElement extends SvgElement {
+class SvgMoreElement extends components.SvgElement {
     constructor(callback) {
-        super('/static/icon/more.svg', {width: 20, height: 60, className: style.listItemEnd})
+
+        super(resources.svg.more, {width: 20, height: 60, className: style.listItemEnd})
 
         this.state = {
             callback
@@ -334,58 +318,6 @@ class StorageListElement extends DomElement {
     }
 }
 
-class MiddleText extends DomElement {
-    constructor(text) {
-        super("div", {className: [style.textSpacer]}, [])
-
-        if (text.length > 4) {
-            const idx = text.length - 4;
-            const text1 = text.substr(0, idx);
-            const text2 = text.substr(idx, 4);
-
-            this.updateProps({className: [style.ellideMiddle, style.textSpacer]});
-
-            this.appendChild(new DomElement("div",
-                {className: style.ellideMiddleDiv1},
-                [new TextElement(text1)]));
-
-            this.appendChild(new DomElement("div",
-                {className: style.ellideMiddleDiv2},
-                [new TextElement(text2)]));
-        } else {
-            this.appendChild(new TextElement(text))
-        }
-
-    }
-
-    setText(text) {
-        const idx = text.length - 4;
-        const text1 = text.substr(0, idx);
-        const text2 = text.substr(idx, 4);
-        this.children[0].children[0].setText(text1)
-        this.children[1].children[0].setText(text2)
-    }
-}
-
-class MiddleTextLink extends MiddleText {
-    constructor(text, url) {
-        super(text)
-
-        this.state = {
-            url
-        }
-
-        this.props.className.push(style.ellideMiddleLink)
-    }
-
-    onClick() {
-        if (this.state.url.startsWith('http')) {
-            window.open(this.state.url, '_blank');
-        } else {
-            history.pushState({}, "", this.state.url)
-        }
-    }
-}
 
 class CallbackLink extends DomElement {
     constructor(text, callback) {
@@ -406,9 +338,17 @@ class DirectoryElement extends DomElement {
         super("div", {className: style.listItemDir}, [])
 
         this.appendChild(new DomElement("div", {className: style.encryption["none"]}, []))
-        this.appendChild(new SvgIconElement('/static/icon/folder.svg', null, {className: style.icon1}))
-        this.appendChild(new MiddleTextLink(name, url))
+        this.appendChild(new SvgIconElement(resources.svg.folder, null, {className: style.icon1}))
+        this.appendChild(new components.MiddleTextLink(name, url))
         this.children[2].addClassName(style.listItemMid)
+    }
+}
+
+class DownloadLink extends DomElement {
+    // android (chrome) compatible download link
+    // the prop 'download' is required inside a webview
+    constructor(url, filename) {
+        super("a", {href: url, download:filename}, [new TextElement("Download")])
     }
 }
 
@@ -425,14 +365,14 @@ class FileElement extends DomElement {
             delete_callback,
         }
 
-        const elem = new MiddleText(fileInfo.name);
+        const elem = new components.MiddleText(fileInfo.name);
         elem.addClassName(style.listItemMid)
         elem.updateProps({onClick: this.handleShowDetails.bind(this)})
         //const elem = new DomElement("div",
         //    {className: style.text, onClick: this.handleShowDetails.bind(this)},
         //    [new TextElement(fileInfo.name)])
 
-        let url1 = '/static/icon/file.svg';
+        let url1 = resources.svg.file;
         let url2 = null;
         let className = style.icon1
 
@@ -462,8 +402,15 @@ class FileElement extends DomElement {
             //    api.fsPathUrl(this.state.fileInfo.root, fpath, 0))]))
             this.attrs.details.appendChild(new DomElement('div', {className: style.paddedText}, [new LinkElement("Preview",
                 api.fsGetPathContentUrl(this.state.fileInfo.root, fpath))]))
-            this.attrs.details.appendChild(new DomElement('div', {className: style.paddedText}, [new LinkElement("Download",
-                api.fsPathUrl(this.state.fileInfo.root, fpath, 1))]))
+
+            // Old download impl
+            //this.attrs.details.appendChild(new DomElement('div', {className: style.paddedText}, [new LinkElement("Download",
+            //    api.fsPathUrl(this.state.fileInfo.root, fpath, 1))]))
+
+            // Android compatible download impl
+            const dl = new DownloadLink(api.fsPathUrl(this.state.fileInfo.root, fpath, 1), this.state.fileInfo.name);
+            this.attrs.details.appendChild(new DomElement('div', {className: style.paddedText}, [dl]))
+
             this.attrs.details.appendChild(new DomElement('div', {className: style.paddedText}, [new CallbackLink("Delete",
                 this.attrs.delete_callback)]))
             this.attrs.details.appendChild(new DomElement('div', {}, [new TextElement(`Version: ${this.state.fileInfo.version}`)]))
@@ -614,7 +561,7 @@ export class StoragePage extends DomElement {
         super("div", {}, []);
 
         this.attrs = {
-            txt: new MiddleText("....."), // TODO FIXME
+            txt: new components.MiddleText("....."), // TODO FIXME
             regex: daedalus.patternToRegexp(":root?/:dirpath*", false),
             lst: new StorageListElement(),
             more: new MoreMenuShadow(this.handleHideFileMore.bind(this)),
@@ -622,11 +569,11 @@ export class StoragePage extends DomElement {
             navBar: new StorageNavBar(),
             uploadManager: new StorageUploadManager(this.handleInsertUploadFile.bind(this)),
             search_input: new TextInputElement("", null, this.search.bind(this)),
-            btnLogOut: new MoreMenuButton("LogOut", this.handleLogOut.bind(this)),
-            btnBack: new MoreMenuButton("Back", this.handleOpenParent.bind(this)),
-            btnUpload: new MoreMenuButton("Upload", this.handleUploadFile.bind(this)),
-            btnSearch: new MoreMenuButton("Search", this.handleToggleSearch.bind(this)),
-            btnNewDirectory: new MoreMenuButton("New Directory", this.handleNewDirectory.bind(this)),
+            //btnMenu: new MoreMenuButton("Menu", this.handleMenu.bind(this)),
+            btnBack: new components.SvgButtonElement(resources.svg['return'], this.handleOpenParent.bind(this)),
+            btnUpload: new components.SvgButtonElement(resources.svg['upload'], this.handleUploadFile.bind(this)),
+            btnSearch: new components.SvgButtonElement(resources.svg['search_generic'], this.handleToggleSearch.bind(this)),
+            btnNewDirectory: new components.SvgButtonElement(resources.svg['new_folder'], this.handleNewDirectory.bind(this)),
             filemap: {},
         }
 
@@ -642,7 +589,6 @@ export class StoragePage extends DomElement {
         this.attrs.banner.appendChild(this.attrs.search_input)
         this.attrs.banner.appendChild(this.attrs.uploadManager)
 
-        this.attrs.navBar.addActionElement(this.attrs.btnLogOut)
         this.attrs.navBar.addActionElement(this.attrs.btnBack)
         this.attrs.navBar.addActionElement(this.attrs.btnUpload)
         this.attrs.navBar.addActionElement(this.attrs.btnSearch)
@@ -650,10 +596,10 @@ export class StoragePage extends DomElement {
 
         this.attrs.search_input.updateProps({className: [style.searchHide]})
 
-        this.attrs.btnBack.updateProps({className: [style.moreMenuButton, style.searchShow]})
-        this.attrs.btnUpload.updateProps({className: [style.moreMenuButton, style.searchShow]})
-        this.attrs.btnSearch.updateProps({className: [style.moreMenuButton, style.searchShow]})
-        this.attrs.btnNewDirectory.updateProps({className: [style.moreMenuButton, style.searchShow]})
+        //this.attrs.btnBack.updateProps({className: [style.moreMenuButton, style.searchShow]})
+        //this.attrs.btnUpload.updateProps({className: [style.moreMenuButton, style.searchShow]})
+        //this.attrs.btnSearch.updateProps({className: [style.moreMenuButton, style.searchShow]})
+        //this.attrs.btnNewDirectory.updateProps({className: [style.moreMenuButton, style.searchShow]})
 
         this.appendChild(this.attrs.lst)
 
@@ -685,10 +631,9 @@ export class StoragePage extends DomElement {
         //}
     }
 
-    handleLogOut() {
+    handleMenu() {
 
-        api.clearUserToken();
-        history.pushState({}, "", "/")
+        console.log("on menu clicked")
     }
 
     getRoots() {
@@ -795,23 +740,29 @@ export class StoragePage extends DomElement {
 
         if (this.attrs.search_input.props.className[0] == style.searchHide) {
             this.attrs.search_input.updateProps({className: [style.searchShow]})
-            this.attrs.btnSearch.setText("Cancel")
+            //this.attrs.btnSearch.setText("Cancel")
 
-            this.attrs.btnBack.updateProps({className: [style.moreMenuButton, style.searchHide]})
-            this.attrs.btnUpload.updateProps({className: [style.moreMenuButton, style.searchHide]})
-            //this.attrs.btnSearch.updateProps({className: [style.moreMenuButton, style.searchShow]})
-            this.attrs.btnNewDirectory.updateProps({className: [style.moreMenuButton, style.searchHide]})
+            this.attrs.btnBack.addClassName(style.searchHide)
+            this.attrs.btnUpload.addClassName(style.searchHide)
+            this.attrs.btnNewDirectory.addClassName(style.searchHide)
+
+            this.attrs.btnBack.removeClassName(style.searchShow)
+            this.attrs.btnUpload.removeClassName(style.searchShow)
+            this.attrs.btnNewDirectory.removeClassName(style.searchShow)
 
             thumbnail_CancelQueue();
             this.attrs.lst.removeChildren();
         } else {
-            this.attrs.btnSearch.setText("Search")
+            //this.attrs.btnSearch.setText("Search")
             this.attrs.search_input.updateProps({className: [style.searchHide]})
 
-            this.attrs.btnBack.updateProps({className: [style.moreMenuButton, style.searchShow]})
-            this.attrs.btnUpload.updateProps({className: [style.moreMenuButton, style.searchShow]})
-            //this.attrs.btnSearch.updateProps({className: [style.moreMenuButton, style.searchShow]})
-            this.attrs.btnNewDirectory.updateProps({className: [style.moreMenuButton, style.searchShow]})
+            this.attrs.btnBack.addClassName(style.searchShow)
+            this.attrs.btnUpload.addClassName(style.searchShow)
+            this.attrs.btnNewDirectory.addClassName(style.searchShow)
+
+            this.attrs.btnBack.removeClassName(style.searchHide)
+            this.attrs.btnUpload.removeClassName(style.searchHide)
+            this.attrs.btnNewDirectory.removeClassName(style.searchHide)
 
             // TODO: this can be optimized in the future by caching the result
             this.refresh()
@@ -995,6 +946,7 @@ export class StoragePreviewPage extends DomElement {
         } else if (format === 'image') {
             // TODO: images should be centered, click/tap for full size
             const url = api.fsPathUrl(root, path, 0)
+            console.log(url)
             this.appendChild(new DomElement("img", {src: url}, []))
         } else if (format === 'video') {
             // TODO: videos should be centered, click/tap for full size

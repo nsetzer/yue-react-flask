@@ -41,11 +41,13 @@ export class LandingPage extends DomElement {
             })
         }
 
+
+
         this.attrs.btn.updateProps({className: styles.btn_center})
 
         this.appendChild(this.attrs.btn)
-        console.log(daedalus.env)
         this.appendChild(new TextElement(daedalus.env.buildDate))
+
     }
 
 }

@@ -4,11 +4,14 @@ import daedalus with {
     StyleSheet,
     DomElement,
     ButtonElement,
+    TextElement,
     TextInputElement,
     Router
 }
 import api
 import pages
+import components
+import resources
 
 const styles = {
     // style the body of the page red so that if we ever see
@@ -17,16 +20,25 @@ const styles = {
     body: StyleSheet({
         margin:0,
         padding:0,
+        'overflow-y': 'scroll',
         //background: {color: '#43464b'}
     }),
-    root: StyleSheet({
-        width: '100vw',
-        height: '100vh',
+    rootWeb: StyleSheet({
+        width: 'calc(100vw - 17px)',
+        //height: '100vh',
         margin: {left: 0, top: 0, bottom: 0, right: 0},
         padding: 0,
         //background: {color: 'cyan'}
     }),
-    margin: StyleSheet({'margin-right': '17px'})
+    rootMobile: StyleSheet({
+        width: '100vw',
+        //height: '100vh',
+        margin: {left: 0, top: 0, bottom: 0, right: 0},
+        padding: 0,
+        //background: {color: 'cyan'}
+    }),
+    margin: StyleSheet({'margin-right': '0px'}),
+    fullsize: StyleSheet({'margin-left': "300px"})
 }
 
 function isAuthenticated() {
@@ -42,7 +54,7 @@ function isNotAuthenticated() {
 }
 
 function reqAuth(elem) {
-    element = new daedalus.AuthenticateElement(
+    const element = new daedalus.AuthenticateElement(
         elem,
         isAuthenticated,
         () => {},
@@ -53,7 +65,7 @@ function reqAuth(elem) {
 }
 
 function reqNoAuth(elem) {
-    element = new daedalus.AuthenticateElement(
+    const element = new daedalus.AuthenticateElement(
         elem,
         isNotAuthenticated,
         () => {},
@@ -66,7 +78,7 @@ function reqNoAuth(elem) {
 export class Root extends DomElement {
 
     constructor() {
-        super("div", {className: styles.root}, []);
+        super("div", {}, []);
 
         const body = document.getElementsByTagName("BODY")[0];
         body.className = styles.body
@@ -77,11 +89,14 @@ export class Root extends DomElement {
             user_storage: () => reqAuth(new pages.StoragePage()),
             user_storage_preview: () => reqAuth(new pages.StoragePreviewPage()),
             user_storage_search: () => reqAuth(new pages.StorageSearchPage()),
+            user_playlist: () => reqAuth(new pages.PlaylistPage()),
+            user_settings: () => reqAuth(new pages.SettingsPage()),
             user: () => reqAuth(new DomElement('div', {}, [])),
-            'public': () => new DomElement('div', {}, [])
+            'public': () => new DomElement('div', {}, []),
+            nav: null,
         }
 
-        //window.onresize = this.handleResize.bind(this)
+        window.onresize = this.handleResize.bind(this)
 
     }
 
@@ -89,21 +104,68 @@ export class Root extends DomElement {
         this.attrs.router = new Router([
             {pattern: "/u/storage/preview/:path*",   element: this.attrs.user_storage_preview},
             {pattern: "/u/storage/:mode/:path*",   element: this.attrs.user_storage},
+            {pattern: "/u/playlist",   element: this.attrs.user_playlist},
+            {pattern: "/u/settings",   element: this.attrs.user_settings},
             {pattern: "/u/:path*",   element: this.attrs.user},
             {pattern: "/p/:path*",   element: this.attrs.public},
             {pattern: "/login",      element: this.attrs.login},
             {pattern: "/:path*",     element: this.attrs.main},
         ], ()=>{return new Home()})
 
-        // TODO: RHS margin is browser and OS Dependant
 
-        this.updateMargin()
 
+
+
+        this.attrs.nav = new components.NavMenu();
+        this.attrs.nav.addAction(resources.svg.playlist, "Playlist", ()=>{
+            history.pushState({}, "", "/u/playlist");
+            this.attrs.nav.hide();
+        });
+        this.attrs.nav.addAction(resources.svg.music_note, "Library", ()=>{
+            this.attrs.nav.hide();
+        });
+        this.attrs.nav.addAction(resources.svg.download, "Sync", ()=>{
+            this.attrs.nav.hide();
+        });
+        this.attrs.nav.addAction(resources.svg.documents, "Storage", ()=>{
+            history.pushState({}, "", "/u/storage/list");
+            this.attrs.nav.hide();
+        });
+        this.attrs.nav.addAction(resources.svg.note, "Notes", ()=>{
+            this.attrs.nav.hide();
+        });
+        this.attrs.nav.addAction(resources.svg.settings, "Settings", ()=>{
+            history.pushState({}, "", "/u/settings");
+            this.attrs.nav.hide();
+        });
+        this.attrs.nav.addAction(resources.svg.logout, "Log Out", ()=>{
+            //this.attrs.nav.hide()
+            api.clearUserToken();
+            history.pushState({}, "", "/")
+        });
+        if (daedalus.platform.isAndroid) {
+            this.attrs.nav.addAction(resources.svg['return'], "Reload", ()=>{
+                try {
+                    Client.reloadPage()
+                } catch (e) {
+                    console.error(e)
+                }
+            });
+        }
+
+        this.toggleShowMenuFixed();
 
         this.appendChild(this.attrs.router)
+        this.appendChild(this.attrs.nav)
     }
 
     elementMounted() {
+
+        // TODO: RHS margin is browser and OS Dependant
+        // TODO: always show rhs scroll bar
+
+        this.updateMargin()
+
         // TODO: don't create the Router until after the token
         // is validated
         const token = api.getUsertoken()
@@ -124,12 +186,30 @@ export class Root extends DomElement {
 
 
     handleResize(event) {
-        this.updateMargin()
+        this.toggleShowMenuFixed();
+    }
+
+    toggleShowMenuFixed() {
+        const condition = document.body.clientWidth > 900
+
+        if (!!this.attrs.nav) {
+            this.attrs.nav.showFixed(condition)
+        }
+
+        if (!!this.attrs.router) {
+            if (condition) {
+                this.attrs.router.addClassName(styles.fullsize)
+            } else {
+                this.attrs.router.removeClassName(styles.fullsize)
+            }
+        }
     }
 
     updateMargin() {
 
-        this.attrs.router.updateProps({className: styles.margin})
+        this.addClassName({className: styles.rootWeb})
+
+        //this.attrs.router.updateProps({className: styles.margin})
         //console.log(document.body.scrollHeight , window.innerHeight)
 
         //if (document.body.scrollHeight > window.innerHeight) {

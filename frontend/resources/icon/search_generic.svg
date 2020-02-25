@@ -1,0 +1,13 @@
+<svg clip-rule="evenodd" fill-rule="evenodd" style="shape-rendering:geometricPrecision;text-rendering:geometricPrecision;image-rendering:optimizeQuality;" version="1.1" viewBox="0 0 360 360" x="0px" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" y="0px">
+    <defs>
+        <style type="text/css">.fil0 {fill:black;fill-rule:nonzero}
+
+  </style>
+    </defs>
+    <g>
+        <path class="fil0" d="M41 41c-55,54 -55,142 0,197 48,48 124,54 178,15l103 102c6,6 15,6 21,0l12 -12c6,-6 6,-15 0,-21l-102 -103c39,-54 33,-130 -15,-178 -55,-55 -143,-55 -197,0zm18 18c44,-45 116,-45 161,0 44,44 44,116 0,161 -45,44 -117,44 -161,0 -45,-45 -45,-117 0,-161z"/>
+        <path class="fil0" d="M58 126c1,-5 -2,-9 -7,-10 -4,-1 -9,2 -10,7 -5,32 5,64 28,87 3,3 9,3 12,0 3,-4 3,-9 0,-12 -19,-19 -27,-46 -23,-72z"/>
+    </g>
+    <!--<text fill="#000000" font-family="'Helvetica Neue', Helvetica, Arial-Unicode, Arial, Sans-serif" font-size="5px" font-weight="bold" x="0" y="375">Created by Wilshon Athena</text>
+    <text fill="#000000" font-family="'Helvetica Neue', Helvetica, Arial-Unicode, Arial, Sans-serif" font-size="5px" font-weight="bold" x="0" y="380">from the Noun Project</text>-->
+</svg>

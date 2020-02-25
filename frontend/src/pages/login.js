@@ -10,27 +10,39 @@ import api
 
 const styles = {
     main: StyleSheet({
+        'margin-top': '25vh',
+        width: '100%',
+    }),
+    panel: StyleSheet({
         display: 'inline-flex',
         'flex-direction': 'column',
         'justify-content': 'center',
-        'margin-top': '25vh',
-        'margin-left': '25vw',
-        width: '50vw',
+        'margin-left': '25%',
         'min-width': '9em',
-        height: '50vh',
+        width: '50%',
+        //height: '100%',
         'min-height': '6em',
-        background: {color: 'blue'}
+        background: {color: 'blue'},
+        padding: '1em'
     }),
     btn_center: StyleSheet({
         'text-align': 'center',
-        'margin-left': '25%',
-        width: '50%'
+        'margin-left': 'auto',
+        'margin-right': 'auto',
+        'margin-bottom': '1em',
+        width: '50%',
+    }),
+    edit: StyleSheet({
+        width: '75%',
+        'margin-left': 'auto',
+        'margin-right': 'auto',
+        'margin-bottom': '1em',
     })
 }
 
-export class LoginPage extends DomElement {
+class Panel extends DomElement {
     constructor() {
-        super("div", {className: styles.main}, []);
+        super("div", {className: styles.panel}, []);
 
         this.attrs = {
             btn1: new ButtonElement("Login", this.handleLoginClicked.bind(this)),
@@ -41,8 +53,11 @@ export class LoginPage extends DomElement {
             edit_password: new TextInputElement(""),
         }
 
-        this.attrs.btn1.updateProps({className: styles.btn_center})
-        this.attrs.btn2.updateProps({className: styles.btn_center})
+        this.attrs.btn1.addClassName(styles.btn_center)
+        this.attrs.btn2.addClassName(styles.btn_center)
+
+        this.attrs.edit_username.addClassName(styles.edit)
+        this.attrs.edit_password.addClassName(styles.edit)
 
         this.attrs.edit_username.updateProps({placeholder: 'Username'})
         this.attrs.edit_password.updateProps({placeholder: 'Password', type: 'password'})
@@ -67,6 +82,12 @@ export class LoginPage extends DomElement {
                 }
             })
             .catch((err) => {console.error(err)})
+    }
+}
+
+export class LoginPage extends DomElement {
+    constructor() {
+        super("div", {className: styles.main}, [new Panel()]);
     }
 
 }
