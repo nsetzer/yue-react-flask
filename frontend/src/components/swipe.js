@@ -36,10 +36,11 @@ export class SwipeHandler {
     };
 
     handleTouchMove(evt) {
+        // TODO: this event could be used to update the navbar position,
+        // allowing a user to 'drag' it out
         if ( ! this.xDown || ! this.yDown ) {
             return;
         }
-
 
         let xUp = evt.touches[0].clientX;
         let yUp = evt.touches[0].clientY;
