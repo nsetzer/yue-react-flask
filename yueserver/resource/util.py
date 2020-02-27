@@ -260,6 +260,10 @@ class UUIDOpenApiBody(object):
         self.__name__ = self.__class__.__name__
 
     def __call__(self, uuid_string):
+
+        if not isinstance(uuid_string, str):
+            raise Exception("Invalid uuid")
+
         try:
             val = UUID(uuid_string, version=4)
         except ValueError:

@@ -888,7 +888,13 @@ class ArrayOpenApiBody(OpenApiBody):
             raise Exception("invalid object")
 
         for item in obj:
-            self.object(item)
+            try:
+                self.object(item)
+            except Exception as e:
+                print(item)
+                print(e)
+                raise
+
 
         return obj
 
