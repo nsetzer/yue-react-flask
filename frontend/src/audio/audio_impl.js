@@ -58,7 +58,7 @@ export class AudioDevice {
 
     queueCreate(query) {
         // returns a promise containing the list of songs in the current queue
-        api.queueCreate(query, 75)
+        api.queueCreate(query, 500)
             .then(result => {
                 this.queue = result.result
                 this._sendEvent('handleAudioQueueChanged', result.result)
@@ -79,9 +79,11 @@ export class AudioDevice {
             this.queue.splice(target, 0, a[0]);
 
             if (this.current_index == index) {
-                this.current_index = target
+                this.current_index = target;
+            } else if (this.current_index == target) {
+                this.current_index += 1;
             }
-            console.log("move", index, target)
+            //console.log("move", index, target)
             this._sendEvent('handleAudioQueueChanged', this.queue)
         }
 
@@ -95,9 +97,11 @@ export class AudioDevice {
             this.queue.splice(target, 0, a[0]);
 
             if (this.current_index == index) {
-                this.current_index = target
+                this.current_index = target;
+            } else if (this.current_index == target) {
+                this.current_index -= 1;
             }
-            console.log("move", index, target)
+            //console.log("move", index, target)
             this._sendEvent('handleAudioQueueChanged', this.queue)
         }
     }

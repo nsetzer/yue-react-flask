@@ -202,7 +202,7 @@ export class NavMenu extends DomElement {
 
     showFixed(fixed) {
 
-        if (fixed) {
+        if (!!fixed) {
             this.attrs.menu.removeClassName(styles.navMenuHide)
             this.attrs.menu.removeClassName(styles.navMenuShow)
             this.attrs.menu.removeClassName(styles.navMenuHideFixed)

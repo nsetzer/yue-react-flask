@@ -91,6 +91,8 @@ export class Root extends DomElement {
             user_storage_search: () => reqAuth(new pages.StorageSearchPage()),
             user_playlist: () => reqAuth(new pages.PlaylistPage()),
             user_settings: () => reqAuth(new pages.SettingsPage()),
+            user_library: () => reqAuth(new pages.LibraryPage()),
+            user_radio: () => reqAuth(new pages.UserRadioPage()),
             user: () => reqAuth(new DomElement('div', {}, [])),
             'public': () => new DomElement('div', {}, []),
             nav: null,
@@ -106,15 +108,13 @@ export class Root extends DomElement {
             {pattern: "/u/storage/:mode/:path*",   element: this.attrs.user_storage},
             {pattern: "/u/playlist",   element: this.attrs.user_playlist},
             {pattern: "/u/settings",   element: this.attrs.user_settings},
+            {pattern: "/u/library",   element: this.attrs.user_library},
+            {pattern: "/u/radio",   element: this.attrs.user_radio},
             {pattern: "/u/:path*",   element: this.attrs.user},
             {pattern: "/p/:path*",   element: this.attrs.public},
             {pattern: "/login",      element: this.attrs.login},
             {pattern: "/:path*",     element: this.attrs.main},
         ], ()=>{return new Home()})
-
-
-
-
 
         this.attrs.nav = new components.NavMenu();
         this.attrs.nav.addAction(resources.svg.playlist, "Playlist", ()=>{
@@ -122,6 +122,11 @@ export class Root extends DomElement {
             this.attrs.nav.hide();
         });
         this.attrs.nav.addAction(resources.svg.music_note, "Library", ()=>{
+            history.pushState({}, "", "/u/library");
+            this.attrs.nav.hide();
+        });
+        this.attrs.nav.addAction(resources.svg.externalmedia, "Radio", ()=>{
+            history.pushState({}, "", "/u/radio");
             this.attrs.nav.hide();
         });
         this.attrs.nav.addAction(resources.svg.download, "Sync", ()=>{
@@ -169,7 +174,7 @@ export class Root extends DomElement {
         // TODO: don't create the Router until after the token
         // is validated
         const token = api.getUsertoken()
-        if (token) {
+        if (!!token) {
             api.validate_token(token)
                 .then((data) => {
                     if (!data.token_is_valid) {
@@ -197,7 +202,7 @@ export class Root extends DomElement {
         }
 
         if (!!this.attrs.router) {
-            if (condition) {
+            if (condition === true) {
                 this.attrs.router.addClassName(styles.fullsize)
             } else {
                 this.attrs.router.removeClassName(styles.fullsize)

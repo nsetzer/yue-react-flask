@@ -145,7 +145,7 @@ class SongItem extends DomElement {
         const active = id === this.attrs.song.id
         if (this.attrs.active != active) {
             this.attrs.active = active
-            if (active) {
+            if (active === true) {
                 this.attrs.txt1.setText((this.attrs.index+1) + ". *** " + this.attrs.song.title)
                 this.addClassName(style.songItemActive)
             } else {
@@ -158,8 +158,8 @@ class SongItem extends DomElement {
 
 function formatTime(secs) {
     secs = secs===Infinity?0:secs
-    var minutes = Math.floor(secs / 60) || 0;
-    var seconds = Math.floor(secs - minutes * 60) || 0;
+    let minutes = Math.floor(secs / 60) || 0;
+    let seconds = Math.floor(secs - minutes * 60) || 0;
     return minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
 }
 
@@ -246,10 +246,11 @@ export class PlaylistPage extends DomElement {
         this.attrs = {
             device: audio.AudioDevice.instance(),
             header: new Header(this),
-            container: new DomElement("div", {}, [new TextElement("Loading...")])
+            container: new DomElement("div", {}, [])
         }
 
         this.appendChild(this.attrs.header)
+        //this.appendChild(new TextElement("Loading..."))
         this.appendChild(this.attrs.container)
 
     }
@@ -327,14 +328,66 @@ export class PlaylistPage extends DomElement {
     }
 
     handleAudioQueueChanged(songList) {
-        this.attrs.container.removeChildren()
+
+        // TODO: better algorithm
+        //  first scan through all existing children
+        //  and replace items where the song id does not match
+        //  then either remove additional items greater than
+        //  the length of the new list or append items from the
+        //  new list
+
+        //this.attrs.container.removeChildren()
 
         const current_id = audio.AudioDevice.instance().currentSongId();
-        songList.forEach((song, index) => {
-            const item = new SongItem(index, song)
-            this.attrs.container.appendChild(item)
+
+        let miss = 0;
+        let hit = 0;
+        let index = 0;
+        let item = null;
+        // get the shorter of the two lists
+        const containerList = this.attrs.container.children;
+        const N = containerList.length < songList.length ? containerList.length : songList.length
+
+        // update in place
+        for (let _=0; index < containerList.length; index++) {
+            if (containerList[index].attrs.song.id == songList[index].id) {
+                // no need to update
+                item = containerList[index];
+            } else {
+                // replace
+                miss += 1
+                item = new SongItem(index, songList[index])
+                containerList[index] = item
+            }
+
             item.updateActive(current_id)
-        })
+
+            // if too many are being replaced
+            //if (miss > .3 * containerList.length) {
+            //    break;
+            //}
+        }
+
+        // remove excess
+        const removeCount = containerList.length - index
+        if (removeCount > 0) {
+            containerList.splice(index, removeCount);
+        }
+
+        // append new
+        for (let _=0; index < songList.length; index++) {
+            item = new SongItem(index, songList[index])
+            containerList.push(item)
+            item.updateActive(current_id)
+            miss += 1
+        }
+
+        if (miss > 0) {
+            this.attrs.container.update()
+        }
+
+        console.log("miss rate", hit, miss)
+
 
     }
  }

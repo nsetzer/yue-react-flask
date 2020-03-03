@@ -129,6 +129,25 @@ export function librarySongAudioUrl(songId) {
     return url + params
 }
 
+export function librarySearchForest(query) {
+    const params = daedalus.util.serializeParameters({query})
+    const url = env.baseUrl + '/api/library/forest' + params;
+    const cfg = getAuthConfig()
+    return api.requests.get_json(url, cfg);
+}
+
+export function libraryDomainInfo(songId) {
+    const url = env.baseUrl + '/api/library/info';
+    const cfg = getAuthConfig()
+    return api.requests.get_json(url, cfg);
+}
+
+export function radioVideoInfo(videoId) {
+    const params = daedalus.util.serializeParameters({videoId})
+    const url = env.baseUrl + '/api/radio/video/info' + params;
+    const cfg = getAuthConfig()
+    return api.requests.get_json(url, cfg);
+}
 
 /**
  * params:

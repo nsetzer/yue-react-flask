@@ -95,41 +95,7 @@ const style = {
         'align-items': 'flex-begin',
     }),
     fileDetailsHide: StyleSheet({display: 'none'}),
-    moreMenuShadow: StyleSheet({
-        position: 'fixed',
-        top: '0',
-        left: '0',
-        background: 'rgba(0,0,0,0.33)',
-        width: '100vw',
-        height: '120vh', // a little extra for mobile browsers
-    }),
-    moreMenu: StyleSheet({
-        position: 'fixed',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        background: 'white',
-        width: '50vw',
-        'min-width': '10em',
-        'min-height': '10em',
-        'box-shadow': '.5em .5em .5em 0 rgba(0,0,0,0.50)',
-        padding: '1em'
-    }),
-    moreMenuShow: StyleSheet({display: 'block'}),
-    moreMenuHide: StyleSheet({display: 'none'}),
 
-    // light color is chosen,
-    // dark color is 50% of light color
-    // hover light color is 10% darker,
-    // hover dark color is 50% of hover light color
-    // border color is HSV half way between both dark colors
-    // active color inverts hover
-    moreMenuButton: StyleSheet({
-        border: {'radius': '.5em', color: '#646464', style: 'solid', width: '1px'},
-        padding: '1em',
-        'background-image': 'linear-gradient(#D5D5D5, #6A6A6A)',
-        'text-align': 'center'
-    }),
 
     encryption: {
         "system": StyleSheet({'min-width': '1em', width: '1em', 'border-color': '#000000', 'border-width': '1px', 'border-radius': '5px 0 0 5px', height: '62px', background: "#9b111e"}),
@@ -183,15 +149,6 @@ const style = {
 
 StyleSheet(`.${style.listItem}:hover`, {background: '#0000FF22'})
 StyleSheet(`.${style.listItemDir}:hover`, {background: '#0000FF22'})
-
-// order of these rules is important, hover before active
-StyleSheet(`.${style.moreMenuButton}:hover`, {
-    'background-image': 'linear-gradient(#BCBCBC, #5E5E5E)';
-})
-
-StyleSheet(`.${style.moreMenuButton}:active`, {
-    'background-image': 'linear-gradient(#5E5E5E, #BCBCBC)';
-})
 
 
 /*
@@ -430,41 +387,6 @@ class FileElement extends DomElement {
     }
 }
 
-class MoreMenuShadow extends DomElement {
-    constructor(callback_close) {
-        super("div", {className: [style.moreMenuShadow, style.moreMenuHide]}, [new MoreMenu()])
-
-        this.attrs = {
-            callback_close
-        }
-    }
-
-    onClick() {
-        this.attrs.callback_close()
-    }
-}
-
-class MoreMenuButton extends DomElement {
-    constructor(text, callback) {
-        super("div", {className: [style.moreMenuButton], onClick: callback}, [new TextElement(text)])
-    }
-
-    setText(text) {
-        this.children[0].setText(text)
-    }
-}
-
-class MoreMenu extends DomElement {
-    constructor() {
-        super("div", {className: [style.moreMenu]}, [])
-
-        this.appendChild(new MoreMenuButton("hello world"))
-    }
-
-    onClick(event) {
-        event.stopPropagation();
-    }
-}
 
 class StorageNavBar extends DomElement {
     constructor() {
@@ -564,7 +486,7 @@ export class StoragePage extends DomElement {
             txt: new components.MiddleText("....."), // TODO FIXME
             regex: daedalus.patternToRegexp(":root?/:dirpath*", false),
             lst: new StorageListElement(),
-            more: new MoreMenuShadow(this.handleHideFileMore.bind(this)),
+            more: new components.MoreMenu(this.handleHideFileMore.bind(this)),
             banner: new DomElement("div", {className: style.center}, []),
             navBar: new StorageNavBar(),
             uploadManager: new StorageUploadManager(this.handleInsertUploadFile.bind(this)),
@@ -843,12 +765,12 @@ export class StoragePage extends DomElement {
 
     handleShowFileMore(item) {
 
-        this.attrs.more.updateProps({className: [style.moreMenuShadow, style.moreMenuShow]})
+        this.attrs.more.show()
     }
 
     handleHideFileMore() {
 
-        this.attrs.more.updateProps({className: [style.moreMenuShadow, style.moreMenuHide]})
+        this.attrs.more.hide()
     }
 
     handleRouteChange(root, dirpath) {
