@@ -76,12 +76,14 @@ from .service.audio_service import AudioService
 from .service.transcode_service import TranscodeService
 from .service.user_service import UserService
 from .service.filesys_service import FileSysService
+from .service.radio_service import RadioService
 
 from .resource.app_resource import AppResource
 from .resource.user_resource import UserResource
 from .resource.library_resource import LibraryResource
 from .resource.queue_resource import QueueResource
 from .resource.files_resource import FilesResource, NotesResource
+from .resource.radio_resource import RadioResource
 
 class YueApp(FlaskApp):
     """docstring for YueApp"""
@@ -111,6 +113,7 @@ class YueApp(FlaskApp):
         self.audio_service = AudioService(config, self.db, self.db.tables)
         self.transcode_service = TranscodeService(config, self.db, self.db.tables)
         self.filesys_service = FileSysService(config, self.db, self.db.tables)
+        self.radio_service = RadioService(config, self.db, self.db.tables)
 
         self.add_resource(AppResource(self.config, self.db, self.db.tables))
         self.add_resource(UserResource(self, self.user_service))
@@ -122,6 +125,7 @@ class YueApp(FlaskApp):
                                         self.audio_service))
         self.add_resource(FilesResource(self.user_service, self.filesys_service))
         self.add_resource(NotesResource(self.user_service, self.filesys_service))
+        self.add_resource(RadioResource(self.user_service, self.radio_service))
 
         self.app.teardown_request(self.teardown_request)
         self.app.before_request(self.before_request)
