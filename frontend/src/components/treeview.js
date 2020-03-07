@@ -17,7 +17,7 @@ const style = {
         'min-width': '32px',
         'min-height': '32px',
         background: 'blue',
-        'margin-right': '1em'
+        //'margin-right': '1em'
     }),
     treeItemButtonH: StyleSheet({
         position: 'relative',
@@ -46,9 +46,10 @@ const style = {
         display: 'flex',
         'flex-direction': 'column',
     }),
-    treeItem0: StyleSheet({'padding-left': '1em'}),
+    treeItem0: StyleSheet({}),
     treeItemN: StyleSheet({'padding-left': '32px'}),
     listItemMid: StyleSheet({
+        'margin-left': '1em',
         'flex-grow': '1',
     }),
     listItemEnd: StyleSheet({
@@ -56,6 +57,16 @@ const style = {
         'margin-right': '1em',
         'cursor': 'pointer'
     }),
+
+    listItemSelected: StyleSheet({
+        background: '#00FF0022',
+        'font-weight': 'bold'
+    }),
+
+    treeFooter: StyleSheet({
+        height: '33vh',
+        'min-height': '64px'
+    })
 
 }
 
@@ -82,8 +93,8 @@ class TreeButton extends DomElement {
     constructor(callback) {
         super("div", {className: [style.treeItemButton]}, []);
 
-        this.appendChild(new DomElement("div", {className: style.treeItemButtonH}, []))
-        this.appendChild(new DomElement("div", {className: style.treeItemButtonV}, []))
+        //this.appendChild(new DomElement("div", {className: style.treeItemButtonH}, []))
+        //this.appendChild(new DomElement("div", {className: style.treeItemButtonV}, []))
 
         this.attrs = {callback}
     }
@@ -92,6 +103,10 @@ class TreeButton extends DomElement {
         this.attrs.callback()
     }
 }
+
+const UNSELECTED = 0
+const SELECTED = 1
+const PARTIAL = 2
 
 export class TreeItem extends DomElement {
 
@@ -102,18 +117,23 @@ export class TreeItem extends DomElement {
             depth,
             title,
             obj,
-            children: null
+            children: null,
+            selected: false
         }
 
 
         this.attrs.container1 = this.appendChild(new DomElement("div", {className: [style.treeItemObjectContainer]}, []))
         this.attrs.container2 = this.appendChild(new DomElement("div", {className: [style.treeItemChildContainer]}, []))
 
-        this.attrs.btn = this.attrs.container1.appendChild(new TreeButton(this.handleToggleExpand.bind(this)))
+        if (this.hasChildren()) {
+            this.attrs.btn = this.attrs.container1.appendChild(
+                new TreeButton(this.handleToggleExpand.bind(this)))
+        }
+
         this.attrs.txt = this.attrs.container1.appendChild(new components.MiddleText(title))
         this.attrs.txt.addClassName(style.listItemMid)
+        this.attrs.txt.props.onClick = this.handleToggleSelection.bind(this)
 
-        this.attrs.more = this.attrs.container1.appendChild(new SvgMoreElement(()=>{}))
 
         if (depth === 0) {
             this.addClassName(style.treeItem0)
@@ -121,6 +141,11 @@ export class TreeItem extends DomElement {
             this.addClassName(style.treeItemN)
         }
 
+    }
+
+    setMoreCallback(callback) {
+        this.attrs.more = this.attrs.container1.appendChild(
+            new SvgMoreElement(callback))
     }
 
     handleToggleExpand() {
@@ -131,6 +156,12 @@ export class TreeItem extends DomElement {
 
         if (this.attrs.children === null) {
             this.attrs.children = this.buildChildren(this.attrs.obj)
+            if (this.attrs.selected) {
+                this.attrs.children.forEach(child => {
+                    child.setSelected(true)
+                })
+            }
+
         }
 
         if (this.attrs.container2.children.length === 0) {
@@ -140,6 +171,48 @@ export class TreeItem extends DomElement {
             this.attrs.container2.children = []
             this.attrs.container2.update()
         }
+    }
+
+    handleToggleSelection() {
+        this.setSelected(!this.attrs.selected)
+
+    }
+
+    setSelected(selected) {
+        this.attrs.selected = selected
+
+        if (!!this.attrs.children) {
+            this.attrs.children.forEach(child => {
+                child.setSelected(selected)
+            })
+        }
+
+        if (this.attrs.selected) {
+            this.attrs.container1.addClassName(style.listItemSelected)
+        } else {
+            this.attrs.container1.removeClassName(style.listItemSelected)
+        }
+    }
+
+    countSelected() {
+
+        let sum = 0
+
+        if (this.attrs.children !== null) {
+            sum += this.attrs.children.reduce((total, child) => {
+                total += child.attrs.selected?1:0
+                total += child.countSelected()
+                return total
+            }, 0)
+        }
+
+        sum += this.attrs.selected?1:0
+
+        return sum
+    }
+
+    isSelected() {
+        return this.attrs.selected
     }
 
     hasChildren() {
@@ -157,17 +230,38 @@ export class TreeItem extends DomElement {
 // when expanded. this allows for quick rendering
 // of a large data set by only constructing on demand
 export class TreeView extends DomElement {
-    constructor(parent) {
+    constructor() {
         super("div", {className: style.treeView}, []);
 
+        this.attrs = {
+            container: new DomElement("div", {}, []),
+            footer: new DomElement("div", {className: style.treeFooter}, []),
+        }
 
+        this.appendChild(this.attrs.container)
+        this.appendChild(this.attrs.footer)
     }
 
     reset() {
-        this.removeChildren()
+        this.attrs.container.removeChildren()
     }
 
     addItem(item) {
-        this.appendChild(item)
+        this.attrs.container.appendChild(item)
+    }
+
+
+    countSelected() {
+        return this.attrs.container.children.reduce((total, child) => {
+            return total + child.countSelected()
+        }, 0)
+    }
+
+    selectAll(selected) {
+
+        this.attrs.container.children.forEach(child => {
+            child.setSelected(selected)
+        })
+
     }
 }

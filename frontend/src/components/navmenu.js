@@ -7,7 +7,7 @@ import daedalus with {
 
 import 'swipe.js'
 
-const styles = {
+const style = {
     navMenuShadow: StyleSheet({
         position: "fixed",
         left: '0px',
@@ -15,10 +15,19 @@ const styles = {
     }),
     navMenuShadowHide: StyleSheet({
         width: "1em",
-        height: "120vh",
+        height: "100vh",
         background: 'rgba(0,0,0,0)',
-        border: {width: '1px', style: 'solid'},
+        'border-right': {width: '1px', style: 'solid'},
         transition: 'background .7s linear, width 0s .7s, height 0s .7s',
+    }),
+    alignRight: StyleSheet({
+        position: "fixed",
+        right: '0px',
+        top: '0px',
+        width: "1em",
+        height: "100vh",
+        background: 'rgba(0,0,0,0)',
+        'border-left': {width: '1px', style: 'solid'},
     }),
     navMenuShadowShow: StyleSheet({
         width: "100vw",
@@ -84,11 +93,11 @@ const styles = {
 
 }
 
-StyleSheet(`.${styles.actionItem}:hover`, {
+StyleSheet(`.${style.actionItem}:hover`, {
     'background-image': 'linear-gradient(#BCBCBC, #5E5E5E)';
 })
 
-StyleSheet(`.${styles.actionItem}:active`, {
+StyleSheet(`.${style.actionItem}:active`, {
     'background-image': 'linear-gradient(#5E5E5E, #BCBCBC)';
 })
 
@@ -100,13 +109,13 @@ class NavMenuSvgImpl extends DomElement {
 
 class NavMenuSvg extends DomElement {
     constructor(url, props={}) {
-        super("div", {className: styles.svgDiv}, [new NavMenuSvgImpl(url, props)])
+        super("div", {className: style.svgDiv}, [new NavMenuSvgImpl(url, props)])
     }
 }
 
 class NavMenuAction extends DomElement {
     constructor(icon_url, text, callback) {
-        super("div", {className: styles.actionItem}, []);
+        super("div", {className: style.actionItem}, []);
 
         this.attrs = {
             callback,
@@ -123,20 +132,20 @@ class NavMenuAction extends DomElement {
 
 class NavMenuHeader extends DomElement {
     constructor() {
-        super("div", {className: styles.header}, []);
+        super("div", {className: style.header}, []);
     }
 
 }
 
 class NavMenuActionContainer extends DomElement {
     constructor() {
-        super("div", {className: styles.navMenuActionContainer}, []);
+        super("div", {className: style.navMenuActionContainer}, []);
     }
 }
 
 class NavMenuImpl extends DomElement {
     constructor() {
-        super("div", {className: [styles.navMenu, styles.navMenuHide]}, []);
+        super("div", {className: [style.navMenu, style.navMenuHide]}, []);
 
         this.appendChild(new NavMenuHeader())
 
@@ -155,12 +164,15 @@ class NavMenuImpl extends DomElement {
 
 export class NavMenu extends DomElement {
     constructor() {
-        super("div", {className: [styles.navMenuShadow, styles.navMenuShadowHide]}, []);
+        super("div", {className: [style.navMenuShadow, style.navMenuShadowHide]}, []);
 
         this.attrs = {
             menu: this.appendChild(new NavMenuImpl(this)),
             fixed: false,
         }
+
+
+        this.appendChild(new DomElement("div", {className: style.alignRight}, []))
 
         this.attrs.swipe = new SwipeHandler(document, (pt, direction) => {
             if (direction == SwipeHandler.RIGHT && pt.x < 20) {
@@ -178,47 +190,47 @@ export class NavMenu extends DomElement {
         if (this.attrs.fixed) {
             return
         }
-        this.attrs.menu.removeClassName(styles.navMenuHideFixed)
+        this.attrs.menu.removeClassName(style.navMenuHideFixed)
 
-        this.attrs.menu.removeClassName(styles.navMenuShow)
-        this.attrs.menu.addClassName(styles.navMenuHide)
+        this.attrs.menu.removeClassName(style.navMenuShow)
+        this.attrs.menu.addClassName(style.navMenuHide)
 
-        this.removeClassName(styles.navMenuShadowShow)
-        this.addClassName(styles.navMenuShadowHide)
+        this.removeClassName(style.navMenuShadowShow)
+        this.addClassName(style.navMenuShadowHide)
     }
 
     show() {
         if (this.attrs.fixed) {
             return
         }
-        this.attrs.menu.removeClassName(styles.navMenuHideFixed)
+        this.attrs.menu.removeClassName(style.navMenuHideFixed)
 
-        this.attrs.menu.removeClassName(styles.navMenuHide)
-        this.attrs.menu.addClassName(styles.navMenuShow)
+        this.attrs.menu.removeClassName(style.navMenuHide)
+        this.attrs.menu.addClassName(style.navMenuShow)
 
-        this.removeClassName(styles.navMenuShadowHide)
-        this.addClassName(styles.navMenuShadowShow)
+        this.removeClassName(style.navMenuShadowHide)
+        this.addClassName(style.navMenuShadowShow)
     }
 
     showFixed(fixed) {
 
         if (!!fixed) {
-            this.attrs.menu.removeClassName(styles.navMenuHide)
-            this.attrs.menu.removeClassName(styles.navMenuShow)
-            this.attrs.menu.removeClassName(styles.navMenuHideFixed)
+            this.attrs.menu.removeClassName(style.navMenuHide)
+            this.attrs.menu.removeClassName(style.navMenuShow)
+            this.attrs.menu.removeClassName(style.navMenuHideFixed)
 
-            this.attrs.menu.addClassName(styles.navMenuShowFixed)
+            this.attrs.menu.addClassName(style.navMenuShowFixed)
         } else {
 
-            this.attrs.menu.addClassName(styles.navMenuHideFixed)
-            this.attrs.menu.removeClassName(styles.navMenuShowFixed)
+            this.attrs.menu.addClassName(style.navMenuHideFixed)
+            this.attrs.menu.removeClassName(style.navMenuShowFixed)
         }
 
         this.attrs.fixed = fixed
     }
 
     toggle() {
-        if (this.hasClassName(styles.navMenuShadowShow)) {
+        if (this.hasClassName(style.navMenuShadowShow)) {
             this.hide()
         } else {
             this.show()

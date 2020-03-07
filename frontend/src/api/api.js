@@ -136,6 +136,12 @@ export function librarySearchForest(query) {
     return api.requests.get_json(url, cfg);
 }
 
+export function librarySong(songId) {
+    const url = env.baseUrl + '/api/library/' + songId;
+    const cfg = getAuthConfig()
+    return api.requests.get_json(url, cfg);
+}
+
 export function libraryDomainInfo(songId) {
     const url = env.baseUrl + '/api/library/info';
     const cfg = getAuthConfig()

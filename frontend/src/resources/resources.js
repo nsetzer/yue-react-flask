@@ -37,6 +37,7 @@ const svg_icon_names = [
     "save",
     "search",
     "search_generic",
+    "select",
     "settings",
     "shuffle",
     "sort",

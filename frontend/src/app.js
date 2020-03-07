@@ -1,5 +1,26 @@
 
+/**
+TODO: investigate dynamically loading pages
 
+    store each page in a separate js file to be loaded on demand
+    display a default loading page while the script loads
+    once fully loaded replace the loading page with the actual page
+
+    requires daedalus and router integration
+
+    var script = document.createElement('script');
+    script.onload = function () {
+        router replace...
+    };
+    script.src = something;
+    document.head.appendChild(script); // initiate script load
+
+
+TODO: investiage module syntax
+
+import { ... } from './file.js';
+
+*/
 import daedalus with {
     StyleSheet,
     DomElement,
@@ -14,14 +35,11 @@ import components
 import resources
 
 const styles = {
-    // style the body of the page red so that if we ever see
-    // red then something is wrong.
-    // set margin/padding to zero to never show the body
     body: StyleSheet({
         margin:0,
         padding:0,
         'overflow-y': 'scroll',
-        //background: {color: '#43464b'}
+        //background: {color: '#CCCCCC'},
     }),
     rootWeb: StyleSheet({
         width: 'calc(100vw - 17px)',

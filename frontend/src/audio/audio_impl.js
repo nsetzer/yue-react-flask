@@ -58,7 +58,7 @@ export class AudioDevice {
 
     queueCreate(query) {
         // returns a promise containing the list of songs in the current queue
-        api.queueCreate(query, 500)
+        api.queueCreate(query, 50)
             .then(result => {
                 this.queue = result.result
                 this._sendEvent('handleAudioQueueChanged', result.result)
@@ -106,20 +106,42 @@ export class AudioDevice {
         }
     }
 
+    queuePlayNext(song) {
+
+        const index = this.current_index + 1
+        console.log(0, index, this.queue.length, index >= 0 && index < this.queue.length)
+        if (index >= 0 && index < this.queue.length) {
+            this.queue.splice(index, 0, song)
+        } else if (index >= this.queue.length) {
+            this.queue.push(song)
+        } else {
+            // user must click next to play
+            this.current_index = -1;
+            this.current_song = song;
+            this.queue = [song,]
+            this._sendEvent('handleAudioSongChanged', null);
+        }
+        this._sendEvent('handleAudioQueueChanged', this.queue)
+        console.log(this.queue)
+    }
+
     queueRemoveIndex(index) {
         if (index >= 0 && index < this.queue.length) {
             const a = this.queue.splice(index, 1);
 
             if (index >= this.queue.length) {
-                this.pause()
+                this.pause();
                 this.current_index = -1;
                 this.current_song = null;
-                this._sendEvent('handleAudioSongChanged', null)
+                this._sendEvent('handleAudioSongChanged', null);
 
             } else if (index == this.current_index) {
-                this.pause()
+                this.pause();
                 this.current_song = this.queue[index];
-                this._sendEvent('handleAudioSongChanged', this.queue[index])
+                this._sendEvent('handleAudioSongChanged', this.queue[index]);
+            } else if (index < this.current_index) {
+                this.current_index -= 1;
+                this.current_song = this.queue[index];
             }
 
             this._sendEvent('handleAudioQueueChanged', this.queue)
@@ -150,7 +172,7 @@ export class AudioDevice {
 
         audio_instance.src = url;
 
-        audio_instance.volume = .5
+        audio_instance.volume = .75
 
         audio_instance.play()
 

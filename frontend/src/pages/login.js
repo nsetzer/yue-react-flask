@@ -10,20 +10,19 @@ import api
 
 const styles = {
     main: StyleSheet({
-        'margin-top': '25vh',
-        width: '100%',
-    }),
-    panel: StyleSheet({
         display: 'inline-flex',
         'flex-direction': 'column',
         'justify-content': 'center',
+        'margin-top': '25vh',
         'margin-left': '25%',
-        'min-width': '9em',
         width: '50%',
-        //height: '100%',
+        'min-width': '9em',
+        height: '50vh',
         'min-height': '6em',
-        background: {color: 'blue'},
-        padding: '1em'
+        'background-image': 'linear-gradient(#08B214, #078C12)',
+        'border': "solid 1px transparent",
+        'border-radius': '1em',
+        'text-align': 'center',
     }),
     btn_center: StyleSheet({
         'text-align': 'center',
@@ -37,12 +36,12 @@ const styles = {
         'margin-left': 'auto',
         'margin-right': 'auto',
         'margin-bottom': '1em',
-    })
+    }),
 }
 
-class Panel extends DomElement {
+export class LoginPage extends DomElement {
     constructor() {
-        super("div", {className: styles.panel}, []);
+        super("div", {className: styles.main}, []);
 
         this.attrs = {
             btn1: new ButtonElement("Login", this.handleLoginClicked.bind(this)),
@@ -85,9 +84,9 @@ class Panel extends DomElement {
     }
 }
 
-export class LoginPage extends DomElement {
-    constructor() {
-        super("div", {className: styles.main}, [new Panel()]);
-    }
-
-}
+//export class LoginPage extends DomElement {
+//    constructor() {
+//        super("div", {className: styles.main}, [new Panel()]);
+//    }
+//
+//}

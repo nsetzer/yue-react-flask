@@ -74,6 +74,14 @@ const style = {
         'font-size': "80%"
     }),
 
+    songItemRow2: StyleSheet({
+        display: 'flex',
+        'justify-content': 'space-between',
+        'padding-left': '1em',
+        'padding-right': '1em',
+        'align-items': 'baseline'
+    }),
+
     callbackLink2: StyleSheet({
         cursor: 'pointer',
         color: 'blue',
@@ -83,6 +91,15 @@ const style = {
 
 
 StyleSheet(`.${style.songItem}:hover`, {background: '#0000FF22'})
+
+
+function formatTime(secs) {
+    secs = secs===Infinity?0:secs
+    let minutes = Math.floor(secs / 60) || 0;
+    let seconds = Math.floor(secs - minutes * 60) || 0;
+    return minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+}
+
 
 class CallbackLink2 extends DomElement {
     constructor(text, callback) {
@@ -111,8 +128,12 @@ class SongItem extends DomElement {
 
         this.attrs.txt1 = this.appendChild(new components.MiddleText((index+1) + ". " + song.title))
         this.attrs.txt1.addClassName(style.fontBig)
-        this.attrs.txt2 = this.appendChild(new components.MiddleText(song.artist))
-        this.attrs.txt2.addClassName(style.fontSmall)
+        const div = this.appendChild(new DomElement("div", {}, []))
+        this.attrs.txt2 = div.appendChild(new components.MiddleText(song.artist))
+        //this.attrs.txt2.addClassName(style.fontSmall)
+        this.attrs.txt3 = div.appendChild(new TextElement(formatTime(song.length))
+        div.addClassName(style.fontSmall)
+        div.addClassName(style.songItemRow2)
 
 
         this.attrs.toolbar.appendChild(new CallbackLink2("play", ()=>{
@@ -154,13 +175,6 @@ class SongItem extends DomElement {
             }
         }
     }
-}
-
-function formatTime(secs) {
-    secs = secs===Infinity?0:secs
-    let minutes = Math.floor(secs / 60) || 0;
-    let seconds = Math.floor(secs - minutes * 60) || 0;
-    return minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
 }
 
 class Header extends DomElement {
@@ -262,6 +276,10 @@ export class PlaylistPage extends DomElement {
 
         if (this.attrs.device.queueLength()==0) {
             this.attrs.device.queueLoad()
+        } else {
+            console.log("update")
+            this.handleAudioQueueChanged(this.attrs.device.queue)
+            this.handleAudioSongChanged(this.attrs.device.current_song)
         }
 
 
@@ -349,7 +367,7 @@ export class PlaylistPage extends DomElement {
         const N = containerList.length < songList.length ? containerList.length : songList.length
 
         // update in place
-        for (let _=0; index < containerList.length; index++) {
+        for (let _=0; index < containerList.length && index < songList.length; index++) {
             if (containerList[index].attrs.song.id == songList[index].id) {
                 // no need to update
                 item = containerList[index];

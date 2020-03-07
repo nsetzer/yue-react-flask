@@ -52,9 +52,6 @@ StyleSheet(`.${style.moreMenuButton}:active`, {
     'background-image': 'linear-gradient(#5E5E5E, #BCBCBC)';
 })
 
-
-
-
 class MoreMenuButton extends DomElement {
     constructor(text, callback) {
         super("div", {className: [style.moreMenuButton], onClick: callback}, [new TextElement(text)])
@@ -63,13 +60,13 @@ class MoreMenuButton extends DomElement {
     setText(text) {
         this.children[0].setText(text)
     }
+
 }
 
 class MoreMenuImpl extends DomElement {
     constructor() {
         super("div", {className: [style.moreMenu]}, [])
 
-        this.appendChild(new MoreMenuButton("hello world"))
     }
 
     onClick(event) {
@@ -81,10 +78,11 @@ export class MoreMenu extends DomElement {
     constructor(callback_close) {
         super("div", {
             className: [style.moreMenuShadow, style.moreMenuHide]
-        }, [new MoreMenuImpl()])
+        }, [])
 
         this.attrs = {
-            callback_close
+            callback_close,
+            impl: this.appendChild(new MoreMenuImpl())
         }
     }
 
@@ -92,6 +90,12 @@ export class MoreMenu extends DomElement {
         this.attrs.callback_close()
     }
 
+    addAction(text, callback) {
+        this.attrs.impl.appendChild(new MoreMenuButton(text, () => {
+            callback();
+            this.hide();
+        }))
+    }
 
     hide() {
         this.updateProps({className: [style.moreMenuShadow, style.moreMenuHide]})

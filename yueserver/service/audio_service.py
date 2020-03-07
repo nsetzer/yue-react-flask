@@ -237,7 +237,11 @@ class AudioService(object):
                 album = {'name': song[Song.album], 'tracks': []}
                 artist['albums'].append(album)
 
-            songItem = {'title': song[Song.title], 'id': song[Song.id]}
+            songItem = {
+            'id': song[Song.id],
+            'title': song[Song.title],
+            'length': song[Song.length],
+            }
             album['tracks'].append(songItem)
 
         return forest
