@@ -1,4 +1,4 @@
-import daedalus with {
+from module daedalus import {
     StyleSheet,
     DomElement,
     ButtonElement,
@@ -7,10 +7,10 @@ import daedalus with {
     Router
 }
 
-import api
-import components
-import resources
-import audio
+import module api
+import module components
+import module resources
+import module audio
 
 const style = {
     main: StyleSheet({

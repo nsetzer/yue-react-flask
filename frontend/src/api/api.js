@@ -1,9 +1,9 @@
 
 
-import daedalus
-import api.requests
+import module daedalus
+import module api.requests
 
-import './token.js'
+include './token.js'
 
 export const env = {
     //`http://${window.location.hostname}:4200`

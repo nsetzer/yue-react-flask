@@ -1,5 +1,5 @@
 
-import daedalus
+import module daedalus
 
 const platform_prefix = daedalus.platform.isAndroid ? "file:///android_asset/site/static/icon/" : "/static/icon/";
 

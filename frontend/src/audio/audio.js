@@ -1,2 +1,2 @@
 
-import 'audio_impl.js'
+include 'audio_impl.js'

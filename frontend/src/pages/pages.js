@@ -1,9 +1,9 @@
 
 
-import './landing.js'
-import './login.js'
-import './storage.js'
-import './playlist.js'
-import './settings.js'
-import './library.js'
-import './radio.js'
+include './landing.js'
+include './login.js'
+include './storage.js'
+include './playlist.js'
+include './settings.js'
+include './library.js'
+include './radio.js'

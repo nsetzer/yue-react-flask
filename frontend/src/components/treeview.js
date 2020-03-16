@@ -1,7 +1,7 @@
 
-import resources
+import module resources
 
-import './svg.js'
+include './svg.js'
 
 const style = {
 

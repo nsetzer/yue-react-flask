@@ -21,7 +21,7 @@ TODO: investiage module syntax
 import { ... } from './file.js';
 
 */
-import daedalus with {
+from module daedalus import {
     StyleSheet,
     DomElement,
     ButtonElement,
@@ -29,12 +29,12 @@ import daedalus with {
     TextInputElement,
     Router
 }
-import api
-import pages
-import components
-import resources
+import module api
+import module pages
+import module components
+import module resources
 
-const styles = {
+const style = {
     body: StyleSheet({
         margin:0,
         padding:0,
@@ -99,7 +99,7 @@ export class Root extends DomElement {
         super("div", {}, []);
 
         const body = document.getElementsByTagName("BODY")[0];
-        body.className = styles.body
+        body.className = style.body
 
         this.attrs = {
             main: () => new pages.LandingPage(),
@@ -221,22 +221,22 @@ export class Root extends DomElement {
 
         if (!!this.attrs.router) {
             if (condition === true) {
-                this.attrs.router.addClassName(styles.fullsize)
+                this.attrs.router.addClassName(style.fullsize)
             } else {
-                this.attrs.router.removeClassName(styles.fullsize)
+                this.attrs.router.removeClassName(style.fullsize)
             }
         }
     }
 
     updateMargin() {
 
-        this.addClassName({className: styles.rootWeb})
+        this.addClassName({className: style.rootWeb})
 
-        //this.attrs.router.updateProps({className: styles.margin})
+        //this.attrs.router.updateProps({className: style.margin})
         //console.log(document.body.scrollHeight , window.innerHeight)
 
         //if (document.body.scrollHeight > window.innerHeight) {
-        //    this.attrs.router.updateProps({className: styles.margin})
+        //    this.attrs.router.updateProps({className: style.margin})
         //} else {
         //    this.attrs.router.updateProps({className: null})
         //}

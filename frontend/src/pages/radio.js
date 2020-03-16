@@ -1,4 +1,4 @@
-import daedalus with {
+from module daedalus import {
     StyleSheet,
     DomElement,
     ButtonElement,
@@ -7,7 +7,7 @@ import daedalus with {
     Router
 }
 
-import components
+import module components
 
 const style = {
     main: StyleSheet({

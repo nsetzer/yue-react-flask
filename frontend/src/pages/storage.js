@@ -15,7 +15,7 @@ download:
     <a href="url" download="filename"></a>
 */
 
-import daedalus with {
+from module daedalus import {
     StyleSheet,
     DomElement,
     TextElement,
@@ -24,9 +24,9 @@ import daedalus with {
     LinkElement,
     Router
 }
-import api
-import resources
-import components
+import module api
+import module resources
+import module components
 
 /*
 const encryptionColorMap = {

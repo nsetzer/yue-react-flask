@@ -1,5 +1,5 @@
 
-import daedalus with {
+from module daedalus import {
     StyleSheet,
     DomElement,
     ButtonElement,
@@ -7,7 +7,7 @@ import daedalus with {
     TextInputElement,
     Router
 }
-import api
+import module api
 
 const styles = {
     main: StyleSheet({

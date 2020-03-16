@@ -1,5 +1,5 @@
 
-import daedalus with {
+from module daedalus import {
     DomElement,
 }
 

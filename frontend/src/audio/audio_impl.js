@@ -1,5 +1,5 @@
 
-import api
+import module api
 
 let device_instance = null;
 let audio_instance = null;
