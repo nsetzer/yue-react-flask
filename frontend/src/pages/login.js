@@ -23,6 +23,7 @@ const styles = {
         'border': "solid 1px transparent",
         'border-radius': '1em',
         'text-align': 'center',
+        'box-shadow': '5px 5px 5px 5px rgba(0,0,0,.6)'
     }),
     btn_center: StyleSheet({
         'text-align': 'center',

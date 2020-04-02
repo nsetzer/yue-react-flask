@@ -5,7 +5,7 @@ from module daedalus import {
     TextElement,
 }
 
-import 'swipe.js'
+include './swipe.js'
 
 const style = {
     navMenuShadow: StyleSheet({
@@ -17,7 +17,7 @@ const style = {
         width: "1em",
         height: "100vh",
         background: 'rgba(0,0,0,0)',
-        'border-right': {width: '1px', style: 'solid'},
+        'border-right': {width: '1px', style: 'solid', color: '#00000033'},
         transition: 'background .7s linear, width 0s .7s, height 0s .7s',
     }),
     alignRight: StyleSheet({
@@ -27,7 +27,7 @@ const style = {
         width: "1em",
         height: "100vh",
         background: 'rgba(0,0,0,0)',
-        'border-left': {width: '1px', style: 'solid'},
+        'border-left': {width: '1px', style: 'solid', color: '#00000033'},
     }),
     navMenuShadowShow: StyleSheet({
         width: "100vw",
@@ -88,7 +88,7 @@ const style = {
         'align-items': 'center',
         width: '100%',
         height: "120px",
-        background: 'green',
+        background: 'linear-gradient(#08B214, #078C12)',
     }),
 
 }
@@ -175,6 +175,9 @@ export class NavMenu extends DomElement {
         this.appendChild(new DomElement("div", {className: style.alignRight}, []))
 
         this.attrs.swipe = new SwipeHandler(document, (pt, direction) => {
+            // if the transition is enabled then
+            // this.attrs.menu.getDomNode().style.left = pt.xc - 300
+            // can be used to set the menu position to the drag position
             if (direction == SwipeHandler.RIGHT && pt.x < 20) {
                 this.show()
             }
@@ -215,15 +218,23 @@ export class NavMenu extends DomElement {
     showFixed(fixed) {
 
         if (!!fixed) {
+            // display permanently on left side
             this.attrs.menu.removeClassName(style.navMenuHide)
             this.attrs.menu.removeClassName(style.navMenuShow)
             this.attrs.menu.removeClassName(style.navMenuHideFixed)
 
             this.attrs.menu.addClassName(style.navMenuShowFixed)
-        } else {
 
+            this.addClassName(style.navMenuShadowHide)
+            this.removeClassName(style.navMenuShadowShow)
+
+        } else {
+            // remove
             this.attrs.menu.addClassName(style.navMenuHideFixed)
             this.attrs.menu.removeClassName(style.navMenuShowFixed)
+
+            this.addClassName(style.navMenuShadowHide)
+            this.removeClassName(style.navMenuShadowShow)
         }
 
         this.attrs.fixed = fixed

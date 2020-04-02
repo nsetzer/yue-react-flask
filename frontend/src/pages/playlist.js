@@ -17,23 +17,6 @@ const style = {
         width: '100%',
     }),
 
-    header: StyleSheet({
-        'text-align': 'center',
-        'position': 'sticky',
-        'background': '#238e23',
-        'padding-left': '2em',
-        'padding-right': '2em',
-        top:0
-    }),
-
-    headerDiv: StyleSheet({
-        display: 'flex',
-        'flex-direction': 'column',
-        'justify-content': 'flex-start',
-        'align-items': 'center',
-        width: '100%'
-    }),
-
     toolbar: StyleSheet({
         display: 'flex',
         'flex-direction': 'row',
@@ -51,12 +34,11 @@ const style = {
         width: '100%'
     }),
 
-    txtInput: StyleSheet({width: "80%"}),
-
     songItem: StyleSheet({
         display: 'flex',
         'flex-direction': 'column',
-        'padding-left': '1.1em',
+        'padding-left': '1em',
+        'padding-right': '1em',
         'padding-bottom': '.5em',
         //width: '100%',
         border: {style: "solid", width: "1px"}
@@ -78,7 +60,7 @@ const style = {
         display: 'flex',
         'justify-content': 'space-between',
         'padding-left': '1em',
-        'padding-right': '1em',
+        //'padding-right': '1em',
         'align-items': 'baseline'
     }),
 
@@ -177,55 +159,52 @@ class SongItem extends DomElement {
     }
 }
 
-class Header extends DomElement {
+class Header extends components.NavHeader {
     constructor(parent) {
-        super("div", {className: style.header}, []);
+        super();
 
-        this.attrs = {
-            parent,
-            toolbar: new DomElement("div", {className: style.toolbar}, []),
-            txtInput: new TextInputElement(""),
-            info1: new DomElement("div", {className: style.info}, []),
-            info2: new DomElement("div", {className: style.info}, []),
-            div: new DomElement("div", {className: style.headerDiv}, [])
-        }
+        this.attrs.parent = parent
 
-        this.attrs.toolbar.appendChild(new components.SvgButtonElement(resources.svg['media_prev'], ()=>{
+        this.addAction(resources.svg['media_prev'], ()=>{
             audio.AudioDevice.instance().prev()
-        }))
-        this.attrs.toolbar.appendChild(new components.SvgButtonElement(resources.svg['media_play'], ()=>{
+        })
+        this.addAction(resources.svg['media_play'], ()=>{
             audio.AudioDevice.instance().togglePlayPause()
-        }))
-        this.attrs.toolbar.appendChild(new components.SvgButtonElement(resources.svg['media_next'], ()=>{
+        })
+        this.addAction(resources.svg['media_next'], ()=>{
             audio.AudioDevice.instance().next()
-        }))
-        this.attrs.toolbar.appendChild(new components.SvgButtonElement(resources.svg['media_shuffle'], ()=>{
+        })
+        this.addAction(resources.svg['media_next'], ()=>{
+            let inst = audio.AudioDevice.instance()
+            inst.setCurrentTime(inst.duration() - 3)
+        })
+        /*
+        this.addAction(resources.svg['media_shuffle'], ()=>{
             audio.AudioDevice.instance().queueCreate(this.attrs.txtInput.props.value)
         }))
 
-        this.attrs.toolbar.appendChild(new components.SvgButtonElement(resources.svg['media_shuffle'], ()=>{
+        this.addAction(resources.svg['media_shuffle'], ()=>{
             audio.AudioDevice.instance().queueCreate("genre = stoner")
         }))
 
-        this.attrs.toolbar.appendChild(new components.SvgButtonElement(resources.svg['media_shuffle'], ()=>{
+        this.addAction(resources.svg['media_shuffle'], ()=>{
             audio.AudioDevice.instance().queueCreate('("visual kei" || genre=j-metal ||(genre =j-rock && genre = "nu metal")) && rating > 0')
         }))
-
-        this.attrs.toolbar.appendChild(new components.SvgButtonElement(resources.svg['save'], ()=>{
+        */
+        this.addAction(resources.svg['save'], ()=>{
             audio.AudioDevice.instance().queueSave()
-        }))
+        })
 
-        this.attrs.txtInput.addClassName(style.txtInput)
-        this.attrs.txt_SongTitle = this.attrs.info1.appendChild(new components.MiddleText("Select A Song"))
-        this.attrs.txt_SongTime = this.attrs.info2.appendChild(new TextElement("00:00:00/00:00:00"))
+        this.attrs.txt_SongTitle = new components.MiddleText("Select A Song")
+        this.attrs.txt_SongTime = new TextElement("00:00:00/00:00:00")
 
-        this.appendChild(this.attrs.div)
-        this.attrs.div.appendChild(this.attrs.toolbar)
-        this.attrs.div.appendChild(this.attrs.txtInput)
-        this.attrs.div.appendChild(this.attrs.info1)
-        this.attrs.div.appendChild(this.attrs.info2)
+        this.addRow(true)
+        this.addRow(true)
 
-        this.attrs.info2.props.onClick = () => {
+        this.addRowElement(0, this.attrs.txt_SongTitle)
+        this.addRowElement(1, this.attrs.txt_SongTime)
+
+        this.attrs.txt_SongTime.props.onClick = () => {
             const device = audio.AudioDevice.instance();
             device.setCurrentTime(device.duration() - 2)
         }
@@ -367,7 +346,7 @@ export class PlaylistPage extends DomElement {
         const N = containerList.length < songList.length ? containerList.length : songList.length
 
         // update in place
-        for (let _=0; index < containerList.length && index < songList.length; index++) {
+        for (; index < containerList.length && index < songList.length; index++) {
             if (containerList[index].attrs.song.id == songList[index].id) {
                 // no need to update
                 item = containerList[index];
@@ -393,7 +372,7 @@ export class PlaylistPage extends DomElement {
         }
 
         // append new
-        for (let _=0; index < songList.length; index++) {
+        for (; index < songList.length; index++) {
             item = new SongItem(index, songList[index])
             containerList.push(item)
             item.updateActive(current_id)

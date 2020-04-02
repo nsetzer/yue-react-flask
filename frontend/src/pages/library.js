@@ -15,63 +15,8 @@ const style = {
         width: '100%',
     }),
 
-    header: StyleSheet({
-        'text-align': 'center',
-        'position': 'sticky',
-        'background': '#078C12',
-        top:0,
-        //'z-index': '1'
-    }),
-
-    headerDiv: StyleSheet({
-        display: 'flex',
-        'flex-direction': 'column',
-        'justify-content': 'flex-start',
-        'align-items': 'center',
-        //width: '100%',
-
-    }),
-
-    toolbar: StyleSheet({
-        display: 'flex',
-        'flex-direction': 'row',
-        'justify-content': 'flex-start',
-        'align-items': 'center',
-        width: '100%',
-        'background-image': 'linear-gradient(#08B214, #078C12)',
-        'border-bottom': "solid 1px black"
-    }),
-    toolbarInner: StyleSheet({
-        display: 'flex',
-        'flex-direction': 'row',
-        'padding-left': '1em',
-        'padding-right': '1em',
-    }),
-
-    toolbar2: StyleSheet({
-        display: 'flex',
-        'flex-direction': 'row',
-        'justify-content': 'flex-start',
-        'align-items': 'center',
-        width: '100%',
-    }),
-
-    toolbarInner2: StyleSheet({
-        display: 'flex',
-        'align-items': 'center',
-        'justify-content': 'center',
-        'padding-left': '1em',
-        'padding-right': '1em',
-    }),
-
-    flexEnd: StyleSheet({
-        'align-self': 'flex-end'
-    }),
     grow: StyleSheet({
         'flex-grow': 1,
-    }),
-    pad: StyleSheet({
-        'width': '1em',
     }),
 
     viewPad: StyleSheet({'padding-left': '1em', 'padding-right': '1em'}),
@@ -86,87 +31,57 @@ function shuffle(a) {
     return a;
 }
 
-
-class Header extends DomElement {
+class Header extends components.NavHeader {
     constructor(parent) {
-        super("div", {className: style.header}, []);
+        super();
 
-        this.attrs = {
-            parent,
-            div: new DomElement("div", {className: style.headerDiv}, []),
-            toolbar: new DomElement("div", {className: style.toolbar}, []),
-            toolbarInner: new DomElement("div", {className: style.toolbarInner}, []),
-            toolbar2: new DomElement("div", {className: style.toolbar2}, []),
-            toolbarInner2: new DomElement("div", {className: style.toolbarInner2}, []),
-            txtInput: new TextInputElement("", null, () => {
+        this.attrs.parent = parent
+        this.attrs.txtInput = new TextInputElement("", null, () => {
                 this.attrs.parent.search(this.attrs.txtInput.props.value)
-            }),
-        }
+        })
 
-        let btn;
-        this.attrs.toolbarInner.appendChild(new components.SvgButtonElement(resources.svg['menu'], ()=>{
+        this.addAction(resources.svg['menu'], ()=>{
             console.log("menu clicked")
-        }))
+        })
 
-        // TODO: align extra buttons on right hand side
-        this.attrs.toolbarInner.appendChild(new components.SvgButtonElement(resources.svg['media_prev'], ()=>{
+        this.addAction(resources.svg['media_prev'], ()=>{
             audio.AudioDevice.instance().prev()
-        }))
+        })
 
-        this.attrs.toolbarInner.appendChild(
-            new components.SvgButtonElement(
-                resources.svg['media_play'], ()=>{
-                    audio.AudioDevice.instance().togglePlayPause()
-        }))
+        this.addAction(resources.svg['media_play'], ()=>{
+            audio.AudioDevice.instance().togglePlayPause()
+        })
 
-        btn = this.attrs.toolbarInner.appendChild(new components.SvgButtonElement(resources.svg['media_next'], ()=>{
+        this.addAction(resources.svg['media_next'], ()=>{
             audio.AudioDevice.instance().next()
-        }))
-        this.attrs.toolbar2.addClassName(style.grow)
-        //btn.addClassName(style.flexEnd)
+        })
 
-
+        this.addRow(false)
+        this.addRowElement(0, this.attrs.txtInput)
         this.attrs.txtInput.addClassName(style.grow)
 
-        this.appendChild(this.attrs.div)
-        this.attrs.toolbar.appendChild(this.attrs.toolbarInner)
-        this.attrs.div.appendChild(this.attrs.toolbar)
-        //this.attrs.div.appendChild(new components.MiddleText("Library"))
-        this.attrs.div.appendChild(this.attrs.toolbar2)
-        //this.attrs.toolbar2.appendChild(this.attrs.toolbarInner2)
-        this.attrs.toolbar2.appendChild(new DomElement("div", {className: style.pad}, []))
-        this.attrs.toolbar2.appendChild(this.attrs.txtInput)
-        this.attrs.toolbar2.appendChild(
-            new components.SvgButtonElement2(
-                resources.svg['search'], ()=>{
-                    this.attrs.parent.search(this.attrs.txtInput.props.value)
-        }))
+        this.addRowAction(0, resources.svg['search'], ()=>{
+            this.attrs.parent.search(this.attrs.txtInput.props.value)
+        })
 
-        this.attrs.toolbar2.appendChild(
-            new components.SvgButtonElement2(
-                resources.svg['media_shuffle'], ()=>{
+        this.addRowAction(0, resources.svg['media_shuffle'], ()=>{
 
-                    const songList = this.attrs.parent.attrs.view.getSelectedSongs()
-                    console.log("creating playlist", songList.length)
-                    audio.AudioDevice.instance().queueSet(shuffle(songList).splice(0, 100))
-                    audio.AudioDevice.instance().next()
+            const songList = this.attrs.parent.attrs.view.getSelectedSongs()
+            console.log("creating playlist", songList.length)
+            audio.AudioDevice.instance().queueSet(shuffle(songList).splice(0, 100))
+            audio.AudioDevice.instance().next()
 
-                    this.attrs.parent.attrs.view.selectAll(false)
+            this.attrs.parent.attrs.view.selectAll(false)
 
-        }))
+        })
 
-        this.attrs.toolbar2.appendChild(
-            new components.SvgButtonElement2(
-                resources.svg['select'], ()=>{
+        this.addRowAction(0, resources.svg['select'], ()=>{
 
-                    const count = this.attrs.parent.attrs.view.countSelected()
-                    console.log(count)
-                    this.attrs.parent.attrs.view.selectAll(count == 0)
+            const count = this.attrs.parent.attrs.view.countSelected()
+            console.log(count)
+            this.attrs.parent.attrs.view.selectAll(count == 0)
 
-        }))
-
-        this.attrs.toolbar2.appendChild(new DomElement("div", {className: style.pad}, []))
-
+        })
 
     }
 }

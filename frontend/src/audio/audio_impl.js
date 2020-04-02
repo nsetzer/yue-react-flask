@@ -369,7 +369,7 @@ AudioDevice.instance = function() {
         device_instance = new AudioDevice()
         audio_instance = new Audio();
 
-        const bind = (x) => audio_instance['on' + x] = device_instance['on' + x].bind(device_instance);
+        const bind = (x) => {audio_instance['on' + x] = device_instance['on' + x].bind(device_instance)};
 
         bind('play');
         bind('pause');

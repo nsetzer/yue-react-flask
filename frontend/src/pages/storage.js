@@ -49,7 +49,10 @@ const style = {
 
     list: StyleSheet({display: 'flex', 'flex-direction': 'column'}),
     listItem: StyleSheet({
-        padding: '.25em',
+        padding-top: '.25em',
+        padding-bottom: '.25em',
+        padding-right: '1em',
+        padding-left: '1em',
         display: 'flex',
         'border-bottom': {width: '1px', color: '#000000', 'style': 'solid'},
         'flex-direction': 'column',
@@ -64,7 +67,10 @@ const style = {
         width: '100%'
     }),
     listItemDir: StyleSheet({
-        padding: '.25em', // TODO: causes view problems
+        padding-top: '.25em',
+        padding-bottom: '.25em',
+        padding-right: '1em',
+        padding-left: '1em',
         'border-bottom': {width: '1px', color: '#000000', 'style': 'solid'},
         display: 'flex',
         'flex-direction': 'row',
@@ -127,7 +133,7 @@ const style = {
     }),
     center: StyleSheet({
         'text-align': 'center',
-        'position': 'sticky',
+        //'position': 'sticky',
         'background': '#238e23',
         'padding-left': '2em',
         top:0
@@ -145,6 +151,29 @@ const style = {
     }),
     searchShow: StyleSheet({display: 'block'}),
     searchHide: StyleSheet({display: 'none'}),
+    grow: StyleSheet({
+        'flex-grow': 1,
+    }),
+    objectContainer: StyleSheet({
+        'height': '96vh',
+        'padding-top': '2vh',
+        'width': '90%',
+        'padding-left': '5%',
+    }),
+    zoomOut: StyleSheet({
+        cursor: "zoom-out",
+    }),
+    zoomIn: StyleSheet({
+        cursor: "zoom-in",
+        display: "flex",
+        justify-content: "center",
+        align-items: 'center',
+        height: "100vh"
+    }),
+    maxWidth: StyleSheet({
+        max-width: "100%",
+        max-height: "100%",
+    })
 }
 
 StyleSheet(`.${style.listItem}:hover`, {background: '#0000FF22'})
@@ -275,7 +304,6 @@ class StorageListElement extends DomElement {
     }
 }
 
-
 class CallbackLink extends DomElement {
     constructor(text, callback) {
         super('div', {className: style.callbackLink}, [new TextElement(text)])
@@ -387,7 +415,6 @@ class FileElement extends DomElement {
     }
 }
 
-
 class StorageNavBar extends DomElement {
     constructor() {
         super("div", {className: style.navBar}, []);
@@ -396,6 +423,55 @@ class StorageNavBar extends DomElement {
     addActionElement(element) {
         this.appendChild(element)
     }
+}
+
+class Header extends components.NavHeader {
+    constructor(parent) {
+        super();
+
+        this.attrs.parent = parent
+
+        this.addAction(resources.svg['menu'], ()=>{});
+        this.addAction(resources.svg['return'], parent.handleOpenParent.bind(parent));
+        this.addAction(resources.svg['upload'], this.handleUploadFile.bind(this));
+        this.addAction(resources.svg['search_generic'], parent.handleToggleSearch.bind(parent));
+        this.addAction(resources.svg['new_folder'], parent.handleNewDirectory.bind(parent));
+
+        this.attrs.location = new components.MiddleText(".....")
+        this.addRow(true)
+        this.addRowElement(0, this.attrs.location);
+
+        this.attrs.search_input = new TextInputElement("", null, parent.search.bind(parent));
+        this.addRow(false)
+        this.attrs.search_input.addClassName(style.grow)
+        this.addRowElement(1, this.attrs.search_input);
+
+        this.addRowAction(1, resources.svg['search_generic'], ()=>{});
+
+        this.attrs.uploadManager = new StorageUploadManager(parent.handleInsertUploadFile.bind(parent));
+        this.addRow(true)
+        this.addRowElement(2, this.attrs.uploadManager);
+
+    }
+
+    setLocation(path) {
+        this.attrs.location.setText(path)
+    }
+
+    setSearchText(text) {
+        this.attrs.search_input.setText(text)
+    }
+
+    handleUploadFile() {
+        if (this.attrs.parent.state.match.root !== "") {
+
+            this.attrs.uploadManager.startUpload(
+                this.attrs.parent.state.match.root,
+                this.attrs.parent.state.match.dirpath)
+
+        }
+    }
+
 }
 
 class StorageUploadManager extends StorageListElement {
@@ -483,19 +559,10 @@ export class StoragePage extends DomElement {
         super("div", {}, []);
 
         this.attrs = {
-            txt: new components.MiddleText("....."), // TODO FIXME
+            header: new Header(this),
             regex: daedalus.patternToRegexp(":root?/:dirpath*", false),
             lst: new StorageListElement(),
             more: new components.MoreMenu(this.handleHideFileMore.bind(this)),
-            banner: new DomElement("div", {className: style.center}, []),
-            navBar: new StorageNavBar(),
-            uploadManager: new StorageUploadManager(this.handleInsertUploadFile.bind(this)),
-            search_input: new TextInputElement("", null, this.search.bind(this)),
-            //btnMenu: new MoreMenuButton("Menu", this.handleMenu.bind(this)),
-            btnBack: new components.SvgButtonElement(resources.svg['return'], this.handleOpenParent.bind(this)),
-            btnUpload: new components.SvgButtonElement(resources.svg['upload'], this.handleUploadFile.bind(this)),
-            btnSearch: new components.SvgButtonElement(resources.svg['search_generic'], this.handleToggleSearch.bind(this)),
-            btnNewDirectory: new components.SvgButtonElement(resources.svg['new_folder'], this.handleNewDirectory.bind(this)),
             filemap: {},
         }
 
@@ -504,32 +571,14 @@ export class StoragePage extends DomElement {
         }
 
         this.appendChild(this.attrs.more)
-        this.appendChild(this.attrs.banner)
-
-        this.attrs.banner.appendChild(this.attrs.txt)
-        this.attrs.banner.appendChild(this.attrs.navBar)
-        this.attrs.banner.appendChild(this.attrs.search_input)
-        this.attrs.banner.appendChild(this.attrs.uploadManager)
-
-        this.attrs.navBar.addActionElement(this.attrs.btnBack)
-        this.attrs.navBar.addActionElement(this.attrs.btnUpload)
-        this.attrs.navBar.addActionElement(this.attrs.btnSearch)
-        this.attrs.navBar.addActionElement(this.attrs.btnNewDirectory)
-
-        this.attrs.search_input.updateProps({className: [style.searchHide]})
-
-        //this.attrs.btnBack.updateProps({className: [style.moreMenuButton, style.searchShow]})
-        //this.attrs.btnUpload.updateProps({className: [style.moreMenuButton, style.searchShow]})
-        //this.attrs.btnSearch.updateProps({className: [style.moreMenuButton, style.searchShow]})
-        //this.attrs.btnNewDirectory.updateProps({className: [style.moreMenuButton, style.searchShow]})
-
+        this.appendChild(this.attrs.header)
         this.appendChild(this.attrs.lst)
 
     }
 
     elementMounted() {
         const params = daedalus.util.parseParameters()
-        this.attrs.search_input.setText((params.q && params.q[0]) || "")
+        this.attrs.header.setSearchText((params.q && params.q[0]) || "")
     }
 
     elementUpdateState(oldState, newState) {
@@ -553,11 +602,6 @@ export class StoragePage extends DomElement {
         //}
     }
 
-    handleMenu() {
-
-        console.log("on menu clicked")
-    }
-
     getRoots() {
         thumbnail_CancelQueue();
         this.attrs.lst.removeChildren();
@@ -567,6 +611,7 @@ export class StoragePage extends DomElement {
     }
 
     handleGetRoots(result) {
+        console.log(result)
         this.updateState({parent_url:null})
 
         result.forEach(name => {
@@ -597,6 +642,11 @@ export class StoragePage extends DomElement {
 
     handleGetPath(result) {
 
+        if (result === undefined) {
+            this.attrs.lst.appendChild(new TextElement("Empty Directory (error)"))
+            return
+        }
+
         let url;
         if (result.parent === result.path) {
             url = daedalus.util.joinpath('/u/storage/list/')
@@ -605,7 +655,6 @@ export class StoragePage extends DomElement {
         }
 
         this.updateState({parent_url:url})
-
 
         const filemap = {};
 
@@ -664,13 +713,13 @@ export class StoragePage extends DomElement {
             this.attrs.search_input.updateProps({className: [style.searchShow]})
             //this.attrs.btnSearch.setText("Cancel")
 
-            this.attrs.btnBack.addClassName(style.searchHide)
-            this.attrs.btnUpload.addClassName(style.searchHide)
-            this.attrs.btnNewDirectory.addClassName(style.searchHide)
+            //this.attrs.btnBack.addClassName(style.searchHide)
+            //this.attrs.btnUpload.addClassName(style.searchHide)
+            //this.attrs.btnNewDirectory.addClassName(style.searchHide)
 
-            this.attrs.btnBack.removeClassName(style.searchShow)
-            this.attrs.btnUpload.removeClassName(style.searchShow)
-            this.attrs.btnNewDirectory.removeClassName(style.searchShow)
+            //this.attrs.btnBack.removeClassName(style.searchShow)
+            //this.attrs.btnUpload.removeClassName(style.searchShow)
+            //this.attrs.btnNewDirectory.removeClassName(style.searchShow)
 
             thumbnail_CancelQueue();
             this.attrs.lst.removeChildren();
@@ -678,13 +727,13 @@ export class StoragePage extends DomElement {
             //this.attrs.btnSearch.setText("Search")
             this.attrs.search_input.updateProps({className: [style.searchHide]})
 
-            this.attrs.btnBack.addClassName(style.searchShow)
-            this.attrs.btnUpload.addClassName(style.searchShow)
-            this.attrs.btnNewDirectory.addClassName(style.searchShow)
+            //this.attrs.btnBack.addClassName(style.searchShow)
+            //this.attrs.btnUpload.addClassName(style.searchShow)
+            //this.attrs.btnNewDirectory.addClassName(style.searchShow)
 
-            this.attrs.btnBack.removeClassName(style.searchHide)
-            this.attrs.btnUpload.removeClassName(style.searchHide)
-            this.attrs.btnNewDirectory.removeClassName(style.searchHide)
+            //this.attrs.btnBack.removeClassName(style.searchHide)
+            //this.attrs.btnUpload.removeClassName(style.searchHide)
+            //this.attrs.btnNewDirectory.removeClassName(style.searchHide)
 
             // TODO: this can be optimized in the future by caching the result
             this.refresh()
@@ -753,16 +802,6 @@ export class StoragePage extends DomElement {
         }
     }
 
-    handleUploadFile() {
-        if (this.state.match.root !== "") {
-
-            this.attrs.uploadManager.startUpload(
-                this.state.match.root,
-                this.state.match.dirpath)
-
-        }
-    }
-
     handleShowFileMore(item) {
 
         this.attrs.more.show()
@@ -781,7 +820,7 @@ export class StoragePage extends DomElement {
             this.getPath(root, dirpath)
         }
 
-        this.attrs.txt.setText(root + "/" + dirpath)
+        this.attrs.header.setLocation(root + "/" + dirpath)
     }
 
     handleInsertUploadFile(fileInfo) {
@@ -837,7 +876,7 @@ export class StoragePreviewPage extends DomElement {
         this.attrs = {
             regex: daedalus.patternToRegexp(":root?/:dirpath*", false),
         }
-
+        console.log(this.attrs.regex)
 
     }
 
@@ -869,21 +908,37 @@ export class StoragePreviewPage extends DomElement {
             // TODO: images should be centered, click/tap for full size
             const url = api.fsPathUrl(root, path, 0)
             console.log(url)
-            this.appendChild(new DomElement("img", {src: url}, []))
+            let img = new DomElement("img", {src: url, className: style.maxWidth}, [])
+            let div = new DomElement("div", {className: style.zoomIn, onClick: this.toggleImageZoom.bind(this)}, [img])
+            this.attrs.img = img
+            this.attrs.img_div = div
+            this.appendChild(div)
         } else if (format === 'video') {
             // TODO: videos should be centered, click/tap for full size
             const url = api.fsPathUrl(root, path, 0)
             this.appendChild(new DomElement("video", {src: url, controls: 1}, []))
         } else if (format === 'pdf') {
-            // TODO: videos should be centered, click/tap for full size
             const url = api.fsPathUrl(root, path, 0)
             console.warn(url)
+            this.addClassName(style.objectContainer)
             this.appendChild(new DomElement("object", {
                 data: url,
                 type: 'application/pdf',
                 width: '100%',
                 height: '100%',
             }, []))
+        }
+    }
+
+    toggleImageZoom(event) {
+        if (this.attrs.img_div.hasClassName(style.zoomIn)) {
+            this.attrs.img_div.removeClassName(style.zoomIn)
+            this.attrs.img.removeClassName(style.maxWidth)
+            this.attrs.img_div.addClassName(style.zoomOut)
+        } else {
+            this.attrs.img_div.removeClassName(style.zoomOut)
+            this.attrs.img_div.addClassName(style.zoomIn)
+            this.attrs.img.addClassName(style.maxWidth)
         }
     }
 }

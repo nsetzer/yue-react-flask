@@ -14,15 +14,6 @@ const style = {
         width: '100%',
     }),
 
-    header: StyleSheet({
-        'text-align': 'center',
-        'position': 'sticky',
-        'background': '#238e23',
-        'padding-left': '2em',
-        'padding-right': '2em',
-        top:0
-    }),
-
     settingsItem: StyleSheet({
         display: 'flex',
         'flex-direction': 'column',
@@ -61,11 +52,10 @@ class SettingsGroupItem extends DomElement {
     }
 }
 
-class Header extends DomElement {
+class Header extends components.NavHeader {
     constructor(parent) {
-        super("div", {className: style.header}, []);
-
-        this.appendChild(new components.MiddleText("Settings"))
+        super();
+        this.addAction(resources.svg['menu'], ()=>{});
     }
 }
 

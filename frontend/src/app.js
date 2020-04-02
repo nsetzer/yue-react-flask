@@ -15,11 +15,6 @@ TODO: investigate dynamically loading pages
     script.src = something;
     document.head.appendChild(script); // initiate script load
 
-
-TODO: investiage module syntax
-
-import { ... } from './file.js';
-
 */
 from module daedalus import {
     StyleSheet,
@@ -230,7 +225,7 @@ export class Root extends DomElement {
 
     updateMargin() {
 
-        this.addClassName({className: style.rootWeb})
+        this.addClassName(style.rootWeb)
 
         //this.attrs.router.updateProps({className: style.margin})
         //console.log(document.body.scrollHeight , window.innerHeight)

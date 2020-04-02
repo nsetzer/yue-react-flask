@@ -12,7 +12,7 @@ export const env = {
     baseUrl: (daedalus.env && daedalus.env.baseUrl)?daedalus.env.baseUrl:""
 }
 
-console.log(`base url: ${env.baseUrl}`)
+//console.log(`base url: ${env.baseUrl}`)
 env.origin = window.location.origin
 
 // returns {token: token}
