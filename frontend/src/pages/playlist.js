@@ -165,6 +165,9 @@ class Header extends components.NavHeader {
 
         this.attrs.parent = parent
 
+        this.addAction(resources.svg['menu'], ()=>{
+            console.log("menu clicked")
+        })
         this.addAction(resources.svg['media_prev'], ()=>{
             audio.AudioDevice.instance().prev()
         })

@@ -22,7 +22,7 @@ from module daedalus import {
     ButtonElement,
     TextElement,
     TextInputElement,
-    Router
+    AuthenticatedRouter
 }
 import module api
 import module pages
@@ -36,8 +36,15 @@ const style = {
         'overflow-y': 'scroll',
         //background: {color: '#CCCCCC'},
     }),
-    rootWeb: StyleSheet({
+    rootWebDesktop: StyleSheet({
         width: 'calc(100vw - 17px)',
+        //height: '100vh',
+        margin: {left: 0, top: 0, bottom: 0, right: 0},
+        padding: 0,
+        //background: {color: 'cyan'}
+    }),
+    rootWebMobile: StyleSheet({
+        width: '100vw',
         //height: '100vh',
         margin: {left: 0, top: 0, bottom: 0, right: 0},
         padding: 0,
@@ -54,38 +61,12 @@ const style = {
     fullsize: StyleSheet({'margin-left': "300px"})
 }
 
-function isAuthenticated() {
-    return new Promise(function(resolve, reject) {
-        resolve(api.getUsertoken() !== null)
-    })
-}
 
-function isNotAuthenticated() {
-    return new Promise(function(resolve, reject) {
-        resolve(api.getUsertoken() === null)
-    })
-}
+class AppRouter extends AuthenticatedRouter {
 
-function reqAuth(elem) {
-    const element = new daedalus.AuthenticateElement(
-        elem,
-        isAuthenticated,
-        () => {},
-        () => {history.pushState({}, "", "/")}
-    )
-    //element.updateProps({style: {height: '100%', width: '100%', 'background-color': '#00FF0033'}})
-    return element;
-}
-
-function reqNoAuth(elem) {
-    const element = new daedalus.AuthenticateElement(
-        elem,
-        isNotAuthenticated,
-        () => {},
-        () => {history.pushState({}, "", "/u/storage/list")}
-    )
-    //element.updateProps({style: {height: '100%', width: '100%', 'background-color': '#FFFF0033'}})
-    return element;
+    isAuthenticated() {
+        return api.getUsertoken() !== null
+    }
 }
 
 export class Root extends DomElement {
@@ -97,18 +78,11 @@ export class Root extends DomElement {
         body.className = style.body
 
         this.attrs = {
-            main: () => new pages.LandingPage(),
-            login: () => reqNoAuth(new pages.LoginPage()),
-            user_storage: () => reqAuth(new pages.StoragePage()),
-            user_storage_preview: () => reqAuth(new pages.StoragePreviewPage()),
-            user_storage_search: () => reqAuth(new pages.StorageSearchPage()),
-            user_playlist: () => reqAuth(new pages.PlaylistPage()),
-            user_settings: () => reqAuth(new pages.SettingsPage()),
-            user_library: () => reqAuth(new pages.LibraryPage()),
-            user_radio: () => reqAuth(new pages.UserRadioPage()),
-            user: () => reqAuth(new DomElement('div', {}, [])),
-            'public': () => new DomElement('div', {}, []),
+            main: new pages.LandingPage,
+            page_cache: {},
             nav: null,
+            router: null,
+            container: new DomElement("div", {}, []),
         }
 
         window.onresize = this.handleResize.bind(this)
@@ -116,18 +90,20 @@ export class Root extends DomElement {
     }
 
     buildRouter() {
-        this.attrs.router = new Router([
-            {pattern: "/u/storage/preview/:path*",   element: this.attrs.user_storage_preview},
-            {pattern: "/u/storage/:mode/:path*",   element: this.attrs.user_storage},
-            {pattern: "/u/playlist",   element: this.attrs.user_playlist},
-            {pattern: "/u/settings",   element: this.attrs.user_settings},
-            {pattern: "/u/library",   element: this.attrs.user_library},
-            {pattern: "/u/radio",   element: this.attrs.user_radio},
-            {pattern: "/u/:path*",   element: this.attrs.user},
-            {pattern: "/p/:path*",   element: this.attrs.public},
-            {pattern: "/login",      element: this.attrs.login},
-            {pattern: "/:path*",     element: this.attrs.main},
-        ], ()=>{return new Home()})
+
+        let router = new AppRouter(this.attrs.container)
+        router.addAuthRoute("/u/storage/preview/:path*", (cbk)=>this.handleRoute(cbk, pages.StoragePreviewPage), '/login');
+        router.addAuthRoute("/u/storage/:mode/:path*", (cbk)=>this.handleRoute(cbk, pages.StoragePage), '/login');
+        router.addAuthRoute("/u/playlist", (cbk)=>this.handleRoute(cbk, pages.PlaylistPage), '/login');
+        router.addAuthRoute("/u/settings", (cbk)=>this.handleRoute(cbk, pages.SettingsPage), '/login');
+        router.addAuthRoute("/u/library", (cbk)=>this.handleRoute(cbk, pages.LibraryPage), '/login');
+        router.addAuthRoute("/u/radio", (cbk)=>this.handleRoute(cbk, pages.UserRadioPage), '/login');
+        router.addAuthRoute("/u/:path*", (cbk)=>{history.pushState({}, "", "/u/storage/list")}, '/login');
+        router.addNoAuthRoute("/login", (cbk)=>this.handleRoute(cbk, pages.LoginPage), "/u/storage/list");
+        router.addRoute("/p/:path*", (cbk)=>{history.pushState({}, "", "/")});
+        router.addRoute("/:path*", (cbk)=>{cbk(this.attrs.main)});
+        router.setDefaultRoute((cbk)=>{cbk(this.attrs.main)})
+        this.attrs.router = router
 
         this.attrs.nav = new components.NavMenu();
         this.attrs.nav.addAction(resources.svg.playlist, "Playlist", ()=>{
@@ -157,7 +133,6 @@ export class Root extends DomElement {
             this.attrs.nav.hide();
         });
         this.attrs.nav.addAction(resources.svg.logout, "Log Out", ()=>{
-            //this.attrs.nav.hide()
             api.clearUserToken();
             history.pushState({}, "", "/")
         });
@@ -173,8 +148,24 @@ export class Root extends DomElement {
 
         this.toggleShowMenuFixed();
 
-        this.appendChild(this.attrs.router)
+        this.appendChild(this.attrs.container)
         this.appendChild(this.attrs.nav)
+
+        // perform the initial route
+        this.attrs.router.handleLocationChanged(window.location.pathname)
+        // handle future location changes
+        this.connect(history.locationChanged, this.handleLocationChanged.bind(this))
+    }
+
+    handleLocationChanged() {
+        this.attrs.router.handleLocationChanged(window.location.pathname)
+    }
+
+    handleRoute(fn, page) {
+        if (this.attrs.page_cache[page] === undefined) {
+            this.attrs.page_cache[page] = new page()
+        }
+        fn(this.attrs.page_cache[page])
     }
 
     elementMounted() {
@@ -208,32 +199,37 @@ export class Root extends DomElement {
     }
 
     toggleShowMenuFixed() {
-        const condition = document.body.clientWidth > 900
+        const condition = document.body.clientWidth > 900 && api.getUsertoken() !== null
 
         if (!!this.attrs.nav) {
             this.attrs.nav.showFixed(condition)
         }
 
-        if (!!this.attrs.router) {
+        if (!!this.attrs.container) {
             if (condition === true) {
-                this.attrs.router.addClassName(style.fullsize)
+                this.attrs.container.addClassName(style.fullsize)
             } else {
-                this.attrs.router.removeClassName(style.fullsize)
+                this.attrs.container.removeClassName(style.fullsize)
             }
         }
     }
 
     updateMargin() {
 
-        this.addClassName(style.rootWeb)
+        if (daedalus.platform.isMobile) {
+            this.addClassName(style.rootWebMobile)
+        } else {
+            this.addClassName(style.rootWebDesktop)
+        }
 
-        //this.attrs.router.updateProps({className: style.margin})
+
+        //this.attrs.container.updateProps({className: style.margin})
         //console.log(document.body.scrollHeight , window.innerHeight)
 
         //if (document.body.scrollHeight > window.innerHeight) {
-        //    this.attrs.router.updateProps({className: style.margin})
+        //    this.attrs.container.updateProps({className: style.margin})
         //} else {
-        //    this.attrs.router.updateProps({className: null})
+        //    this.attrs.container.updateProps({className: null})
         //}
     }
 }
