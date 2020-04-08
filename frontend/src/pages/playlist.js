@@ -44,6 +44,17 @@ const style = {
         border: {style: "solid", width: "1px"}
     }),
 
+    songItemPlaceholder: StyleSheet({
+        display: 'flex',
+        'flex-direction': 'column',
+        'padding-left': '1em',
+        'padding-right': '1em',
+        'padding-bottom': '.5em',
+        border: {style: "solid", width: "1px"},
+        background-color: "#edf2f7",
+        border: "2px dashed #cbd5e0",
+    }),
+
     songItemActive: StyleSheet({
         background: '#00FF0022',
     }),
@@ -56,6 +67,10 @@ const style = {
         'font-size': "80%"
     }),
 
+    songItemRow: StyleSheet({
+        display:'flex',
+        'flex-direction': 'row'
+    }),
     songItemRow2: StyleSheet({
         display: 'flex',
         'justify-content': 'space-between',
@@ -69,6 +84,15 @@ const style = {
         color: 'blue',
         'padding-right': '1em'
     }),
+
+    grip: StyleSheet({
+        cursor: "ns-resize",
+        width: "2em",
+        min-width: "2em",
+        height: "2em",
+        background: "linear-gradient(rgba(0,0,0,0) 30%, rgba(0,0,0,.3) 40%, rgba(0,0,0,0) 50%, rgba(0,0,0,.3) 60%, rgba(0,0,0,0) 70%);",
+    }),
+    space5 : StyleSheet({width: ".5em", min-width: ".5em"})
 }
 
 
@@ -98,25 +122,52 @@ class CallbackLink2 extends DomElement {
 }
 
 class SongItem extends DomElement {
-    constructor(index, song) {
+    constructor(parent, index, song) {
         super("div", {className: style.songItem}, []);
 
         this.attrs = {
+            parent,
             index,
             song,
             active: false,
             toolbar: new DomElement("div", {className:style.toolbar}, [])
         }
 
-        this.attrs.txt1 = this.appendChild(new components.MiddleText((index+1) + ". " + song.title))
+        const div2 = this.appendChild(new DomElement("div", {className: style.songItemRow}, []))
+
+        div2.appendChild(new DomElement("div", {className:style.space5}, []) )
+        const grip = div2.appendChild(new DomElement("div", {className:style.grip}, []) )
+        div2.appendChild(new DomElement("div", {className:style.space5}, []) )
+
+        grip.props.onMouseDown = (event) => {
+            this.attrs.parent.handleChildDragBegin(this, event)
+            let node = this.getDomNode()
+            node.style.left = '0px'
+            node.style.right = '0px'
+            node.style.background = "white"
+            event.stopPropagation()
+        }
+
+        grip.props.onTouchStart = (event) => {
+            this.attrs.parent.handleChildDragBegin(this, event)
+            let node = this.getDomNode()
+            node.style.left = '0px'
+            node.style.right = '0px'
+            node.style.background = "white"
+            event.stopPropagation()
+        }
+
+        const divrhs = div2.appendChild(new DomElement("div", {className:style.main}, []))
+
+        this.attrs.txt1 = divrhs.appendChild(new components.MiddleText((index+1) + ". " + song.title))
         this.attrs.txt1.addClassName(style.fontBig)
-        const div = this.appendChild(new DomElement("div", {}, []))
+        const div = divrhs.appendChild(new DomElement("div", {}, []))
+
         this.attrs.txt2 = div.appendChild(new components.MiddleText(song.artist))
         //this.attrs.txt2.addClassName(style.fontSmall)
         this.attrs.txt3 = div.appendChild(new TextElement(formatTime(song.length))
         div.addClassName(style.fontSmall)
         div.addClassName(style.songItemRow2)
-
 
         this.attrs.toolbar.appendChild(new CallbackLink2("play", ()=>{
             audio.AudioDevice.instance().playIndex(this.attrs.index)
@@ -131,19 +182,15 @@ class SongItem extends DomElement {
             audio.AudioDevice.instance().queueRemoveIndex(this.attrs.index)
         }))
 
-        this.appendChild(this.attrs.toolbar)
+
+        divrhs.appendChild(this.attrs.toolbar)
 
     }
-
-    //onClick() {
-    //    console.log(this.attrs.index)
-    //    audio.AudioDevice.instance().playIndex(this.attrs.index)
-    //}
 
     updateActive(id) {
         if (id === undefined) {
             console.error("err undef")
-            return
+            return;
         }
         const active = id === this.attrs.song.id
         if (this.attrs.active != active) {
@@ -157,6 +204,45 @@ class SongItem extends DomElement {
             }
         }
     }
+
+    onTouchMove(event) {
+        this.attrs.parent.handleChildDragMove(this, event)
+        event.stopPropagation()
+    }
+
+    onTouchEnd(event) {
+        this.attrs.parent.handleChildDragEnd(this, {target: this.getDomNode()})
+        let node = this.getDomNode()
+        node.style.removeProperty('left');
+        node.style.removeProperty('right');
+        node.style.removeProperty('background');
+        event.stopPropagation()
+    }
+
+    onTouchCancel(event) {
+        this.attrs.parent.handleChildDragEnd(this, {target: this.getDomNode()})
+        event.stopPropagation()
+    }
+
+    onMouseMove(event) {
+        this.attrs.parent.handleChildDragMove(this, event)
+        event.stopPropagation()
+    }
+
+    //onMouseLeave(event) {
+    //    this.attrs.parent.handleChildDragEnd(this, event)
+    //    event.stopPropagation()
+    //}
+
+    onMouseUp(event) {
+        this.attrs.parent.handleChildDragEnd(this, event)
+        let node = this.getDomNode()
+        node.style.removeProperty('left');
+        node.style.removeProperty('right');
+        node.style.removeProperty('background');
+        event.stopPropagation()
+    }
+
 }
 
 class Header extends components.NavHeader {
@@ -235,6 +321,16 @@ class Header extends components.NavHeader {
     }
 }
 
+class SongList extends daedalus.DraggableList {
+
+    updateModel(indexStart, indexEnd) {
+        super.updateModel(indexStart, indexEnd);
+
+        audio.AudioDevice.instance().queueSwapSong(indexStart, indexEnd)
+    }
+
+}
+
 export class PlaylistPage extends DomElement {
     constructor() {
         super("div", {className: style.main}, []);
@@ -242,8 +338,10 @@ export class PlaylistPage extends DomElement {
         this.attrs = {
             device: audio.AudioDevice.instance(),
             header: new Header(this),
-            container: new DomElement("div", {}, [])
+            container: new SongList()
         }
+
+        this.attrs.container.setPlaceholderClassName(style.songItemPlaceholder)
 
         this.appendChild(this.attrs.header)
         //this.appendChild(new TextElement("Loading..."))
@@ -271,26 +369,6 @@ export class PlaylistPage extends DomElement {
         console.log("dismount playlist view")
 
         this.attrs.device.disconnectView(this)
-    }
-
-    xshowQueue(queue) {
-
-        this.attrs.container.removeChildren()
-
-        queue.result.forEach((song, index) => {
-            this.attrs.container.appendChild(new SongItem(index, song))
-        })
-
-        this.update()
-
-        this.attrs.device.queueSet(queue.result)
-    }
-
-    xshowQueueError(error) {
-
-        console.error(error)
-        this.attrs.container.removeChildren()
-        this.attrs.container.appendChild(new TextElement("Error..."))
     }
 
     handleAudioPlay(event) {
@@ -353,10 +431,11 @@ export class PlaylistPage extends DomElement {
             if (containerList[index].attrs.song.id == songList[index].id) {
                 // no need to update
                 item = containerList[index];
+                item.attrs.index = index // fix for drag and drop
             } else {
                 // replace
                 miss += 1
-                item = new SongItem(index, songList[index])
+                item = new SongItem(this.attrs.container, index, songList[index])
                 containerList[index] = item
             }
 
@@ -376,7 +455,7 @@ export class PlaylistPage extends DomElement {
 
         // append new
         for (; index < songList.length; index++) {
-            item = new SongItem(index, songList[index])
+            item = new SongItem(this.attrs.container, index, songList[index])
             containerList.push(item)
             item.updateActive(current_id)
             miss += 1

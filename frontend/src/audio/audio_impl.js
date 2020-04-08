@@ -106,6 +106,21 @@ export class AudioDevice {
         }
     }
 
+    queueSwapSong(index, target) {
+
+        console.log(this.current_index, index, target)
+        daedalus.util.array_move(this.queue, index, target)
+        if (this.current_index == index) {
+            this.current_index = target;
+        } else if (index < this.current_index && target >= this.current_index) {
+            this.current_index -= 1;
+        } else if (index > this.current_index && target <= this.current_index) {
+            this.current_index += 1;
+        }
+        //console.log("move", index, target)
+        this._sendEvent('handleAudioQueueChanged', this.queue)
+    }
+
     queuePlayNext(song) {
 
         const index = this.current_index + 1
@@ -233,6 +248,8 @@ export class AudioDevice {
 
     setCurrentTime(time) {
         console.log(time)
+        // TODO: check that time is finite
+        // index.js:2052 Uncaught TypeError: Failed to set the 'currentTime' property on 'HTMLMediaElement': The provided double value is non-finite.
         audio_instance.currentTime = time;
     }
 
