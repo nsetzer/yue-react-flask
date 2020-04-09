@@ -34,25 +34,31 @@ const style = {
         width: '100%'
     }),
 
-    songItem: StyleSheet({
-        display: 'flex',
-        'flex-direction': 'column',
+    songList: StyleSheet({
         'padding-left': '1em',
         'padding-right': '1em',
-        'padding-bottom': '.5em',
-        //width: '100%',
-        border: {style: "solid", width: "1px"}
+    }),
+
+    songItem: StyleSheet({
+        display: 'flex',
+        'flex-direction': 'row',
+        margin-bottom: '.25em',
+        border: {style: "solid", width: "1px"},
+        width: 'calc(100% - 2px)', // minus border width * 2
     }),
 
     songItemPlaceholder: StyleSheet({
         display: 'flex',
         'flex-direction': 'column',
-        'padding-left': '1em',
-        'padding-right': '1em',
-        'padding-bottom': '.5em',
+        margin-bottom: '.25em',
         border: {style: "solid", width: "1px"},
-        background-color: "#edf2f7",
-        border: "2px dashed #cbd5e0",
+        //background-color: "#edf2f7",
+        border: "1px solid black",
+
+        background-position: '0px 0px, 10px 10px',
+        background-size: '20px 20px',
+        background-image: 'linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, #eee 75%, #eee 100%),linear-gradient(45deg, #eee 25%, white 25%, white 75%, #eee 75%, #eee 100%)'
+
     }),
 
     songItemActive: StyleSheet({
@@ -69,7 +75,13 @@ const style = {
 
     songItemRow: StyleSheet({
         display:'flex',
-        'flex-direction': 'row'
+        'flex-direction': 'row',
+        width: '100%'
+    }),
+    songItemRhs: StyleSheet({
+        'flex': '1 1 0',
+        // 100% minus grip + padding
+        'max-width': 'calc(100% - 1.5em)'
     }),
     songItemRow2: StyleSheet({
         display: 'flex',
@@ -87,12 +99,14 @@ const style = {
 
     grip: StyleSheet({
         cursor: "ns-resize",
-        width: "2em",
-        min-width: "2em",
-        height: "2em",
+        width: "1em",
+        min-width: "1em",
+        //height: "2em",
         background: "linear-gradient(rgba(0,0,0,0) 30%, rgba(0,0,0,.3) 40%, rgba(0,0,0,0) 50%, rgba(0,0,0,.3) 60%, rgba(0,0,0,0) 70%);",
     }),
-    space5 : StyleSheet({width: ".5em", min-width: ".5em"})
+    space5 : StyleSheet({width: ".25em", min-width: ".25em"}),
+
+    center80: StyleSheet({max-width: '80%'})
 }
 
 
@@ -133,31 +147,39 @@ class SongItem extends DomElement {
             toolbar: new DomElement("div", {className:style.toolbar}, [])
         }
 
-        const div2 = this.appendChild(new DomElement("div", {className: style.songItemRow}, []))
 
-        div2.appendChild(new DomElement("div", {className:style.space5}, []) )
-        const grip = div2.appendChild(new DomElement("div", {className:style.grip}, []) )
-        div2.appendChild(new DomElement("div", {className:style.space5}, []) )
+        //const div2 = this.appendChild(new DomElement("div", {className: style.songItemRow}, []))
+
+        this.appendChild(new DomElement("div", {className:style.space5}, []) )
+        const grip = this.appendChild(new DomElement("div", {className:style.grip}, []) )
+        this.appendChild(new DomElement("div", {className:style.space5}, []) )
 
         grip.props.onMouseDown = (event) => {
-            this.attrs.parent.handleChildDragBegin(this, event)
             let node = this.getDomNode()
-            node.style.left = '0px'
-            node.style.right = '0px'
+            node.style.width = node.clientWidth + 'px'
+            this.attrs.parent.handleChildDragBegin(this, event)
+
+            //node.style.left = '0px'
+            //node.style.right = '0px'
+
             node.style.background = "white"
             event.stopPropagation()
         }
 
         grip.props.onTouchStart = (event) => {
-            this.attrs.parent.handleChildDragBegin(this, event)
             let node = this.getDomNode()
-            node.style.left = '0px'
-            node.style.right = '0px'
+            node.style.width = node.clientWidth + 'px'
+            this.attrs.parent.handleChildDragBegin(this, event)
+
+            //node.style.left = '0px'
+            //node.style.right = '0px'
             node.style.background = "white"
             event.stopPropagation()
         }
 
-        const divrhs = div2.appendChild(new DomElement("div", {className:style.main}, []))
+        const divrhs = this.appendChild(new DomElement("div", {className:style.songItemRhs}, []))
+
+        //const divrhs = this
 
         this.attrs.txt1 = divrhs.appendChild(new components.MiddleText((index+1) + ". " + song.title))
         this.attrs.txt1.addClassName(style.fontBig)
@@ -172,12 +194,12 @@ class SongItem extends DomElement {
         this.attrs.toolbar.appendChild(new CallbackLink2("play", ()=>{
             audio.AudioDevice.instance().playIndex(this.attrs.index)
         }))
-        this.attrs.toolbar.appendChild(new CallbackLink2("move up", ()=>{
-            audio.AudioDevice.instance().queueMoveSongUp(this.attrs.index)
-        }))
-        this.attrs.toolbar.appendChild(new CallbackLink2("move down", ()=>{
-            audio.AudioDevice.instance().queueMoveSongDown(this.attrs.index)
-        }))
+        //this.attrs.toolbar.appendChild(new CallbackLink2("move up", ()=>{
+        //    audio.AudioDevice.instance().queueMoveSongUp(this.attrs.index)
+        //}))
+        //this.attrs.toolbar.appendChild(new CallbackLink2("move down", ()=>{
+        //    audio.AudioDevice.instance().queueMoveSongDown(this.attrs.index)
+        //}))
         this.attrs.toolbar.appendChild(new CallbackLink2("delete", ()=>{
             audio.AudioDevice.instance().queueRemoveIndex(this.attrs.index)
         }))
@@ -185,6 +207,13 @@ class SongItem extends DomElement {
 
         divrhs.appendChild(this.attrs.toolbar)
 
+    }
+
+    setIndex(index) {
+        if (index != this.attrs.index) {
+            this.attrs.index = index
+            this.attrs.txt1.setText((index+1) + ". " + this.attrs.song.title)
+        }
     }
 
     updateActive(id) {
@@ -213,8 +242,7 @@ class SongItem extends DomElement {
     onTouchEnd(event) {
         this.attrs.parent.handleChildDragEnd(this, {target: this.getDomNode()})
         let node = this.getDomNode()
-        node.style.removeProperty('left');
-        node.style.removeProperty('right');
+        node.style.removeProperty('width');
         node.style.removeProperty('background');
         event.stopPropagation()
     }
@@ -229,16 +257,16 @@ class SongItem extends DomElement {
         event.stopPropagation()
     }
 
-    //onMouseLeave(event) {
-    //    this.attrs.parent.handleChildDragEnd(this, event)
-    //    event.stopPropagation()
-    //}
+    onMouseLeave(event) {
+        this.attrs.parent.handleChildDragMove(this, event)
+        //this.attrs.parent.handleChildDragEnd(this, event)
+        event.stopPropagation()
+    }
 
     onMouseUp(event) {
         this.attrs.parent.handleChildDragEnd(this, event)
         let node = this.getDomNode()
-        node.style.removeProperty('left');
-        node.style.removeProperty('right');
+        node.style.removeProperty('width');
         node.style.removeProperty('background');
         event.stopPropagation()
     }
@@ -293,6 +321,8 @@ class Header extends components.NavHeader {
         this.addRowElement(0, this.attrs.txt_SongTitle)
         this.addRowElement(1, this.attrs.txt_SongTime)
 
+        this.attrs.txt_SongTitle.addClassName(style.center80)
+
         this.attrs.txt_SongTime.props.onClick = () => {
             const device = audio.AudioDevice.instance();
             device.setCurrentTime(device.duration() - 2)
@@ -342,6 +372,7 @@ export class PlaylistPage extends DomElement {
         }
 
         this.attrs.container.setPlaceholderClassName(style.songItemPlaceholder)
+        this.attrs.container.addClassName(style.songList)
 
         this.appendChild(this.attrs.header)
         //this.appendChild(new TextElement("Loading..."))
@@ -431,7 +462,7 @@ export class PlaylistPage extends DomElement {
             if (containerList[index].attrs.song.id == songList[index].id) {
                 // no need to update
                 item = containerList[index];
-                item.attrs.index = index // fix for drag and drop
+                item.setIndex(index) // fix for drag and drop
             } else {
                 // replace
                 miss += 1
