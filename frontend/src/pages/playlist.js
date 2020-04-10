@@ -106,7 +106,15 @@ const style = {
     }),
     space5 : StyleSheet({width: ".25em", min-width: ".25em"}),
 
-    center80: StyleSheet({max-width: '80%'})
+    center80: StyleSheet({max-width: '80%'}),
+
+    lockScreen: StyleSheet({
+        height: '100%',
+        overflow: 'hidden',
+        width: '100%',
+        position: 'fixed',
+    })
+
 }
 
 
@@ -157,23 +165,22 @@ class SongItem extends DomElement {
         grip.props.onMouseDown = (event) => {
             let node = this.getDomNode()
             node.style.width = node.clientWidth + 'px'
+            node.style.background = "white"
             this.attrs.parent.handleChildDragBegin(this, event)
 
             //node.style.left = '0px'
             //node.style.right = '0px'
 
-            node.style.background = "white"
+
             event.stopPropagation()
         }
 
         grip.props.onTouchStart = (event) => {
             let node = this.getDomNode()
             node.style.width = node.clientWidth + 'px'
+            node.style.background = "white"
             this.attrs.parent.handleChildDragBegin(this, event)
 
-            //node.style.left = '0px'
-            //node.style.right = '0px'
-            node.style.background = "white"
             event.stopPropagation()
         }
 
@@ -234,41 +241,100 @@ class SongItem extends DomElement {
         }
     }
 
-    onTouchMove(event) {
-        this.attrs.parent.handleChildDragMove(this, event)
+    onTouchStart(event) {
+        let node = this.getDomNode()
+        node.style.width = node.clientWidth + 'px'
+        node.style.background = "white"
+        this.attrs.parent.handleChildSwipeBegin(this, event)
         event.stopPropagation()
     }
 
-    onTouchEnd(event) {
-        this.attrs.parent.handleChildDragEnd(this, {target: this.getDomNode()})
+    onMouseDown(event) {
         let node = this.getDomNode()
-        node.style.removeProperty('width');
-        node.style.removeProperty('background');
+        node.style.width = node.clientWidth + 'px'
+        node.style.background = "white"
+        this.attrs.parent.handleChildSwipeBegin(this, event)
+        event.stopPropagation()
+    }
+
+    onTouchMove(event) {
+        if (this.attrs.parent.attrs.isSwipe) {
+            if (!this.attrs.parent.handleChildSwipeMove(this, event)) {
+                return;
+            }
+        } else {
+            this.attrs.parent.handleChildDragMove(this, event)
+        }
+        event.stopPropagation()
+        //this.setIndex(99)
+    }
+
+    onTouchEnd(event) {
+        if (this.attrs.parent.attrs.isSwipe) {
+            this.attrs.parent.handleChildSwipeEnd(this, {target: this.getDomNode()})
+        } else {
+            this.attrs.parent.handleChildDragEnd(this, {target: this.getDomNode()})
+            let node = this.getDomNode()
+            node.style.removeProperty('width');
+            node.style.removeProperty('background');
+        }
+
         event.stopPropagation()
     }
 
     onTouchCancel(event) {
-        this.attrs.parent.handleChildDragEnd(this, {target: this.getDomNode()})
+        if (this.attrs.parent.attrs.isSwipe) {
+            this.attrs.parent.handleChildSwipeEnd(this, {target: this.getDomNode()})
+        } else {
+            this.attrs.parent.handleChildDragEnd(this, {target: this.getDomNode()})
+            let node = this.getDomNode()
+            node.style.removeProperty('width');
+            node.style.removeProperty('background');
+        }
+
         event.stopPropagation()
     }
 
     onMouseMove(event) {
-        this.attrs.parent.handleChildDragMove(this, event)
+        if (this.attrs.parent.attrs.isSwipe) {
+            if(!this.attrs.parent.handleChildSwipeMove(this, event)) {
+                return
+            }
+        } else {
+            this.attrs.parent.handleChildDragMove(this, event)
+        }
+
         event.stopPropagation()
     }
 
     onMouseLeave(event) {
-        this.attrs.parent.handleChildDragMove(this, event)
+        if (this.attrs.parent.attrs.isSwipe) {
+            this.attrs.parent.handleChildSwipeEnd(this, event)
+            let node = this.getDomNode()
+            node.style.removeProperty('width');
+            node.style.removeProperty('background');
+        } else {
+            this.attrs.parent.handleChildDragMove(this, event)
+        }
+
         //this.attrs.parent.handleChildDragEnd(this, event)
         event.stopPropagation()
     }
 
     onMouseUp(event) {
-        this.attrs.parent.handleChildDragEnd(this, event)
-        let node = this.getDomNode()
-        node.style.removeProperty('width');
-        node.style.removeProperty('background');
+
+        if (this.attrs.parent.attrs.isSwipe) {
+            this.attrs.parent.handleChildSwipeEnd(this, event)
+        } else {
+            this.attrs.parent.handleChildDragEnd(this, event)
+            let node = this.getDomNode()
+            node.style.removeProperty('width');
+            node.style.removeProperty('background');
+        }
+
+
         event.stopPropagation()
+
     }
 
 }
@@ -353,12 +419,186 @@ class Header extends components.NavHeader {
 
 class SongList extends daedalus.DraggableList {
 
+    constructor() {
+        super()
+
+        // flip between drag and drop and swipe mode
+        this.attrs.isSwipe = false;
+        // true when an animation is present and actions should be ignored
+        this.attrs.isAnimated = false;
+
+        this.attrs.swipeActionDelete = null;
+
+    }
     updateModel(indexStart, indexEnd) {
         super.updateModel(indexStart, indexEnd);
 
         audio.AudioDevice.instance().queueSwapSong(indexStart, indexEnd)
     }
 
+    handleChildDragBegin(child, event) {
+        if (this.attrs.isAnimated) {
+            return
+        }
+        super.handleChildDragBegin(child, event);
+        this.attrs.isSwipe = false;
+    }
+
+    handleChildDragMove(child, event) {
+        if (this.attrs.isAnimated) {
+            return
+        }
+        super.handleChildDragMove(child, event);
+        this.attrs.isSwipe = false;
+    }
+
+    handleChildSwipeBegin(child, event) {
+        if (this.attrs.isAnimated) {
+            return
+        }
+
+        if (!!this.attrs.draggingEle) {
+            // previous drag did not complete. cancel that drag and ignore
+            // this event
+            this.handleChildDragCancel();
+            return;
+        }
+
+        const org_event = event;
+
+        let evt = (event?.touches || event?.originalEvent?.touches)
+        if (evt) {
+            event = evt[0]
+        }
+
+        const draggingEle = child.getDomNode();
+        const rect = draggingEle.getBoundingClientRect();
+        const x = event.pageX - rect.left
+        const y = event.pageY - rect.top
+
+        let pos = Math.abs(Math.floor(100 * (x / (rect.right - rect.left))))
+
+        if ( pos > 30 && pos < 70 ) {
+            org_event.preventDefault()
+
+
+            this.attrs.draggingEle = draggingEle;
+            // Calculate the mouse position
+            this.attrs.xstart = rect.left;
+            this.attrs.ystart = rect.top;
+            this.attrs.x = x;
+            this.attrs.y = y;
+
+            this.attrs.isSwipe = true;
+        }
+    }
+
+    handleChildSwipeMove(child, event) {
+
+        if (this.attrs.isAnimated) {
+            return
+        }
+
+        if (this.attrs.draggingEle!==child.getDomNode()) {
+            return;
+        }
+
+        let org_event = event;
+
+        let evt = (event?.touches || event?.originalEvent?.touches)
+        if (evt) {
+            event = evt[0]
+        }
+
+        let deltax = event.pageX - this.attrs.xstart - this.attrs.x
+        //let deltay = event.pageY - this.attrs.ystart - this.attrs.y;
+
+
+        if (!this.attrs.isDraggingStarted) {
+
+            const draggingRect = this.attrs.draggingEle.getBoundingClientRect();
+
+            if (Math.abs(deltax) < 32) {
+                return false;
+            }
+
+            this.attrs.isDraggingStarted = true;
+
+            // Let the placeholder take the height of dragging element
+            // So the next element won't move up
+            this.attrs.placeholder = document.createElement('div');
+            this.attrs.placeholder.classList.add(this.attrs.placeholderClassName);
+            this.attrs.draggingEle.parentNode.insertBefore(this.attrs.placeholder, this.attrs.draggingEle.nextSibling);
+            this.attrs.placeholder.style.height = `${draggingRect.height-2}px`;  // minus border top / bot
+
+            //const body = document.getElementsByTagName("BODY")[0];
+            //body.className = style.lockScreen
+
+        }
+
+        org_event.preventDefault()
+        //child.setIndex(deltax)
+
+
+        this.attrs.draggingEle.style.position = 'absolute';
+        this.attrs.draggingEle.style.left = `${event.pageX - this.attrs.x}px`;
+        //this.attrs.draggingEle.style['touch-action'] = 'none';
+
+        return true;
+    }
+
+    handleChildSwipeEnd(child, event) {
+        if (this.attrs.draggingEle!==child.getDomNode()) {
+            return;
+        }
+        this.handleChildSwipeCancel(child, event);
+    }
+
+    handleChildSwipeCancel(child, event) {
+        // Remove the placeholder
+        if (this.attrs.isAnimated) {
+            return
+        }
+        let deltax = this.attrs.draggingEle.offsetLeft - this.attrs.placeholder.offsetLeft
+
+        // minimum drag distance to force a delete
+        const SWIPE_OFFSET = 32
+
+        this.swipeActionDelete = (deltax > SWIPE_OFFSET) ? child : null;
+
+        if (deltax > SWIPE_OFFSET) {
+            this.attrs.draggingEle.style.left = document.body.clientWidth + 'px'
+        } else {
+            this.attrs.draggingEle.style.left = this.attrs.placeholder.offsetLeft + 'px'
+        }
+        this.attrs.draggingEle.style.transition = 'left .35s'
+        setTimeout(this.handleChildSwipeTimeout.bind(this), 350)
+        this.attrs.isAnimated = true
+    }
+
+    handleChildSwipeTimeout() {
+        this.attrs.isAnimated = false
+
+
+        this.attrs.placeholder && this.attrs.placeholder.parentNode.removeChild(this.attrs.placeholder);
+
+        this.attrs.draggingEle.style.removeProperty('left');
+        this.attrs.draggingEle.style.removeProperty('position');
+        this.attrs.draggingEle.style.removeProperty('transition');
+        this.attrs.draggingEle.style.removeProperty('width');
+        this.attrs.draggingEle.style.removeProperty('background');
+        //this.attrs.draggingEle.style.removeProperty('touch-action');
+
+        this.attrs.x = null;
+        this.attrs.y = null;
+        this.attrs.draggingEle = null;
+        this.attrs.isDraggingStarted = false;
+
+        if (this.swipeActionDelete !== null) {
+            const index = this.swipeActionDelete.attrs.index
+            audio.AudioDevice.instance().queueRemoveIndex(index)
+        }
+    }
 }
 
 export class PlaylistPage extends DomElement {
