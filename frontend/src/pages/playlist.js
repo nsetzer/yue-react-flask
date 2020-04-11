@@ -66,11 +66,11 @@ const style = {
     }),
 
     fontBig: StyleSheet({
-        'font-size': "120%"
+        'font-size': "110%"
     }),
 
     fontSmall: StyleSheet({
-        'font-size': "80%"
+        'font-size': "85%"
     }),
 
     songItemRow: StyleSheet({
@@ -207,9 +207,9 @@ class SongItem extends DomElement {
         //this.attrs.toolbar.appendChild(new CallbackLink2("move down", ()=>{
         //    audio.AudioDevice.instance().queueMoveSongDown(this.attrs.index)
         //}))
-        this.attrs.toolbar.appendChild(new CallbackLink2("delete", ()=>{
-            audio.AudioDevice.instance().queueRemoveIndex(this.attrs.index)
-        }))
+        //this.attrs.toolbar.appendChild(new CallbackLink2("delete", ()=>{
+        //    audio.AudioDevice.instance().queueRemoveIndex(this.attrs.index)
+        //}))
 
 
         divrhs.appendChild(this.attrs.toolbar)
@@ -309,15 +309,14 @@ class SongItem extends DomElement {
 
     onMouseLeave(event) {
         if (this.attrs.parent.attrs.isSwipe) {
-            this.attrs.parent.handleChildSwipeEnd(this, event)
+            this.attrs.parent.handleChildSwipeCancel(this, event)
+        } else {
+            this.attrs.parent.handleChildDragMove(this, event)
             let node = this.getDomNode()
             node.style.removeProperty('width');
             node.style.removeProperty('background');
-        } else {
-            this.attrs.parent.handleChildDragMove(this, event)
         }
 
-        //this.attrs.parent.handleChildDragEnd(this, event)
         event.stopPropagation()
     }
 
@@ -380,12 +379,15 @@ class Header extends components.NavHeader {
 
         this.attrs.txt_SongTitle = new components.MiddleText("Select A Song")
         this.attrs.txt_SongTime = new TextElement("00:00:00/00:00:00")
+        this.attrs.txt_SongStatus = new TextElement("")
 
+        this.addRow(true)
         this.addRow(true)
         this.addRow(true)
 
         this.addRowElement(0, this.attrs.txt_SongTitle)
         this.addRowElement(1, this.attrs.txt_SongTime)
+        this.addRowElement(2, this.attrs.txt_SongStatus)
 
         this.attrs.txt_SongTitle.addClassName(style.center80)
 
@@ -415,7 +417,15 @@ class Header extends components.NavHeader {
             console.error(e)
         }
     }
+
+    setStatus(status) {
+        this.attrs.txt_SongStatus.setText(status)
+    }
+
 }
+
+const SWIPE_RIGHT = 0x01;
+const SWIPE_LEFT  = 0x02;
 
 class SongList extends daedalus.DraggableList {
 
@@ -427,7 +437,11 @@ class SongList extends daedalus.DraggableList {
         // true when an animation is present and actions should be ignored
         this.attrs.isAnimated = false;
 
-        this.attrs.swipeActionDelete = null;
+        // pointer to child object which was swipped right or left
+        this.attrs.swipeActionRight = null;
+        this.attrs.swipeActionLeft = null;
+
+        this.attrs.swipeConfig = SWIPE_RIGHT;
 
     }
     updateModel(indexStart, indexEnd) {
@@ -460,7 +474,7 @@ class SongList extends daedalus.DraggableList {
         if (!!this.attrs.draggingEle) {
             // previous drag did not complete. cancel that drag and ignore
             // this event
-            this.handleChildDragCancel();
+            this.handleChildSwipeCancel(child, event);
             return;
         }
 
@@ -507,7 +521,16 @@ class SongList extends daedalus.DraggableList {
 
         let evt = (event?.touches || event?.originalEvent?.touches)
         if (evt) {
+
+
             event = evt[0]
+
+            // cancel touch events outside the widget
+            if (event.pageY < this.attrs.draggingEle.offsetTop ||
+                event.pageY > this.attrs.draggingEle.offsetTop + this.attrs.draggingEle.clientHeight) {
+                this.handleChildSwipeCancel(child, event)
+                return;
+            }
         }
 
         let deltax = event.pageX - this.attrs.xstart - this.attrs.x
@@ -524,6 +547,9 @@ class SongList extends daedalus.DraggableList {
 
             this.attrs.isDraggingStarted = true;
 
+
+            this.attrs.draggingEle.style.removeProperty('transition');
+
             // Let the placeholder take the height of dragging element
             // So the next element won't move up
             this.attrs.placeholder = document.createElement('div');
@@ -531,14 +557,9 @@ class SongList extends daedalus.DraggableList {
             this.attrs.draggingEle.parentNode.insertBefore(this.attrs.placeholder, this.attrs.draggingEle.nextSibling);
             this.attrs.placeholder.style.height = `${draggingRect.height-2}px`;  // minus border top / bot
 
-            //const body = document.getElementsByTagName("BODY")[0];
-            //body.className = style.lockScreen
-
         }
 
         org_event.preventDefault()
-        //child.setIndex(deltax)
-
 
         this.attrs.draggingEle.style.position = 'absolute';
         this.attrs.draggingEle.style.left = `${event.pageX - this.attrs.x}px`;
@@ -548,26 +569,35 @@ class SongList extends daedalus.DraggableList {
     }
 
     handleChildSwipeEnd(child, event) {
+        this.handleChildSwipeCancel(child, event, true);
+    }
+
+    handleChildSwipeCancel(child, event, success=false) {
+        // Remove the placeholder
+
         if (this.attrs.draggingEle!==child.getDomNode()) {
             return;
         }
-        this.handleChildSwipeCancel(child, event);
-    }
 
-    handleChildSwipeCancel(child, event) {
-        // Remove the placeholder
         if (this.attrs.isAnimated) {
             return
         }
+
         let deltax = this.attrs.draggingEle.offsetLeft - this.attrs.placeholder.offsetLeft
 
         // minimum drag distance to force a delete
         const SWIPE_OFFSET = 32
 
-        this.swipeActionDelete = (deltax > SWIPE_OFFSET) ? child : null;
+        // TODO: cancel when touch event is not within bounding box of item
 
-        if (deltax > SWIPE_OFFSET) {
-            this.attrs.draggingEle.style.left = document.body.clientWidth + 'px'
+        const cfg = this.attrs.swipeConfig
+
+        if (success && deltax > SWIPE_OFFSET && cfg&SWIPE_RIGHT) {
+            this.attrs.draggingEle.style.left = `${document.body.clientWidth}px`
+            this.swipeActionRight = child;
+        } else if (success && deltax < SWIPE_OFFSET && cfg&SWIPE_LEFT) {
+            this.attrs.draggingEle.style.left = `${-this.attrs.draggingEle.clientWidth}px`
+            this.swipeActionLeft = child;
         } else {
             this.attrs.draggingEle.style.left = this.attrs.placeholder.offsetLeft + 'px'
         }
@@ -577,27 +607,49 @@ class SongList extends daedalus.DraggableList {
     }
 
     handleChildSwipeTimeout() {
+        console.log("swipe timeout")
         this.attrs.isAnimated = false
+        this.attrs.x = null;
+        this.attrs.y = null;
+        this.attrs.isDraggingStarted = false;
+
+        if (this.attrs.placeholder && this.attrs.placeholder.parentNode) {
+            this.attrs.placeholder.parentNode.removeChild(this.attrs.placeholder);
+        }
 
 
-        this.attrs.placeholder && this.attrs.placeholder.parentNode.removeChild(this.attrs.placeholder);
+        if (!this.attrs.draggingEle) {
+            return
+        }
 
         this.attrs.draggingEle.style.removeProperty('left');
         this.attrs.draggingEle.style.removeProperty('position');
         this.attrs.draggingEle.style.removeProperty('transition');
         this.attrs.draggingEle.style.removeProperty('width');
         this.attrs.draggingEle.style.removeProperty('background');
-        //this.attrs.draggingEle.style.removeProperty('touch-action');
 
-        this.attrs.x = null;
-        this.attrs.y = null;
         this.attrs.draggingEle = null;
-        this.attrs.isDraggingStarted = false;
 
-        if (this.swipeActionDelete !== null) {
-            const index = this.swipeActionDelete.attrs.index
-            audio.AudioDevice.instance().queueRemoveIndex(index)
+        if (!!this.swipeActionRight) {
+            this.handleSwipeRight(this.swipeActionRight)
+            this.swipeActionRight = null;
         }
+
+        if (!!this.swipeActionLeft) {
+            this.handleSwipeLeft(this.swipeActionLeft)
+            this.swipeActionLeft = null;
+        }
+
+    }
+
+    handleSwipeRight(child) {
+        console.log("handle swipe right", child);
+        const index = child.attrs.index
+        audio.AudioDevice.instance().queueRemoveIndex(index)
+    }
+
+    handleSwipeLeft(child) {
+        console.log("handle swipe left");
     }
 }
 
@@ -643,11 +695,23 @@ export class PlaylistPage extends DomElement {
     }
 
     handleAudioPlay(event) {
-        console.log("on play")
+        this.attrs.header.setStatus("playing")
     }
 
     handleAudioPause(event) {
-        console.log("on pause")
+        this.attrs.header.setStatus("paused")
+    }
+
+    handleAudioWaiting(event) {
+        this.attrs.header.setStatus("waiting")
+    }
+
+    handleAudioStalled(event) {
+        this.attrs.header.setStatus("stalled")
+    }
+
+    handleAudioEnded(event) {
+        this.attrs.header.setStatus("ended")
     }
 
     handleAudioTimeUpdate(event) {
@@ -691,20 +755,26 @@ export class PlaylistPage extends DomElement {
 
         let miss = 0;
         let hit = 0;
+        let del = 0;
         let index = 0;
         let item = null;
         // get the shorter of the two lists
         const containerList = this.attrs.container.children;
         const N = containerList.length < songList.length ? containerList.length : songList.length
-
         // update in place
         for (; index < containerList.length && index < songList.length; index++) {
             if (containerList[index].attrs.song.id == songList[index].id) {
                 // no need to update
                 item = containerList[index];
                 item.setIndex(index) // fix for drag and drop
+            } else if (index < (containerList.length - 1) && containerList[index+1].attrs.song.id == songList[index].id) {
+                // optimization for delete of a single row element
+                containerList.splice(index, 1)
+                item = containerList[index];
+                item.setIndex(index) // fix for drag and drop
+                del += 1
             } else {
-                // replace
+                // substitution
                 miss += 1
                 item = new SongItem(this.attrs.container, index, songList[index])
                 containerList[index] = item
@@ -720,8 +790,10 @@ export class PlaylistPage extends DomElement {
 
         // remove excess
         const removeCount = containerList.length - index
+        console.log("update", containerList.length, songList.length, removeCount, index)
         if (removeCount > 0) {
             containerList.splice(index, removeCount);
+            del += removeCount
         }
 
         // append new
@@ -732,11 +804,11 @@ export class PlaylistPage extends DomElement {
             miss += 1
         }
 
-        if (miss > 0) {
+        if (miss > 0 || del > 0) {
             this.attrs.container.update()
         }
 
-        console.log("miss rate", hit, miss)
+        console.log("miss rate", hit, miss, del)
 
 
     }

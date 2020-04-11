@@ -142,9 +142,9 @@ export class AudioDevice {
 
     queueRemoveIndex(index) {
         if (index >= 0 && index < this.queue.length) {
+            console.log('remove', index, this.queue.length, this.current_index)
             const a = this.queue.splice(index, 1);
-
-            if (index >= this.queue.length) {
+            if (this.current_index >= this.queue.length) {
                 this.pause();
                 this.current_index = -1;
                 this.current_song = null;
