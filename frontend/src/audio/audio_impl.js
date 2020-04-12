@@ -12,6 +12,7 @@ export class AudioDevice {
         this.connected_elements = [];
         this.current_index = -1;
         this.current_song = null;
+        this.auto_play = false;
         this.queue = []
     }
 
@@ -135,6 +136,7 @@ export class AudioDevice {
             this.current_song = song;
             this.queue = [song,]
             this._sendEvent('handleAudioSongChanged', null);
+            console.log("queuePlayNext: prepare next song")
         }
         this._sendEvent('handleAudioQueueChanged', this.queue)
         console.log(this.queue)
@@ -149,6 +151,7 @@ export class AudioDevice {
                 this.current_index = -1;
                 this.current_song = null;
                 this._sendEvent('handleAudioSongChanged', null);
+                console.log("queueRemoveIndex: removed current song")
 
             } else if (index == this.current_index) {
                 this.pause();
@@ -171,6 +174,7 @@ export class AudioDevice {
         this.current_index = -1
         this.current_song = null;
         this._sendEvent('handleAudioSongChanged', null)
+        console.log("stop: stopped current song")
     }
 
     pause() {
@@ -180,7 +184,7 @@ export class AudioDevice {
     }
 
     _playSong(song) {
-
+        console.log('playing song', song.id)
         this.current_song = song
 
         const url = api.librarySongAudioUrl(song.id);
@@ -189,7 +193,7 @@ export class AudioDevice {
 
         audio_instance.volume = .75
 
-        audio_instance.play()
+        this.auto_play = true;
 
         // current_index must be set prior to calling this function
         this._sendEvent('handleAudioSongChanged', {...song, index: this.current_index})
@@ -209,7 +213,7 @@ export class AudioDevice {
             this.current_song = null;
             this.stop()
             this._sendEvent('handleAudioSongChanged', null)
-            console.warn("invalid playlist index " + index)
+            console.warn("playIndex: invalid playlist index " + index)
         }
     }
 
@@ -306,8 +310,21 @@ export class AudioDevice {
 
     // ---------
 
+    onloadstart(event) {
+        console.log('audio on load start')
+        if (this.auto_play) {
+            audio_instance.play()
+        }
+        this._sendEvent('handleAudioLoadStart', {})
+    }
+
     onplay(event) {
         //console.log(event)
+        this._sendEvent('handleAudioPlay', {})
+    }
+
+    onplaying(event) {
+        console.log("playing", event)
         this._sendEvent('handleAudioPlay', {})
     }
 
@@ -351,6 +368,14 @@ export class AudioDevice {
 
     }
 
+    onerror(event) {
+        console.log("on error", this.current_index)
+        this._sendEvent('handleAudioError', event)
+
+        this.next()
+
+
+    }
 
 }
 
@@ -389,12 +414,15 @@ AudioDevice.instance = function() {
         const bind = (x) => {audio_instance['on' + x] = device_instance['on' + x].bind(device_instance)};
 
         bind('play');
+        bind('loadstart');
+        bind('playing');
         bind('pause');
         bind('durationchange');
         bind('timeupdate');
         bind('waiting');
         bind('stalled');
         bind('ended');
+        bind('error');
     }
     return device_instance;
 }

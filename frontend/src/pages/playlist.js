@@ -37,6 +37,7 @@ const style = {
     songList: StyleSheet({
         'padding-left': '1em',
         'padding-right': '1em',
+        //background: "linear-gradient(-90deg, rgba(7, 150, 18, .1) 30%, rgba(7, 150, 18, .2) 40%, rgba(7, 150, 18, .2) 60%, rgba(7, 150, 18, .1) 70%)",
     }),
 
     songItem: StyleSheet({
@@ -113,7 +114,7 @@ const style = {
         overflow: 'hidden',
         width: '100%',
         position: 'fixed',
-    })
+    }),
 
 }
 
@@ -152,7 +153,7 @@ class SongItem extends DomElement {
             index,
             song,
             active: false,
-            toolbar: new DomElement("div", {className:style.toolbar}, [])
+            //toolbar: new DomElement("div", {className:style.toolbar}, [])
         }
 
 
@@ -198,9 +199,9 @@ class SongItem extends DomElement {
         div.addClassName(style.fontSmall)
         div.addClassName(style.songItemRow2)
 
-        this.attrs.toolbar.appendChild(new CallbackLink2("play", ()=>{
-            audio.AudioDevice.instance().playIndex(this.attrs.index)
-        }))
+        //this.attrs.toolbar.appendChild(new CallbackLink2("play", ()=>{
+        //    audio.AudioDevice.instance().playIndex(this.attrs.index)
+        //}))
         //this.attrs.toolbar.appendChild(new CallbackLink2("move up", ()=>{
         //    audio.AudioDevice.instance().queueMoveSongUp(this.attrs.index)
         //}))
@@ -212,7 +213,7 @@ class SongItem extends DomElement {
         //}))
 
 
-        divrhs.appendChild(this.attrs.toolbar)
+        //divrhs.appendChild(this.attrs.toolbar)
 
     }
 
@@ -440,6 +441,7 @@ class SongList extends daedalus.DraggableList {
         // pointer to child object which was swipped right or left
         this.attrs.swipeActionRight = null;
         this.attrs.swipeActionLeft = null;
+        this.attrs.swipeActionCancel = null;
 
         this.attrs.swipeConfig = SWIPE_RIGHT;
 
@@ -600,6 +602,9 @@ class SongList extends daedalus.DraggableList {
             this.swipeActionLeft = child;
         } else {
             this.attrs.draggingEle.style.left = this.attrs.placeholder.offsetLeft + 'px'
+            if (success) {
+                this.swipeActionCancel = child;
+            }
         }
         this.attrs.draggingEle.style.transition = 'left .35s'
         setTimeout(this.handleChildSwipeTimeout.bind(this), 350)
@@ -607,7 +612,6 @@ class SongList extends daedalus.DraggableList {
     }
 
     handleChildSwipeTimeout() {
-        console.log("swipe timeout")
         this.attrs.isAnimated = false
         this.attrs.x = null;
         this.attrs.y = null;
@@ -631,15 +635,22 @@ class SongList extends daedalus.DraggableList {
         this.attrs.draggingEle = null;
 
         if (!!this.swipeActionRight) {
+            console.log("swipe action right")
             this.handleSwipeRight(this.swipeActionRight)
             this.swipeActionRight = null;
         }
 
         if (!!this.swipeActionLeft) {
+            console.log("swipe action left")
             this.handleSwipeLeft(this.swipeActionLeft)
             this.swipeActionLeft = null;
         }
 
+        if (!!this.swipeActionCancel) {
+            console.log("swipe action cancel")
+            this.handleSwipeCancel(this.swipeActionCancel)
+            this.swipeActionCancel = null;
+        }
     }
 
     handleSwipeRight(child) {
@@ -650,6 +661,11 @@ class SongList extends daedalus.DraggableList {
 
     handleSwipeLeft(child) {
         console.log("handle swipe left");
+    }
+
+    handleSwipeCancel(child) {
+        const index = child.attrs.index
+        audio.AudioDevice.instance().playIndex(index)
     }
 }
 
@@ -714,6 +730,10 @@ export class PlaylistPage extends DomElement {
         this.attrs.header.setStatus("ended")
     }
 
+    handleAudioError(event) {
+        this.attrs.header.setStatus("error")
+    }
+
     handleAudioTimeUpdate(event) {
         this.attrs.header.setTime(event.currentTime, event.duration)
     }
@@ -723,6 +743,7 @@ export class PlaylistPage extends DomElement {
     }
 
     handleAudioSongChanged(song) {
+
         this.attrs.header.setSong(song)
 
         // TODO: if the song changes should that also trigger
@@ -730,12 +751,14 @@ export class PlaylistPage extends DomElement {
         // the audio player or in a audio client?
 
         if (song !== null && song.id) {
+            this.attrs.header.setStatus("pending")
             this.attrs.container.children.forEach(child => {
                 child.updateActive(song.id)
             })
 
             this.attrs.header.setTime(0, 0)
         } else {
+            this.attrs.header.setStatus("load error")
             console.error("song error", song)
         }
     }
