@@ -1,24 +1,327 @@
 
+// todo: rename device -> manager
+
 import module api
 
 let device_instance = null;
-let audio_instance = null;
+
+class RemoteDeviceImpl {
+
+    constructor(device) {
+        this.device = device
+
+        this.audio_instance = new Audio();
+
+        this.auto_play = false;
+
+        const bind = (x) => {this.audio_instance['on' + x] = this['on' + x].bind(this)};
+
+        bind('play');
+        bind('loadstart');
+        bind('playing');
+        bind('pause');
+        bind('durationchange');
+        bind('timeupdate');
+        bind('waiting');
+        bind('stalled');
+        bind('ended');
+        bind('error');
+    }
+
+    setQueue(queue) {
+        // TODO: implement event for save success/fail
+        const idList = queue.map(song => song.id).filter(uuid => !!uuid)
+        api.queueSetQueue(idList)
+            .then(result => {console.log(result)})
+            .catch(result => {console.log(result)})
+
+        this.device._sendEvent('handleAudioQueueChanged', queue)
+    }
+
+    updateQueue(index, queue) {
+
+        this.device._sendEvent('handleAudioQueueChanged', queue)
+
+    }
+
+    loadQueue() {
+        return api.queueGetQueue()
+    }
+
+    createQueue(query) {
+
+        return api.queueCreate(query, 50)
+    }
+
+    playSong(index, song) {
+
+        const url = api.librarySongAudioUrl(song.id);
+
+        this.audio_instance.src = url
+        this.audio_instance.volume = .75
+
+        this.auto_play = true;
+
+    }
+
+    play() {
+        this.audio_instance.play()
+    }
+
+    stop() {
+        if (this.isPlaying()) {
+            this.pause()
+        }
+
+
+        this.device._sendEvent('handleAudioSongChanged', null)
+    }
+
+    pause() {
+        if (this.isPlaying()) {
+            this.audio_instance.pause()
+        }
+    }
+
+    currentTime() {
+        return this.audio_instance.currentTime;
+    }
+
+    setCurrentTime(time) {
+        // TODO: check that time is finite
+        // index.js:2052 Uncaught TypeError: Failed to set the 'currentTime' property on 'HTMLMediaElement': The provided double value is non-finite.
+        this.audio_instance.currentTime = time;
+    }
+
+    duration() {
+        return this.audio_instance.duration;
+    }
+
+    setVolume(volume) {
+
+        this.audio_instance.volume = volume
+    }
+
+    isPlaying() {
+        return this.audio_instance
+            && this.audio_instance.currentTime > 0
+            && !this.audio_instance.paused
+            && !this.audio_instance.ended
+            && this.audio_instance.readyState > 2;
+    }
+
+
+    // ---------
+
+    onloadstart(event) {
+        console.log('audio on load start')
+        if (this.auto_play) {
+            this.audio_instance.play()
+        }
+        this.device._sendEvent('handleAudioLoadStart', {})
+    }
+
+    onplay(event) {
+        //console.log(event)
+        this.device._sendEvent('handleAudioPlay', {})
+    }
+
+    onplaying(event) {
+        console.log("playing", event)
+        this.device._sendEvent('handleAudioPlay', {})
+    }
+
+    onpause(event) {
+        //console.log(event)
+        this.device._sendEvent('handleAudioPause', {})
+    }
+
+    onwaiting(event) {
+        //console.log(event)
+        this.device._sendEvent('handleAudioWaiting', {})
+    }
+
+    onstalled(event) {
+        //console.log(event)
+        this.device._sendEvent('handleAudioStalled', {})
+    }
+
+    ontimeupdate(event) {
+        //console.log(event)
+        this.device._sendEvent('handleAudioTimeUpdate', {
+            currentTime: this.audio_instance.currentTime,
+            duration: this.audio_instance.duration
+        })
+    }
+
+    ondurationchange(event) {
+        // audio_instance.duration
+        this.device._sendEvent('handleAudioDurationChange', {
+            currentTime: this.audio_instance.currentTime,
+            duration: this.audio_instance.duration
+        })
+    }
+
+    onended(event) {
+        console.log("on ended", this.current_index)
+        this.device._sendEvent('handleAudioEnded', event)
+
+        this.next()
+
+    }
+
+    onerror(event) {
+        console.log("on error", this.current_index)
+        this.device._sendEvent('handleAudioError', event)
+
+        this.next()
+
+    }
+}
+
+function mapSongToObj(song) {
+    return {url: api.librarySongAudioUrl(song.id)}
+}
+class NativeDeviceImpl {
+
+    constructor(device) {
+        this.device = device
+
+        console.error("-------------------------------------");
+        const bind = (x) => {
+            registerAndroidEvent('on' + x, this['on' + x].bind(this))
+        };
+
+        bind('prepared');
+        bind('play');
+        bind('pause');
+        bind('stop');
+        bind('error');
+        bind('timeupdate');
+        bind('indexchanged');
+
+    }
+
+    setQueue(queue) {
+        console.log("setting queue")
+        return new Promise((accept, reject) => {
+            const lst = queue.map(mapSongToObj);
+            const data = JSON.stringify(lst)
+            AndroidNativeAudio.setQueue(data);
+            this.device._sendEvent('handleAudioQueueChanged', queue)
+            accept(true);
+        })
+    }
+
+    updateQueue(index, queue) {
+
+        return new Promise((accept, reject) => {
+            const lst = queue.map(mapSongToObj);
+            const data = JSON.stringify(lst)
+            AndroidNativeAudio.updateQueue(index, data);
+            this.device._sendEvent('handleAudioQueueChanged', queue)
+            accept(true);
+        })
+    }
+
+    loadQueue() {
+        return new Promise((accept, reject) => {
+            accept({result: []})
+        })
+    }
+
+    createQueue(query) {
+        return api.queueCreate(query, 50)
+    }
+
+    playSong(index, song) {
+        AndroidNativeAudio.loadIndex(index)
+    }
+
+    play() {
+        AndroidNativeAudio.play();
+    }
+
+    pause() {
+        AndroidNativeAudio.pause();
+    }
+
+    stop() {
+        AndroidNativeAudio.stop();
+
+        this.device._sendEvent('handleAudioSongChanged', null)
+    }
+
+    currentTime() {
+        return 0
+    }
+
+    setCurrentTime(time) {
+        return;
+    }
+
+    duration() {
+        return 0;
+    }
+
+    setVolume(volume) {
+        return;
+    }
+
+    isPlaying() {
+        return AndroidNativeAudio.isPlaying();
+    }
+
+    onprepared(payload) {
+
+    }
+
+    onplay(payload) {
+        this.device._sendEvent('handleAudioPlay', {})
+    }
+
+    onpause(payload) {
+        this.device._sendEvent('handleAudioPause', {})
+    }
+
+    onstop(payload) {
+        this.device._sendEvent('handleAudioStop', {})
+    }
+
+    onerror(payload) {
+
+    }
+
+    ontimeupdate(payload) {
+        this.device._sendEvent('handleAudioTimeUpdate', {
+            currentTime: payload.position / 1000,
+            duration: payload.duration / 1000
+        })
+    }
+
+    onindexchanged(payload) {
+
+        const index = payload.index;
+
+        this.device._sendEvent('handleAudioSongChanged', this.device.queue[index]);
+    }
+
+}
 
 export class AudioDevice {
-
 
     // https://www.w3schools.com/tags/ref_av_dom.asp
     constructor() {
         this.connected_elements = [];
         this.current_index = -1;
         this.current_song = null;
-        this.auto_play = false;
         this.queue = []
+
+        this.impl = null;
     }
 
-    mount() {
-        //const document_root = document.getElementById("root");
-        //document_root.appendChild(audio_instance);
+    setImpl(impl) {
+        this.impl = impl;
     }
 
     queueGet() {
@@ -31,42 +334,43 @@ export class AudioDevice {
 
     queueSet(songList) {
         this.queue = songList
+        this.impl.updateQueue(-1, this.queue)
 
         this.stop();
     }
 
     queueSave() {
-        // TODO: implement event for save success/fail
-        const idList = this.queue.map(song => song.id).filter(uuid => !!uuid)
-        api.queueSetQueue(idList)
-            .then(result => {console.log(result)})
-            .catch(result => {console.log(result)})
+        this.impl.setQueue(this.queue)
     }
 
     queueLoad() {
         // returns a promise containing the list of songs in the current queue
-        api.queueGetQueue()
+        this.impl.loadQueue()
             .then(result => {
                 this.queue = result.result
-                this._sendEvent('handleAudioQueueChanged', result.result)
+                this.impl.updateQueue(this.current_index, this.queue)
             })
             .catch(error => {
                 console.log(error);
-                this._sendEvent('handleAudioQueueChanged', [])
+                this.queue = []
+                this.current_index = -1;
+                this.impl.updateQueue(this.current_index, this.queue)
             })
         this.stop()
     }
 
     queueCreate(query) {
         // returns a promise containing the list of songs in the current queue
-        api.queueCreate(query, 50)
+        this.impl.createQueue(query)
             .then(result => {
                 this.queue = result.result
-                this._sendEvent('handleAudioQueueChanged', result.result)
+                this.impl.updateQueue(this.current_index, this.queue)
             })
             .catch(error => {
                 console.log(error);
-                this._sendEvent('handleAudioQueueChanged', [])
+                this.queue = [];
+                this.current_index = -1;
+                this.impl.updateQueue(this.current_index, this.queue)
             })
         this.stop()
     }
@@ -84,8 +388,7 @@ export class AudioDevice {
             } else if (this.current_index == target) {
                 this.current_index += 1;
             }
-            //console.log("move", index, target)
-            this._sendEvent('handleAudioQueueChanged', this.queue)
+            this.impl.updateQueue(this.current_index, this.queue)
         }
 
     }
@@ -102,14 +405,12 @@ export class AudioDevice {
             } else if (this.current_index == target) {
                 this.current_index -= 1;
             }
-            //console.log("move", index, target)
-            this._sendEvent('handleAudioQueueChanged', this.queue)
+            this.impl.updateQueue(this.current_index, this.queue)
         }
     }
 
     queueSwapSong(index, target) {
 
-        console.log(this.current_index, index, target)
         daedalus.util.array_move(this.queue, index, target)
         if (this.current_index == index) {
             this.current_index = target;
@@ -118,14 +419,13 @@ export class AudioDevice {
         } else if (index > this.current_index && target <= this.current_index) {
             this.current_index += 1;
         }
-        //console.log("move", index, target)
-        this._sendEvent('handleAudioQueueChanged', this.queue)
+        this.impl.updateQueue(this.current_index, this.queue)
+
     }
 
     queuePlayNext(song) {
 
         const index = this.current_index + 1
-        console.log(0, index, this.queue.length, index >= 0 && index < this.queue.length)
         if (index >= 0 && index < this.queue.length) {
             this.queue.splice(index, 0, song)
         } else if (index >= this.queue.length) {
@@ -136,22 +436,19 @@ export class AudioDevice {
             this.current_song = song;
             this.queue = [song,]
             this._sendEvent('handleAudioSongChanged', null);
-            console.log("queuePlayNext: prepare next song")
         }
-        this._sendEvent('handleAudioQueueChanged', this.queue)
-        console.log(this.queue)
+        this.impl.updateQueue(this.current_index, this.queue)
     }
 
     queueRemoveIndex(index) {
         if (index >= 0 && index < this.queue.length) {
-            console.log('remove', index, this.queue.length, this.current_index)
-            const a = this.queue.splice(index, 1);
+            this.queue.splice(index, 1);
+            console.log("queue, sliced", index, this.queue.length)
             if (this.current_index >= this.queue.length) {
                 this.pause();
                 this.current_index = -1;
                 this.current_song = null;
                 this._sendEvent('handleAudioSongChanged', null);
-                console.log("queueRemoveIndex: removed current song")
 
             } else if (index == this.current_index) {
                 this.pause();
@@ -161,39 +458,25 @@ export class AudioDevice {
                 this.current_index -= 1;
                 this.current_song = this.queue[index];
             }
-
-            this._sendEvent('handleAudioQueueChanged', this.queue)
+            console.log("queue, sliced update")
+            this.impl.updateQueue(this.current_index, this.queue)
         }
     }
 
     stop() {
-        if (this.isPlaying()) {
-            this.pause()
-        }
-
         this.current_index = -1
         this.current_song = null;
-        this._sendEvent('handleAudioSongChanged', null)
-        console.log("stop: stopped current song")
+        this.impl.stop();
     }
 
     pause() {
-        if (this.isPlaying()) {
-            audio_instance.pause()
-        }
+        this.impl.pause();
     }
 
     _playSong(song) {
-        console.log('playing song', song.id)
         this.current_song = song
-
-        const url = api.librarySongAudioUrl(song.id);
-
-        audio_instance.src = url;
-
-        audio_instance.volume = .75
-
-        this.auto_play = true;
+        console.log(song)
+        this.impl.playSong(this.current_index, this.current_song)
 
         // current_index must be set prior to calling this function
         this._sendEvent('handleAudioSongChanged', {...song, index: this.current_index})
@@ -205,6 +488,7 @@ export class AudioDevice {
     }
 
     playIndex(index) {
+        console.log(index)
         if (index >= 0 && index < this.queue.length) {
             this.current_index = index
             this._playSong(this.queue[index])
@@ -218,10 +502,10 @@ export class AudioDevice {
     }
 
     togglePlayPause() {
-        if (this.isPlaying()) {
-            audio_instance.pause()
+        if (this.impl.isPlaying()) {
+            this.impl.pause()
         } else {
-            audio_instance.play()
+            this.impl.play()
         }
     }
 
@@ -246,32 +530,27 @@ export class AudioDevice {
         }
         return null;
     }
+
     currentTime() {
-        return audio_instance.currentTime;
+        return this.impl.currentTime();
     }
 
     setCurrentTime(time) {
-        console.log(time)
-        // TODO: check that time is finite
-        // index.js:2052 Uncaught TypeError: Failed to set the 'currentTime' property on 'HTMLMediaElement': The provided double value is non-finite.
-        audio_instance.currentTime = time;
+        // TODO: document units
+        return this.impl.setCurrentTime(time);
     }
 
     duration() {
-        return audio_instance.duration;
+        return this.impl.duration();
     }
 
     setVolume(volume) {
 
-        audio_instance.volume = volume
+        return this.impl.setVolume(volume);
     }
 
     isPlaying() {
-        return audio_instance
-            && audio_instance.currentTime > 0
-            && !audio_instance.paused
-            && !audio_instance.ended
-            && audio_instance.readyState > 2;
+        return this.impl.isPlaying();
     }
 
     // ---------
@@ -286,18 +565,15 @@ export class AudioDevice {
         }
 
         this.connected_elements.push(elem)
-        //console.log(`connect '${elem.props.id}'`)
 
     }
 
     disconnectView(elem) {
 
         this.connected_elements = this.connected_elements.filter(e => e!==elem)
-        //console.log(`disconnect '${elem.props.id}'`)
     }
 
     // todo: this 'signal and slot' mechanism is better than the previous impl
-    //
     _sendEvent(eventname, event) {
         this.connected_elements = this.connected_elements.filter(e => e.isMounted())
 
@@ -308,121 +584,24 @@ export class AudioDevice {
         })
     }
 
-    // ---------
-
-    onloadstart(event) {
-        console.log('audio on load start')
-        if (this.auto_play) {
-            audio_instance.play()
-        }
-        this._sendEvent('handleAudioLoadStart', {})
-    }
-
-    onplay(event) {
-        //console.log(event)
-        this._sendEvent('handleAudioPlay', {})
-    }
-
-    onplaying(event) {
-        console.log("playing", event)
-        this._sendEvent('handleAudioPlay', {})
-    }
-
-    onpause(event) {
-        //console.log(event)
-        this._sendEvent('handleAudioPause', {})
-    }
-
-    onwaiting(event) {
-        //console.log(event)
-        this._sendEvent('handleAudioWaiting', {})
-    }
-
-    onstalled(event) {
-        //console.log(event)
-        this._sendEvent('handleAudioStalled', {})
-    }
-
-    ontimeupdate(event) {
-        //console.log(event)
-        this._sendEvent('handleAudioTimeUpdate', {
-            currentTime: audio_instance.currentTime,
-            duration: audio_instance.duration
-        })
-    }
-
-    ondurationchange(event) {
-        // audio_instance.duration
-        this._sendEvent('handleAudioDurationChange', {
-            currentTime: audio_instance.currentTime,
-            duration: audio_instance.duration
-        })
-    }
-
-    onended(event) {
-        console.log("on ended", this.current_index)
-        this._sendEvent('handleAudioEnded', event)
-
-        this.next()
-
-
-    }
-
-    onerror(event) {
-        console.log("on error", this.current_index)
-        this._sendEvent('handleAudioError', event)
-
-        this.next()
-
-
-    }
-
 }
-
-/*
-
-setting currentTime on android does not work. one of these
-alternatives may work
-
-function Video(src, append) {
-  var v = document.createElement("video");
-  if (src != "") {
-    v.src = src;
-  }
-  if (append == true) {
-    document.body.appendChild(v);
-  }
-  return v;
-}
-
-Java:
-    if (url.endsWith(".ogg")){
-        Uri tempPath = Uri.parse(url);
-        MediaPlayer player = MediaPlayer.create(WebViewVideo.this, tempPath);
-        player.start();
-        return true;
-    }
-
-}
-*/
 
 AudioDevice.instance = function() {
+
     if (device_instance === null) {
+
         device_instance = new AudioDevice()
-        audio_instance = new Audio();
 
-        const bind = (x) => {audio_instance['on' + x] = device_instance['on' + x].bind(device_instance)};
+        let impl;
+        if (daedalus.platform.isAndroid) {
+            impl = new NativeDeviceImpl(device_instance)
+        } else {
+            impl = new RemoteDeviceImpl(device_instance)
+        }
 
-        bind('play');
-        bind('loadstart');
-        bind('playing');
-        bind('pause');
-        bind('durationchange');
-        bind('timeupdate');
-        bind('waiting');
-        bind('stalled');
-        bind('ended');
-        bind('error');
+        device_instance.setImpl(impl)
+
     }
+
     return device_instance;
 }

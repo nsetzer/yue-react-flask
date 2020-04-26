@@ -20,7 +20,15 @@ const style = {
         'padding-left': '1.1em',
         'padding-bottom': '.5em',
         //width: '100%',
-        border: {style: "solid", width: "1px"}
+        border-bottom: {style: "solid", width: "1px"}
+    }),
+
+    settingsRowItem: StyleSheet({
+        display: 'flex',
+        'flex-direction': 'row',
+        'padding-left': '1.1em',
+        'padding-bottom': '.5em',
+        border-bottom: {style: "solid", width: "1px"}
     }),
 }
 
@@ -33,9 +41,22 @@ class SettingsItem extends DomElement {
     }
 }
 
+class SettingsButtonItem extends DomElement {
+    constructor(title, action) {
+        super("div", {className: style.settingsRowItem}, []);
+        this.attrs.count = 0
+
+        this.appendChild(new ButtonElement(title, () => {action(this)}))
+    }
+
+    setText(text) {
+        //this.children[0].setText(text)
+    }
+}
+
 class SettingsGroupItem extends DomElement {
     constructor(title, names) {
-        super("div", {}, []);
+        super("div", {className: style.settingsItem}, []);
 
         this.appendChild(new TextElement(title))
 
@@ -74,6 +95,69 @@ export class SettingsPage extends DomElement {
 
         this.attrs.container.appendChild(new SettingsItem("Volume:"))
         this.attrs.container.appendChild(new SettingsGroupItem("Audio Backend:", ["Cloud", "Cloud Native", "Native"]))
+        this.attrs.container.appendChild(new SettingsButtonItem("file api test",
+            (item) => {
+                if (Client) {
+                    console.log("test")
+                    item.attrs.count += 1
+                    if (Client.fileExists("sample.dat")) {
+                        item.setText(item.attrs.count + " : " + "T")
+                    } else {
+                        item.setText(item.attrs.count + " : " + "F")
+                        const url = "http://192.168.1.149:4100/static/index.js";
+                        const folder = 'Music/test';
+                        const name = 'index.js';
+
+                        Client.downloadUrl(url, folder, name)
+                    }
+                }
+            }));
+
+        this.attrs.container.appendChild(new SettingsButtonItem("load",
+            (item) => {
+                if (daedalus.platform.isAndroid) {
+
+                    const url1 = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+                    const url2 = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"
+                    const url3 = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3"
+                    const queue = [ {url: url1}, {url: url2}, {url: url3}];
+
+                    const data = JSON.stringify(queue)
+                    console.log(data)
+                    AndroidNativeAudio.setQueue(data);
+
+
+                    AndroidNativeAudio.loadIndex(0);
+                }
+            }));
+
+        this.attrs.container.appendChild(new SettingsButtonItem("play",
+            (item) => {
+                if (daedalus.platform.isAndroid) {
+                    AndroidNativeAudio.play();
+                }
+            }));
+
+        this.attrs.container.appendChild(new SettingsButtonItem("pause",
+            (item) => {
+                if (daedalus.platform.isAndroid) {
+                    AndroidNativeAudio.pause();
+                }
+            }));
+
+        this.attrs.container.appendChild(new SettingsButtonItem("next",
+            (item) => {
+                if (daedalus.platform.isAndroid) {
+                    AndroidNativeAudio.skipToNext();
+                }
+            }));
+
+        this.attrs.container.appendChild(new SettingsButtonItem("prev",
+            (item) => {
+                if (daedalus.platform.isAndroid) {
+                    AndroidNativeAudio.skipToPrev();
+                }
+            }));
 
     }
 

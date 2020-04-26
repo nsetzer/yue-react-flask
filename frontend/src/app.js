@@ -94,6 +94,7 @@ export class Root extends DomElement {
         let router = new AppRouter(this.attrs.container)
         router.addAuthRoute("/u/storage/preview/:path*", (cbk)=>this.handleRoute(cbk, pages.StoragePreviewPage), '/login');
         router.addAuthRoute("/u/storage/:mode/:path*", (cbk)=>this.handleRoute(cbk, pages.StoragePage), '/login');
+        router.addAuthRoute("/u/fs/:path*", (cbk)=>this.handleRoute(cbk, pages.FileSystemPage), '/login');
         router.addAuthRoute("/u/playlist", (cbk)=>this.handleRoute(cbk, pages.PlaylistPage), '/login');
         router.addAuthRoute("/u/settings", (cbk)=>this.handleRoute(cbk, pages.SettingsPage), '/login');
         router.addAuthRoute("/u/library", (cbk)=>this.handleRoute(cbk, pages.LibraryPage), '/login');
@@ -123,6 +124,10 @@ export class Root extends DomElement {
         });
         this.attrs.nav.addAction(resources.svg.documents, "Storage", ()=>{
             history.pushState({}, "", "/u/storage/list");
+            this.attrs.nav.hide();
+        });
+        this.attrs.nav.addAction(resources.svg.documents, "File System", ()=>{
+            history.pushState({}, "", "/u/fs");
             this.attrs.nav.hide();
         });
         this.attrs.nav.addAction(resources.svg.note, "Notes", ()=>{

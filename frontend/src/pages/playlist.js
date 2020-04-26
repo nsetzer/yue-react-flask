@@ -581,6 +581,10 @@ class SongList extends daedalus.DraggableList {
             return;
         }
 
+        if (!this.attrs.placeholder) {
+            return;
+        }
+
         if (this.attrs.isAnimated) {
             return
         }
@@ -654,7 +658,7 @@ class SongList extends daedalus.DraggableList {
     }
 
     handleSwipeRight(child) {
-        console.log("handle swipe right", child);
+        console.log("handle swipe right", child.attrs.index);
         const index = child.attrs.index
         audio.AudioDevice.instance().queueRemoveIndex(index)
     }
@@ -664,6 +668,7 @@ class SongList extends daedalus.DraggableList {
     }
 
     handleSwipeCancel(child) {
+        console.log("handle swipe cancel");
         const index = child.attrs.index
         audio.AudioDevice.instance().playIndex(index)
     }
@@ -773,6 +778,7 @@ export class PlaylistPage extends DomElement {
         //  new list
 
         //this.attrs.container.removeChildren()
+        console.log("handleAudioQueueChanged")
 
         const current_id = audio.AudioDevice.instance().currentSongId();
 

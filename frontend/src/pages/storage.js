@@ -484,6 +484,7 @@ class StorageUploadManager extends StorageListElement {
             dirpath: null,
             insert_callback
         }
+
     }
 
     startUpload(root, dirpath) {
@@ -573,6 +574,7 @@ export class StoragePage extends DomElement {
         this.appendChild(this.attrs.more)
         this.appendChild(this.attrs.header)
         this.appendChild(this.attrs.lst)
+
 
     }
 
@@ -665,7 +667,7 @@ export class StoragePage extends DomElement {
         } else {
             result.directories.forEach(name => {
                 let url = daedalus.util.joinpath('/u/storage/list/', this.state.match.path, name)
-                this.attrs.lst.appendChild(new DirectoryElement(name, url), null)
+                this.attrs.lst.appendChild(new DirectoryElement(name, url))
             })
 
             result.files.forEach(item => {
@@ -942,3 +944,135 @@ export class StoragePreviewPage extends DomElement {
         }
     }
 }
+
+class FileSystemDirectoryElement extends DomElement {
+    constructor(parent, name, url) {
+        super("div", {className: style.listItemDir}, [])
+
+        this.appendChild(new DomElement("div", {className: style.encryption["none"]}, []))
+        this.appendChild(new SvgIconElement(resources.svg.folder, null, {className: style.icon1}))
+        this.attrs.text = this.appendChild(new components.MiddleText(name))
+        this.attrs.text.props.onClick = this.handleClick.bind(this)
+        this.children[2].addClassName(style.listItemMid)
+        this.attrs.parent = parent
+        this.attrs.url = url
+    }
+
+    handleClick() {
+        this.attrs.parent.setCurrentPath(this.attrs.url)
+    }
+
+
+}
+
+class FileSystemFileElement extends DomElement {
+    constructor(parent, item, url) {
+        super("div", {className: style.listItemDir}, [])
+
+        this.appendChild(new DomElement("div", {className: style.encryption["none"]}, []))
+        this.appendChild(new SvgIconElement(resources.svg.file, null, {className: style.icon1}))
+        this.appendChild(new components.MiddleText(item.name))
+        this.children[2].addClassName(style.listItemMid)
+        this.attrs.parent = parent
+        this.attrs.url = url
+    }
+}
+
+
+class FileSystemHeader extends components.NavHeader {
+    constructor(parent) {
+        super();
+
+        this.attrs.parent = parent
+
+        this.addAction(resources.svg['menu'], ()=>{});
+        this.addAction(resources.svg['return'], parent.handleOpenParent.bind(parent));
+
+        this.attrs.location = new components.MiddleText(".....")
+        this.addRow(true)
+        this.addRowElement(0, this.attrs.location);
+    }
+
+    setLocation(location) {
+        this.attrs.location.setText(location)
+    }
+
+}
+
+export class FileSystemPage extends DomElement {
+    constructor() {
+        super("div", {}, []);
+
+        this.attrs = {
+            header: new FileSystemHeader(this),
+            lst: new StorageListElement(),
+            current_path: "/",
+        }
+
+
+        this.appendChild(this.attrs.header)
+        this.appendChild(this.attrs.lst)
+
+
+    }
+
+    elementMounted() {
+
+        this.setCurrentPath("/")
+    }
+
+    handleOpenParent() {
+        this.setCurrentPath(daedalus.util.dirname(this.attrs.current_path))
+    }
+
+    setCurrentPath(path) {
+
+        if (path.length === 0) {
+            path = "/"
+        }
+
+        console.log(`navigate to \`${path}\``)
+
+        this.attrs.current_path = path
+        this.attrs.lst.removeChildren();
+        this.attrs.header.setLocation(path)
+
+        if (daedalus.platform.isAndroid) {
+
+            let result = Client.listDirectory(path)
+            result = JSON.parse(result)
+            this.updateContents(result)
+        } else {
+            const result = {
+                files: [{name: "file1"}],
+                directories: ["dir0", "dir1"],
+            }
+            this.updateContents(result)
+        }
+
+        return
+    }
+
+    updateContents(result) {
+
+        if ((result.files.length + result.directories.length) === 0) {
+
+            this.attrs.lst.appendChild(new TextElement("Empty Directory"))
+
+        } else {
+            result.directories.forEach(name => {
+                let url = daedalus.util.joinpath(this.attrs.current_path, name)
+                const elem = new FileSystemDirectoryElement(this, name, url)
+                this.attrs.lst.appendChild(elem)
+            })
+
+            result.files.forEach(item => {
+                let url = daedalus.util.joinpath(this.attrs.current_path, name)
+                const elem = new FileSystemFileElement(this, item, url)
+                this.attrs.lst.appendChild(elem)
+            })
+        }
+
+    }
+}
+
