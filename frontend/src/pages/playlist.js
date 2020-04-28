@@ -755,16 +755,21 @@ export class PlaylistPage extends DomElement {
         // a reset of time and duration? should that be done in
         // the audio player or in a audio client?
 
-        if (song !== null && song.id) {
-            this.attrs.header.setStatus("pending")
-            this.attrs.container.children.forEach(child => {
-                child.updateActive(song.id)
-            })
+        if (song !== null) {
 
-            this.attrs.header.setTime(0, 0)
+            if (!song.id) {
+                this.attrs.header.setStatus("load error: invalid id")
+            } else {
+                this.attrs.header.setStatus("pending")
+                this.attrs.container.children.forEach(child => {
+                    child.updateActive(song.id)
+                })
+
+                this.attrs.header.setTime(0, 0)
+
+            }
         } else {
-            this.attrs.header.setStatus("load error")
-            console.error("song error", song)
+            this.attrs.header.setStatus("load error: null")
         }
     }
 

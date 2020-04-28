@@ -40,7 +40,7 @@ class RemoteDeviceImpl {
 
     updateQueue(index, queue) {
 
-        this.device._sendEvent('handleAudioQueueChanged', queue)
+
 
     }
 
@@ -180,7 +180,14 @@ class RemoteDeviceImpl {
 }
 
 function mapSongToObj(song) {
-    return {url: api.librarySongAudioUrl(song.id)}
+    return {
+        url: api.librarySongAudioUrl(song.id),
+        artist: song.artist,
+        album: song.album,
+        title: song.title,
+        length: song.length,
+        id: song.id,
+    }
 }
 class NativeDeviceImpl {
 
@@ -214,19 +221,34 @@ class NativeDeviceImpl {
     }
 
     updateQueue(index, queue) {
-
+        console.log("updating queue")
         return new Promise((accept, reject) => {
             const lst = queue.map(mapSongToObj);
             const data = JSON.stringify(lst)
             AndroidNativeAudio.updateQueue(index, data);
-            this.device._sendEvent('handleAudioQueueChanged', queue)
             accept(true);
         })
     }
 
     loadQueue() {
+        console.log("loading queue")
         return new Promise((accept, reject) => {
-            accept({result: []})
+            console.log("loading queue: from promise")
+            let data;
+            try {
+                data = AndroidNativeAudio.getQueue()
+            } catch (e) {
+                console.error("load queue error: " + e.message)
+            }
+            if (data.length > 0) {
+                let tracks = JSON.parse(data)
+                console.log("loading queue: " + tracks.length);
+                accept({result: tracks})
+            } else {
+                console.log("loading queue: error");
+                accept({result: []})
+            }
+
         })
     }
 
@@ -348,13 +370,13 @@ export class AudioDevice {
         this.impl.loadQueue()
             .then(result => {
                 this.queue = result.result
-                this.impl.updateQueue(this.current_index, this.queue)
+                this._sendEvent('handleAudioQueueChanged', this.queue)
             })
             .catch(error => {
                 console.log(error);
                 this.queue = []
                 this.current_index = -1;
-                this.impl.updateQueue(this.current_index, this.queue)
+                this._sendEvent('handleAudioQueueChanged', this.queue)
             })
         this.stop()
     }
@@ -365,12 +387,14 @@ export class AudioDevice {
             .then(result => {
                 this.queue = result.result
                 this.impl.updateQueue(this.current_index, this.queue)
+                this._sendEvent('handleAudioQueueChanged', this.queue)
             })
             .catch(error => {
                 console.log(error);
                 this.queue = [];
                 this.current_index = -1;
                 this.impl.updateQueue(this.current_index, this.queue)
+                this._sendEvent('handleAudioQueueChanged', this.queue)
             })
         this.stop()
     }
@@ -389,6 +413,7 @@ export class AudioDevice {
                 this.current_index += 1;
             }
             this.impl.updateQueue(this.current_index, this.queue)
+            this._sendEvent('handleAudioQueueChanged', this.queue)
         }
 
     }
@@ -406,6 +431,7 @@ export class AudioDevice {
                 this.current_index -= 1;
             }
             this.impl.updateQueue(this.current_index, this.queue)
+            this._sendEvent('handleAudioQueueChanged', this.queue)
         }
     }
 
@@ -420,6 +446,7 @@ export class AudioDevice {
             this.current_index += 1;
         }
         this.impl.updateQueue(this.current_index, this.queue)
+        this._sendEvent('handleAudioQueueChanged', this.queue)
 
     }
 
@@ -438,6 +465,7 @@ export class AudioDevice {
             this._sendEvent('handleAudioSongChanged', null);
         }
         this.impl.updateQueue(this.current_index, this.queue)
+        this._sendEvent('handleAudioQueueChanged', this.queue)
     }
 
     queueRemoveIndex(index) {
@@ -460,6 +488,7 @@ export class AudioDevice {
             }
             console.log("queue, sliced update")
             this.impl.updateQueue(this.current_index, this.queue)
+            this._sendEvent('handleAudioQueueChanged', this.queue)
         }
     }
 
