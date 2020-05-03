@@ -207,6 +207,9 @@ class NativeDeviceImpl {
         bind('timeupdate');
         bind('indexchanged');
 
+        this._currentTime = 0
+        this._duration = 0
+
     }
 
     setQueue(queue) {
@@ -275,15 +278,18 @@ class NativeDeviceImpl {
     }
 
     currentTime() {
-        return 0
+        return this._currentTime
     }
 
     setCurrentTime(time) {
+        const pos = Math.floor(time * 1000)
+        console.log(`setting time to ${pos} / ${this._duration}`);
+        AndroidNativeAudio.seekms(pos)
         return;
     }
 
     duration() {
-        return 0;
+        return this._duration;
     }
 
     setVolume(volume) {
@@ -315,9 +321,25 @@ class NativeDeviceImpl {
     }
 
     ontimeupdate(payload) {
+
+        // on android when the ui is not active updates are not processed/
+        // assume the queue is in sync, and update the ui whenever a time
+        // update occurs and we detect that the frontend data is out of date.
+        if (payload.currentIndex != this.device.current_index) {
+            console.error("detected out of date information");
+            this.device.current_index = payload.currentIndex;
+            if (payload.currentIndex >= 0 && payload.currentIndex < this.device.queue.length) {
+                let song = this.device.queue[payload.currentIndex]
+                this.device._sendEvent('handleAudioSongChanged', {...song, index: payload.currentIndex})
+            }
+        }
+
+        this._currentTime = payload.position / 1000;
+        this._duration = payload.duration / 1000;
+
         this.device._sendEvent('handleAudioTimeUpdate', {
-            currentTime: payload.position / 1000,
-            duration: payload.duration / 1000
+            currentTime: this._currentTime,
+            duration: this._duration
         })
     }
 

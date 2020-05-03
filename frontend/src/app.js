@@ -97,7 +97,8 @@ export class Root extends DomElement {
         router.addAuthRoute("/u/fs/:path*", (cbk)=>this.handleRoute(cbk, pages.FileSystemPage), '/login');
         router.addAuthRoute("/u/playlist", (cbk)=>this.handleRoute(cbk, pages.PlaylistPage), '/login');
         router.addAuthRoute("/u/settings", (cbk)=>this.handleRoute(cbk, pages.SettingsPage), '/login');
-        router.addAuthRoute("/u/library", (cbk)=>this.handleRoute(cbk, pages.LibraryPage), '/login');
+        router.addAuthRoute("/u/library/list", (cbk)=>this.handleRoute(cbk, pages.LibraryPage), '/login');
+        router.addAuthRoute("/u/library/sync", (cbk)=>this.handleRoute(cbk, pages.SyncPage), '/login');
         router.addAuthRoute("/u/radio", (cbk)=>this.handleRoute(cbk, pages.UserRadioPage), '/login');
         router.addAuthRoute("/u/:path*", (cbk)=>{history.pushState({}, "", "/u/storage/list")}, '/login');
         router.addNoAuthRoute("/login", (cbk)=>this.handleRoute(cbk, pages.LoginPage), "/u/storage/list");
@@ -112,7 +113,7 @@ export class Root extends DomElement {
             this.attrs.nav.hide();
         });
         this.attrs.nav.addAction(resources.svg.music_note, "Library", ()=>{
-            history.pushState({}, "", "/u/library");
+            history.pushState({}, "", "/u/library/list");
             this.attrs.nav.hide();
         });
         this.attrs.nav.addAction(resources.svg.externalmedia, "Radio", ()=>{
@@ -120,6 +121,7 @@ export class Root extends DomElement {
             this.attrs.nav.hide();
         });
         this.attrs.nav.addAction(resources.svg.download, "Sync", ()=>{
+            history.pushState({}, "", "/u/library/sync");
             this.attrs.nav.hide();
         });
         this.attrs.nav.addAction(resources.svg.documents, "Storage", ()=>{

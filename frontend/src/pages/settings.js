@@ -159,6 +159,13 @@ export class SettingsPage extends DomElement {
                 }
             }));
 
+        this.attrs.container.appendChild(new SettingsButtonItem("fetch",
+            (item) => {
+                if (daedalus.platform.isAndroid) {
+                    AndroidNativeAudio.beginFetch("" + api.getAuthToken());
+                }
+            }));
+
     }
 
 }

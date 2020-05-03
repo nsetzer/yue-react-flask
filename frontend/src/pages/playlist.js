@@ -515,7 +515,7 @@ class SongList extends daedalus.DraggableList {
             return
         }
 
-        if (this.attrs.draggingEle!==child.getDomNode()) {
+        if (!this.attrs.draggingEle || this.attrs.draggingEle!==child.getDomNode()) {
             return;
         }
 
@@ -577,7 +577,7 @@ class SongList extends daedalus.DraggableList {
     handleChildSwipeCancel(child, event, success=false) {
         // Remove the placeholder
 
-        if (this.attrs.draggingEle!==child.getDomNode()) {
+        if (!this.attrs.draggingEle || this.attrs.draggingEle!==child.getDomNode()) {
             return;
         }
 
