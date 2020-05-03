@@ -186,6 +186,8 @@ function mapSongToObj(song) {
         album: song.album,
         title: song.title,
         length: song.length,
+        file_path: song.file_path, // android only
+        spk: song.spk, // android only
         id: song.id,
     }
 }

@@ -116,10 +116,10 @@ export class Root extends DomElement {
             history.pushState({}, "", "/u/library/list");
             this.attrs.nav.hide();
         });
-        this.attrs.nav.addAction(resources.svg.externalmedia, "Radio", ()=>{
-            history.pushState({}, "", "/u/radio");
-            this.attrs.nav.hide();
-        });
+        //this.attrs.nav.addAction(resources.svg.externalmedia, "Radio", ()=>{
+        //    history.pushState({}, "", "/u/radio");
+        //    this.attrs.nav.hide();
+        //});
         this.attrs.nav.addAction(resources.svg.download, "Sync", ()=>{
             history.pushState({}, "", "/u/library/sync");
             this.attrs.nav.hide();
@@ -128,10 +128,12 @@ export class Root extends DomElement {
             history.pushState({}, "", "/u/storage/list");
             this.attrs.nav.hide();
         });
-        this.attrs.nav.addAction(resources.svg.documents, "File System", ()=>{
-            history.pushState({}, "", "/u/fs");
-            this.attrs.nav.hide();
-        });
+        if (daedalus.platform.isMobile) {
+            this.attrs.nav.addAction(resources.svg.documents, "File System", ()=>{
+                history.pushState({}, "", "/u/fs");
+                this.attrs.nav.hide();
+            });
+        }
         this.attrs.nav.addAction(resources.svg.note, "Notes", ()=>{
             this.attrs.nav.hide();
         });
@@ -143,15 +145,15 @@ export class Root extends DomElement {
             api.clearUserToken();
             history.pushState({}, "", "/")
         });
-        if (daedalus.platform.isAndroid) {
-            this.attrs.nav.addAction(resources.svg['return'], "Reload", ()=>{
-                try {
-                    Client.reloadPage()
-                } catch (e) {
-                    console.error(e)
-                }
-            });
-        }
+        //if (daedalus.platform.isAndroid) {
+        //    this.attrs.nav.addAction(resources.svg['return'], "Reload", ()=>{
+        //        try {
+        //            Client.reloadPage()
+        //        } catch (e) {
+        //            console.error(e)
+        //        }
+        //    });
+        //}
 
         this.toggleShowMenuFixed();
 

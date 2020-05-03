@@ -226,6 +226,7 @@ class LibraryTreeView extends components.TreeView {
         } else {
             if (node.isSelected()) {
                 const song = {...node.attrs.obj, artist, album}
+                console.log(JSON.stringify(song));
                 result.push(song)
             }
         }
@@ -294,16 +295,28 @@ export class LibraryPage extends DomElement {
     }
 
     search(text) {
-        api.librarySearchForest(text)
-                .then(result => {
-                    this.attrs.view.reset()
-                    result.result.forEach(tree => {
-                        this.attrs.view.addItem(new ArtistTreeItem(this, tree))
+        this.attrs.view.reset()
+
+        this.attrs.search_promise = new Promise((accept, reject) => {
+            if (daedalus.platform.isAndroid) {
+
+                let text = AndroidNativeAudio.buildForest();
+                let forest = JSON.parse(text);
+
+                this.attrs.view.setForest(forest);
+
+            } else {
+                api.librarySearchForest(text)
+                    .then(result => {
+                        this.attrs.view.setForest(result.result);
                     })
-                })
-                .catch(error => {
-                    console.log(error);
-                })
+                    .catch(error => {
+                        console.log(error);
+                    })
+            }
+            accept();
+        })
+
     }
 
     showMore(item) {
@@ -412,9 +425,13 @@ export class SyncPage extends DomElement {
         }
 
         if (daedalus.platform.isAndroid) {
+
             registerAndroidEvent('onfetchprogress', this.handleFetchProgress.bind(this))
             registerAndroidEvent('onfetchcomplete', this.handleFetchComplete.bind(this))
             registerAndroidEvent('onsyncstatusupdated', this.handleSyncStatusUpdated.bind(this))
+
+            registerAndroidEvent('onsyncprogress', this.handleSyncProgress.bind(this))
+            registerAndroidEvent('onsynccomplete', this.handleSyncComplete.bind(this))
         }
 
     }
@@ -433,24 +450,27 @@ export class SyncPage extends DomElement {
     }
 
     search(text) {
-        if (daedalus.platform.isAndroid) {
+        this.attrs.view.reset()
 
-            let text = AndroidNativeAudio.buildForest();
-            let forest = JSON.parse(text);
+        this.attrs.search_promise = new Promise((accept, reject) => {
+            if (daedalus.platform.isAndroid) {
 
-            this.attrs.view.reset()
-            this.attrs.view.setForest(forest);
+                let text = AndroidNativeAudio.buildForest();
+                let forest = JSON.parse(text);
 
-        } else {
-            api.librarySearchForest(text)
-                .then(result => {
-                    this.attrs.view.reset()
-                    this.attrs.view.setForest(result.result);
-                })
-                .catch(error => {
-                    console.log(error);
-                })
-        }
+                this.attrs.view.setForest(forest);
+
+            } else {
+                api.librarySearchForest(text)
+                    .then(result => {
+                        this.attrs.view.setForest(result.result);
+                    })
+                    .catch(error => {
+                        console.log(error);
+                    })
+            }
+            accept();
+        })
     }
 
     handleSyncSave() {
@@ -486,14 +506,22 @@ export class SyncPage extends DomElement {
     }
 
     handleFetchProgress(payload) {
-        console.log("fetch progress: " + JSON.stringify(payload))
-
         this.attrs.header.updateStatus(`${payload.count}/${payload.total}`);
     }
 
     handleFetchComplete(payload) {
         console.log("fetch complete: " + JSON.stringify(payload))
     }
+
+    handleSyncProgress(payload) {
+        this.attrs.header.updateStatus(`${payload.index}/${payload.total} ${payload.message}`);
+    }
+
+    handleSyncComplete(payload) {
+        console.log("fetch complete: " + JSON.stringify(payload))
+        this.attrs.header.updateStatus("sync complete");
+    }
+
 
     handleSyncStatusUpdated(payload) {
         this.search("")

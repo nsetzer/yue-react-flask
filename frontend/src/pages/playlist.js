@@ -116,6 +116,15 @@ const style = {
         position: 'fixed',
     }),
 
+    padding1: StyleSheet({
+        height: '1em',
+        'min-height': '1em'
+    }),
+    padding2: StyleSheet({
+        height: '33vh',
+        'min-height': '64px'
+    })
+
 }
 
 
@@ -382,6 +391,7 @@ class Header extends components.NavHeader {
         this.attrs.txt_SongTime = new TextElement("00:00:00/00:00:00")
         this.attrs.txt_SongStatus = new TextElement("")
 
+        this.attrs.txt_SongTitle.props.style = {'max-width': 'calc(100vw - 4em)'}
         this.addRow(true)
         this.addRow(true)
         this.addRow(true)
@@ -401,6 +411,7 @@ class Header extends components.NavHeader {
     setSong(song) {
         if (song === null) {
             this.attrs.txt_SongTitle.setText("Select A Song")
+            this.attrs.txt_SongTitle.setText("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
         } else {
             this.attrs.txt_SongTitle.setText(song.artist + " - " + song.title)
         }
@@ -681,7 +692,9 @@ export class PlaylistPage extends DomElement {
         this.attrs = {
             device: audio.AudioDevice.instance(),
             header: new Header(this),
-            container: new SongList()
+            container: new SongList(),
+            padding1: new DomElement("div", {className: style.padding1}, []),
+            padding2: new DomElement("div", {className: style.padding2}, []),
         }
 
         this.attrs.container.setPlaceholderClassName(style.songItemPlaceholder)
@@ -689,7 +702,9 @@ export class PlaylistPage extends DomElement {
 
         this.appendChild(this.attrs.header)
         //this.appendChild(new TextElement("Loading..."))
+        this.appendChild(this.attrs.padding1)
         this.appendChild(this.attrs.container)
+        this.appendChild(this.attrs.padding2)
 
     }
 
