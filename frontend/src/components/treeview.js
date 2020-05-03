@@ -184,7 +184,7 @@ export class TreeItem extends DomElement {
         }
 
         if (selectMode == TreeItem.SELECTION_MODE_CHECK) {
-            this.setCheckEnabled(this.handleToggleSelection.bind(this), 0);
+            this.setCheckEnabled(this.handleToggleSelection.bind(this), selected);
         }
 
         if (depth === 0) {
@@ -218,12 +218,12 @@ export class TreeItem extends DomElement {
 
         if (this.attrs.children === null) {
             this.attrs.children = this.buildChildren(this.attrs.obj)
-            if (this.attrs.selected != UNSELECTED) {
-                this.attrs.children.forEach(child => {
-                    child.setSelected(true)
-                })
-            }
 
+                if (this.attrs.selected == SELECTED) {
+                    this.attrs.children.forEach(child => {
+                        child.setSelected(SELECTED)
+                    })
+                }
         }
 
         if (this.attrs.container2.children.length === 0) {

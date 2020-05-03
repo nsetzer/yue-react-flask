@@ -98,7 +98,7 @@ class Header extends components.NavHeader {
 class ArtistTreeItem extends components.TreeItem {
 
     constructor(parent, obj, selectMode=1) {
-        super(parent, 0, obj.name, obj, selectMode);
+        super(parent, 0, obj.name, obj, selectMode, obj.selected||0);
 
     }
 
@@ -110,7 +110,7 @@ class ArtistTreeItem extends components.TreeItem {
 class AlbumTreeItem extends components.TreeItem {
 
     constructor(parent, obj, selectMode=1) {
-        super(parent, 1, obj.name, obj, selectMode);
+        super(parent, 1, obj.name, obj, selectMode, obj.selected||0);
     }
 
     buildChildren(obj) {
@@ -121,7 +121,7 @@ class AlbumTreeItem extends components.TreeItem {
 class TrackTreeItem extends components.TreeItem {
 
     constructor(parent, obj, selectMode=1) {
-        let selected = false
+        let selected = 0
         if (selectMode == components.TreeItem.SELECTION_MODE_CHECK) {
             selected = obj.sync || 0
         }
@@ -164,7 +164,6 @@ class LibraryTreeView extends components.TreeView {
     getSelectedSongs() {
 
         const result = []
-        console.log(this)
         this.attrs.container.children.forEach(child => {
             this._chkArtistSelection(result, child)
         })
@@ -174,9 +173,7 @@ class LibraryTreeView extends components.TreeView {
 
     _chkArtistSelection(result, node) {
         if (!node.attrs.children) {
-            if (node.isSelected()) {
-                this._collectArtist(result, node.attrs.obj)
-            }
+            this._collectArtist(result, node.attrs.obj, node.isSelected())
             return;
         }
         node.attrs.children.forEach(child => {
@@ -185,17 +182,15 @@ class LibraryTreeView extends components.TreeView {
 
     }
 
-    _collectArtist(result, obj) {
+    _collectArtist(result, obj, selected) {
         obj.albums.forEach(child => {
-            this._collectAlbum(result, child, obj.name)
+            this._collectAlbum(result, child, obj.name, selected)
         })
     }
 
     _chkAlbumSelection(result, node, artist) {
         if (!node.attrs.children) {
-            if (node.isSelected()) {
-                this._collectAlbum(result, node.attrs.obj, artist)
-            }
+            this._collectAlbum(result, node.attrs.obj, artist, node.isSelected())
             return;
         }
         node.attrs.children.forEach(child => {
@@ -203,9 +198,9 @@ class LibraryTreeView extends components.TreeView {
         })
     }
 
-    _collectAlbum(result, obj, artist) {
+    _collectAlbum(result, obj, artist, selected) {
         obj.tracks.forEach(child => {
-            this._collectTrack(result, child, artist, obj.name)
+            this._collectTrack(result, child, artist, obj.name, selected)
         })
     }
 
@@ -218,8 +213,8 @@ class LibraryTreeView extends components.TreeView {
 
 
             const item = node.attrs.obj;
-            if (item.sync == 1 && node.attrs.selected == 0) {
 
+            if (item.sync == 1 && node.attrs.selected == 0) {
                 const track = {"spk": item.spk, sync: 0}
                 result.push(track)
             }
@@ -240,17 +235,28 @@ class LibraryTreeView extends components.TreeView {
     /**
     collect a track when the node does not exist
     and a parent, which exists, is selected
+
+    TODO: the optimization to use is: was this or a parent
+    modified by the user, if not then dont descend.
     */
-    _collectTrack(result, obj, artist, album) {
+    _collectTrack(result, obj, artist, album, selected) {
 
         if (this.attrs.selectMode == components.TreeItem.SELECTION_MODE_CHECK) {
-            if (obj.sync == 0) {
+            if (obj.sync == 0 && selected == 1) {
                 const track = {"uid": obj.id, "spk": obj.spk, sync: 1}
                 result.push(track)
             }
+
+            if (obj.sync == 1 && selected == 0) {
+                const track = {"uid": obj.id, "spk": obj.spk, sync: 0}
+                result.push(track)
+            }
+
         } else {
-            const song = {...obj, artist, album}
-            result.push(song)
+            if (selected) {
+                const song = {...obj, artist, album}
+                result.push(song)
+            }
         }
 
     }
@@ -340,6 +346,12 @@ class SyncHeader extends components.NavHeader {
             console.log("menu clicked")
         })
 
+        this.addAction(resources.svg['media_error'], ()=>{
+            if (daedalus.platform.isAndroid) {
+                AndroidNativeAudio.cancelTask();
+            }
+        })
+
         this.addAction(resources.svg['sort'], ()=>{
             if (daedalus.platform.isAndroid) {
                 AndroidNativeAudio.beginFetch("" + api.getAuthToken());
@@ -351,7 +363,13 @@ class SyncHeader extends components.NavHeader {
         })
 
         this.addAction(resources.svg['save'], ()=>{
-                this.attrs.parent.handleSyncSave();
+            this.attrs.parent.handleSyncSave();
+        })
+
+        this.addAction(resources.svg['download'], ()=>{
+            if (daedalus.platform.isAndroid) {
+                AndroidNativeAudio.beginSync("" + api.getAuthToken());
+            }
         })
 
         this.addRow(false)
@@ -386,7 +404,7 @@ export class SyncPage extends DomElement {
     }
 
     elementMounted() {
-        console.log("mount library view")
+        console.log("mount sync view")
 
         if (this.attrs.firstMount) {
             this.attrs.firstMount = false
@@ -396,12 +414,18 @@ export class SyncPage extends DomElement {
         if (daedalus.platform.isAndroid) {
             registerAndroidEvent('onfetchprogress', this.handleFetchProgress.bind(this))
             registerAndroidEvent('onfetchcomplete', this.handleFetchComplete.bind(this))
+            registerAndroidEvent('onsyncstatusupdated', this.handleSyncStatusUpdated.bind(this))
         }
 
     }
 
     elementUnmounted() {
-
+        console.log("unmount sync view")
+        if (daedalus.platform.isAndroid) {
+            registerAndroidEvent('onfetchprogress', ()=>{})
+            registerAndroidEvent('onfetchcomplete', ()=>{})
+            registerAndroidEvent('onsyncstatusupdated', ()=>{})
+        }
     }
 
     handleHideFileMore() {
@@ -432,19 +456,31 @@ export class SyncPage extends DomElement {
     handleSyncSave() {
 
 
-        let songs = this.attrs.view.getSelectedSongs()
+        let items = this.attrs.view.getSelectedSongs()
 
+        console.log(JSON.stringify(items))
+        console.log(`selected ${items.length} items`)
         let data = {}
-        for (let i=0; i < songs.length; i++) {
-            let song = songs[i];
-            data[song.spk]=song.sync;
+        for (let i=0; i < items.length; i++) {
+            let item = items[i];
+            data[item.spk] = item.sync;
         }
 
-        if (daedalus.platform.isAndroid) {
-            let payload = JSON.stringify(data);
-            AndroidNativeAudio.updateSyncStatus(payload)
+        console.log(JSON.stringify(data))
+        console.log(`selected ${data.length} items`)
+
+        if (items.length > 0) {
+            if (daedalus.platform.isAndroid) {
+                let payload = JSON.stringify(data);
+
+                AndroidNativeAudio.updateSyncStatus(payload)
+
+                //this.search("");  // TODO: fix query
+            } else {
+                console.log(data)
+            }
         } else {
-            console.log(data)
+            console.log("sync save: nothing to save")
         }
 
     }
@@ -457,6 +493,10 @@ export class SyncPage extends DomElement {
 
     handleFetchComplete(payload) {
         console.log("fetch complete: " + JSON.stringify(payload))
+    }
+
+    handleSyncStatusUpdated(payload) {
+        this.search("")
     }
 
     showMore(item) {
