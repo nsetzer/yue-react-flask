@@ -28,6 +28,12 @@ const style = {
 
     viewPad: StyleSheet({'padding-left': '1em', 'padding-right': '1em'}),
 
+    listItemCheck: StyleSheet({
+        padding-left:'.5em',
+        padding-right:'.5em',
+        'cursor': 'pointer',
+        'border': 'solid 1px black'
+    }),
 }
 
 function shuffle(a) {
@@ -67,6 +73,12 @@ class Header extends components.NavHeader {
         this.addRowElement(0, this.attrs.txtInput)
         this.attrs.txtInput.addClassName(style.grow)
 
+        if (daedalus.platform.isAndroid) {
+            this.attrs.chk = new CheckedElement(this.handleCheck.bind(this), 1);
+
+            this.addRowElement(0, this.attrs.chk);
+        }
+
         this.addRowAction(0, resources.svg['search'], ()=>{
             this.attrs.parent.search(this.attrs.txtInput.props.value)
         })
@@ -91,6 +103,55 @@ class Header extends components.NavHeader {
         })
 
     }
+
+    handleCheck() {
+        this.attrs.chk.setCheckState((this.attrs.chk.attrs.checkState == 0)?1:0)
+    }
+
+    isChecked() {
+        return this.attrs.chk.attrs.checkState != 0;
+    }
+}
+
+// --
+
+// TODO: this is copied from treeview
+function getCheckResource(state) {
+    if (state == 2) { // partial
+        return resources.svg.sort
+    } else if (state == 1) { // checked
+        return resources.svg.download
+    }
+
+    return resources.svg.select
+
+}
+
+class CheckedElement extends components.SvgElement {
+    constructor(callback, initialCheckState) {
+
+        let res = getCheckResource(initialCheckState)
+        super(res, {width: 20, height: 32, className: style.listItemCheck})
+
+        this.attrs = {
+            callback,
+            checkState: initialCheckState,
+            initialCheckState,
+        }
+
+    }
+
+    setCheckState(checkState) {
+        this.attrs.checkState = checkState
+        this.props.src = getCheckResource(checkState);
+        this.update();
+    }
+
+
+    onClick(event) {
+
+        this.attrs.callback()
+    }
 }
 
 // --
@@ -98,7 +159,15 @@ class Header extends components.NavHeader {
 class ArtistTreeItem extends components.TreeItem {
 
     constructor(parent, obj, selectMode=1) {
-        super(parent, 0, obj.name, obj, selectMode, obj.selected||0);
+        // TODO: this is a bug in the forest builder on AndroidNativeAudio
+        // it will set a 'selected' fields always -- based on whether
+        // or no the tracks are synced. it should not do this
+        // when running a general search
+        let selected = 0
+        if (selectMode==components.TreeItem.SELECTION_MODE_CHECK) {
+            selected = obj.selected||0
+        }
+        super(parent, 0, obj.name, obj, selectMode, selected);
 
     }
 
@@ -110,7 +179,11 @@ class ArtistTreeItem extends components.TreeItem {
 class AlbumTreeItem extends components.TreeItem {
 
     constructor(parent, obj, selectMode=1) {
-        super(parent, 1, obj.name, obj, selectMode, obj.selected||0);
+        let selected = 0
+        if (selectMode==components.TreeItem.SELECTION_MODE_CHECK) {
+            selected = obj.selected||0
+        }
+        super(parent, 1, obj.name, obj, selectMode, selected);
     }
 
     buildChildren(obj) {
@@ -300,8 +373,9 @@ export class LibraryPage extends DomElement {
         this.attrs.search_promise = new Promise((accept, reject) => {
             if (daedalus.platform.isAndroid) {
 
-                let text = AndroidNativeAudio.buildForest();
-                let forest = JSON.parse(text);
+                let syncedOnly = this.attrs.header.isChecked();
+                let payload = AndroidNativeAudio.buildForest(text, syncedOnly);
+                let forest = JSON.parse(payload);
 
                 this.attrs.view.setForest(forest);
 
@@ -455,8 +529,8 @@ export class SyncPage extends DomElement {
         this.attrs.search_promise = new Promise((accept, reject) => {
             if (daedalus.platform.isAndroid) {
 
-                let text = AndroidNativeAudio.buildForest();
-                let forest = JSON.parse(text);
+                let payload = AndroidNativeAudio.buildForest(text, false);
+                let forest = JSON.parse(payload);
 
                 this.attrs.view.setForest(forest);
 
