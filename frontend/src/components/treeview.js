@@ -2,6 +2,7 @@
 import module resources
 
 include './svg.js'
+include './chkbox.js'
 
 const style = {
 
@@ -11,32 +12,7 @@ const style = {
     treeItem: StyleSheet({
         'padding-top': '.25em'
     }),
-    treeItemButton: StyleSheet({
-        width: '32px',
-        height: '32px',
-        'min-width': '32px',
-        'min-height': '32px',
-        background: 'blue',
-        //'margin-right': '1em'
-    }),
-    treeItemButtonH: StyleSheet({
-        position: 'relative',
-        top: 0,
-        left: 0,
-        width: '32px',
-        height: '11px',
-        'margin-top': '11px',
-        background: 'green',
-    }),
-    treeItemButtonV: StyleSheet({
-        position: 'relative',
-        top: '-22px',
-        left: 0,
-        width: '11px',
-        height: '32px',
-        'margin-left': '11px',
-        background: 'green',
-    }),
+
     treeItemObjectContainer: StyleSheet({
         display: 'flex',
         'flex-direction': 'row',
@@ -57,14 +33,6 @@ const style = {
         'margin-right': '1em',
         'cursor': 'pointer'
     }),
-
-    listItemCheck: StyleSheet({
-        'margin-left': '1em',
-        'margin-right': '1em',
-        'cursor': 'pointer',
-        'border': 'solid 1px black'
-    }),
-
     listItemSelected: StyleSheet({
         background: '#00FF0022',
         'font-weight': 'bold'
@@ -96,62 +64,9 @@ class SvgMoreElement extends SvgElement {
     }
 }
 
-function getCheckResource(state) {
-    if (state == 2) { // partial
-        return resources.svg.sort
-    } else if (state == 1) { // checked
-        return resources.svg.download
-    }
-
-    return resources.svg.select
-
-}
-
-class CheckedElement extends SvgElement {
-    constructor(callback, initialCheckState) {
-
-        let res = getCheckResource(initialCheckState)
-        super(res, {width: 20, height: 32, className: style.listItemCheck})
-
-        this.attrs = {
-            callback,
-            checkState: initialCheckState,
-            initialCheckState,
-        }
-
-    }
-
-    setCheckState(checkState) {
-        this.attrs.checkState = checkState
-        this.props.src = getCheckResource(checkState);
-        this.update();
-    }
-
-
-    onClick(event) {
-
-        this.attrs.callback()
-    }
-}
-
-class TreeButton extends DomElement {
-    constructor(callback) {
-        super("div", {className: [style.treeItemButton]}, []);
-
-        //this.appendChild(new DomElement("div", {className: style.treeItemButtonH}, []))
-        //this.appendChild(new DomElement("div", {className: style.treeItemButtonV}, []))
-
-        this.attrs = {callback}
-    }
-
-    onClick() {
-        this.attrs.callback()
-    }
-}
-
-const UNSELECTED = 0
-const SELECTED = 1
-const PARTIAL = 2
+const UNSELECTED=0
+const SELECTED=1
+const PARTIAL=2
 
 export class TreeItem extends DomElement {
 
@@ -174,7 +89,7 @@ export class TreeItem extends DomElement {
 
         if (this.hasChildren()) {
             this.attrs.btn = this.attrs.container1.appendChild(
-                new TreeButton(this.handleToggleExpand.bind(this)))
+                new SvgButtonElement(resources.svg.plus, this.handleToggleExpand.bind(this)))
         }
 
         this.attrs.txt = this.attrs.container1.appendChild(new components.MiddleText(title))
@@ -207,7 +122,7 @@ export class TreeItem extends DomElement {
 
     setCheckEnabled(callback, state) {
         this.attrs.chk = this.attrs.container1.appendChild(
-            new CheckedElement(callback, state))
+            this.constructCheckbox(callback, state))
     }
 
     handleToggleExpand() {
@@ -229,14 +144,16 @@ export class TreeItem extends DomElement {
         if (this.attrs.container2.children.length === 0) {
             this.attrs.container2.children = this.attrs.children
             this.attrs.container2.update()
+            this.attrs.btn.setUrl(resources.svg.minus)
         } else {
             this.attrs.container2.children = []
             this.attrs.container2.update()
+            this.attrs.btn.setUrl(resources.svg.plus)
         }
     }
 
     handleToggleSelection() {
-
+        console.log("..")
         let next = (this.attrs.selected != UNSELECTED)?UNSELECTED:SELECTED;
         this.setSelected(next)
 
@@ -321,6 +238,10 @@ export class TreeItem extends DomElement {
 
     buildChildren(obj) {
         return []
+    }
+
+    constructCheckbox(callback, initialState) {
+        return new CheckBoxElement(callback, initialState)
     }
 }
 

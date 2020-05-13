@@ -28,6 +28,7 @@ import module api
 import module pages
 import module components
 import module resources
+import module store
 
 const style = {
     body: StyleSheet({
@@ -108,6 +109,9 @@ export class Root extends DomElement {
         this.attrs.router = router
 
         this.attrs.nav = new components.NavMenu();
+
+        store.globals.showMenu = () => {this.attrs.nav.show();}
+
         this.attrs.nav.addAction(resources.svg.playlist, "Playlist", ()=>{
             history.pushState({}, "", "/u/playlist");
             this.attrs.nav.hide();

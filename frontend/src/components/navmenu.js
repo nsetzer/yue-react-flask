@@ -153,7 +153,6 @@ class NavMenuImpl extends DomElement {
             actions: this.appendChild(new NavMenuActionContainer()),
         }
 
-
     }
 
     onClick(event) {

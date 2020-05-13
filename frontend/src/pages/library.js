@@ -16,6 +16,45 @@ from module daedalus import {
 import module api
 import module components
 import module audio
+import module store
+
+class SearchModeCheckBox extends components.CheckBoxElement {
+
+    // TODO: this is a framework bug: inherited signals are not bound
+    onClick(event) {
+        this.attrs.callback()
+    }
+
+    getStateIcons() {
+        return [
+            resources.svg.checkbox_unchecked,
+            resources.svg.checkbox_synced,
+            resources.svg.checkbox_not_synced,
+            resources.svg.checkbox_partial,
+        ];
+    }
+
+}
+
+class SyncCheckBox extends components.CheckBoxElement {
+
+
+    // TODO: this is a framework bug: inherited signals are not bound
+    onClick(event) {
+        this.attrs.callback()
+    }
+
+
+    getStateIcons() {
+        return [
+            resources.svg.checkbox_unchecked,
+            resources.svg.checkbox_download,
+            resources.svg.checkbox_partial,
+        ];
+    }
+
+}
+
 
 const style = {
     main: StyleSheet({
@@ -29,10 +68,10 @@ const style = {
     viewPad: StyleSheet({'padding-left': '1em', 'padding-right': '1em'}),
 
     listItemCheck: StyleSheet({
-        padding-left:'.5em',
-        padding-right:'.5em',
+        //padding-left:'.5em',
+        //padding-right:'.5em',
         'cursor': 'pointer',
-        'border': 'solid 1px black'
+        //'border': 'solid 1px black'
     }),
 }
 
@@ -54,7 +93,7 @@ class Header extends components.NavHeader {
         })
 
         this.addAction(resources.svg['menu'], ()=>{
-            console.log("menu clicked")
+            store.globals.showMenu()
         })
 
         this.addAction(resources.svg['media_prev'], ()=>{
@@ -74,15 +113,19 @@ class Header extends components.NavHeader {
         this.attrs.txtInput.addClassName(style.grow)
 
         if (daedalus.platform.isAndroid) {
-            this.attrs.chk = new CheckedElement(this.handleCheck.bind(this), 1);
 
+            this.attrs.chk = new SearchModeCheckBox(this.handleCheck.bind(this), 1);
+
+            this.addRowElement(0, new components.HSpacer("1em"));
             this.addRowElement(0, this.attrs.chk);
+            this.addRowElement(0, new components.HSpacer("1em"));
         }
 
         this.addRowAction(0, resources.svg['search'], ()=>{
             this.attrs.parent.search(this.attrs.txtInput.props.value)
         })
 
+        /*
         this.addRowAction(0, resources.svg['media_shuffle'], ()=>{
 
             const songList = this.attrs.parent.attrs.view.getSelectedSongs()
@@ -100,59 +143,48 @@ class Header extends components.NavHeader {
             console.log(count)
             this.attrs.parent.attrs.view.selectAll(count == 0)
 
-        })
+        })*/
 
     }
 
     handleCheck() {
-        this.attrs.chk.setCheckState((this.attrs.chk.attrs.checkState == 0)?1:0)
+        this.attrs.chk.setCheckState((this.attrs.chk.attrs.checkState + 1)%3)
     }
 
-    isChecked() {
-        return this.attrs.chk.attrs.checkState != 0;
+    syncState() {
+        return this.attrs.chk.attrs.checkState;
     }
 }
 
+class Footer extends components.NavFooter {
+    constructor(parent) {
+        super();
+
+        this.attrs.parent = parent
+
+        this.addAction(resources.svg['select'], ()=>{
+
+            const count = this.attrs.parent.attrs.view.countSelected()
+            this.attrs.parent.attrs.view.selectAll(count == 0)
+
+        })
+
+        this.addAction(resources.svg['media_shuffle'], ()=>{
+
+            const songList = this.attrs.parent.attrs.view.getSelectedSongs()
+            console.log("creating playlist", songList.length)
+            audio.AudioDevice.instance().queueSet(shuffle(songList).splice(0, 100))
+            audio.AudioDevice.instance().next()
+
+            this.attrs.parent.attrs.view.selectAll(false)
+
+        })
+
+    }
+
+
+}
 // --
-
-// TODO: this is copied from treeview
-function getCheckResource(state) {
-    if (state == 2) { // partial
-        return resources.svg.sort
-    } else if (state == 1) { // checked
-        return resources.svg.download
-    }
-
-    return resources.svg.select
-
-}
-
-class CheckedElement extends components.SvgElement {
-    constructor(callback, initialCheckState) {
-
-        let res = getCheckResource(initialCheckState)
-        super(res, {width: 20, height: 32, className: style.listItemCheck})
-
-        this.attrs = {
-            callback,
-            checkState: initialCheckState,
-            initialCheckState,
-        }
-
-    }
-
-    setCheckState(checkState) {
-        this.attrs.checkState = checkState
-        this.props.src = getCheckResource(checkState);
-        this.update();
-    }
-
-
-    onClick(event) {
-
-        this.attrs.callback()
-    }
-}
 
 // --
 
@@ -174,6 +206,10 @@ class ArtistTreeItem extends components.TreeItem {
     buildChildren(obj) {
         return obj.albums.map(album => new AlbumTreeItem(this, album, this.attrs.selectMode))
     }
+
+    constructCheckbox(callback, initialState) {
+        return new SyncCheckBox(callback, initialState)
+    }
 }
 
 class AlbumTreeItem extends components.TreeItem {
@@ -188,6 +224,10 @@ class AlbumTreeItem extends components.TreeItem {
 
     buildChildren(obj) {
         return obj.tracks.map(track => new TrackTreeItem(this, track, this.attrs.selectMode))
+    }
+
+    constructCheckbox(callback, initialState) {
+        return new SyncCheckBox(callback, initialState)
     }
 }
 
@@ -211,20 +251,27 @@ class TrackTreeItem extends components.TreeItem {
     handleMoreClicked() {
         const abm = this.attrs.parent
         const art = abm.attrs.parent
+        const view = art.attrs.parent
+        const page = view.attrs.parent
 
         const song = {...this.attrs.obj,
             artist: art.attrs.obj.name,
             album: abm.attrs.obj.name
         }
+        console.log(art.attrs.parent)
+        page.showMore(song)
+    }
 
-        art.attrs.parent.showMore(song)
+    constructCheckbox(callback, initialState) {
+        return new SyncCheckBox(callback, initialState)
     }
 }
 
 class LibraryTreeView extends components.TreeView {
 
-    constructor(selectMode) {
+    constructor(parent, selectMode) {
         super();
+        this.attrs.parent = parent
         this.attrs.selectMode = selectMode
     }
 
@@ -342,7 +389,8 @@ export class LibraryPage extends DomElement {
 
         this.attrs = {
             header: new Header(this),
-            view: new LibraryTreeView(components.TreeItem.SELECTION_MODE_HIGHLIGHT),
+            footer: new Footer(this),
+            view: new LibraryTreeView(this, components.TreeItem.SELECTION_MODE_HIGHLIGHT),
             more: new components.MoreMenu(this.handleHideFileMore.bind(this)),
             more_context_item: null,
             firstMount: true,
@@ -354,6 +402,7 @@ export class LibraryPage extends DomElement {
         this.appendChild(this.attrs.more)
         this.appendChild(this.attrs.header)
         this.appendChild(this.attrs.view)
+        this.appendChild(this.attrs.footer)
 
     }
 
@@ -373,8 +422,8 @@ export class LibraryPage extends DomElement {
         this.attrs.search_promise = new Promise((accept, reject) => {
             if (daedalus.platform.isAndroid) {
 
-                let syncedOnly = this.attrs.header.isChecked();
-                let payload = AndroidNativeAudio.buildForest(text, syncedOnly);
+                let syncState = this.attrs.header.syncState();
+                let payload = AndroidNativeAudio.buildForest(text, syncState);
                 let forest = JSON.parse(payload);
 
                 this.attrs.view.setForest(forest);
@@ -418,19 +467,20 @@ export class LibraryPage extends DomElement {
         //    })
 
     }
-
 }
-
 
 class SyncHeader extends components.NavHeader {
     constructor(parent) {
         super();
 
         this.attrs.parent = parent
+        this.attrs.txtInput = new TextInputElement("", null, () => {
+                this.attrs.parent.search(this.attrs.txtInput.props.value)
+        })
         this.attrs.status = new components.MiddleText("...");
 
         this.addAction(resources.svg['menu'], ()=>{
-            console.log("menu clicked")
+            store.globals.showMenu()
         })
 
         this.addAction(resources.svg['media_error'], ()=>{
@@ -460,12 +510,42 @@ class SyncHeader extends components.NavHeader {
         })
 
         this.addRow(false)
-        this.addRowElement(0, this.attrs.status)
+        this.addRowElement(0, this.attrs.txtInput)
+        this.attrs.txtInput.addClassName(style.grow)
+
+        if (daedalus.platform.isAndroid)
+        {
+
+            this.attrs.chk = new SearchModeCheckBox(this.handleCheck.bind(this), 0);
+
+            this.addRowElement(0, new components.HSpacer("1em"));
+            this.addRowElement(0, this.attrs.chk);
+            this.addRowElement(0, new components.HSpacer("1em"));
+        }
+
+        this.addRowAction(0, resources.svg['search'], ()=>{
+            this.attrs.parent.search(this.attrs.txtInput.props.value)
+        })
+
+        this.addRow(false)
+        this.addRowElement(1, this.attrs.status)
     }
 
     updateStatus(text) {
         this.attrs.status.setText(text)
 
+    }
+
+    searchText() {
+        return this.attrs.txtInput.props.value
+    }
+
+    handleCheck() {
+        this.attrs.chk.setCheckState((this.attrs.chk.attrs.checkState + 1)%3)
+    }
+
+    syncState() {
+        return this.attrs.chk.attrs.checkState;
     }
 }
 
@@ -475,7 +555,7 @@ export class SyncPage extends DomElement {
 
         this.attrs = {
             header: new SyncHeader(this),
-            view: new LibraryTreeView(components.TreeItem.SELECTION_MODE_CHECK),
+            view: new LibraryTreeView(this, components.TreeItem.SELECTION_MODE_CHECK),
             more: new components.MoreMenu(this.handleHideFileMore.bind(this)),
             more_context_item: null,
             firstMount: true,
@@ -529,7 +609,8 @@ export class SyncPage extends DomElement {
         this.attrs.search_promise = new Promise((accept, reject) => {
             if (daedalus.platform.isAndroid) {
 
-                let payload = AndroidNativeAudio.buildForest(text, false);
+                let syncState = this.attrs.header.syncState();
+                let payload = AndroidNativeAudio.buildForest(text, syncState);
                 let forest = JSON.parse(payload);
 
                 this.attrs.view.setForest(forest);
@@ -598,7 +679,7 @@ export class SyncPage extends DomElement {
 
 
     handleSyncStatusUpdated(payload) {
-        this.search("")
+        this.search(this.attrs.header.searchText())
     }
 
     showMore(item) {

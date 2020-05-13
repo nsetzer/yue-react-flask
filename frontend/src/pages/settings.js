@@ -8,6 +8,7 @@ from module daedalus import{
 }
 import module api
 import module components
+import module store
 
 const style = {
     main: StyleSheet({
@@ -76,7 +77,7 @@ class SettingsGroupItem extends DomElement {
 class Header extends components.NavHeader {
     constructor(parent) {
         super();
-        this.addAction(resources.svg['menu'], ()=>{});
+        this.addAction(resources.svg['menu'], ()=>{ store.globals.showMenu() });
     }
 }
 

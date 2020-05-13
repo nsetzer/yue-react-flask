@@ -11,6 +11,7 @@ import module api
 import module components
 import module resources
 import module audio
+import module store
 
 const style = {
     main: StyleSheet({
@@ -108,6 +109,8 @@ const style = {
     space5 : StyleSheet({width: ".25em", min-width: ".25em"}),
 
     center80: StyleSheet({max-width: '80%'}),
+    //centerRow: StyleSheet({max-width: 'calc(100%-2em)'}),
+    centerRow: StyleSheet({max-width: 'calc(100%-2em)'}),
 
     lockScreen: StyleSheet({
         height: '100%',
@@ -123,8 +126,46 @@ const style = {
     padding2: StyleSheet({
         height: '33vh',
         'min-height': '64px'
-    })
+    }),
 
+
+    progressBar: StyleSheet({
+        position: "relative",
+        height: "1em",
+        max-height: "1em",
+        min-height: "1em",
+        width:"90%",
+        //background-color: "white"
+    }),
+
+    progressBar_bar: StyleSheet({
+        position: "absolute",
+        height: ".3em",
+        max-height: ".3em",
+        min-height: ".3em",
+        width:"100%",
+        top: ".35em",
+        background-color: "black",
+        border-radius: "1em",
+        border-width: "1px",
+        border-style: "solid",
+        border-color: "black",
+        user-select: "none",
+    }),
+
+    progressBar_button: StyleSheet({
+        position: "absolute",
+        height: ".5em",
+        max-height: ".5em",
+        min-height: ".5em",
+        width:"1em",
+        top: ".25em",
+        background-color: "blue",
+        border-radius: "1em",
+        border-width: "2px",
+        border-style: "solid",
+        border-color: "blue",
+    })
 }
 
 
@@ -348,6 +389,170 @@ class SongItem extends DomElement {
 
 }
 
+class ProgressBarTrack extends DomElement {
+    constructor(parent) {
+        super("div", {className: style.progressBar_bar}, [])
+    }
+}
+
+class ProgressBarButton extends DomElement {
+    constructor(parent) {
+        super("div", {className: style.progressBar_button}, [])
+    }
+}
+
+class ProgressBar extends DomElement {
+    constructor(callback) {
+        super("div", {className: style.progressBar}, [])
+
+        this.attrs = {
+            callback,
+            pressed: false,
+            pos: 0,
+            tpos: 0,
+            startx: 0,
+            track: this.appendChild(new ProgressBarTrack()),
+            btn: this.appendChild(new ProgressBarButton()),
+        }
+    }
+
+    setPosition(position, count=1.0) {
+        let pos = 0;
+        if (count > 0) {
+            pos = position / count;
+        }
+        this.attrs.pos = pos;
+
+        const btn = this.attrs.btn.getDomNode();
+        const ele = this.getDomNode();
+
+        if (btn && ele) {
+            let m2 = (ele.clientWidth - btn.clientWidth);
+            let m1 = 0;
+
+            let x = m2 * pos
+
+            if (x > m2) {
+                x = m2;
+            } else if (x < m1) {
+                x = m1
+            }
+
+            this.attrs.startx = Math.floor(x) + "px";
+            if (!this.attrs.pressed) {
+                const btn = this.attrs.btn.getDomNode();
+                btn.style.left = this.attrs.startx
+            }
+        }
+    }
+
+    onMouseDown(event) {
+        this.trackingStart();
+        this.trackingMove(event);
+    }
+
+    onMouseMove(event) {
+        if (!this.attrs.pressed) {
+            return;
+        }
+        this.trackingMove(event);
+    }
+
+    onMouseLeave(event) {
+        if (!this.attrs.pressed) {
+            return;
+        }
+        this.trackingEnd(false);
+    }
+
+    onMouseUp(event) {
+        if (!this.attrs.pressed) {
+            return;
+        }
+        this.trackingMove(event);
+        this.trackingEnd(true);
+    }
+
+    onTouchStart(event) {
+        this.trackingStart();
+        this.trackingMove(event);
+    }
+
+    onTouchMove(event) {
+        if (!this.attrs.pressed) {
+            return;
+        }
+
+        this.trackingMove(event);
+    }
+
+    onTouchCancel(event) {
+        if (!this.attrs.pressed) {
+            return;
+        }
+        this.trackingEnd(false);
+    }
+
+    onTouchEnd(event) {
+        if (!this.attrs.pressed) {
+            return;
+        }
+        this.trackingMove(event);
+        this.trackingEnd(true);
+    }
+
+    trackingStart() {
+
+        const btn = this.attrs.btn.getDomNode();
+        this.attrs.startx = btn.style.left
+        this.attrs.pressed = true
+    }
+
+    trackingEnd(accept) {
+        const btn = this.attrs.btn.getDomNode();
+        this.attrs.pressed = false
+        if (accept) {
+            if (this.attrs.callback) {
+                this.attrs.callback(this.attrs.tpos)
+            }
+        } else {
+            btn.style.left = this.attrs.startx;
+        }
+    }
+
+    trackingMove(event) {
+        let org_event = event;
+
+        let evt = (event?.touches || event?.originalEvent?.touches)
+        if (evt) {
+            event = evt[0]
+        }
+
+        if (!event) {
+            return
+        }
+
+        const btn = this.attrs.btn.getDomNode();
+        const ele = this.getDomNode();
+        const rect = ele.getBoundingClientRect();
+        let x = event.pageX - rect.left - (btn.clientWidth/2)
+
+        let m2 = ele.clientWidth - btn.clientWidth;
+        let m1 = 0;
+
+        if (x > m2) {
+            x = m2;
+        } else if (x < m1) {
+            x = m1
+        }
+
+        this.attrs.tpos = (m2>0 && x >= 0) ? x / m2 : 0.0;
+
+        btn.style.left = Math.floor(x) + "px";
+        console.log("move", btn.style.left)
+    }
+}
+
 class Header extends components.NavHeader {
     constructor(parent) {
         super();
@@ -355,7 +560,7 @@ class Header extends components.NavHeader {
         this.attrs.parent = parent
 
         this.addAction(resources.svg['menu'], ()=>{
-            console.log("menu clicked")
+            store.globals.showMenu()
         })
         this.addAction(resources.svg['media_prev'], ()=>{
             audio.AudioDevice.instance().prev()
@@ -366,10 +571,10 @@ class Header extends components.NavHeader {
         this.addAction(resources.svg['media_next'], ()=>{
             audio.AudioDevice.instance().next()
         })
-        this.addAction(resources.svg['media_next'], ()=>{
-            let inst = audio.AudioDevice.instance()
-            inst.setCurrentTime(inst.duration() - 3)
-        })
+        //this.addAction(resources.svg['media_next'], ()=>{
+        //    let inst = audio.AudioDevice.instance()
+        //    inst.setCurrentTime(inst.duration() - 3)
+        //})
         /*
         this.addAction(resources.svg['media_shuffle'], ()=>{
             audio.AudioDevice.instance().queueCreate(this.attrs.txtInput.props.value)
@@ -390,8 +595,16 @@ class Header extends components.NavHeader {
         this.attrs.txt_SongTitle = new components.MiddleText("Select A Song")
         this.attrs.txt_SongTime = new TextElement("00:00:00/00:00:00")
         this.attrs.txt_SongStatus = new TextElement("")
+        this.attrs.pbar_time = new ProgressBar((pos)=>{
+            let inst = audio.AudioDevice.instance()
+            let dur = inst.duration()
+            if (!!dur) {
+                inst.setCurrentTime(pos*dur)
+            }
+        })
 
-        this.attrs.txt_SongTitle.props.style = {'max-width': 'calc(100vw - 4em)'}
+        //this.attrs.txt_SongTitle.props.style = {'max-width': 'calc(100% - 4em)'}
+        this.addRow(true)
         this.addRow(true)
         this.addRow(true)
         this.addRow(true)
@@ -399,8 +612,10 @@ class Header extends components.NavHeader {
         this.addRowElement(0, this.attrs.txt_SongTitle)
         this.addRowElement(1, this.attrs.txt_SongTime)
         this.addRowElement(2, this.attrs.txt_SongStatus)
+        this.addRowElement(3, this.attrs.pbar_time)
 
-        this.attrs.txt_SongTitle.addClassName(style.center80)
+        //this.attrs.txt_SongTitle.addClassName(style.center80)
+        //this.attrs.txt_SongTitle.addClassName(style.centerRow)
 
         this.attrs.txt_SongTime.props.onClick = () => {
             const device = audio.AudioDevice.instance();
@@ -425,6 +640,8 @@ class Header extends components.NavHeader {
             const t1 = formatTime(currentTime)
             const t2 = formatTime(duration)
             this.attrs.txt_SongTime.setText(t1 + "/" + t2)
+            this.attrs.pbar_time.setPosition(currentTime, duration)
+
         } catch (e) {
             console.error(e)
         }

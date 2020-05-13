@@ -46,6 +46,14 @@ const svg_icon_names = [
     "volume_1",
     "volume_2",
     "volume_4",
+    "checkbox_unchecked",
+    "checkbox_partial",
+    "checkbox_download",
+    "checkbox_checked",
+    "checkbox_synced",
+    "checkbox_not_synced",
+    "plus",
+    "minus",
 ];
 
 export const svg = {};

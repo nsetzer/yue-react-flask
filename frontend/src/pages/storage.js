@@ -27,6 +27,7 @@ from module daedalus import {
 import module api
 import module resources
 import module components
+import module store
 
 /*
 const encryptionColorMap = {
@@ -431,7 +432,7 @@ class Header extends components.NavHeader {
 
         this.attrs.parent = parent
 
-        this.addAction(resources.svg['menu'], ()=>{});
+        this.addAction(resources.svg['menu'], ()=>{store.globals.showMenu()});
         this.addAction(resources.svg['return'], parent.handleOpenParent.bind(parent));
         this.addAction(resources.svg['upload'], this.handleUploadFile.bind(this));
         this.addAction(resources.svg['search_generic'], parent.handleToggleSearch.bind(parent));
@@ -985,7 +986,7 @@ class FileSystemHeader extends components.NavHeader {
 
         this.attrs.parent = parent
 
-        this.addAction(resources.svg['menu'], ()=>{});
+        this.addAction(resources.svg['menu'], ()=>{store.globals.showMenu()});
         this.addAction(resources.svg['return'], parent.handleOpenParent.bind(parent));
 
         this.attrs.location = new components.MiddleText(".....")

@@ -166,7 +166,7 @@ class RemoteDeviceImpl {
         console.log("on ended", this.current_index)
         this.device._sendEvent('handleAudioEnded', event)
 
-        this.next()
+        this.device.next()
 
     }
 
@@ -174,7 +174,7 @@ class RemoteDeviceImpl {
         console.log("on error", this.current_index)
         this.device._sendEvent('handleAudioError', event)
 
-        this.next()
+        this.device.next()
 
     }
 }
