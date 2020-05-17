@@ -245,7 +245,7 @@ class SongItem extends DomElement {
 
         this.attrs.txt2 = div.appendChild(new components.MiddleText(song.artist))
         //this.attrs.txt2.addClassName(style.fontSmall)
-        this.attrs.txt3 = div.appendChild(new TextElement(formatTime(song.length))
+        this.attrs.txt3 = div.appendChild(new TextElement(formatTime(song.length)))
         div.addClassName(style.fontSmall)
         div.addClassName(style.songItemRow2)
 
@@ -549,7 +549,6 @@ class ProgressBar extends DomElement {
         this.attrs.tpos = (m2>0 && x >= 0) ? x / m2 : 0.0;
 
         btn.style.left = Math.floor(x) + "px";
-        console.log("move", btn.style.left)
     }
 }
 

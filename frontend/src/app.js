@@ -25,9 +25,10 @@ from module daedalus import {
     AuthenticatedRouter
 }
 import module api
-import module pages
 import module components
+import module pages
 import module resources
+import module router
 import module store
 
 const style = {
@@ -59,15 +60,35 @@ const style = {
         //background: {color: 'cyan'}
     }),
     margin: StyleSheet({'margin-right': '0px'}),
-    fullsize: StyleSheet({'margin-left': "300px"})
+    fullsize: StyleSheet({'margin-left': "300px"}),
+    show: StyleSheet({}),
+    hide: StyleSheet({display: "none"})
 }
 
+function buildRouter(parent, container) {
 
-class AppRouter extends AuthenticatedRouter {
+    const u = router.route_urls;
 
-    isAuthenticated() {
-        return api.getUsertoken() !== null
-    }
+    let rt = new router.AppRouter(container)
+
+    rt.addAuthRoute(u.userStoragePreview, (cbk)=>parent.handleRoute(cbk, pages.StoragePreviewPage), '/login');
+    rt.addAuthRoute(u.userStorage, (cbk)=>parent.handleRoute(cbk, pages.StoragePage), '/login');
+    rt.addAuthRoute(u.userFs, (cbk)=>parent.handleRoute(cbk, pages.FileSystemPage), '/login');
+    rt.addAuthRoute(u.userPlaylist, (cbk)=>parent.handleRoute(cbk, pages.PlaylistPage), '/login');
+    rt.addAuthRoute(u.userSettings, (cbk)=>parent.handleRoute(cbk, pages.SettingsPage), '/login');
+    rt.addAuthRoute(u.userLibraryList, (cbk)=>parent.handleRoute(cbk, pages.LibraryPage), '/login');
+    rt.addAuthRoute(u.userLibrarySync, (cbk)=>parent.handleRoute(cbk, pages.SyncPage), '/login');
+    rt.addAuthRoute(u.userRadio, (cbk)=>parent.handleRoute(cbk, pages.UserRadioPage), '/login');
+
+    rt.addAuthRoute(u.userWildCard, (cbk)=>{history.pushState({}, "", "/u/storage/list")}, '/login');
+    rt.addNoAuthRoute(u.login, (cbk)=>parent.handleRoute(cbk, pages.LoginPage), "/u/storage/list");
+    rt.addRoute(u.publicFile, (cbk)=>{parent.handleRoute(cbk, pages.PublicFilePage)});
+    rt.addRoute(u.wildCard, (cbk)=>{parent.handleRoute(cbk, pages.LandingPage)});
+
+    rt.setDefaultRoute((cbk)=>{parent.handleRoute(cbk, pages.LandingPage)})
+
+    return rt
+
 }
 
 export class Root extends DomElement {
@@ -92,63 +113,63 @@ export class Root extends DomElement {
 
     buildRouter() {
 
-        let router = new AppRouter(this.attrs.container)
-        router.addAuthRoute("/u/storage/preview/:path*", (cbk)=>this.handleRoute(cbk, pages.StoragePreviewPage), '/login');
-        router.addAuthRoute("/u/storage/:mode/:path*", (cbk)=>this.handleRoute(cbk, pages.StoragePage), '/login');
-        router.addAuthRoute("/u/fs/:path*", (cbk)=>this.handleRoute(cbk, pages.FileSystemPage), '/login');
-        router.addAuthRoute("/u/playlist", (cbk)=>this.handleRoute(cbk, pages.PlaylistPage), '/login');
-        router.addAuthRoute("/u/settings", (cbk)=>this.handleRoute(cbk, pages.SettingsPage), '/login');
-        router.addAuthRoute("/u/library/list", (cbk)=>this.handleRoute(cbk, pages.LibraryPage), '/login');
-        router.addAuthRoute("/u/library/sync", (cbk)=>this.handleRoute(cbk, pages.SyncPage), '/login');
-        router.addAuthRoute("/u/radio", (cbk)=>this.handleRoute(cbk, pages.UserRadioPage), '/login');
-        router.addAuthRoute("/u/:path*", (cbk)=>{history.pushState({}, "", "/u/storage/list")}, '/login');
-        router.addNoAuthRoute("/login", (cbk)=>this.handleRoute(cbk, pages.LoginPage), "/u/storage/list");
-        router.addRoute("/p/:path*", (cbk)=>{history.pushState({}, "", "/")});
-        router.addRoute("/:path*", (cbk)=>{cbk(this.attrs.main)});
-        router.setDefaultRoute((cbk)=>{cbk(this.attrs.main)})
-        this.attrs.router = router
+        this.attrs.router = buildRouter(this, this.attrs.container)
 
         this.attrs.nav = new components.NavMenu();
 
         store.globals.showMenu = () => {this.attrs.nav.show();}
 
-        this.attrs.nav.addAction(resources.svg.playlist, "Playlist", ()=>{
+        this.attrs.nav.addAction(resources.svg.music_note, "Playlist", ()=>{
             history.pushState({}, "", "/u/playlist");
             this.attrs.nav.hide();
         });
-        this.attrs.nav.addAction(resources.svg.music_note, "Library", ()=>{
+
+        this.attrs.nav.addAction(resources.svg.playlist, "Library", ()=>{
             history.pushState({}, "", "/u/library/list");
             this.attrs.nav.hide();
         });
+
+        this.attrs.nav.addSubAction(resources.svg.bolt, "Dynamic Playlist", ()=>{
+            history.pushState({}, "", "/u/library/list");
+            this.attrs.nav.hide();
+        });
+
         //this.attrs.nav.addAction(resources.svg.externalmedia, "Radio", ()=>{
         //    history.pushState({}, "", "/u/radio");
         //    this.attrs.nav.hide();
         //});
-        this.attrs.nav.addAction(resources.svg.download, "Sync", ()=>{
+
+        this.attrs.nav.addSubAction(resources.svg.download, "Sync", ()=>{
             history.pushState({}, "", "/u/library/sync");
             this.attrs.nav.hide();
         });
+
         this.attrs.nav.addAction(resources.svg.documents, "Storage", ()=>{
             history.pushState({}, "", "/u/storage/list");
             this.attrs.nav.hide();
         });
+
+        this.attrs.nav.addSubAction(resources.svg.note, "Notes", ()=>{
+            this.attrs.nav.hide();
+        });
+
         if (daedalus.platform.isMobile) {
             this.attrs.nav.addAction(resources.svg.documents, "File System", ()=>{
                 history.pushState({}, "", "/u/fs");
                 this.attrs.nav.hide();
             });
         }
-        this.attrs.nav.addAction(resources.svg.note, "Notes", ()=>{
-            this.attrs.nav.hide();
-        });
+
         this.attrs.nav.addAction(resources.svg.settings, "Settings", ()=>{
             history.pushState({}, "", "/u/settings");
             this.attrs.nav.hide();
         });
+
         this.attrs.nav.addAction(resources.svg.logout, "Log Out", ()=>{
             api.clearUserToken();
             history.pushState({}, "", "/")
         });
+
         //if (daedalus.platform.isAndroid) {
         //    this.attrs.nav.addAction(resources.svg['return'], "Reload", ()=>{
         //        try {
@@ -165,12 +186,17 @@ export class Root extends DomElement {
         this.appendChild(this.attrs.nav)
 
         // perform the initial route
-        this.attrs.router.handleLocationChanged(window.location.pathname)
+        //this.attrs.router.handleLocationChanged(window.location.pathname)
+        this.handleLocationChanged()
+
         // handle future location changes
         this.connect(history.locationChanged, this.handleLocationChanged.bind(this))
     }
 
     handleLocationChanged() {
+
+        this.toggleShowMenuFixed();
+
         this.attrs.router.handleLocationChanged(window.location.pathname)
     }
 
@@ -212,14 +238,27 @@ export class Root extends DomElement {
     }
 
     toggleShowMenuFixed() {
-        const condition = document.body.clientWidth > 900 && api.getUsertoken() !== null
 
-        if (!!this.attrs.nav) {
-            this.attrs.nav.showFixed(condition)
+        if (!this.attrs.nav) {
+            return
         }
 
+        let condition = (document.body.clientWidth > 900) && \
+            (!!api.getUsertoken())
+
+        if (!location.pathname.startsWith("/u") || location.pathname.startsWith("/u/storage/preview")) {
+            this.attrs.nav.addClassName(style.hide)
+            this.attrs.nav.removeClassName(style.show)
+            condition = false;
+        } else {
+            this.attrs.nav.addClassName(style.show)
+            this.attrs.nav.removeClassName(style.hide)
+        }
+
+        this.attrs.nav.showFixed(condition)
+
         if (!!this.attrs.container) {
-            if (condition === true) {
+            if (!!condition) {
                 this.attrs.container.addClassName(style.fullsize)
             } else {
                 this.attrs.container.removeClassName(style.fullsize)

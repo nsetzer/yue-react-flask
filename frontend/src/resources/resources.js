@@ -5,6 +5,7 @@ const platform_prefix = daedalus.platform.isAndroid ? "file:///android_asset/sit
 
 const svg_icon_names = [
     "album",
+    "bolt",
     "create",
     "discard",
     "disc",

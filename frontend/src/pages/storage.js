@@ -25,6 +25,7 @@ from module daedalus import {
     Router
 }
 import module api
+import module router
 import module resources
 import module components
 import module store
@@ -174,7 +175,25 @@ const style = {
     maxWidth: StyleSheet({
         max-width: "100%",
         max-height: "100%",
-    })
+    }),
+    main2: StyleSheet({
+        display: 'inline-flex',
+        'flex-direction': 'column',
+        'justify-content': 'center',
+        'margin-top': '25vh',
+        'margin-left': '25%',
+        width: '50%',
+        'min-width': '9em',
+        height: '50vh',
+        'min-height': '6em',
+        'background-image': 'linear-gradient(#08B214, #078C12)',
+        'border': "solid 1px transparent",
+        'border-radius': '1em',
+        'text-align': 'center',
+        'box-shadow': '5px 5px 5px 5px rgba(0,0,0,.6)'
+    }),
+    show: StyleSheet({}),
+    hide: StyleSheet({display: "none"})
 }
 
 StyleSheet(`.${style.listItem}:hover`, {background: '#0000FF22'})
@@ -314,6 +333,10 @@ class CallbackLink extends DomElement {
         }
     }
 
+    setText(text) {
+        this.children[0].setText(text)
+    }
+
     onClick() {
         this.state.callback()
     }
@@ -399,10 +422,22 @@ class FileElement extends DomElement {
 
             this.attrs.details.appendChild(new DomElement('div', {className: style.paddedText}, [new CallbackLink("Delete",
                 this.attrs.delete_callback)]))
+
+            if (this.state.fileInfo.encryption == "system") {
+
+                this.attrs.public_container = new DomElement('div', {className: style.paddedText}, []);
+                this.attrs.public_link1 = new CallbackLink("Generate Public Link", this.handlePublic1Clicked.bind(this))
+                this.attrs.public_link2 = new CallbackLink("Open Public Download Page", this.handlePublic2Clicked.bind(this))
+                this.attrs.public_container.appendChild(this.attrs.public_link1)
+                this.attrs.public_container.appendChild(this.attrs.public_link2)
+                this.attrs.details.appendChild(this.attrs.public_container)
+                this._updatePublicLinkText()
+            }
+
             this.attrs.details.appendChild(new DomElement('div', {}, [new TextElement(`Version: ${this.state.fileInfo.version}`)]))
             this.attrs.details.appendChild(new DomElement('div', {}, [new TextElement(`Size: ${this.state.fileInfo.size}`)]))
             this.attrs.details.appendChild(new DomElement('div', {}, [new TextElement(`Encryption: ${this.state.fileInfo.encryption}`)]))
-            this.attrs.details.appendChild(new DomElement('div', {}, [new TextElement(`Public: ${this.state.fileInfo.public}`)]))
+            //this.attrs.details.appendChild(new DomElement('div', {}, [new TextElement(`Public: ${this.state.fileInfo.public}`)]))
             const dt = new Date(this.state.fileInfo.mtime * 1000)
             this.attrs.details.appendChild(new DomElement('div', {}, [new TextElement(`Modified Time: ${dt}`)]))
         } else {
@@ -412,6 +447,62 @@ class FileElement extends DomElement {
             } else {
                 this.attrs.details.updateProps({className: style.fileDetailsShow})
             }
+        }
+    }
+
+    handlePublic1Clicked() {
+        console.log("click")
+        console.log(this.state.fileInfo)
+
+
+        const root = this.state.fileInfo.root
+        const name = this.state.fileInfo.path + "/" + this.state.fileInfo.name
+        if (this.state.fileInfo.public) {
+            api.fsPublicUriRevoke(root, name)
+                .then(result => {
+                    this.state.fileInfo.public = null;
+                    this._updatePublicLinkText()
+                })
+                .catch(error => {console.error(error)})
+        } else {
+            api.fsPublicUriGenerate(root, name)
+                .then(result => {
+                    console.log("***", result)
+                    this.state.fileInfo.public = result.result['id'];
+                    this._updatePublicLinkText()
+                })
+                .catch(error => {console.error(error)})
+        }
+
+
+    }
+
+    handlePublic2Clicked() {
+        console.log("click")
+        console.log(this.state.fileInfo)
+
+        const uid = this.state.fileInfo.public;
+        const filename = this.state.fileInfo.name;
+        let url = location.origin + router.routes.publicFile({uid, filename})
+        window.open(url, '_blank');
+    }
+
+    _updatePublicLinkText() {
+
+        console.log(this.state.fileInfo.public)
+
+        let text = this.state.fileInfo.public ? "Revoke Public Link" : "Generate Public Link"
+        this.attrs.public_link1.setText(text)
+
+
+        if (this.state.fileInfo.public) {
+            this.attrs.public_link2.removeClassName(style.hide)
+            this.attrs.public_link2.addClassName(style.show)
+
+        } else {
+            this.attrs.public_link2.removeClassName(style.show)
+            this.attrs.public_link2.addClassName(style.hide)
+
         }
     }
 }
@@ -962,8 +1053,6 @@ class FileSystemDirectoryElement extends DomElement {
     handleClick() {
         this.attrs.parent.setCurrentPath(this.attrs.url)
     }
-
-
 }
 
 class FileSystemFileElement extends DomElement {
@@ -1077,3 +1166,27 @@ export class FileSystemPage extends DomElement {
     }
 }
 
+
+export class PublicFilePage extends DomElement {
+    constructor() {
+        super("div", {className: style.main2}, []);
+    }
+
+    elementMounted() {
+
+        const m = this.state.match
+        const url = api.fsGetPublicPathUrl(m.uid, m.filename)
+
+        api.fsPublicUriInfo(m.uid, m.filename)
+            .then(result => {
+                this.appendChild(new DomElement("h2", {}, [new TextElement("Download File")]))
+                this.appendChild(new DomElement("a", {href: url, download:m.filename}, [new TextElement(m.filename)]))
+                this.appendChild(new components.VSpacer("1em"))
+                this.appendChild(new TextElement("File Size: " + Math.floor(result.result.file.size/1024) + "kb"))
+            })
+            .catch(error => {
+                this.appendChild(new DomElement("h2", {}, [new TextElement("File Not Found")]))
+            })
+
+    }
+}

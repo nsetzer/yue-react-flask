@@ -71,6 +71,12 @@ export function fsGetPathContentUrl(root, path) {
     return url;
 }
 
+export function fsGetPublicPathUrl(uid, name) {
+
+    const url = env.baseUrl + daedalus.util.joinpath('/api/fs/public', uid, name);
+    return url;
+}
+
 export function fsSearch(root, path, terms, page, limit) {
     const params = daedalus.util.serializeParameters({path, terms, page, limit})
     const url = env.baseUrl + '/api/fs/' + root +'/search' + params;
@@ -91,8 +97,9 @@ export function fsPublicUriRevoke(root, path) {
     return api.requests.put_json(url, {}, cfg);
 }
 
-export function fsPublicUriInfo(file_id) {
-    const url = env.baseUrl + '/api/fs/public/' + file_id + serialize({info: true})
+export function fsPublicUriInfo(uid, name) {
+    const params = daedalus.util.serializeParameters({info:true})
+    const url = env.baseUrl + daedalus.util.joinpath('/api/fs/public', uid, name) + params
     return api.requests.get_json(url);
 }
 

@@ -70,7 +70,7 @@ class SettingsGroupItem extends DomElement {
             const btn = child.appendChild(new DomElement("input", {type:"radio", value: name, name: this.props.id}));
             child.appendChild(new DomElement("label", {'forx': btn.props.id}, [new TextElement(name)]))
             //child.appendChild(new DomElement("br", {}, []))
-        }
+        })
     }
 }
 

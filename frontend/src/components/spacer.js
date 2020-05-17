@@ -43,12 +43,12 @@ export class VSpacer extends DomElement {
         this._setHeight();
     }
 
-    setWidth(width) {
+    setHeight(height) {
         this.attrs.height = height
         this._setHeight();
     }
 
-    _setWidth() {
+    _setHeight() {
         const node = this.getDomNode();
 
         if (!!node) {

@@ -73,6 +73,7 @@ const style = {
         'cursor': 'pointer',
         //'border': 'solid 1px black'
     }),
+
 }
 
 function shuffle(a) {
@@ -181,8 +182,6 @@ class Footer extends components.NavFooter {
         })
 
     }
-
-
 }
 // --
 
@@ -278,7 +277,7 @@ class LibraryTreeView extends components.TreeView {
     setForest(forest) {
         forest.forEach(tree => {
             this.addItem(new ArtistTreeItem(this, tree, this.attrs.selectMode))
-        }
+        })
     }
 
     getSelectedSongs() {

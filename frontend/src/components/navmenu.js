@@ -6,6 +6,7 @@ from module daedalus import {
 }
 
 include './swipe.js'
+include './spacer.js'
 
 const style = {
     navMenuShadow: StyleSheet({
@@ -69,7 +70,10 @@ const style = {
         'width': '50px',
         'height': '50px',
         'margin-right':  '0.5em',
-        'margin-left':  '0.5em'
+        'margin-left':  '0.5em',
+        display: "flex",
+        justify-content: "center",
+        align-items: "center",
     }),
     actionItem: StyleSheet({
         display: 'flex',
@@ -79,6 +83,9 @@ const style = {
         'align-items': 'center',
         width: '100%',
         height: "60px"
+    }),
+    subActionItem: StyleSheet({
+        height: "45px"
     }),
     header: StyleSheet({
         display: 'flex',
@@ -102,14 +109,14 @@ StyleSheet(`.${style.actionItem}:active`, {
 })
 
 class NavMenuSvgImpl extends DomElement {
-    constructor(url, props) {
-        super("img", {src:url, width: 48, height: 48, ...props}, []);
+    constructor(url, size, props) {
+        super("img", {src:url, width: size, height: size, ...props}, []);
     }
 }
 
 class NavMenuSvg extends DomElement {
-    constructor(url, props={}) {
-        super("div", {className: style.svgDiv}, [new NavMenuSvgImpl(url, props)])
+    constructor(url, size=48, props={}) {
+        super("div", {className: style.svgDiv}, [new NavMenuSvgImpl(url, size, props)])
     }
 }
 
@@ -121,7 +128,25 @@ class NavMenuAction extends DomElement {
             callback,
         }
 
-        this.appendChild(new NavMenuSvg(icon_url))
+        this.appendChild(new NavMenuSvg(icon_url, 48))
+        this.appendChild(new TextElement(text))
+    }
+
+    onClick() {
+        this.attrs.callback();
+    }
+}
+
+class NavMenuSubAction extends DomElement {
+    constructor(icon_url, text, callback) {
+        super("div", {className: [style.actionItem, style.subActionItem]}, []);
+
+        this.attrs = {
+            callback,
+        }
+
+        this.appendChild(new HSpacer("2em"))
+        this.appendChild(new NavMenuSvg(icon_url, 32))
         this.appendChild(new TextElement(text))
     }
 
@@ -186,6 +211,11 @@ export class NavMenu extends DomElement {
     addAction(icon_url, text, callback) {
         this.attrs.menu.attrs.actions.appendChild(
             new NavMenuAction(icon_url, text, callback));
+    }
+
+    addSubAction(icon_url, text, callback) {
+        this.attrs.menu.attrs.actions.appendChild(
+            new NavMenuSubAction(icon_url, text, callback));
     }
 
     hide() {
