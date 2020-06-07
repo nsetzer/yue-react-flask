@@ -379,7 +379,7 @@ class FileSysService(object):
         if mtime is None:
             mtime = int(time.time())
 
-        size = self._internalSave(user['id'], storage_path, stream, 2048)
+        size = self._internalSave(user['id'], storage_path, stream, 4096)
 
         # if the file is wrapped by an encryptor, subtract the size
         # of the header information. This allows the user to stat
@@ -445,14 +445,29 @@ class FileSysService(object):
 
         try:
             with self.fs.open(storage_path, "wb") as outputStream:
-                for buf in iter(lambda: inputStream.read(chunk_size), b""):
 
-                    outputStream.write(buf)
-                    size += len(buf)
+                _iter = iter(lambda: inputStream.read(chunk_size), b"")
 
-                    if quota_enabled:
-                        byte_index = self._internalCheckQuota(
-                            user_id, size, byte_index, uid)
+                cont = True;
+
+                while cont:
+                    data = b""
+                    try:
+                        # load X megabytes before attempting to write
+                        # to the output file
+                        for i in range(1000):
+                            data += next(_iter)
+                    except StopIteration as e:
+                        cont = False
+
+                    if data:
+                        outputStream.write(data)
+
+                        size += len(data)
+
+                        if quota_enabled:
+                            byte_index = self._internalCheckQuota(
+                                user_id, size, byte_index, uid)
 
             if quota_enabled:
                 self._internalCheckQuota(

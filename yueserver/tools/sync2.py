@@ -73,6 +73,9 @@ from sqlalchemy import and_, or_, not_, select, column, \
     update, insert, delete, asc, desc
 from sqlalchemy.sql.expression import bindparam
 
+UPLOAD_BATCH_SIZE = 8192
+DEFAULT_KEY_SIZE = 2048
+
 class SyncException(Exception):
     pass
 
@@ -1107,7 +1110,7 @@ class ProgressFileReaderWrapper(object):
                 # support for client encryption upload
                 rb = FileEncryptorReader(rb, self.key)
 
-            for i, chunk in enumerate(iter(lambda: rb.read(2048), b"")):
+            for i, chunk in enumerate(iter(lambda: rb.read(UPLOAD_BATCH_SIZE), b"")):
                 yield chunk
                 self.bytes_read += len(chunk)
                 # percent = 100 * self.bytes_read / self.info.size
@@ -2002,10 +2005,10 @@ def _copy_impl(ctxt, src, dst):
 
         with ctxt.fs.open(src, "rb") as rb:
             with ctxt.fs.open(dst, "wb") as wb:
-                chunk = rb.read(2048)
+                chunk = rb.read(UPLOAD_BATCH_SIZE)
                 while chunk:
                     wb.write(chunk)
-                    chunk = rb.read(2048)
+                    chunk = rb.read(UPLOAD_BATCH_SIZE)
 
 def _list_impl(ctxt, root, path, verbose=False):
     """
@@ -2601,7 +2604,7 @@ class InitCLI():
 
         cm = CryptoManager()
 
-        private_key, public_key = cm.generate_key(cfgdir, "rsa", 2048)
+        private_key, public_key = cm.generate_key(cfgdir, "rsa", DEFAULT_KEY_SIZE)
 
         enc_password = cm.encrypt64(public_key, api_password.encode("utf-8"))
         userdata = {
