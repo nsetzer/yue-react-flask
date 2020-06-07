@@ -196,7 +196,10 @@ export class NavMenu extends DomElement {
         }
 
 
-        this.appendChild(new DomElement("div", {className: style.alignRight}, []))
+        this.appendChild(new DomElement("div", {
+            className: style.alignRight,
+            onClick: (event) => event.stopPropagation()
+        }, []))
 
         this.attrs.swipe = new SwipeHandler(document, (pt, direction) => {
             // if the transition is enabled then

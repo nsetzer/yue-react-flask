@@ -7,6 +7,7 @@ from module daedalus import {
     Router
 }
 import module api
+from module router import { routes }
 
 const style = {
     main: StyleSheet({
@@ -90,7 +91,7 @@ export class LoginPage extends DomElement {
                 if (data.token) {
                     api.setUsertoken(data.token)
                     this.attrs.warning.addClassName(style.hide)
-                    history.pushState({}, "", "/u/storage/list")
+                    history.pushState({}, "", routes.userLibraryList())
                 } else {
                     this.attrs.warning.removeClassName(style.hide)
                     console.error(data.error)

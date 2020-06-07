@@ -17,6 +17,7 @@ import module api
 import module components
 import module audio
 import module store
+import module router
 
 class SearchModeCheckBox extends components.CheckBoxElement {
 
@@ -74,6 +75,31 @@ const style = {
         //'border': 'solid 1px black'
     }),
 
+
+
+    savedSearchPage: StyleSheet({
+        width: '100%',
+    }),
+    savedSearchList: StyleSheet({
+        'padding-left': '1em',
+        'padding-right': '1em',
+    }),
+    savedSearchItem: StyleSheet({
+        display: 'flex',
+        'flex-direction': 'column',
+        margin-bottom: '.25em',
+        border: {style: "solid", width: "1px"},
+        width: 'calc(100% - 2px)', // minus border width * 2
+    }),
+    padding1: StyleSheet({
+        height: '1em',
+        'min-height': '1em'
+    }),
+    padding2: StyleSheet({
+        height: '33vh',
+        'min-height': '64px'
+    }),
+
 }
 
 function shuffle(a) {
@@ -92,6 +118,8 @@ class Header extends components.NavHeader {
         this.attrs.txtInput = new TextInputElement("", null, () => {
                 this.attrs.parent.search(this.attrs.txtInput.props.value)
         })
+
+        this.attrs.txtInput.updateProps({"autocapitalize": "off"})
 
         this.addAction(resources.svg['menu'], ()=>{
             store.globals.showMenu()
@@ -146,6 +174,10 @@ class Header extends components.NavHeader {
 
         })*/
 
+    }
+
+    setQuery(query) {
+        this.attrs.txtInput.setText(query)
     }
 
     handleCheck() {
@@ -393,6 +425,7 @@ export class LibraryPage extends DomElement {
             more: new components.MoreMenu(this.handleHideFileMore.bind(this)),
             more_context_item: null,
             firstMount: true,
+            currentSearch: null,
         }
 
         this.attrs.view.addClassName(style.viewPad)
@@ -403,20 +436,35 @@ export class LibraryPage extends DomElement {
         this.appendChild(this.attrs.view)
         this.appendChild(this.attrs.footer)
 
+
     }
 
     elementMounted() {
         console.log("mount library view")
 
-        if (this.attrs.firstMount) {
+        // this works around an android native bug, where the query
+        // sometimes gets passed in as "undefined"
+        let query = daedalus.util.parseParameters()['query']
+        if (query === null || query === undefined) {
+            query = ""
+        } else {
+            query = "" + query
+        }
+
+        if (this.attrs.firstMount || (this.attrs.currentSearch !== query)) {
             this.attrs.firstMount = false
-            this.search("")
+            this.attrs.header.setQuery(query)
+            this.search(query)
         }
 
     }
 
+
     search(text) {
         this.attrs.view.reset()
+
+        this.attrs.currentSearch = text
+        router.navigate(router.routes.userLibraryList({}, {query: text}))
 
         this.attrs.search_promise = new Promise((accept, reject) => {
             if (daedalus.platform.isAndroid) {
@@ -476,6 +524,9 @@ class SyncHeader extends components.NavHeader {
         this.attrs.txtInput = new TextInputElement("", null, () => {
                 this.attrs.parent.search(this.attrs.txtInput.props.value)
         })
+
+        this.attrs.txtInput.updateProps({"autocapitalize": "off"})
+
         this.attrs.status = new components.MiddleText("...");
 
         this.addAction(resources.svg['menu'], ()=>{
@@ -683,5 +734,77 @@ export class SyncPage extends DomElement {
 
     showMore(item) {
         console.log("on show more clicked");
+    }
+}
+
+class SavedSearchHeader extends components.NavHeader {
+    constructor(parent) {
+        super();
+
+        this.attrs.parent = parent
+
+        this.addAction(resources.svg['menu'], ()=>{
+            store.globals.showMenu()
+        })
+
+    }
+
+}
+
+class SavedSearchItem extends DomElement {
+    constructor(name, query) {
+        super("div", {className: style.savedSearchItem}, []);
+
+        this.attrs = {name, query}
+        this.appendChild(new DomElement("div", {}, [new TextElement(name)]))
+        this.appendChild(new DomElement("div", {}, [new TextElement(query)]))
+    }
+
+
+    onClick(event) {
+
+        router.navigate(router.routes.userLibraryList({}, {query: this.attrs.query}))
+
+    }
+}
+
+const savedSearches = [
+    {name: "stoner best", query: "stoner rating >= 5"},
+    {name: "grunge best", query: "grunge rating >= 5"},
+    {name: "visual best", query: "\"visual kei\" rating >= 5"},
+    {name: "english best", query: "language = english rating >= 5"},
+    {name: "stone temple pilots", query: "\"stone temple pilots\""},
+    {name: "soundwitch", query: "soundwitch"},
+    {name: "Gothic Emily", query: "\"gothic emily\""},
+]
+
+class SavedSearchList extends DomElement {
+    constructor(parent, index, song) {
+        super("div", {className: style.savedSearchList}, []);
+
+        for (let i=0; i < savedSearches.length; i++) {
+            let s = savedSearches[i]
+            this.appendChild(new SavedSearchItem(s.name, s.query))
+        }
+
+    }
+}
+
+export class SavedSearchPage extends DomElement {
+    constructor() {
+        super("div", {className: style.SavedSearchPage}, []);
+
+        this.attrs = {
+            device: audio.AudioDevice.instance(),
+            header: new SavedSearchHeader(this),
+            container: new SavedSearchList(),
+            padding1: new DomElement("div", {className: style.padding1}, []),
+            padding2: new DomElement("div", {className: style.padding2}, []),
+        }
+
+        this.appendChild(this.attrs.header)
+        this.appendChild(this.attrs.padding1)
+        this.appendChild(this.attrs.container)
+        this.appendChild(this.attrs.padding2)
     }
 }

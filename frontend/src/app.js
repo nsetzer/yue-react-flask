@@ -78,10 +78,11 @@ function buildRouter(parent, container) {
     rt.addAuthRoute(u.userSettings, (cbk)=>parent.handleRoute(cbk, pages.SettingsPage), '/login');
     rt.addAuthRoute(u.userLibraryList, (cbk)=>parent.handleRoute(cbk, pages.LibraryPage), '/login');
     rt.addAuthRoute(u.userLibrarySync, (cbk)=>parent.handleRoute(cbk, pages.SyncPage), '/login');
+    rt.addAuthRoute(u.userLibrarySavedSearch, (cbk)=>parent.handleRoute(cbk, pages.SavedSearchPage), '/login');
     rt.addAuthRoute(u.userRadio, (cbk)=>parent.handleRoute(cbk, pages.UserRadioPage), '/login');
 
     rt.addAuthRoute(u.userWildCard, (cbk)=>{history.pushState({}, "", "/u/storage/list")}, '/login');
-    rt.addNoAuthRoute(u.login, (cbk)=>parent.handleRoute(cbk, pages.LoginPage), "/u/storage/list");
+    rt.addNoAuthRoute(u.login, (cbk)=>parent.handleRoute(cbk, pages.LoginPage), "/u/library/list");
     rt.addRoute(u.publicFile, (cbk)=>{parent.handleRoute(cbk, pages.PublicFilePage)});
     rt.addRoute(u.wildCard, (cbk)=>{parent.handleRoute(cbk, pages.LandingPage)});
 
@@ -130,7 +131,7 @@ export class Root extends DomElement {
         });
 
         this.attrs.nav.addSubAction(resources.svg.bolt, "Dynamic Playlist", ()=>{
-            history.pushState({}, "", "/u/library/list");
+            history.pushState({}, "", "/u/library/saved");
             this.attrs.nav.hide();
         });
 
@@ -139,10 +140,12 @@ export class Root extends DomElement {
         //    this.attrs.nav.hide();
         //});
 
-        this.attrs.nav.addSubAction(resources.svg.download, "Sync", ()=>{
-            history.pushState({}, "", "/u/library/sync");
-            this.attrs.nav.hide();
-        });
+        if (daedalus.platform.isAndroid) {
+            this.attrs.nav.addSubAction(resources.svg.download, "Sync", ()=>{
+                history.pushState({}, "", "/u/library/sync");
+                this.attrs.nav.hide();
+            });
+        }
 
         this.attrs.nav.addAction(resources.svg.documents, "Storage", ()=>{
             history.pushState({}, "", "/u/storage/list");
@@ -153,7 +156,7 @@ export class Root extends DomElement {
             this.attrs.nav.hide();
         });
 
-        if (daedalus.platform.isMobile) {
+        if (daedalus.platform.isAndroid) {
             this.attrs.nav.addAction(resources.svg.documents, "File System", ()=>{
                 history.pushState({}, "", "/u/fs");
                 this.attrs.nav.hide();

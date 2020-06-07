@@ -2,11 +2,21 @@ from module daedalus import { AuthenticatedRouter, patternCompile }
 
 import module api
 
+let current_match = null;
+
 export class AppRouter extends AuthenticatedRouter {
 
     isAuthenticated() {
         return api.getUsertoken() !== null
     }
+
+    setMatch(match) {
+        current_match = match;
+    }
+}
+
+AppRouter.match = () => {
+    return current_match;
 }
 
 export function navigate(location) {
@@ -22,6 +32,7 @@ export const route_urls = {
     userSettings: "/u/settings",
     userLibraryList: "/u/library/list",
     userLibrarySync: "/u/library/sync",
+    userLibrarySavedSearch: "/u/library/saved",
     userRadio: "/u/radio",
     userWildCard: "/u/:path*",
     login: "/login",

@@ -3,6 +3,7 @@
 import module daedalus
 import module api.requests
 
+include './util.js'
 include './token.js'
 
 export const env = {
