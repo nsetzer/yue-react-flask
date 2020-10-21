@@ -83,6 +83,7 @@ function buildRouter(parent, container) {
 
     rt.addAuthRoute(u.userWildCard, (cbk)=>{history.pushState({}, "", "/u/storage/list")}, '/login');
     rt.addNoAuthRoute(u.login, (cbk)=>parent.handleRoute(cbk, pages.LoginPage), "/u/library/list");
+    rt.addAuthRoute(u.apiDoc, (cbk)=>parent.handleRoute(cbk, pages.OpenApiDocPage), "/login");
     rt.addRoute(u.publicFile, (cbk)=>{parent.handleRoute(cbk, pages.PublicFilePage)});
     rt.addRoute(u.wildCard, (cbk)=>{parent.handleRoute(cbk, pages.LandingPage)});
 

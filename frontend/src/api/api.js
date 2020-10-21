@@ -3,7 +3,7 @@
 import module daedalus
 import module api.requests
 
-include './util.js'
+//include './util.js'
 include './token.js'
 
 export const env = {
@@ -154,6 +154,14 @@ export function libraryDomainInfo(songId) {
     const url = env.baseUrl + '/api/library/info';
     const cfg = getAuthConfig()
     return api.requests.get_json(url, cfg);
+}
+
+
+export function userDoc(hostname) {
+    const params = daedalus.util.serializeParameters({hostname})
+    const url = env.baseUrl + '/api/doc' + params;
+    const cfg = getAuthConfig()
+    return api.requests.get_text(url, cfg);
 }
 
 export function radioVideoInfo(videoId) {

@@ -36,6 +36,7 @@ export const route_urls = {
     userRadio: "/u/radio",
     userWildCard: "/u/:path*",
     login: "/login",
+    apiDoc: "/doc",
     publicFile: "/p/:uid/:filename",
     wildCard: "/:path*",
 }
