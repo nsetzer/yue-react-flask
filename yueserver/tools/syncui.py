@@ -725,6 +725,21 @@ class LocationContext(QObject):
         except OSError:
             return self.pushParentDirectory()
 
+    def removeSelection(self, rows):
+
+        # TODO: fixme
+        # filter data and remove display items in rows
+        # each row is an instance of FileTableRowItem
+        #
+        print(rows)
+
+        # below is the old behavior
+        try:
+            self._access(self._location)
+            return self.load(self._location)
+        except OSError:
+            return self.pushParentDirectory()
+
     def pushDirectory(self, directory):
 
         self._access(directory)
@@ -1134,8 +1149,8 @@ class OverlaySpinner(QWidget):
             else:
                 color = QColor(127, 127, 127)
                 painter.setBrush(QBrush(color))
-            x = self.width()/2 + self.cos[i]
-            y = self.height()/2 + self.sin[i]
+            x = int(self.width()/2 + self.cos[i])
+            y = int(self.height()/2 + self.sin[i])
             painter.drawEllipse(x, y, 20, 20)
 
         painter.end()
@@ -2066,6 +2081,7 @@ class FileContextMenu(QMenu):
             thread = RemoveProgressThread(self.ctxt.fs, urls, self)
             dialog.setThread(thread)
             dialog.exec_()
+            # TODO: fixme
             self.ctxt.reload()
 
 class FileTableRowItem(object):
@@ -2161,7 +2177,7 @@ class FileTableRowItem(object):
 
 class FileTableView(TableView):
 
-    loadLocation = pyqtSignal(str, str)  # async load, mode, dir
+    loadLocation = pyqtSignal(str, object)  # async load, mode, dir
     locationChanged = pyqtSignal(str, int, int)  # dir, dcount, fcount
 
     triggerSave = pyqtSignal()
@@ -2865,7 +2881,7 @@ class FileTableView(TableView):
         thread = RemoveProgressThread(self.ctxt.fs, paths, self)
         dialog.setThread(thread)
         dialog.exec_()
-        self.loadLocation.emit("reload", None)
+        self.loadLocation.emit("remove", rows)
 
     def onSetFilterPattern(self, pattern):
         self.model().setFilterGlobPattern(pattern)
@@ -3132,8 +3148,8 @@ class FileGridView(GridView):
         self.cfg = cfg
         self.doubleClicked.connect(self.onOpenIndex)
 
-        s1 = self.cfg.iconSize
-        s2 = self.cfg.iconSize * 1.5
+        s1 = int(self.cfg.iconSize)
+        s2 = int(self.cfg.iconSize * 1.5)
         self.setIconSize(QSize(s1, s1))
         self.setGridSize(QSize(s2, s2))
         self.setSpacing(100)
@@ -3324,7 +3340,7 @@ class LocationView(QWidget):
         self.hbox1.addWidget(self.btn_forward)
         self.hbox1.addWidget(self.btn_up)
         self.hbox1.addWidget(self.btn_refresh)
-        self.hbox1.addStretch(.3)
+        self.hbox1.addStretch(1)
         #self.hbox1.addWidget(self.edit_location)
         self.hbox1.addWidget(self.edit_filter)
         self.hbox1.addWidget(self.btn_details)
@@ -4604,7 +4620,7 @@ class LocationPane(Pane):
         self.hbox_status.addWidget(self.lbl_status_1)
         self.hbox_status.addWidget(self.lbl_status_2)
         self.hbox_status.addWidget(self.lbl_status_3)
-        self.hbox_status.addStretch(.25)
+        self.hbox_status.addStretch(1)
 
         self.addWidget(self.view_location)
         self.addWidget(self.table_file)
@@ -4886,12 +4902,14 @@ class LocationPane(Pane):
         # if any exception is raised it is passed to
         # onLoadLocationTaskComplete, which can handle it
 
-        mode, directory = args
+        mode, extra = args
 
         if mode == "push":
-            self.ctxt.pushDirectory(directory)
+            # extra should be a directory path
+            self.ctxt.pushDirectory(extra)
         elif mode == "child":
-            self.ctxt.pushChildDirectory(directory) # actually a name, not dir
+            # extra should be a directory path
+            self.ctxt.pushChildDirectory(extra)  # actually a name, not dir
         elif mode == "reload":
             self.ctxt.reload()
         elif mode == "pop":
@@ -4900,6 +4918,9 @@ class LocationPane(Pane):
             self.ctxt.unpopDirectory()
         elif mode == "push-parent":
             self.ctxt.pushParentDirectory()
+        elif mode == "remove":
+            # extra should be a list of rows
+            self.ctxt.removeSelection(extra)
         else:
             raise Exception(f"unknown mode {mode} for {directory}")
 
@@ -5105,7 +5126,8 @@ class _TaskThread(QThread):
 
     def delete(self, tid, retval):
         del self.parent()._tasks[tid]
-        self.parent().taskFinished.emit(tid, *retval)
+        retval, e, time = retval
+        self.parent().taskFinished.emit(tid, retval, e, time)
         self._cv.notify_all()
 
     def join(self):
@@ -5117,7 +5139,7 @@ class _TaskThread(QThread):
 
 class TaskQueue(QObject):
 
-    taskFinished = pyqtSignal(str, object, object, int)
+    taskFinished = pyqtSignal(str, object, object, float)
 
     def __init__(self, size, parent=None):
         super(TaskQueue, self).__init__(parent)
