@@ -242,7 +242,7 @@ class FilesResource(WebResource):
 
         it also allows for generating permanent links with meaningful urls
         """
-        return self.get_public_file(fileId)
+        return self.get_public_file_impl(fileId, name)
 
     @get("public/<fileId>")
     @param("dl", type_=Boolean().default(True))
@@ -257,24 +257,31 @@ class FilesResource(WebResource):
         a password is optional. if the file requires a password it the password
         will be used to validate the download can continue
         """
+        return self.get_public_file_impl(fileId, None)
+
+    def get_public_file_impl(self, fileId, name):
 
         try:
 
             if g.args.info:
                 info = self.filesys_service.publicFileInfo(fileId)
+                if name is not None:
+                    info['name'] = name
                 return jsonify(result={'file': info})
             else:
                 password = g.headers.get('X-YUE-PASSWORD', None)
                 info, stream = self.filesys_service.loadPublicFile(
                     fileId, password)
                 go = files_generator_v2(stream)
-                return send_generator(go, info.name,
+                if name is None:
+                    name = info.name
+                return send_generator(go, name,
                     file_size=info.size, attachment=g.args.dl)
 
         except FileSysServiceException:
-            return httpError(401, "invalid file id or password")
+            return httpError(401, "invalid file id")
         except StorageNotFoundException:
-            return httpError(404, "invalid file id or password")
+            return httpError(404, "invalid file id")
 
     @put("public/<root>/path/<path:resPath>")
     @header("X-YUE-PASSWORD")

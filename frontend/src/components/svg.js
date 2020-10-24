@@ -1,23 +1,17 @@
 
-import daedalus with {
+from module daedalus import {
     DomElement,
 }
 
 const style = {
     svgButton: StyleSheet({
-        'background-image': 'linear-gradient(#D5D5D5, #6A6A6A)',
-        'margin-right': '.5em',
-        'margin-bottom': '.5em',
-        padding: '4px'
+        padding: '4px',
     }),
+
 }
 
-StyleSheet(`.${style.svgButton}:hover`, {
-    'background-image': 'linear-gradient(#BCBCBC, #5E5E5E)';
-})
-
 StyleSheet(`.${style.svgButton}:active`, {
-    'background-image': 'linear-gradient(#5E5E5E, #BCBCBC)';
+    background: '#00000030',
 })
 
 export class SvgElement extends DomElement {
@@ -26,7 +20,6 @@ export class SvgElement extends DomElement {
     }
 
     onLoad(event) {
-        // the backup image doesn't effect the work queue
         console.warn("success loading: ", this.props.src)
     }
 
@@ -46,4 +39,10 @@ export class SvgButtonElement extends SvgElement {
             this.attrs.callback()
         }
     }
+
+    setUrl(url) {
+        this.props.src = url;
+        this.update()
+    }
 }
+

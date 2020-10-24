@@ -24,11 +24,30 @@ serve_prod:
 			--static ./resources \
 			src/app.js
 
+.PHONY: build_debug
+build_debug:
+	export PYTHONPATH=../daedalus; \
+		python3.8 -m daedalus build \
+		--env buildDate="$(DATE)" \
+		--static ./resources \
+		src/app.js ./build
+
 .PHONY: build
 build:
 	export PYTHONPATH=../daedalus; \
 		python3.8 -m daedalus build \
 		--env buildDate="$(DATE)" \
 		--static ./resources \
+		--minify \
+		src/app.js ./build
+
+.PHONY: build_html
+build_html:
+	export PYTHONPATH=../daedalus; \
+		python3.8 -m daedalus build \
+		--env buildDate="$(DATE)" \
+		--static ./resources \
+		--minify \
+		--onefile \
 		src/app.js ./build
 

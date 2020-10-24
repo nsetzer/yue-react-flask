@@ -1,10 +1,11 @@
 
-import daedalus
+import module daedalus
 
 const platform_prefix = daedalus.platform.isAndroid ? "file:///android_asset/site/static/icon/" : "/static/icon/";
 
 const svg_icon_names = [
     "album",
+    "bolt",
     "create",
     "discard",
     "disc",
@@ -37,6 +38,7 @@ const svg_icon_names = [
     "save",
     "search",
     "search_generic",
+    "select",
     "settings",
     "shuffle",
     "sort",
@@ -45,6 +47,14 @@ const svg_icon_names = [
     "volume_1",
     "volume_2",
     "volume_4",
+    "checkbox_unchecked",
+    "checkbox_partial",
+    "checkbox_download",
+    "checkbox_checked",
+    "checkbox_synced",
+    "checkbox_not_synced",
+    "plus",
+    "minus",
 ];
 
 export const svg = {};

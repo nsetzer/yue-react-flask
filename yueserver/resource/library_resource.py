@@ -151,6 +151,21 @@ class LibraryResource(WebResource):
             "page_size": g.args.limit,
         })
 
+    @get("forest")
+    @param("query", type_=String().default(None))
+    @param("showBanished", type_=Boolean().default(False))
+    @requires_auth("library_read")
+    @compressed
+    def search_library_forest(self):
+        """ return song information from the library """
+
+        forest = self.audio_service.search_forest(g.current_user,
+            g.args.query, showBanished=g.args.showBanished)
+
+        return jsonify({
+            "result": forest,
+        })
+
     @put("")
     @body(ArrayOpenApiBody(UpdateSongOpenApiBody()))
     @requires_auth("library_write")

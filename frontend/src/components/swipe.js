@@ -14,6 +14,7 @@ export class SwipeHandler {
         console.log("mount", dom)
         dom.addEventListener('touchstart', this.handleTouchStart.bind(this), false);
         dom.addEventListener('touchmove', this.handleTouchMove.bind(this), false);
+
     }
 
     getTouches(evt) {
@@ -21,8 +22,6 @@ export class SwipeHandler {
     }
 
     handleTouchStart(evt) {
-        //this.callback(0, -1)
-
         try {
             const firstTouch = this.getTouches(evt)[0];
             this.xDown = firstTouch.clientX;
@@ -49,7 +48,11 @@ export class SwipeHandler {
         let yDiff = this.yDown - yUp;
 
 
-        let pt = {x: this.xDown, y: this.yDown, dx: xDiff, dy: yDiff}
+        let pt = {
+            x: this.xDown, y: this.yDown,
+            xc: xUp, yc: yUp,
+            dx: xDiff, dy: yDiff,
+        }
 
         let direction = 0
 

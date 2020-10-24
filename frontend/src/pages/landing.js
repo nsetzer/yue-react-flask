@@ -1,5 +1,5 @@
 
-import daedalus with {
+from module daedalus import {
     StyleSheet,
     DomElement,
     ButtonElement,
@@ -7,7 +7,7 @@ import daedalus with {
     TextInputElement,
     Router
 }
-import api
+import module api
 
 const styles = {
     main: StyleSheet({
@@ -15,13 +15,16 @@ const styles = {
         'flex-direction': 'column',
         'justify-content': 'center',
         'margin-top': '25vh',
-        'margin-left': '25vw',
-        width: '50vw',
+        'margin-left': '25%',
+        width: '50%',
         'min-width': '9em',
         height: '50vh',
         'min-height': '6em',
-        background: 'radial-gradient(#43464b, #238e23)',
+        'background-image': 'linear-gradient(#08B214, #078C12)',
+        'border': "solid 1px transparent",
+        'border-radius': '1em',
         'text-align': 'center',
+        'box-shadow': '5px 5px 5px 5px rgba(0,0,0,.6)'
     }),
     btn_center: StyleSheet({
         'text-align': 'center',
@@ -46,7 +49,7 @@ export class LandingPage extends DomElement {
         this.attrs.btn.updateProps({className: styles.btn_center})
 
         this.appendChild(this.attrs.btn)
-        this.appendChild(new TextElement(daedalus.env.buildDate))
+        this.appendChild(new TextElement(daedalus.env.buildDate + daedalus.platform.isMobile))
 
     }
 

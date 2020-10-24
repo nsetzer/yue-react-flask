@@ -4,7 +4,7 @@ let user_token = null
 export function getUsertoken() {
     if (user_token === null) {
         const token = window.localStorage.getItem("user_token")
-        if (token) {
+        if (!!token) {
             user_token = token
         }
     }

@@ -18,7 +18,12 @@ export function get_json(url, parameters) {
 
     parameters.method = "GET"
 
-    return fetch(url, parameters).then((response) => {return response.json()})
+    return fetch(url, parameters).then((response) => {
+        if (!response.ok) {
+            throw response;
+        }
+        return response.json()
+    })
 }
 
 export function post_json(url, payload, parameters) {

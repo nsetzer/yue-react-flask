@@ -1,9 +1,10 @@
 
 
-import daedalus
-import api.requests
+import module daedalus
+import module api.requests
 
-import './token.js'
+//include './util.js'
+include './token.js'
 
 export const env = {
     //`http://${window.location.hostname}:4200`
@@ -12,7 +13,7 @@ export const env = {
     baseUrl: (daedalus.env && daedalus.env.baseUrl)?daedalus.env.baseUrl:""
 }
 
-console.log(`base url: ${env.baseUrl}`)
+//console.log(`base url: ${env.baseUrl}`)
 env.origin = window.location.origin
 
 // returns {token: token}
@@ -71,6 +72,12 @@ export function fsGetPathContentUrl(root, path) {
     return url;
 }
 
+export function fsGetPublicPathUrl(uid, name) {
+
+    const url = env.baseUrl + daedalus.util.joinpath('/api/fs/public', uid, name);
+    return url;
+}
+
 export function fsSearch(root, path, terms, page, limit) {
     const params = daedalus.util.serializeParameters({path, terms, page, limit})
     const url = env.baseUrl + '/api/fs/' + root +'/search' + params;
@@ -91,8 +98,9 @@ export function fsPublicUriRevoke(root, path) {
     return api.requests.put_json(url, {}, cfg);
 }
 
-export function fsPublicUriInfo(file_id) {
-    const url = env.baseUrl + '/api/fs/public/' + file_id + serialize({info: true})
+export function fsPublicUriInfo(uid, name) {
+    const params = daedalus.util.serializeParameters({info:true})
+    const url = env.baseUrl + daedalus.util.joinpath('/api/fs/public', uid, name) + params
     return api.requests.get_json(url);
 }
 
@@ -129,6 +137,39 @@ export function librarySongAudioUrl(songId) {
     return url + params
 }
 
+export function librarySearchForest(query) {
+    const params = daedalus.util.serializeParameters({query})
+    const url = env.baseUrl + '/api/library/forest' + params;
+    const cfg = getAuthConfig()
+    return api.requests.get_json(url, cfg);
+}
+
+export function librarySong(songId) {
+    const url = env.baseUrl + '/api/library/' + songId;
+    const cfg = getAuthConfig()
+    return api.requests.get_json(url, cfg);
+}
+
+export function libraryDomainInfo(songId) {
+    const url = env.baseUrl + '/api/library/info';
+    const cfg = getAuthConfig()
+    return api.requests.get_json(url, cfg);
+}
+
+
+export function userDoc(hostname) {
+    const params = daedalus.util.serializeParameters({hostname})
+    const url = env.baseUrl + '/api/doc' + params;
+    const cfg = getAuthConfig()
+    return api.requests.get_text(url, cfg);
+}
+
+export function radioVideoInfo(videoId) {
+    const params = daedalus.util.serializeParameters({videoId})
+    const url = env.baseUrl + '/api/radio/video/info' + params;
+    const cfg = getAuthConfig()
+    return api.requests.get_json(url, cfg);
+}
 
 /**
  * params:

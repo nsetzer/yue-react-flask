@@ -202,6 +202,50 @@ class AudioService(object):
 
         return result
 
+    def search_forest(self, user,
+        searchTerm,
+        case_insensitive=True,
+        showBanished=False):
+        """ query the library and return a list of songs as a forest
+
+        query results are restricted by the users domain and role
+        """
+
+        orderby = [Song.artist_key, Song.album, Song.title]
+        limit = None
+        offset = None
+
+        songList = self.libraryDao.search(
+            user['id'], user['domain_id'],
+            searchTerm, case_insensitive,
+            orderby, limit, offset, showBanished)
+
+        # A Forset is list-of-ArtistItem
+        # An ArtistItem is a {name: str, albums: list-of-AlbumItem}
+        # An AlbumItem is a {name: str, tracks: list-of-TrackItem}
+        # A TrackItem is a {title: str, id: str}
+
+        artist = None
+        album = None
+        forest = []
+        for song in songList:
+            if artist is None or song[Song.artist] != artist['name']:
+                artist = {'name': song[Song.artist], 'albums': []}
+                forest.append(artist)
+
+            if album is None or song[Song.album] != album['name']:
+                album = {'name': song[Song.album], 'tracks': []}
+                artist['albums'].append(album)
+
+            songItem = {
+            'id': song[Song.id],
+            'title': song[Song.title],
+            'length': song[Song.length],
+            }
+            album['tracks'].append(songItem)
+
+        return forest
+
     def updateSongs(self, user, songs):
         """
         update metadata for a set of songs
