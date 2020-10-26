@@ -274,16 +274,10 @@ class LocalStorageDao(object):
             if not path_prefix.endswith(delimiter):
                 path_prefix += delimiter
 
-            where = FsTab.c.rel_path.startswith(bindparam('path_prefix', path_prefix))
+            where = FsTab.c.rel_path.startswith(bindparam('path', path_prefix))
 
         if terms:
-            rules = [self.grammar.ruleFromString(term) for term in terms]
-
-            if len(rules) > 1:
-                rule = AndSearchRule(rules)
-            else:
-                rule = rules[0]
-
+            rule = AndSearchRule([self.grammar.ruleFromString(term) for term in terms])
             sql_rule = rule.sql()
             if where is not None:
                 where = and_(where, sql_rule)
@@ -744,6 +738,7 @@ class FileEnt(object):
         self.af = af
 
         self._state = self._get_state()
+        print(lf,rf,af,self._state)
 
     def __str__(self):
         return "FileEnt<%s,%s>" % (self.remote_path, self.local_path)
@@ -1418,6 +1413,9 @@ def _check_dir2ent(ctxt, attr, remote_base, local_base, d, record):
 
 def _check_file2ent(ctxt, remote_base, local_base, f, record):
 
+    print(">", remote_base, local_base, f, record)
+
+
     # f:FileRecord{.name, .isDir, .size, .mtime, .version, .permission, .encrypted, .storage_path, .file_path}
 
     name = f['rel_path']
@@ -1459,15 +1457,18 @@ def _check_file2ent(ctxt, remote_base, local_base, f, record):
             #st = ctxt.fs.file_info(local_path)
 
             af = {
-                "version": record.version,
-                "size": record.size,
-                "mtime": record.mtime,
-                "permission": record.permission,
+                "version": st.version,
+                "size": st.size,
+                "mtime": st.mtime,
+                "permission": st.permission,
             }
     except FileNotFoundError:
+        print("> err1", local_path)
         af = None
     except NotADirectoryError:
+        print("> err2")
         af = None
+    print(lf, rf, af)
 
     return FileEnt(remote_path, local_path, lf, rf, af)
 
@@ -1505,6 +1506,7 @@ def _check(ctxt, remote_base, local_base):
         if d in _names:
             del _names[d]
 
+    print(_names)
     for f in _files:
 
         name = f['rel_path']
@@ -1902,7 +1904,7 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
         sys.stdout.write("use force to push %s\n" % ent.remote_path)
 
     elif (FileState.PUSH == state and push) or \
-         (FileState.PULL == state and push and force and ent.af) or \
+         (FileState.PULL == state and push and force) or \
          (FileState.DELETE_REMOTE == state and not pull and push) or \
          (FileState.CONFLICT_MODIFIED == state and not pull and push) or \
          (FileState.CONFLICT_CREATED == state and not pull and push) or \
@@ -1912,6 +1914,7 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
             message = "%s is in a conflict state.\n" % ent.remote_path
             sys.stdout.write(message)
 
+        print("!", state, push, pull, force)
         _sync_file_push(ctxt, attr, ent)
 
     elif (FileState.PUSH == state and pull and not push and not force):
@@ -1920,7 +1923,7 @@ def _sync_file_impl(ctxt, ent, push=False, pull=False, force=False):
         sys.stdout.write("use force to pull %s\n" % ent.remote_path)
 
     elif (FileState.PULL == state and pull) or \
-         (FileState.PUSH == state and pull and force and ent.rf) or \
+         (FileState.PUSH == state and pull and force) or \
          (FileState.DELETE_LOCAL == state and pull and not push) or \
          (FileState.CONFLICT_MODIFIED == state and pull and not push) or \
          (FileState.CONFLICT_CREATED == state and pull and not push) or \
@@ -2205,15 +2208,6 @@ def _move_impl(ctxt, ents, dst):
     for src, dst in _f_actions:
         _move_file_impl(ctxt, src, dst)
 
-def _remove_impl_local_dir(ctxt, ent):
-    """remove db entry and local file"""
-
-    if not os.listdir(ent.local_base):
-        ctxt.fs.rmdir.rmdir(ent.local_base)
-        return True
-
-    return False
-
 def _remove_impl_local(ctxt, ent):
     """remove db entry and local file"""
     s1 = ctxt.storageDao.remove(ent.remote_base)
@@ -2275,7 +2269,6 @@ def _remove_impl(ctxt, ents, local, remote):
     else:
         rm = _remove_impl_both
 
-    dirs = []
     while len(ents) > 0:
         ent = ents.pop(0)
 
@@ -2286,7 +2279,7 @@ def _remove_impl(ctxt, ents, local, remote):
                 abs_path = ctxt.fs.join(ctxt.local_base, item.rel_path)
                 ents.append(DirEnt(None, item.rel_path, abs_path))
             # ent is a directory
-            dirs.append(ent)
+            print("dir not implemented", ent)
         elif ctxt.storageDao.file_info(ent.remote_base):
             # ent is a file and exists on remote
             if rm(ctxt, ent):
@@ -2296,17 +2289,10 @@ def _remove_impl(ctxt, ents, local, remote):
 
         elif ctxt.fs.exists(ent.local_base):
             # ent is a file and exists locally
-            # TODO: this could be implemented to remove local files
             print("not tracked", ent)
         else:
             # ent does not exist locally
             print("fail", ent)
-
-    # for local directories attempt to remove empty directories
-    # process in reverse because deeper nodes will be appended last
-    if local:
-        for ent in reversed(dirs):
-            _remove_impl_local_dir(ctxt, ent)
 
 def _merge_get_path(fent):
     # insert the filename version before the file extension
@@ -2566,16 +2552,12 @@ def _getpublic_impl(ctxt, paths):
         else:
             sys.stderr.write("error: %s\n" % ent.remote_base)
 
-def _search_impl(ctxt, terms, limit, offset):
+def _search_impl(ctxt, terms):
 
-    results = ctxt.storageDao.search(
-        terms,
-        path_prefix=ctxt.current_remote_base,
-        limit=limit,
-        offset=offset)
-
+    print(ctxt.local_base)
+    print(ctxt.current_remote_base)
+    results = ctxt.storageDao.search(terms, path_prefix=ctxt.current_remote_base)
     for item in results:
-
         rel_path = item.rel_path[len(ctxt.current_remote_base):].lstrip("/")
         local_path = ctxt.fs.join(ctxt.current_local_base, rel_path)
 
@@ -3214,19 +3196,13 @@ class SearchCLI(object):
             action="count",
             help="show detailed information")
 
-        subparser.add_argument("-n", "--limit", default=None,
-            help="limit search results")
-
-        subparser.add_argument("--offset", default=None,
-            help="skip first offset results.")
-
         subparser.add_argument('terms', nargs="*", help="search terms")
 
     def execute(self, args):
         ctxt = get_ctxt(os.getcwd())
-        ctxt.verbose = args.verbose + 1
+        ctxt.verbose = args.verbose
 
-        _search_impl(ctxt, args.terms, args.limit, args.offset)
+        _search_impl(ctxt, args.terms)
 
 class VersionCLI(object):
 

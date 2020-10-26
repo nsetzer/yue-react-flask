@@ -87,10 +87,7 @@ def createTestFile(storageDao, fs, state, variant, rel_path, remote_base, local_
         info = fs.file_info(local_path)
         record = RecordBuilder() \
             .remoteFromInfo(info).remote(2).build()
-        print(record)
         storageDao.insert(remote_path, record)
-        print(remote_path)
-        print(storageDao.listdir(""))
     if state == FileState.CONFLICT_VERSION:
         if variant == 0:
             with fs.open(local_path, "wb") as wb:
@@ -422,7 +419,7 @@ class SyncTestCase(unittest.TestCase):
         self.db.delete(self.db.tables.LocalStorageTable)
         MemoryFileSystemImpl.clear()
 
-    def __push(self, state, variant):
+    def __push(self, state, variant, force=True, final_state=None):
 
         root = "mem"
         remote_base = ""
@@ -432,7 +429,9 @@ class SyncTestCase(unittest.TestCase):
         remote_path = "test.txt"
         remote_abs_path = "mem://remote/test.txt"
         content = b"hello world"
-        final_state = self.transition_push[state]
+
+        if final_state is None:
+            final_state = self.transition_push[state]
 
         createTestFile(self.storageDao, self.fs, state, variant,
             name, remote_base, local_base, content)
@@ -443,7 +442,7 @@ class SyncTestCase(unittest.TestCase):
         msg = "%s\nactual:`%s`\nexpected:`%s`\naf: %s\nlf: %s\nrf: %s\n" % (fent.local_path, actual_state, state, fent.af, fent.lf, fent.rf)
         self.assertTrue(actual_state.startswith(state), msg)
 
-        _sync_file_impl(self.ctxt, fent, True, False, True)
+        _sync_file_impl(self.ctxt, fent, True, False, force)
 
         if final_state is None:
             self.assertFalse(self.fs.exists(local_path))
@@ -479,10 +478,15 @@ class SyncTestCase(unittest.TestCase):
             wb.write(b"hello world")
         self.__push(FileState.PULL, 0)
 
-    def test_push_000_pull_1(self):
+    def test_push_000_pull_1a(self):
         with self.fs.open("mem://remote/test.txt", "wb") as wb:
             wb.write(b"hello world")
-        self.__push(FileState.PULL, 1)
+        self.__push(FileState.PULL, 1, False, FileState.PULL)
+
+    def test_push_000_pull_1b(self):
+        with self.fs.open("mem://remote/test.txt", "wb") as wb:
+            wb.write(b"hello world")
+        self.__push(FileState.PULL, 1, True, FileState.SAME)
 
     def test_push_000_conflict_0(self):
         with self.fs.open("mem://remote/test.txt", "wb") as wb:
@@ -515,7 +519,7 @@ class SyncTestCase(unittest.TestCase):
             wb.write(b"hello world")
         self.__push(FileState.DELETE_LOCAL, 0)
 
-    def __pull(self, state, variant):
+    def __pull(self, state, variant, force=True, final_state=None):
 
         root = "mem"
         remote_base = ""
@@ -525,7 +529,9 @@ class SyncTestCase(unittest.TestCase):
         remote_path = "test.txt"
         remote_abs_path = "mem://remote/test.txt"
         content = b"hello world"
-        final_state = self.transition_pull[state]
+
+        if final_state is None:
+            final_state = self.transition_pull[state]
 
         createTestFile(self.storageDao, self.fs, state, variant,
             name, remote_base, local_base, content)
@@ -536,7 +542,7 @@ class SyncTestCase(unittest.TestCase):
         msg = "%s\nactual:`%s`\nexpected:`%s`\naf: %s\nlf: %s\nrf: %s\n" % (fent.local_path, actual_state, state, fent.af, fent.lf, fent.rf)
         self.assertTrue(actual_state.startswith(state), msg)
 
-        _sync_file_impl(self.ctxt, fent, False, True, True)
+        _sync_file_impl(self.ctxt, fent, False, True, force)
 
         if final_state is None:
             self.assertFalse(self.fs.exists(local_path))
@@ -546,7 +552,7 @@ class SyncTestCase(unittest.TestCase):
         else:
             result2 = _check(self.ctxt, remote_base, local_base)
             fent2 = result2.files[0]
-            self.assertTrue(fent2.state().startswith(final_state), fent2.state())
+            self.assertTrue(fent2.state().startswith(final_state), "%s / %s" % (fent2.state(), final_state))
             self.assertTrue(self.fs.exists(local_path),
                 MemoryFileSystemImpl._mem_store.keys())
 
@@ -559,11 +565,18 @@ class SyncTestCase(unittest.TestCase):
         # variant 0, remote does not yet exist
         self.__pull(FileState.PUSH, 0)
 
-    def test_pull_000_push_1(self):
+    def test_pull_000_push_1a(self):
         # variant 1, overwrite remote
         with self.fs.open("mem://remote/test.txt", "wb") as wb:
             wb.write(b"hello world")
-        self.__pull(FileState.PUSH, 1)
+        self.__pull(FileState.PUSH, 1, False, FileState.PUSH)
+
+    def test_pull_000_push_1b(self):
+        # variant 1, overwrite remote
+        with self.fs.open("mem://remote/test.txt", "wb") as wb:
+            wb.write(b"hello world")
+        self.__pull(FileState.PUSH, 1, True, FileState.SAME)
+
 
     def test_pull_000_pull_0(self):
         with self.fs.open("mem://remote/test.txt", "wb") as wb:
@@ -784,7 +797,6 @@ class SyncApplicationTestCase(unittest.TestCase):
 
         ent = _check_file(self.ctxt, 'test/upload.txt',
             'mem://local/test/upload.txt')
-        print(ent, ent.af, ent.lf, ent.rf)
         _sync_file_pull(self.ctxt, DirAttr({}, {".yue"}), ent)
 
         # show the file was downloaded successfully

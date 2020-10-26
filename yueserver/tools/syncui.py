@@ -36,9 +36,11 @@
 # filter allow `kind = ?` where kind is image, video, document, folder
 # formalize stats collection of FS implementations
 #
+import time
+ts_start = time.time()
+print("%.3f : start" % ts_start)
 import os
 import sys
-import time
 import math
 import logging
 import posixpath
@@ -58,12 +60,17 @@ def trace(*args, **kwargs):
     filename = os.path.split(frame.filename)[-1]
     print(f"{filename}:{frame.function}:{frame.lineno}", *args, **kwargs)
 
-ts_start = time.time()
+
 
 import PIL
 
 if sys.platform == 'win32':
-    import win32gui # for SetWindowPos
+    try:
+        import win32gui # for SetWindowPos
+        has_win32gui = True
+    except ImportError:
+        has_win32gui = False
+        sys.stderr.write("error importing win32gui")
 
 from datetime import datetime
 
@@ -618,8 +625,9 @@ class LocationContext(QObject):
     # then periodic updates as files become available
     # then a final signal to indicate the process is complete
     locationChanging = pyqtSignal()
-    locationUpdate = pyqtSignal(str)  # directory
+    #locationUpdate = pyqtSignal(str)  # directory
     locationChanged = pyqtSignal(str, str)  # directory
+    locationModified = pyqtSignal()
 
     #loadContextSuccess = pyqtSignal(str)  # directory
     #loadContextError = pyqtSignal(str, str)  # directory, reason
@@ -731,14 +739,22 @@ class LocationContext(QObject):
         # filter data and remove display items in rows
         # each row is an instance of FileTableRowItem
         #
-        print(rows)
+        idx = 0
+        while idx < len(self._dir_contents):
+            for ent in rows:
+                if self._dir_contents[idx].samefile(ent):
+                    self._dir_contents.pop(idx)
+            else:
+                idx += 1
+
+        self.locationModified.emit()
 
         # below is the old behavior
-        try:
-            self._access(self._location)
-            return self.load(self._location)
-        except OSError:
-            return self.pushParentDirectory()
+        #try:
+        #    self._access(self._location)
+        #    return self.load(self._location)
+        #except OSError:
+        #    return self.pushParentDirectory()
 
     def pushDirectory(self, directory):
 
@@ -2082,7 +2098,8 @@ class FileContextMenu(QMenu):
             dialog.setThread(thread)
             dialog.exec_()
             # TODO: fixme
-            self.ctxt.reload()
+            #self.ctxt.reload()
+            self.ctxt.removeSelection(ents)
 
 class FileTableRowItem(object):
 
@@ -2439,13 +2456,7 @@ class FileTableView(TableView):
         self.setEnabled(False)
         self.setNewData([])
 
-    # @ ctxt
-    def onLocationChanged(self, directory, target):
-
-        self.setEnabled(True)
-
-        self._details_load_start = False
-
+    def refreshData(self):
         data = []
         # todo change record to FileEnt..
         fcount = 0
@@ -2457,7 +2468,19 @@ class FileTableView(TableView):
                 fcount += 1
             elif isinstance(ent, sync2.DirEnt):
                 dcount += 1
+
         self.setNewData(data)
+
+        return fcount, dcount
+
+    # @ ctxt
+    def onLocationChanged(self, directory, target):
+
+        self.setEnabled(True)
+
+        self._details_load_start = False
+
+        fcount, dcount = self.refreshData()
 
         self.locationChanged.emit(directory, dcount, fcount)
 
@@ -2881,7 +2904,7 @@ class FileTableView(TableView):
         thread = RemoveProgressThread(self.ctxt.fs, paths, self)
         dialog.setThread(thread)
         dialog.exec_()
-        self.loadLocation.emit("remove", rows)
+        self.loadLocation.emit("remove", [row[FileTableRowItem.COL_ENT] for row in rows])
 
     def onSetFilterPattern(self, pattern):
         self.model().setFilterGlobPattern(pattern)
@@ -3380,6 +3403,7 @@ class LocationView(QWidget):
         self.edit_location.returnPressed.connect(self.onOpenButtonPressed)
         self.ctxt.locationChanging.connect(self.onLocationChanging)
         self.ctxt.locationChanged.connect(self.onLocationChanged)
+        self.ctxt.locationModified.connect(self.onLocationModified)
 
     def showSplitButton(self, visible):
         self.btn_split.setVisible(visible)
@@ -3488,6 +3512,11 @@ class LocationView(QWidget):
         self.btn_details.setEnabled(active)
 
         self.edit_location.setText(directory)
+
+    def onLocationModified(self):
+
+        self.setEnabled(True)
+
 
     def resizeEvent(self, event):
 
@@ -3911,11 +3940,13 @@ class RemoveProgressThread(ProgressThread):
             self._remove_reg(src)
 
     def _remove_dir(self, src):
-        self.fs.rmdir(src)
+        #self.fs.rmdir(src)
+        pass
 
     def _remove_reg(self, src):
 
-        self.fs.remove(src)
+        #self.fs.remove(src)
+        pass
 
 class SyncOptionsDialog(QDialog):
 
@@ -4055,6 +4086,8 @@ class SyncProgressDialog(QDialog):
 
         self.lbl_status.setText("Finished.")
         self.btn_exit.setText("Close")
+        # TODO: if no thread errors
+        self.accept()
 
     def reject(self):
         if self.thread.isRunning():
@@ -4568,6 +4601,7 @@ class FavoritesPane(Pane):
 class LocationPane(Pane):
 
     locationChanged = pyqtSignal(Pane, str)
+    locationModified = pyqtSignal(Pane)
     previewEntry = pyqtSignal(object)
     splitInterface = pyqtSignal()
     submitBatchJob = pyqtSignal(object, list, object)
@@ -4649,6 +4683,7 @@ class LocationPane(Pane):
 
         self.ctxt.locationChanging.connect(self.onLocationChanging)
         self.ctxt.locationChanged.connect(self.onLocationChanged)
+        self.ctxt.locationModified.connect(self.onLocationModified)
 
         self.view_location.loadLocation.connect(self.onLoadLocation)
         self.view_location.setFilterPattern.connect(self.table_file.onSetFilterPattern)
@@ -4728,6 +4763,18 @@ class LocationPane(Pane):
             self.lbl_status_3.setText("")
 
         self.locationChanged.emit(self.parent(), directory)
+
+    def onLocationModified(self):
+
+        self.timer.stop()
+        self.spinner.hide()
+
+        self.table_file.refreshData()
+
+        # self.table_file.
+        self.table_file.setEnabled(True)
+
+        self.locationModified.emit(self.parent())
 
     def showSplitButton(self, visible):
         self.view_location.showSplitButton(visible)
@@ -5540,7 +5587,7 @@ class SyncMainWindow(QMainWindow):
     def focusWindow(self):
         # todo: platform dependent options
 
-        if sys.platform == 'win32':
+        if has_win32gui:
 
             # https://forum.qt.io/topic/1939/activatewindow-does-not-send-window-to-front/5
 
@@ -5665,6 +5712,7 @@ def setDarkTheme(app):
 
 def main():
 
+    print("%.3f : main" % (time.time()))
     if sys.stderr is None or sys.stdout is None:
         class dummy_writer(object):
             def write(self, *args, **kwargs):
@@ -5681,6 +5729,8 @@ def main():
     cfg = SyncConfig(cfg_path)
     if save:
         cfg.save()
+
+    print("%.3f : argparse" % (time.time()))
 
     parser = argparse.ArgumentParser(
         description='',
@@ -5711,6 +5761,8 @@ def main():
     parser.add_argument("paths", type=str, default=None, nargs='*',
         help='open a file')
 
+    print("%.3f : parse args" % (time.time()))
+
     args = parser.parse_args()
 
     if args.edit:
@@ -5727,6 +5779,8 @@ def main():
     if args.diff:
         trace(args)
         return
+
+    print("%.3f : rpc init" % (time.time()))
 
     if not args.new and os.path.exists(procinfo):
         paths = []
@@ -5751,6 +5805,8 @@ def main():
             # assume window closed and open a new one
             pass
 
+    print("%.3f : rpc init end" % (time.time()))
+
     if args.new:
         # clear this variable, this process does not have a pid file
         procinfo = None
@@ -5772,6 +5828,8 @@ def main():
         trace(scheme, bucket)
         FileSystem.register(scheme, s3fs)
 
+    print("%.3f : application" % (time.time()))
+
     app = QApplication(sys.argv)
     app.setApplicationName("Yue-Sync")
     trace(QStyleFactory.keys())
@@ -5788,6 +5846,8 @@ def main():
     QGuiApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
 
     installExceptionHook()
+
+    print("%.3f : main window" % (time.time()))
 
     window = SyncMainWindow(cfg, procinfo=procinfo)
     window.showWindow()
