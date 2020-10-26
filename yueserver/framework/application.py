@@ -18,10 +18,10 @@ import gzip
 import argparse
 import logging
 
-import eventlet
-import eventlet.wsgi
+#import eventlet
+#import eventlet.wsgi
 
-from socketio import Server as SocketServer, Middleware as SocketMiddleware
+#from socketio import Server as SocketServer, Middleware as SocketMiddleware
 import ssl
 
 from .client import RegisteredEndpoint, Parameter, AuthenticatedRestClient, \
@@ -83,7 +83,8 @@ class FlaskApp(object):
         self._registered_websockets = []
         self._registered_resources = []
 
-        self.async_mode = "eventlet"
+        #self.async_mode = "eventlet"
+        self.async_mode = "flask"
 
     def _enable_sio(self):
         if self.sio is None:
@@ -224,14 +225,14 @@ class FlaskApp(object):
         logging.info("running on: http%s://%s:%s" % (s,
             self.config.host, self.config.port))
 
-        if self.async_mode == 'eventlet':
-            socket = eventlet.listen((self.config.host, self.config.port))
-            eventlet.wsgi.server(socket, self.app)
-        else:
-            self.app.run(host=self.config.host,
-                         port=self.config.port,
-                         ssl_context=ssl_context,
-                         threaded=True)
+        #if self.async_mode == 'eventlet':
+        #    socket = eventlet.listen((self.config.host, self.config.port))
+        #    eventlet.wsgi.server(socket, self.app)
+        #else:
+        self.app.run(host=self.config.host,
+                     port=self.config.port,
+                     ssl_context=ssl_context,
+                     threaded=True)
 
     def _add_cors_headers(self, response):
 
@@ -284,11 +285,21 @@ class FlaskApp(object):
 
     def get_ssl_context(self):
         context = None
-        if os.path.exists(self.config.ssl.private_key) and \
-           os.path.exists(self.config.ssl.certificate):
-            context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-            context.load_cert_chain(self.config.ssl.certificate,
-                                    self.config.ssl.private_key)
+        if not os.path.exists(self.config.ssl.private_key):
+            logging.info("no private key set")
+            return None
+
+        if not os.path.exists(self.config.ssl.certificate):
+            logging.info("no certificate chain set")
+            return None
+
+        st1 = os.stat(self.config.ssl.private_key)
+
+        st2 = os.stat(self.config.ssl.certificate)
+
+        context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+        context.load_cert_chain(self.config.ssl.certificate,
+                                self.config.ssl.private_key)
         return context
 
     def __call__(self, env, start_response):

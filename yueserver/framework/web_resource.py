@@ -414,8 +414,8 @@ def send_file(filepath):
 
     if "Range" not in request.headers:
 
-        g = local_file_generator(filepath)
-        response = Response(g, mimetype=mimetype)
+        g_file = local_file_generator(filepath)
+        response = Response(g_file, mimetype=mimetype)
     else:
 
         ranges = findall(r"\d+", request.headers["Range"])

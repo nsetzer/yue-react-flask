@@ -1,6 +1,6 @@
 
 
-import imp, os, sys
+import os, sys
 from setuptools import setup, Command
 from distutils.sysconfig import get_python_lib
 import unittest
