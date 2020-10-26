@@ -49,7 +49,7 @@ export class LandingPage extends DomElement {
         this.attrs.btn.updateProps({className: styles.btn_center})
 
         this.appendChild(this.attrs.btn)
-        this.appendChild(new TextElement(daedalus.env.buildDate + daedalus.platform.isMobile))
+        this.appendChild(new TextElement(daedalus.env.buildDate))
 
     }
 
