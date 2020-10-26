@@ -3,6 +3,7 @@
 A resource for serving the application bundle
 """
 import os
+import time
 import logging
 
 from flask import jsonify, render_template, g, request, \
@@ -12,9 +13,8 @@ from ..dao.library import Song
 from ..dao.util import parse_iso_format, pathCorrectCase, server_health
 
 from ..framework.web_resource import WebResource, \
-    get, post, put, delete, compressed, httpError, send_generator
-
-from .util import requires_auth
+    get, post, put, delete, header, body, compressed, httpError, \
+    send_generator, int_range
 
 class AppResource(WebResource):
     """
@@ -115,3 +115,6 @@ class AppResource(WebResource):
         """
         base = os.path.join(os.getcwd(), ".well-known")
         return send_from_directory(base, path)
+
+
+

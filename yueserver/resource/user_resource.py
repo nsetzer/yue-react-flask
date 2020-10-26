@@ -169,6 +169,7 @@ class UserResource(WebResource):
     @get('/api/doc')
     @param("hostname", type_=URI().default(""))
     @requires_auth()
+    @returns([200, 401])
     def doc(self):
         """ construct curl documentation for endpoints
 

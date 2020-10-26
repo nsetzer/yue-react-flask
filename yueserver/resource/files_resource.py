@@ -4,6 +4,7 @@ A resource for browsing parts of the file system, and uploading files
 """
 import os, sys
 import logging
+import time
 
 from flask import jsonify, render_template, g, request, send_file
 
@@ -46,6 +47,11 @@ validate_mode_system = String() \
                           case_sensitive=False) \
                     .default(CryptMode.system) \
                     .description("encryption mode")
+
+def speedtest_gen(count, size):
+    data = b"\x2B\xAD" + (b"\x00" * (size - 2))
+    for i in range(count):
+        yield data
 
 class EncryptionKeyOpenApiBody(object):
 
@@ -495,7 +501,51 @@ class FilesResource(WebResource):
         self.filesys_service.setUserClientKey(g.current_user, g.body)
         return jsonify(result="OK"), 200
 
+    # curl -u admin:admin localhost:4200/.speedtest/50/2048 -o tmp
+    # curl -u admin:admin --data-binary "@tmp" localhost:4200/.speedtest
 
+    @post("/.speedtest")
+    @body(BinaryStreamOpenApiBody(),
+          content_type="application/octet-stream")
+    @requires_auth()
+    @returns([200, 400, 401, 409])
+    @timed(100)
+    def speedtest_upload(self):
+        stream = None
+        # support multi part form uploads that
+        # have exactly one file in the payload
+        # TODO: should we fail otherwise for uploads with more than 1 file
+
+        if request.files and len(request.files) == 1:
+            for key in request.files.keys():
+                stream = request.files.get(key)
+        else:
+            stream = g.body
+
+        total_size = 0
+
+        t0 = time.time()
+        buf = stream.read(2048)
+        while buf:
+            total_size += len(buf)
+            buf = stream.read(2048)
+        t1 = time.time()
+
+        return jsonify(result="OK", total_size=total_size, duration=(t1-t0))
+
+    @get("/.speedtest/<count>/<size>")
+    @requires_auth()
+    def speedtest_download(self, count, size):
+
+        count = int_range(1, 2**8)(count)
+        size  = int_range(2, 2**16)(size)
+        total_size = int_range(2, 2**20)(count * size)
+        print(count, size, count*size)
+        mimetype = "application/octect-stream"
+        response = Response(speedtest_gen(count, size), mimetype=mimetype)
+        response.headers.set('Content-Length', total_size)
+
+        return response
 
 class NotesResource(WebResource):
     """NotesResource
