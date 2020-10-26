@@ -58,6 +58,9 @@ echo \$PWD
 user=\$(stat -c '%U' wsgi.py)
 YUE_PRIVATE_KEY=\$(cat ./crypt/rsa.pem)
 export YUE_PRIVATE_KEY
+cat /etc/letsencrypt/live/yueapp.duckdns.org/fullchain.pem > "config/\${1:-production}/fullchain.pem"
+cat /etc/letsencrypt/live/yueapp.duckdns.org/privkey.pem > "config/\${1:-production}/privkey.pem"
+
 exec sudo -E -u "\$user" python3 wsgi.py -p"\${1:-production}"
 EOF
 

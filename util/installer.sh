@@ -3,6 +3,15 @@ echo ""
 echo "Self Extracting Installer"
 echo ""
 
+tarpath=$(readlink -f $0)
+ARCHIVE=$(awk '/^__ARCHIVE_BELOW__/ {print NR + 1; exit 0; }' "$tarpath")
+
+
+if [ "$1" == "-t" ]; then
+    tail -n+$ARCHIVE "$tarpath" | tar -tvz
+    exit 0
+fi
+
 if [[ $EUID -ne 0 ]]; then
    echo "This script must be run as root"
    exit 1
@@ -15,7 +24,6 @@ then
     mkdir -p "$EXTRACT_DIR"
 fi
 
-tarpath=$(readlink -f $0)
 echo "$tarpath"
 cd "$EXTRACT_DIR"
 
@@ -24,7 +32,6 @@ if [ -e "./uninstall.sh" ]; then
 fi
 
 echo "install yueserver to $EXTRACT_DIR"
-ARCHIVE=$(awk '/^__ARCHIVE_BELOW__/ {print NR + 1; exit 0; }' "$tarpath")
 tail -n+$ARCHIVE "$tarpath" | tar -xz
 
 if id yueapp &> /dev/null;
