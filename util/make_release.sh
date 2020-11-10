@@ -61,7 +61,8 @@ export YUE_PRIVATE_KEY
 cat /etc/letsencrypt/live/yueapp.duckdns.org/fullchain.pem > "config/\${1:-production}/fullchain.pem"
 cat /etc/letsencrypt/live/yueapp.duckdns.org/privkey.pem > "config/\${1:-production}/privkey.pem"
 
-exec sudo -E -u "\$user" python3 wsgi.py -p"\${1:-production}"
+#exec sudo -E -u "\$user" python3 wsgi.py -p"\${1:-production}"
+exec sudo -E -u "\$user" python3 -m yueserver.app2 -p"\${1:-production}"
 EOF
 
 cat <<EOF > uninstall.sh

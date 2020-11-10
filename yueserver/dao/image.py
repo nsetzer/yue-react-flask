@@ -68,33 +68,27 @@ def scale_image_stream(inputStream, outputStream, scale):
     # TODO: scale and crop one dim
     # this may depend on square and landscape shape
     if height < width:
-        print("W>H")
         scale = (tgt_height / float(height))
         wsize = int(scale * width)
         hsize = tgt_height
     else:
-        print("h>W")
         scale = (tgt_width / float(width))
         wsize = tgt_width
         hsize = int(scale * height)
 
     img = img.resize((wsize, hsize), Image.BILINEAR)
-    print(tgt_width, tgt_height, wsize, hsize, img.size)
 
     if img.size[1] < tgt_height:
-        print("pad v")
         # pad with transparent pixels on the top and bottom
         d = tgt_height - img.size[1]
         padding = (0, int(d / 2), 0, round(d / 2))
         img = ImageOps.expand(img, padding, fill=(0, 0, 0, 255))
     elif img.size[0] < tgt_width:
-        print("pad h")
         # pad with transparent pixels on the left and right
         d = tgt_width - img.size[0]
         padding = (int(d / 2), 0, round(d / 2), 0)
         img = ImageOps.expand(img, padding, fill=(0, 0, 0, 255))
     elif img.size[1] > tgt_height or img.size[0] > tgt_width:
-        print("crop")
         # crop the image, centered
         img = ImageOps.fit(img, (tgt_width, tgt_height))
 

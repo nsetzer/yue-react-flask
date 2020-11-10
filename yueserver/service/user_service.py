@@ -6,6 +6,8 @@ User can be created or removed, A user can authenticate and change their
 password.
 """
 
+import logging
+
 from ..dao.user import UserDao
 from ..dao.storage import StorageDao
 from ..dao.library import LibraryDao

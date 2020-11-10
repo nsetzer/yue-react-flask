@@ -1,7 +1,18 @@
 
 """
 
+https://github.com/seamusabshere/py-upsert/blob/master/upsert/sqlite3.py
+https://github.com/seamusabshere/py-upsert/blob/master/upsert/postgresql.py
+
 git inspired sync tool.
+
+todo: a push does not seem to update the local cache and/or does not update
+the version correctly. resulting in newly created files that are pushed
+to be out of date.
+
+todo: if an upload fails for any reason (s3fs.upload exception)
+stat the file and if it exists on s3fs/memfs/localfs remove the file
+before returning.
 
 todo: create a stat cache to avoid making os calls for the same file
 
@@ -201,10 +212,16 @@ class LocalStorageDao(object):
 
         if item is None:
             self.insert(rel_path, record, commit)
-            return "insert"
+            #return "insert"
         else:
             self.update(rel_path, record, commit)
-            return "update"
+            #return "update"
+
+        query = select(['*']) \
+            .select_from(self.dbtables.LocalStorageTable) \
+            .where(where)
+        result = self.db.session.execute(query)
+        item = result.fetchone()
 
     def remove(self, rel_path, commit=True):
 
@@ -734,6 +751,9 @@ class DirEnt(object):
         return None
 
 class FileEnt(object):
+    # lf.
+    # rf.
+    # af.
     def __init__(self, remote_path, local_path, lf, rf, af):
         super(FileEnt, self).__init__()
         self.remote_path = remote_path
@@ -903,9 +923,9 @@ class FileEnt(object):
         ap = ("%5s" % oct(self.af.get('permission', 0))) if self.af else ("-" * 5)
 
         if self.rf:
-            public = self.rf.get('public', None) or ""
+            public = self.rf.get('public', None) or "private"
         else:
-            public = ""
+            public = "private"
 
         triple = [
             ("L", "R", "A"),
@@ -914,7 +934,7 @@ class FileEnt(object):
             (_ls, _rs, _as),
             (lp, rp, ap),
         ]
-        return "/".join(["%s,%s,%s" % t for t in triple]) + ' ' + public
+        return ":".join(["%s,%s,%s" % t for t in triple]) + ':' + public
 
     def stat(self):
         """
@@ -1722,15 +1742,19 @@ def _status_file_impl(ctxt, ent):
     state = ent.state().split(':')[0]
     if state == FileState.SAME and ctxt.verbose == 0:
         return
+
     sym = FileState.symbol(state, ctxt.verbose > 2)
     path = ctxt.fs.relpath(ent.local_path, ctxt.current_local_base)
-    if ctxt.verbose > 1:
-        sys.stdout.write("f%s %s %s\n" % (sym, ent.stat(), path))
-    else:
-        sys.stdout.write("f%s %s\n" % (sym, path))
-    # in testing, it can be useful to see lf/rf/af state
+
     if ctxt.verbose > 3:
-        sys.stdout.write("%s\n" % ent.data())
+        # in testing, it can be useful to see lf/rf/af state
+        sys.stdout.write("f%s:%s: %s\n" % (sym, ent.data(), path))
+    else:
+        if ctxt.verbose > 1:
+            sys.stdout.write("f%s %s %s\n" % (sym, ent.stat(), path))
+        else:
+            sys.stdout.write("f%s %s\n" % (sym, path))
+
 
 class SyncResult(object):
     def __init__(self, ent, state, message):
@@ -1799,7 +1823,6 @@ def _sync_file_push(ctxt, attr, ent):
         raise SyncException("unexpected error: %s" % response.status_code)
 
     data =  response.json()
-
     ent.af['version'] = data['file_info']['version']
 
     record = RecordBuilder().local(**ent.af).remote(**ent.af).build()
@@ -2216,43 +2239,53 @@ def _remove_impl_local_dir(ctxt, ent):
 
 def _remove_impl_local(ctxt, ent):
     """remove db entry and local file"""
-    s1 = ctxt.storageDao.remove(ent.remote_base)
 
     if os.path.exists(ent.local_base):
         ctxt.fs.remove(ent.local_base)
-        s3 = True
+        rm_local = True
     else:
-        s3 = False
+        rm_local = False
 
-    return s1 and s3
+    rm_entry = ctxt.storageDao.remove(ent.remote_base)
+
+    rm_remote = False
+
+    return rm_local, rm_remote, rm_entry
 
 def _remove_impl_remote(ctxt, ent):
     """remove db entry and remote file"""
 
-    s1 = ctxt.storageDao.remove(ent.remote_base)
 
     response = ctxt.client.files_remove_file(ctxt.root, ent.remote_base)
-    s2 = response.status_code == 200
+    rm_remote = response.status_code == 200
+    if not rm_remote:
+        print("%s: %s" % (response.status_code, response.text.strip()))
 
-    return s1 and s2
+    rm_entry = ctxt.storageDao.remove(ent.remote_base)
+
+    rm_local = False
+
+    return rm_local, rm_remote, rm_entry
 
 def _remove_impl_both(ctxt, ent):
     """remove db entry, local file, and remote file"""
 
-    s1 = ctxt.storageDao.remove(ent.remote_base)
 
     response = ctxt.client.files_remove_file(ctxt.root, ent.remote_base)
-    s2 = response.status_code == 200
-    if not s2:
+    rm_remote = response.status_code == 200
+    if not rm_remote:
         print("%s: %s" % (response.status_code, response.text.strip()))
 
     if os.path.exists(ent.local_base):
         ctxt.fs.remove(ent.local_base)
-        s3 = True
+        rm_local = True
     else:
-        s3 = False
+        rm_local = False
 
-    return s1 and s2 and s3
+    rm_entry = ctxt.storageDao.remove(ent.remote_base)
+
+
+    return rm_local, rm_remote, rm_entry
 
 def _remove_impl(ctxt, ents, local, remote):
     """
@@ -2289,15 +2322,40 @@ def _remove_impl(ctxt, ents, local, remote):
             dirs.append(ent)
         elif ctxt.storageDao.file_info(ent.remote_base):
             # ent is a file and exists on remote
-            if rm(ctxt, ent):
-                print(ent.remote_base)
-            else:
-                print("error removing: %s" % ent.remote_base)
+
+            # print out an indicator of whether the local, remote,
+            # and database entry was removed
+            rml, rmr, rme = rm(ctxt, ent)
+
+            modes = []
+            for x in rm(ctxt, ent):
+                if x is False:
+                    c = "-"
+                if x is True:
+                    c = "x"
+                modes.append(c)
+            modes.append(ent.remote_base)
+
+            print(" ".join(modes))
 
         elif ctxt.fs.exists(ent.local_base):
             # ent is a file and exists locally
             # TODO: this could be implemented to remove local files
-            print("not tracked", ent)
+            if not local:
+                print("not tracked", ent)
+
+            else:
+                modes = []
+                for x in _remove_impl_local(ctxt, ent):
+                    if x is False:
+                        c = "-"
+                    if x is True:
+                        c = "x"
+                    modes.append(c)
+                modes.append(ent.remote_base)
+
+                print(" ".join(modes))
+
         else:
             # ent does not exist locally
             print("fail", ent)

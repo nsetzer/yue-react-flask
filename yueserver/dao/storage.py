@@ -341,8 +341,6 @@ class StorageDao(object):
         except StorageNotFoundException as e:
             pass
 
-        print(FileSystem()._mem())
-
         if fdst:
             raise StorageException("EEXISTS: %s" % dstPath)
 
@@ -510,8 +508,6 @@ class StorageDao(object):
 
         if offset is not None:
             query = query.offset(offset).order_by(asc(FsTab.c.file_path))
-
-        print(path_prefix, query)
 
         dirs = set()
         count = 0

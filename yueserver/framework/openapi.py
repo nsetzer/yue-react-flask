@@ -289,7 +289,6 @@ def extract_parameter(kind, param):
             "schema": {'type': 'string'}
         }
 
-
 def extract_path_parameters(path):
 
         parameters = []
@@ -337,9 +336,10 @@ def fmtary(tab, width, prefix, suffix, sep, content):
 
     yield s + "\n"
 
-def curldoc(app, host):
+def curldoc(endpoints, host):
+    # endpoints = app._registered_endpoints_v2
 
-    for endpoint in sorted(app._registered_endpoints_v2, key=lambda e: e.path):
+    for endpoint in sorted(endpoints, key=lambda e: e.path):
 
         if not endpoint.path.startswith('/api'):
             continue

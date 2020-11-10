@@ -30,4 +30,4 @@ else:
         return ["/",]
 
 if __name__ == '__main__':
-    print(get_drives())
+    sys.stdout.write("%s\n" % get_drives())

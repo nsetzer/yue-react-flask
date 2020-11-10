@@ -285,6 +285,23 @@ class FileSysService(object):
 
         return stream
 
+    def downloadFileFromInfo(self, user, info, password=None):
+
+        #abs_path = self.getFilePath(user, fs_name, path)
+        #fs_id = self.storageDao.getFilesystemId(
+        #    user['id'], user['role_id'], fs_name)
+        #info = self.storageDao.file_info(user['id'], fs_id, abs_path)
+
+        def downloadCallback(writer):
+
+            if info.encryption is not None:
+                writer = self.decryptStream(user, password,
+                    writer, "wb", info.encryption)
+
+            self.fs.download(info.storage_path, writer)
+
+        return downloadCallback
+
     def publicFileInfo(self, fileId):
         record = self.storageDao.publicFileInfo(fileId)
 
@@ -433,47 +450,48 @@ class FileSysService(object):
 
         uid = str(uuid.uuid4())
 
-        _, usage, quota = self.storageDao.userDiskUsage(user_id)
+        quota_enabled = False
 
-        if usage > quota:
-            raise FileSysServiceException("quota exceeded", 413)
+        if quota_enabled:
+
+            _, usage, quota = self.storageDao.userDiskUsage(user_id)
+
+            if usage > quota:
+                raise FileSysServiceException("quota exceeded", 413)
 
         byte_index = 0
         size = 0
 
-        quota_enabled = False
 
         try:
-            with self.fs.open(storage_path, "wb") as outputStream:
+            # inputStream -> setNonBlocking(True) ? where?
 
-                _iter = iter(lambda: inputStream.read(chunk_size), b"")
-
-                cont = True;
-
-                while cont:
-                    data = b""
-                    try:
-                        # load X megabytes before attempting to write
-                        # to the output file
-                        for i in range(1000):
-                            data += next(_iter)
-                    except StopIteration as e:
-                        cont = False
-
-                    if data:
-                        outputStream.write(data)
-
-                        size += len(data)
-
-                        if quota_enabled:
-                            byte_index = self._internalCheckQuota(
-                                user_id, size, byte_index, uid)
+            size = self.fs.upload(inputStream, storage_path)
+            #with self.fs.open(storage_path, "wb") as outputStream:
+            #    _iter = iter(lambda: inputStream.read(chunk_size), b"")
+            #    cont = True;
+            #    while cont:
+            #        data = b""
+            #        try:
+            #            # load X megabytes before attempting to write
+            #            # to the output file
+            #            for i in range(1000):
+            #                data += next(_iter)
+            #        except StopIteration as e:
+            #            cont = False
+            #        if data:
+            #            outputStream.write(data)
+            #            size += len(data)
+            #            if quota_enabled:
+            #                byte_index = self._internalCheckQuota(
+            #                    user_id, size, byte_index, uid)
 
             if quota_enabled:
                 self._internalCheckQuota(
                     user_id, size, -1, uid)
 
         except Exception as e:
+            logging.exception("upload failed. removing failed file at location: %s", storage_path)
             self.fs.remove(storage_path)
             raise e
         finally:
@@ -512,24 +530,35 @@ class FileSysService(object):
 
     def remove(self, user, fs_name, path):
 
+        logging.warning("remove: is abs %s %s", fs_name, path)
         if self.fs.isabs(path):
             raise FileSysServiceException("unexpected absolute path: %s" % path)
 
+        logging.warning("remove: get path")
         file_path = self.getFilePath(user, fs_name, path)
+        logging.warning("remove: get path %s", file_path)
 
         fs_id = self.storageDao.getFilesystemId(
             user['id'], user['role_id'], fs_name)
+        logging.warning("remove: fs_id %s", fs_id)
 
         # remote by storage path, by selecting by user_id and path
         # then remove by user_id and path
         try:
-            # TODO: either both succeed or neither...
+            # TODO: FS remove first, then if it fails
+            #   404: remove from db anyway
+            #   remove failed: ???
+            logging.warning("remove: get info")
             record = self.storageDao.file_info(user['id'], fs_id, file_path)
+            logging.warning("remove: remove preview")
             self._removePreviewFiles(user['id'], fs_id, file_path)
-            self.storageDao.removeFile(user['id'], fs_id, file_path)
+            logging.warning("remove: remove fs entry")
             result = self.fs.remove(record.storage_path)
+            logging.warning("remove: remove dao entry")
+            self.storageDao.removeFile(user['id'], fs_id, file_path)
             return result
         except FileNotFoundError as e:
+            logging.warning("remove failed: file not found")
             raise e
         except Exception as e:
             logging.exception("unable to delete: %s" % path)
@@ -736,17 +765,24 @@ class FileSysService(object):
     def previewFile(self, user, fs_name, path, scale, password=None):
 
         abs_path = self.getFilePath(user, fs_name, path)
+        ext1 = abs_path.split('.')[-1].lower()
+        if ext1 not in {"jpg", "jpeg", "png", "gif", 'bmp', "webm", "mp4"}:
+            return None
+
         fs_id = self.storageDao.getFilesystemId(
             user['id'], user['role_id'], fs_name)
         fileItem = self.storageDao.file_info(user['id'], fs_id, abs_path)
+        ext = fileItem.file_path.split('.')[-1].lower()
 
         name = ImageScale.name(scale)
 
         previewItem = self.storageDao.previewFind(
             user['id'], fileItem.file_id, name)
 
-        if previewItem is None or previewItem.valid == 0 or not self.fs.exists(previewItem.path):
+        if previewItem and previewItem.path.startswith("err://"):
+            return None
 
+        elif previewItem is None or previewItem.valid == 0 or not self.fs.exists(previewItem.path):
             inputStream = self.loadFileFromInfo(user, fileItem, password)
             # look for a preview file that already exists
             # check a database table, not the file system
@@ -758,13 +794,13 @@ class FileSysService(object):
             # area. this may help to avoid revealing the type of
             # an encrypted file
             dst = self._getNewStoragePath(user, fs_name, path)
-            ext = fileItem.file_path.split('.')[-1].lower()
 
             try:
+                logging.info("creating preview %s %s" % (name, dst))
                 if fileItem.encryption in (CryptMode.server, CryptMode.client):
                     raise FileSysServiceException("file is encrypted")
-                elif ext in ("jpg", "jpeg", "png", "gif", 'bmp'):
-                    logging.info("creating preview %s %s" % (name, dst))
+                elif ext in {"jpg", "jpeg", "png", "gif", 'bmp'}:
+
                     with self.fs.open(dst, "wb") as outputStream:
                         if fileItem.encryption is not None:
                             outputStream = self.encryptStream(user,
@@ -776,16 +812,16 @@ class FileSysService(object):
                             'height': h,
                             'filesystem_id': fs_id,
                             'size': s,
-                            'path': dst
+                            'path': dst,
+                            'valid': 1
                         }
 
                         self.storageDao.previewUpsert(
                             user['id'], fileItem.file_id, name, info)
+                elif ext in {"ogg", "mp3", "wav"}:
 
-                elif ext in ("ogg", "mp3", "wav"):
                     raise FileSysServiceException("not implemented")
-                elif ext in ("webm", "mp4"):
-                    logging.info("creating preview %s %s" % (name, dst))
+                elif ext in {"webm", "mp4"}:
                     with self.fs.open(dst, "wb") as outputStream:
                         if fileItem.encryption is not None:
                             outputStream = self.encryptStream(user,
@@ -798,13 +834,14 @@ class FileSysService(object):
                             'height': h,
                             'filesystem_id': fs_id,
                             'size': s,
-                            'path': dst
+                            'path': dst,
+                            'valid': 1
                         }
 
                         self.storageDao.previewUpsert(
                             user['id'], fileItem.file_id, name, info)
-
                 elif ext in ("pdf", "swf"):
+
                     raise FileSysServiceException("not implemented")
                 else:
                     raise FileSysServiceException("not implemented")
@@ -815,11 +852,23 @@ class FileSysService(object):
                 return dst
             except Exception as e:
 
-                logging.exception("Failed to generate preview for %s `%s`" % (fs_name, abs_path))
-                raise e
+                info = {
+                    'width': 0,
+                    'height': 0,
+                    'filesystem_id': fs_id,
+                    'size': 0,
+                    'path': "err://transcode",
+                    'valid': 1
+                }
+
+                self.storageDao.previewUpsert(
+                    user['id'], fileItem.file_id, name, info)
+
+                logging.error("Failed to generate preview for %s `%s`" % (fs_name, abs_path))
+                return None
 
         else:
-            return previewItem.path
+            return previewItem
 
     def _removePreviewFiles(self, user_id, fs_id, file_path):
         # TODO: exception handling, eventual consistency

@@ -232,6 +232,9 @@ class BotoFileSystemImpl(AbstractFileSystem):
         # NOTE: multiple instances of this class can be registered
         # with a different scheme
         self.session = boto3.session.Session()
+
+        # resources are not thread safe...
+        # clients may be thread safe...
         self.s3 = self.session.resource('s3',
             region_name=region,
             endpoint_url=endpoint_url,
@@ -311,6 +314,53 @@ class BotoFileSystemImpl(AbstractFileSystem):
             return BotoWriterFile(bucket, key)
         else:
             return BotoReaderFile(bucket, key)
+
+    def upload(self, reader, path):
+        bucket_name, key = self._parse_path(path)
+        bucket = self.s3.Bucket(bucket_name)
+
+        #config = boto3.s3.transfer.TransferConfig(
+        #    multipart_threshold=4096,
+        #    max_concurrency=1,
+        #    multipart_chunksize=4096,
+        #    num_download_attempts=5,
+        #    max_io_queue=10,
+        #    io_chunksize=4096,
+        #    use_threads=False
+        #)
+
+        config = boto3.s3.transfer.TransferConfig(
+            max_concurrency=2,
+            num_download_attempts=5,
+            max_io_queue=2,
+        )
+
+        xfer_bytes = 0
+        def callback(n_bytes):
+            nonlocal xfer_bytes
+            xfer_bytes += n_bytes
+
+        bucket.upload_fileobj(reader, key, Config=config, Callback=callback)
+        return xfer_bytes
+
+    def download(self, path, writer):
+        bucket_name, key = self._parse_path(path)
+        bucket = self.s3.Bucket(bucket_name)
+
+        config = boto3.s3.transfer.TransferConfig(
+            max_concurrency=2,
+            num_download_attempts=5,
+            max_io_queue=2,
+        )
+
+        xfer_bytes = 0
+        def callback(n_bytes):
+            nonlocal xfer_bytes
+            xfer_bytes += n_bytes
+
+        bucket.download_fileobj(key, writer, Config=config, Callback=callback)
+
+        return xfer_bytes
 
     def listdir(self, path):
         """ returns all sub-names for the given key

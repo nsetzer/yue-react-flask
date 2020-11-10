@@ -45,6 +45,26 @@ class LocalFileSystemImpl(AbstractFileSystem):
     def open(self, path, mode):
         return open(path, mode)
 
+    def upload(self, reader, path):
+        xfer_bytes = 0
+        with self.open(path, "wb") as writer:
+            buf = reader.read(2048)
+            while buf:
+                writer.write(buf)
+                xfer_bytes += len(buf)
+                buf = reader.read(2048)
+        return xfer_bytes
+
+    def download(self, path, writer):
+        xfer_bytes = 0
+        with self.open(path, "rb") as reader:
+            buf = reader.read(2048)
+            while buf:
+                writer.write(buf)
+                xfer_bytes += len(buf)
+                buf = reader.read(2048)
+        return xfer_bytes
+
     def listdir(self, path):
         return os.listdir(path)
 
@@ -175,12 +195,31 @@ class MemoryFileSystemImpl(AbstractFileSystem):
             return f
         raise ValueError("Invalid mode: %s" % mode)
 
+    def upload(self, reader, path):
+        xfer_bytes = 0
+        with self.open(path, "wb") as writer:
+            buf = reader.read(2048)
+            while buf:
+                writer.write(buf)
+                xfer_bytes += len(buf)
+                buf = reader.read(2048)
+        return xfer_bytes
+
+    def download(self, path, writer):
+        xfer_bytes = 0
+        with self.open(path, "rb") as reader:
+            buf = reader.read(2048)
+            while buf:
+                writer.write(buf)
+                xfer_bytes += len(buf)
+                buf = reader.read(2048)
+        return xfer_bytes
+
     def _scandir_impl(self, path):
         visited = set()
         if not path.endswith("/"):
             path += self.impl.sep
         for fpath, (f, mtime) in MemoryFileSystemImpl._mem_store.items():
-            print(fpath)
             if fpath.startswith(path):
                 name = fpath.replace(path, "")
                 if '/' in name:
@@ -332,7 +371,6 @@ class FileSystem(object):
 
         yield directories before contants so that directories can be created
         """
-        print(src, dst_dir)
         _, name = self.split(src)
         tgt = self.join(dst_dir, name)
 
@@ -444,6 +482,10 @@ class FileSystem(object):
 
         return ext.lstrip(".").upper()
 
+    def upload(self, reader, path):
+        fs = self.getFileSystemForPath(path)
+        return fs.upload(reader, path)
+
 def main():
 
     fs = FileSystem()
@@ -451,7 +493,7 @@ def main():
     fs.open("mem://test/file.txt", "wb").close()
     fs.open("mem://test/folder/file.txt", "wb").close()
 
-    print(fs.listdir("mem://test"))
+    sys.stdout.write("%s\n" % fs.listdir("mem://test"))
 
 
 
