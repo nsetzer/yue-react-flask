@@ -255,6 +255,8 @@ class StorageDao(object):
         query = self.dbtables.FileSystemStorageTable.insert() \
             .values(data)
 
+        logging.info("insert query: %s", query)
+        logging.info("insert path: %s %s", fs_id, file_path)
         ex = None
         try:
             result = self.db.session.execute(query)
@@ -309,6 +311,8 @@ class StorageDao(object):
 
         item = self.selectFile(user_id, fs_id, file_path)
 
+        logging.info("upsert path: %s %s", fs_id, file_path)
+
         if item is None:
             return self.insertFile(user_id, fs_id, file_path, data, commit)
         else:
@@ -324,10 +328,32 @@ class StorageDao(object):
                      tab.c.file_path == file_path,
                      ))
 
-        self.db.session.execute(query)
+        result = self.db.session.execute(query)
+
+        logging.info("removed %d files", result.rowcount)
 
         if commit:
             self.db.session.commit()
+
+    def removeRecord(self, storage_path, commit=True):
+        """ remove a record by storage path
+
+        added to make deletion of song records easier.
+        assumes storage_path is globally unique, which
+        is not true for general files
+        """
+
+        tab = self.dbtables.FileSystemStorageTable
+        query = tab.delete() \
+            .where(tab.c.storage_path == storage_path)
+
+        result = self.db.session.execute(query)
+
+        logging.info("removed %d files", result.rowcount)
+
+        if commit:
+            self.db.session.commit()
+
 
     def moveFileLocation(self, user_id, fs_id, srcPath, dstPath, commit=True):
         """

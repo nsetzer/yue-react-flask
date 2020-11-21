@@ -439,6 +439,41 @@ class LibraryDao(object):
             if commit:
                 self.db.session.commit()
 
+    def removeSong(self, domain_id, song_id, commit=True):
+        """
+        remove the song meta data.
+        does not remove the song from s3
+        and does not remove the storage entry
+
+        """
+
+        self.removeSongUserData(song_id, commit)
+        self.removeSongData(domain_id, song_id, commit)
+
+    def removeSongData(self, domain_id, song_id, commit=True):
+
+        tab = self.dbtables.SongDataTable
+        query = tab.delete() \
+            .where(
+                and_(self.dbtables.SongDataTable.c.id == song_id,
+                     self.dbtables.SongDataTable.c.domain_id == domain_id))
+
+        self.db.session.execute(query)
+
+        if commit:
+            self.db.session.commit()
+
+    def removeSongUserData(self, song_id, commit=True):
+
+        tab = self.dbtables.SongUserDataTable
+        query = tab.delete() \
+            .where(self.dbtables.SongUserDataTable.c.song_id == song_id)
+
+        self.db.session.execute(query)
+
+        if commit:
+            self.db.session.commit()
+
     def incrementPlaycount(self, user_id, song_id, commit=True):
 
         tab = self.dbtables.SongUserDataTable
@@ -689,6 +724,7 @@ class LibraryDao(object):
         UserTable = self.dbtables.SongUserDataTable.c
 
         sql_rule = rule.psql() if self.db.kind() == "postgresql" else rule.sql()
+        logging.info("rule: %s" % sql_rule)
 
         if not showBanished:
             # remove entries that have either the blocked or banished bit set

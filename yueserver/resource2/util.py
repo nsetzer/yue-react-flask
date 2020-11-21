@@ -34,7 +34,7 @@ class _FileNotFoundError(ExceptionHandler):
 
         logging.exception(reason)
 
-        return Response(404, {"error": reason + str(ex)})
+        return Response(404, {}, {"error": reason + str(ex)})
 
 class _BackendException(ExceptionHandler):
 
@@ -50,7 +50,7 @@ class _BackendException(ExceptionHandler):
 
         logging.exception(reason)
 
-        return Response(ex.HTTP_STATUS, {"error": reason + str(ex)})
+        return Response(ex.HTTP_STATUS, {}, {"error": reason + str(ex)})
 
 class _ServiceException(ExceptionHandler):
 
@@ -66,7 +66,7 @@ class _ServiceException(ExceptionHandler):
 
         logging.exception(reason)
 
-        return Response(ex.HTTP_STATUS, {"error": reason + str(ex)})
+        return Response(ex.HTTP_STATUS, {}, {"error": reason + str(ex)})
 
 class _Exception(ExceptionHandler):
 
@@ -82,7 +82,7 @@ class _Exception(ExceptionHandler):
 
         logging.exception(reason)
 
-        return Response(500, {"error": reason + str(ex)})
+        return Response(500, {}, {"error": reason + str(ex)})
 
 def SecurityBasic(resource, scope, query, headers):
     token = headers.get(b"Authorization")

@@ -561,8 +561,59 @@ class Response(object):
         elif isinstance(self.payload, bytes):
             self.headers['Content-Length'] = str(len(self.payload))
 
+class Endpoint(object):
+    def __init__(self, path=None, long_name=None, doc=None, methods=None, params=None, headers=None, body=None, returns=None, auth=None, scope=None):
+        super(Endpoint, self).__init__()
+        self.path = path # str
+        self.long_name = long_name # str
+        self.doc = doc # str
+        self.methods = methods # list[str]
+        self.params = params # dict[str,???]
+        self.headers = headers # dict[str,???]
+        self.body = body
+        self.returns = returns
+        self.auth = auth
+        self.scope = scope
 
+    def set_path(self, path):
+        self.path = path
+        return self
 
+    def set_long_name(self, long_name):
+        self.long_name = long_name
+        return self
+
+    def set_doc(self, doc):
+        self.doc = doc
+        return self
+
+    def set_methods(self, methods):
+        self.methods = methods
+        return self
+
+    def set_params(self, params):
+        self.params = params
+        return self
+
+    def set_headers(self, headers):
+        self.headers = headers
+        return self
+
+    def set_body(self, body):
+        self.body = body
+        return self
+
+    def set_returns(self, returns):
+        self.returns = returns
+        return self
+
+    def set_auth(self, auth):
+        self.auth = auth
+        return self
+
+    def set_scope(self, scope):
+        self.scope = scope
+        return self
 
 class Router(object):
     def __init__(self):
@@ -583,12 +634,15 @@ class Router(object):
 
     def getPreflight(self, path, headers):
 
+        print("options on", path, headers)
+
+        origin = headers.get(b'Origin', b"*").decode("utf-8")
         method = headers.get(b'Access-Control-Request-Method', b"").decode("utf-8")
         allowed_headers = headers.get(b'Access-Control-Request-Headers', b"").decode("utf-8")
 
         allowed_headers = set([hdr.strip().title() for hdr in allowed_headers.split(",")])
         allowed_headers.add("Content-Type")
-        allowed_headers.add("Authentication")
+        #allowed_headers.add("Authentication")
         if "" in allowed_headers:
             allowed_headers.remove("")
 
@@ -597,11 +651,14 @@ class Router(object):
         response_headers = {}
 
         response_headers['Allow'] = ", ".join(options)
-        response_headers['Access-Control-Allow-Origin'] = "*"
+        #response_headers['Access-Control-Allow-Origin'] = "*"
+        response_headers['Access-Control-Allow-Origin'] = origin
         response_headers['Access-Control-Allow-Methods'] = ", ".join(options)
         response_headers['Access-Control-Allow-Headers'] = ", ".join(sorted(allowed_headers))
         response_headers['Access-Control-Max-Age'] = 86400
+        #response_headers['Access-Control-Allow-Credentials'] = "true"
 
+        print(response_headers)
         return response_headers
 
     def getOptions(self, path):
@@ -611,11 +668,14 @@ class Router(object):
 
         options = []
 
-        for method, table in self.route_table.items():
+        for method in ['GET', 'POST', 'PUT', 'DELETE']:
+            table = self.route_table[method]
+
             for re_ptn, tokens, resource, callback in table:
-                m = re_ptn.match(path)
-                if m:
+                if re_ptn.match(path):
+                    print("matched", re_ptn)
                     options.append(method)
+                    break
 
         if options:
             options.insert(0, 'OPTIONS')

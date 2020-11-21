@@ -92,6 +92,9 @@ class JsonUploader(object):
         self.root = root
         self.noexec = noexec
 
+        self.do_upload = False
+        self.do_create = True
+
         if bucket is not None:
             self.s3fs = S3Upload(bucket)
             self._upload_impl = self.s3fs.upload
@@ -151,19 +154,29 @@ class JsonUploader(object):
         song['equalizer'] = 100
 
         if static_path in remote_songs:
-            #logging.info("update: %s" % static_path)
-            song = remote_songs[static_path]
+
+            if not self.do_upload:
+                return
+
+            logging.info("update: %s" % static_path)
+            remote_song = remote_songs[static_path]
             self.updated += 1 if (aud_path in remote_files) else 0
 
             if self.noexec:
                 return
 
-            if not song['file_path']:
-                self._set_audio_path(song['id'], aud_path)
+            update_song = dict(song)
 
-            # song['id'] = remote_songs[static_path]['id']
-            # self._update_song(song)
+            #for key in ['artist', 'artist_key', 'album', 'title',
+            #            'composer', 'genre', 'year', 'comment', 'country', 'language',
+            #            'banished']:
+            #   update_song[key] = remote_song[key]
+
+            update_song['id'] = remote_song['id']
+            self._update_song(update_song)
         else:
+            if not self.do_create:
+                return
 
             if aud_path in remote_files:
                 logging.info("create: %s" % aud_path)
@@ -180,7 +193,8 @@ class JsonUploader(object):
 
             song_id = self._create_song(song)
 
-            self._set_audio_path(song_id, aud_path)
+            if song_id:
+                self._set_audio_path(song_id, aud_path)
 
     def _transcode_upload(self, local_path, remote_path, opts):
         if not local_path.endswith("ogg"):
@@ -231,17 +245,22 @@ class JsonUploader(object):
 
         response = self.client.library_create_song(json.dumps(remote_song))
         if response.status_code != 201:
-            print(response)
-            print(response.status_code)
-            print(remote_song)
-            print(response.text)
+            print("remote", remote_song)
+            print("response text", response.status_code, response.text)
+            return None
 
-        song_id = response.json()['result']
+
+        result = json.loads(response.text)
+        song_id = result['result']
+
+        #song_id = response.json()['result']
         return song_id
 
     def _update_song(self, song):
 
         remote_song = self._prepare_song_for_transport(song)
+
+        print(remote_song)
 
         response = self.client.library_update_song(json.dumps([remote_song]))
         if response.status_code != 200:
@@ -255,7 +274,7 @@ class JsonUploader(object):
             "root": self.root,
             "path": aud_path,
         }
-        print("set audio path", payload)
+        print("set audio path", song_id, payload)
         response = self.client.library_set_song_audio(song_id,
             json.dumps(payload))
         if response.status_code != 200:
@@ -277,7 +296,7 @@ def _fetch_files(client, root):
     files = set()
 
     page = 0
-    limit = 500
+    limit = 2000
     while True:
         logging.info("fetch files page:%d" % page)
         params = {'limit': limit, 'page': page}

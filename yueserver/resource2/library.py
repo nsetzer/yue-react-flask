@@ -159,7 +159,6 @@ class LibraryResource(Resource):
 
         return Response(201, {}, {"result": forest})
 
-
     @put("/api/library")
     @body(ArrayOpenApiBody(UpdateSongOpenApiBody()))
     @requires_auth("library_write")
@@ -168,8 +167,11 @@ class LibraryResource(Resource):
         # for song in g.body:
         #     self._correct_path(song)
 
+        error = 200
         try:
-            self.audio_service.updateSongs(request.current_user, g.body)
+            n = self.audio_service.updateSongs(request.current_user, request.body)
+
+            error = 200 if n==1 else 400
         except LibraryException as e:
             # logging.exception(e)
             return Response(400, {}, {"error": "%s" % e})
@@ -181,9 +183,24 @@ class LibraryResource(Resource):
     @requires_auth("library_write")
     def create_song(self, request):
 
-        song_id = self.audio_service.createSong(request.current_user, g.body)
+        song_id = self.audio_service.createSong(request.current_user, request.body)
 
         return Response(201, {}, {"result": song_id})
+
+    @delete("/api/library")
+    @param("song_id", type_=String())
+    @requires_auth("library_write")
+    def delete_song(self, request):
+
+        try:
+            success = self.audio_service.deleteSong(
+                request.current_user,
+                request.query.song_id)
+        except AudioServiceException as e:
+            success = False
+
+        return Response(200 if success else 404, {},
+            {"result": "OK" if success else "ERROR"})
 
     @get("/api/library/info")
     @requires_auth("library_read")
@@ -204,8 +221,11 @@ class LibraryResource(Resource):
     @get("/api/library/:song_id")
     @requires_auth("library_read")
     def get_song(self, request):
-        song = self.audio_service.findSongById(request.current_user, request.args.song_id)
-        return Response(200, {}, {"result": song})
+        try:
+            song = self.audio_service.findSongById(request.current_user, request.args.song_id)
+            return Response(200, {}, {"result": song})
+        except AudioServiceException as e:
+            return Response(404, {}, {"error": "No Song for id %s" % (request.args.song_id)})
 
     @get("/api/library/:song_id/audio")
     @param("mode", type_=audio_format)
@@ -249,9 +269,9 @@ class LibraryResource(Resource):
     def set_song_audio(self, request):
 
         self.audio_service.setSongFilePath(
-            request.current_user, request.args.song_id, g.body['root'], g.body['path'])
+            request.current_user, request.args.song_id, request.body['root'], request.body['path'])
 
-        return jsonify(result="OK"), 200
+        return Response(200, {}, {"result": "OK"})
 
     @get("/api/library/:song_id/art")
     @param("scale", type_=ImageScaleType().default('medium'))
@@ -282,7 +302,7 @@ class LibraryResource(Resource):
     def set_song_art(self, request):
 
         self.audio_service.setSongAlbumArtPath(
-            request.current_user, request.args.song_id, g.body['root'], g.body['path'])
+            request.current_user, request.args.song_id, request.body['root'], request.body['path'])
 
         return Response(200, {}, {"result": "OK"})
 
@@ -298,7 +318,7 @@ class LibraryResource(Resource):
 
         timestamp = timegm(time.localtime(time.time()))
 
-        records = [{'song_id': sid, 'timestamp': timestamp} for sid in g.body]
+        records = [{'song_id': sid, 'timestamp': timestamp} for sid in request.body]
 
         self.audio_service.updatePlayCount(request.current_user, records)
 
@@ -323,11 +343,13 @@ class LibraryResource(Resource):
             request.current_user, request.query.start, request.query.end,
             offset=offset, limit=request.query.page_size)
 
-        return jsonify({
+        obj = {
             "result": records,
             "page": request.query.page,
             "page_size": request.query.page_size
-        })
+        }
+        return Response(200, {}, obj)
+
         """
         get song history between a date range
         the start and end time can be an integer or ISO string.

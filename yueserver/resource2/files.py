@@ -27,6 +27,7 @@ from yueserver.framework2.openapi import Resource, \
     String, Integer, Boolean, URI, \
     BinaryStreamOpenApiBody, JsonOpenApiBody, OpenApiParameter, \
     EmptyBodyOpenApiBody, BinaryStreamResponseOpenApiBody, StringOpenApiBody, \
+    TextStreamOpenApiBody, \
     int_range
 
 from yueserver.framework2.security import requires_no_auth, requires_auth, \
@@ -107,6 +108,16 @@ class MoveFileOpenApiBody(JsonOpenApiBody):
 
         return model
 
+class NotesOpenApiBody(JsonOpenApiBody):
+
+    def model(self):
+
+        model = {
+        }
+
+        return model
+
+
 def validate_key(body):
     """read the response body and decode the encryption key
     validate that the key is well formed
@@ -142,7 +153,7 @@ def _list_path(request, service, root, path, list_=False, password=None, preview
 
         if list_:
             result = service.listSingleFile(request.current_user, root, path)
-            return Response(200, {}, {result: result})
+            return Response(200, {}, {"result": result})
         elif preview:
 
             # cache control for preview files
@@ -390,7 +401,7 @@ class FileSysResource(Resource):
         return Response(200, {}, {"result": {"id": fileId}})
 
     @get("/api/fs/:root/index")
-    @param("limit", type_=Integer().min(0).max(500).default(50))
+    @param("limit", type_=Integer().min(0).max(2500).default(50))
     @param("page", type_=Integer().min(0).default(0))
     @requires_auth("filesystem_read")
     @compressed
@@ -410,7 +421,7 @@ class FileSysResource(Resource):
         return Response(200, {}, obj)
 
     @get("/api/fs/:root/index/:resPath*")
-    @param("limit", type_=Integer().min(0).max(500).default(50))
+    @param("limit", type_=Integer().min(0).max(2500).default(50))
     @param("page", type_=Integer().min(0).default(0))
     @requires_auth("filesystem_read")
     @compressed
@@ -583,6 +594,89 @@ class FileSysResource(Resource):
         can be changed via change password api
         """
         self.filesys_service.setUserClientKey(request.current_user, request.body)
+        return Response(200, {}, {"result": "OK"})
+
+    @get("/api/fs/notes")
+    @param("root", type_=String().default("default"))
+    @param("base", type_=String().default('public/notes'))
+    @returns({200: NotesOpenApiBody()})
+    @requires_auth("filesystem_read")
+    def get_user_notes(self, request):
+        notes = self.filesys_service.getUserNotes(
+            request.current_user, request.query.root, dir_path=request.query.base)
+        # return note_id => note_info
+        print(notes)
+        payload = {note['file_name']: note for note in notes}
+        return Response(200, {}, {"result": payload})
+
+    @post("/api/fs/notes")
+    @param("root", type_=String().default("default"))
+    @param("base", type_=String().default('public/notes'))
+    @param("title", type_=String().required())
+    @param("crypt", type_=validate_mode_system)
+    @header("X-YUE-PASSWORD")
+    @body(TextStreamOpenApiBody())
+    @requires_auth("filesystem_write")
+    def create_user_note(self, request):
+
+        # todo return the note id / file id after saving the note
+
+        file_name = request.query.title.replace(" ", "_") + '.txt'
+        resPath = self.filesys_service.fs.join(request.query.base, file_name)
+
+        stream = request.body
+        if request.query.crypt in (CryptMode.server, CryptMode.system):
+            password = request.headers.get('X-YUE-PASSWORD', None)
+            stream = self.filesys_service.encryptStream(request.current_user,
+                password, stream, "r", request.query.crypt)
+        self.filesys_service.saveFile(
+            request.current_user, request.query.root, resPath, stream,
+            encryption=request.query.crypt)
+
+        return Response(200, {}, {"result": "OK"})
+
+    @get("/api/fs/notes/:note_id")
+    @param("root", type_=String().default("default"))
+    @param("base", type_=String().default('public/notes'))
+    @header("X-YUE-PASSWORD")
+    @requires_auth("filesystem_read")
+    def get_user_note_content(self, request):
+        password = request.headers.get('X-YUE-PASSWORD', None)
+        resPath = self.filesys_service.fs.join(request.query.base, note_id)
+        return _list_path(request, self.filesys_service, request.query.root, resPath,
+            False, password=password, preview=None)
+
+
+    @post("/api/fs/notes/:note_id")
+    @param("root", type_=String().default("default"))
+    @param("base", type_=String().default('public/notes'))
+    @param("crypt", type_=validate_mode_system)
+    @header("X-YUE-PASSWORD")
+    @body(TextStreamOpenApiBody())
+    @requires_auth("filesystem_write")
+    def set_user_note_content(self, request):
+        """convenience function wrapping file upload"""
+        resPath = self.filesys_service.fs.join(request.query.base, note_id)
+
+        stream = request.body
+        if request.query.crypt in (CryptMode.server, CryptMode.system):
+            password = request.headers.get('X-YUE-PASSWORD', None)
+            stream = self.filesys_service.encryptStream(request.current_user,
+                password, stream, "r", request.query.crypt)
+        self.filesys_service.saveFile(
+            request.current_user, request.query.root, resPath, stream,
+            encryption=request.query.crypt)
+
+        return Response(200, {}, {"result": "OK"})
+
+    @delete("/api/fs/notes/:note_id")
+    @param("root", type_=String().default("default"))
+    @param("base", type_=String().default('public/notes'))
+    @requires_auth("filesystem_write")
+    def delete_user_note(self, note_id):
+        """convenience function wrapping file delete"""
+        resPath = self.filesys_service.fs.join(request.query.base, note_id)
+        self.filesys_service.remove(request.current_user, request.query.root, resPath)
         return Response(200, {}, {"result": "OK"})
 
     @post("/.speedtest")

@@ -241,6 +241,7 @@ class AudioService(object):
             'id': song[Song.id],
             'title': song[Song.title],
             'length': song[Song.length],
+            'comment': song[Song.comment],
             }
             album['tracks'].append(songItem)
 
@@ -259,12 +260,15 @@ class AudioService(object):
         # TODO: check user role features
 
         for song in songs:
+
             song_id = song['id']
             del song['id']
             uid = user['id']
             did = user['domain_id']
             self.libraryDao.update(uid, did, song_id, song, commit=False)
         self.db.session.commit()
+
+        return len(songs)
 
     def createSong(self, user, song):
         """ create a new song record and return the song_id
@@ -279,6 +283,50 @@ class AudioService(object):
         song_id = self.libraryDao.insert(uid, did, song)
 
         return song_id
+
+    def _deleteSongFile(self, user, song_id, commit=False):
+
+        song = self._getSongInfo(user, song_id)
+
+        if not song:
+            return False
+
+        #fs_id = self.storageDao.getFilesystemId(
+        #        user['id'], user['role_id'], fs_name)
+
+        #root_path = self.storageDao.rootPath(
+        #        user['id'], user['role_id'], fs_name)
+
+        storage_path = song[Song.path]
+
+        # rel_path = storage_path[len(root_path):]
+
+        # TODO: remove album art?
+
+        try:
+            logging.info("removing storage path: %s", storage_path)
+            self.fs.remove(storage_path)
+        except FileNotFoundError as e:
+            logging.warning("removing storage path: %s: not found", storage_path)
+            pass
+
+        logging.info("removing dao record: %s", storage_path)
+        self.storageDao.removeRecord(storage_path, commit=commit)
+
+        return True
+
+    def deleteSong(self, user, song_id):
+
+        success = self._deleteSongFile(user, song_id, False)
+
+        if not success:
+            return False
+
+        self.libraryDao.removeSong(user['domain_id'], song_id, False)
+
+        self.db.session.commit()
+
+        return True
 
     def getDomainSongInfo(self, domain_id):
         """

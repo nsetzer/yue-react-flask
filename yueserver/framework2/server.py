@@ -42,11 +42,20 @@ from .server_core import readword, readline, Namespace, \
 
 class Protocol(object):
 
-    @staticmethod
-    def parse_prepare(request):
+    def handshake(self, request, sock):
+        if hasattr(sock, 'do_handshake'):
+            try:
+                sock.do_handshake()
+            except ssl.SSLError as err:
+                sock.close()
+                host, port = self.client_address
+                logging.error("%016X %s:%d %s" % (threading.get_ident(), host, port, err))
+                return
+
+    def prepare(self, request):
 
         request.method = b"n/a"
-        request.protocol = b"n/a"
+        request.transport_protocol = b"n/a"
         request.path = b"n/a"
         request.path_safe = b"n/a"
 
@@ -62,8 +71,7 @@ class Protocol(object):
 
         request.t0 = time.perf_counter()
 
-    @staticmethod
-    def parse_headers(request):
+    def parse_headers(self, request):
 
         # first line contains method, path, protocol
         request.method = readword(request.rfile, 16)
@@ -77,9 +85,9 @@ class Protocol(object):
         if not request.path:
             raise ProtocolError("invalid path")
 
-        request.protocol = readline(request.rfile, 16)
+        request.transport_protocol = readline(request.rfile, 16)
 
-        if request.protocol not in (b'HTTP/1.0', b'HTTP/1.1'):
+        if request.transport_protocol not in (b'HTTP/1.0', b'HTTP/1.1'):
             raise ProtocolError("invalid protocol")
 
         if b'<' in request.path:
@@ -153,8 +161,7 @@ class Protocol(object):
 
                 request.headers[k] = v.strip()
 
-    @staticmethod
-    def parse_body(request):
+    def parse_body(self, request):
 
         body = None
 
@@ -193,8 +200,64 @@ class Protocol(object):
 
         request.body = body
 
-    @staticmethod
-    def send_response(request, response):
+    def handle_request(self, request, router):
+
+        response = None
+
+        if request.method == b"OPTIONS":
+
+            if b'Access-Control-Request-Method' in request.headers:
+                headers = router.getPreflight(request.location.path, request.headers)
+                status = 200
+            else:
+                options = router.getOptions(request.location.path)
+                status = 204
+                headers = {}
+                headers['Allow'] = ", ".join(options)
+
+            response = Response(status, headers)
+
+        else:
+
+            result = router.getRoute(request.method.decode("utf-8"), request.location.path)
+            if result:
+                resource, callback, matches = result
+
+                request.args = matches
+
+                try:
+                    response = callback(resource, request)
+                except Exception as e:
+                    logging.exception("unhandled user exception")
+                    response = None
+
+            else:
+                logging.error("route not found ")
+                response = Response(404, {}, {'error': 'endpoint not found'})
+
+        if not response:
+            response = Response(500, {}, {'error':
+                'endpoint failed to return a response'})
+
+        return response
+
+    def post_request(self, request, response):
+
+        if "Access-Control-Allow-Origin" not in response.headers:
+            response.headers['Access-Control-Allow-Origin'] = "http://localhost:4100"
+
+        if "Access-Control-Allow-Credentials" not in response.headers:
+            response.headers['Access-Control-Allow-Credentials'] = "true"
+
+        #response.headers['Allow'] = "OPTIONS, GET, POST, PUT, DELETE"
+        #response.headers['Access-Control-Allow-Origin'] = "*"
+
+        #response.headers['Access-Control-Allow-Credentials'] = "true"
+        #response.headers['Access-Control-Allow-Methods'] = "OPTIONS, GET, POST, PUT, DELETE"
+        #response.headers['Access-Control-Allow-Headers'] = "Content-Type, Content-Length, Authorization"
+        #response.headers['Access-Control-Max-Age'] = 86400
+
+    def send_response(self, request, response):
 
         # parse headers:
         chunked = False
@@ -207,20 +270,20 @@ class Protocol(object):
 
         # send update
         elapsed = int((time.perf_counter() - request.t0) * 1000)
-        protocol = request.protocol.decode()
+        transport_protocol = request.transport_protocol.decode()
         method = request.method.decode()
         #path = request.path.decode()
         path = request.path_safe
         host, port = request.client_address
         logging.info("%016X %s:%d %s %3d %6d %-8s %s [%d]" % (
-            threading.get_ident(), host, port, protocol,
+            threading.get_ident(), host, port, transport_protocol,
             response.status, elapsed, method, path, content_length))
 
         wsock = request.request
 
         # send status
         status_str = responses[response.status].encode("utf-8")
-        resp_str = b"%s %d %s\n" % (request.protocol, response.status, status_str)
+        resp_str = b"%s %d %s\n" % (request.transport_protocol, response.status, status_str)
         wsock.sendall(resp_str)
 
         # send headers
@@ -275,63 +338,28 @@ class Protocol(object):
 
 class ThreadedTCPRequestHandler(socketserver.BaseRequestHandler):
     router = None
+    protocol = None
 
     def handle(self):
-        if hasattr(self.request, 'do_handshake'):
-            try:
-                self.request.do_handshake()
-            except ssl.SSLError as err:
-                self.request.close()
-                host, port = self.client_address
-                logging.error("%016X %s:%d %s" % (threading.get_ident(), host, port, err))
-                return
+
+        self.protocol.handshake(self, self.request)
 
         while True:
 
-            Protocol.parse_prepare(self)
-
             try:
-                Protocol.parse_headers(self)
+
+                self.protocol.prepare(self)
+
+                self.protocol.parse_headers(self)
+
                 # todo check security here, on fail close connection
-                Protocol.parse_body(self)
+                self.protocol.parse_body(self)
 
-                response = None
+                response = self.protocol.handle_request(self, self.router)
 
-                if self.method == b"OPTIONS":
+                self.protocol.post_request(self, response)
 
-                    if b'Access-Control-Request-Method' in self.headers:
-                        headers = self.router.getPreflight(self.location.path, self.headers)
-                        status = 200
-                    else:
-                        options = self.router.getOptions(self.location.path)
-                        status = 204
-                        headers = {}
-                        headers['Allow'] = ", ".join(options)
-
-                    response = Response(status, headers)
-
-                else:
-
-                    result = self.router.getRoute(self.method.decode("utf-8"), self.location.path)
-                    if result:
-                        resource, callback, matches = result
-
-                        self.args = matches
-
-                        try:
-                            response = callback(resource, self)
-                        except Exception as e:
-                            logging.exception("unhandled user exception")
-                            response = None
-
-                        if not response:
-                            response = Response(500, {}, {'error':
-                            'endpoint failed to return a response'})
-                    else:
-                        logging.error("route not found ")
-                        response = Response(404, {}, {'error': 'endpoint not found'})
-
-                Protocol.send_response(self, response)
+                self.protocol.send_response(self, response)
 
             except ssl.SSLError as e:
                 host, port = self.client_address
@@ -340,12 +368,14 @@ class ThreadedTCPRequestHandler(socketserver.BaseRequestHandler):
 
             except BrokenPipeError as e:
                 elapsed = int((time.perf_counter() - self.t0) * 1000)
-                protocol = self.protocol.decode()
+                transport_protocol = self.transport_protocol.decode()
                 method = self.method.decode()
                 #path = self.path.decode()
                 path = self.path_safe
                 host, port = self.client_address
-                logging.error("%016X %s:%d %s %-8s %s %s" % (threading.get_ident(), host, port, protocol, method, path, e))
+                logging.error("%016X %s:%d %s %-8s %s %s" % (
+                    threading.get_ident(), host, port, transport_protocol,
+                    method, path, e))
 
                 break
 
@@ -358,12 +388,14 @@ class ThreadedTCPRequestHandler(socketserver.BaseRequestHandler):
             except ProtocolError as e:
 
                 elapsed = int((time.perf_counter() - self.t0) * 1000)
-                protocol = self.protocol.decode()
+                transport_protocol = self.transport_protocol.decode()
                 method = self.method.decode()
                 #path = self.path.decode()
                 path = self.path_safe
                 host, port = self.client_address
-                logging.error("%016X %s:%d %s %-8s %s %s" % (threading.get_ident(), host, port, protocol, method, path, e))
+                logging.error("%016X %s:%d %s %-8s %s %s" % (
+                    threading.get_ident(), host, port, transport_protocol,
+                    method, path, e))
 
                 self.request.close()
                 break
@@ -372,18 +404,18 @@ class ThreadedTCPRequestHandler(socketserver.BaseRequestHandler):
                 self.request.close()
                 break
 
-def RequestHandlerFactory(_router):
+def RequestHandlerFactory(_router, _protocol):
 
     _log = logging.getLogger("server.request")
 
     class RequestHandler(ThreadedTCPRequestHandler):
         router = _router
+        protocol = _protocol
         log = _log
 
     return RequestHandler
 
 class TCPServer(socketserver.TCPServer):
-    """docstring for TCPServer"""
     allow_reuse_address = 1
 
     def __init__(self, server_address, RequestHandlerClass, bind_and_activate=True):
@@ -436,10 +468,11 @@ class ThreadedTCPServer(ThreadingMixIn, TCPServer):
     pass
 
 class Site(object):
-    def __init__(self, host):
+    def __init__(self, host, protocol=None):
         super(Site, self).__init__()
         self.host = host
         self.threads = []
+        self.protocol = Protocol() if protocol is None else protocol
 
     def listenTLS(self, router, port, certfile, keyfile, password=None):
 
@@ -447,7 +480,7 @@ class Site(object):
             raise FileNotFoundError(certfile)
         if not os.path.exists(keyfile):
             raise FileNotFoundError(keyfile)
-        factory = RequestHandlerFactory(router)
+        factory = RequestHandlerFactory(router, self.protocol)
         server = ThreadedTCPServer((self.host, port), factory)
         server.router = router
         server.setCert(certfile, keyfile, password)
@@ -458,7 +491,7 @@ class Site(object):
         self.threads.append(server_thread)
 
     def listenTCP(self, router, port):
-        factory = RequestHandlerFactory(router)
+        factory = RequestHandlerFactory(router, self.protocol)
         server = ThreadedTCPServer((self.host, port), factory)
         server.router = router
         server_thread = threading.Thread(target=server.serve_forever)

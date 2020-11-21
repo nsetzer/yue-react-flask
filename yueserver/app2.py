@@ -1,5 +1,11 @@
 """
 
+2020-11-21 02:57:26,338 INFO     root :server.send_response:280:
+00007FB8EF0FE700 64.9.251.139:29414 HTTP/1.1 200    551 GET
+
+/api/library/5a9dc789-cd7f-46a0-af18-fd1d11c28ce4/audio [4458]
+M/4458c2360cf4d6c76483c13a023fe900/0bd45a7468044ab1/625cd18a60356f0e_6724.ogg
+
 GET, POST, HEAD, PUT, DELETE, TRACE, OPTIONS and CONNECT
 
 HEAD : get but return headers only
@@ -55,6 +61,13 @@ botocore.exceptions.ClientError: An error occurred (EntityTooSmall) when calling
 2020-11-08 22:08:10,117 INFO     root :server.send_response:208: 00007F7DE3FFF700 74.120.14.35:39802 HTTP/1.1 200     19 GET      / [804]
 2020-11-08 23:14:41,469 INFO     root :server.send_response:208: 00007F7DE3FFF700 162.243.128.166:34180 HTTP/1.1 200     66 GET      /owa/auth/logon.aspx [804]
 2020-11-09 00:41:17,122 INFO     root :server.send_response:208: 00007F7DE3FFF700 74.82.47.3:55106 HTTP/1.1 200    641 GET      / [804]
+2020-11-08 23:14:41,469 INFO     root :server.send_response:208: 00007F7DE3FFF700 162.243.128.166:34180 HTTP/1.1 200     66 GET      /owa/auth/logon.aspx [804]
+2020-11-09 01:47:45,706 INFO     root :server.send_response:208: 00007F7DE3FFF700 188.166.65.216:33374 HTTP/1.1 200     80 GET      /system_api.php [804]
+2020-11-09 01:47:46,562 INFO     root :server.send_response:208: 00007F7DE37FE700 188.166.65.216:33726 HTTP/1.1 200     80 GET      /c/version.js [804]
+2020-11-09 01:47:47,414 INFO     root :server.send_response:208: 00007F7DE3FFF700 188.166.65.216:34044 HTTP/1.1 200     80 GET      /streaming/clients_live.php [804]
+2020-11-09 01:47:48,266 INFO     root :server.send_response:208: 00007F7DE37FE700 188.166.65.216:34392 HTTP/1.1 200     80 GET      /stalker_portal/c/version.js [804]
+2020-11-09 01:47:49,122 INFO     root :server.send_response:208: 00007F7DE3FFF700 188.166.65.216:34700 HTTP/1.1 200     80 GET      /client_area/ [804]
+2020-11-09 01:47:49,972 INFO     root :server.send_response:208: 00007F7DE37FE700 188.166.65.216:35018 HTTP/1.1 200     80 GET      /stalker_portal/c/ [804]
 
 """
 import os
