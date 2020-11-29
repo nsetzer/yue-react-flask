@@ -26,6 +26,22 @@ export function get_json(url, parameters) {
     })
 }
 
+export function post(url, payload, parameters) {
+
+    if (parameters === undefined) {
+        parameters = {}
+    }
+
+    if (parameters.headers === undefined) {
+        parameters.headers = {}
+    }
+
+    parameters.method = "POST"
+    parameters.body = payload
+
+    return fetch(url, parameters).then((response) => {return response.json()})
+}
+
 export function post_json(url, payload, parameters) {
 
     if (parameters === undefined) {

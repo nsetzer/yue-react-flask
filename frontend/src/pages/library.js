@@ -19,6 +19,22 @@ import module audio
 import module store
 import module router
 
+class SearchBannishedCheckBox extends components.CheckBoxElement {
+
+    // TODO: this is a framework bug: inherited signals are not bound
+    onClick(event) {
+        this.attrs.callback()
+    }
+
+    getStateIcons() {
+        return [
+            resources.svg.checkbox_unchecked,
+            resources.svg.checkbox_checked,
+        ];
+    }
+
+}
+
 class SearchModeCheckBox extends components.CheckBoxElement {
 
     // TODO: this is a framework bug: inherited signals are not bound
@@ -150,6 +166,11 @@ class Header extends components.NavHeader {
             this.addRowElement(0, new components.HSpacer("1em"));
         }
 
+        this.attrs.show_banished = new SearchBannishedCheckBox(this.handleCheckShowBannished.bind(this), 0);
+        this.addRowElement(0, new components.HSpacer("1em"));
+        this.addRowElement(0, this.attrs.show_banished);
+        this.addRowElement(0, new components.HSpacer("1em"));
+
         this.addRowAction(0, resources.svg['search'], ()=>{
             this.attrs.parent.search(this.attrs.txtInput.props.value)
         })
@@ -184,8 +205,17 @@ class Header extends components.NavHeader {
         this.attrs.chk.setCheckState((this.attrs.chk.attrs.checkState + 1)%3)
     }
 
+    handleCheckShowBannished() {
+        this.attrs.show_banished.setCheckState((this.attrs.show_banished.attrs.checkState + 1)%2)
+    }
+
     syncState() {
         return this.attrs.chk.attrs.checkState;
+    }
+
+
+    showBanished() {
+        return this.attrs.show_banished.attrs.checkState;
     }
 }
 
@@ -467,16 +497,20 @@ export class LibraryPage extends DomElement {
         router.navigate(router.routes.userLibraryList({}, {query: text}))
 
         this.attrs.search_promise = new Promise((accept, reject) => {
+
+            let showBanished = this.attrs.header.showBanished()===1; //to bool
+            console.log(showBanished)
+
             if (daedalus.platform.isAndroid) {
 
                 let syncState = this.attrs.header.syncState();
-                let payload = AndroidNativeAudio.buildForest(text, syncState);
+                let payload = AndroidNativeAudio.buildForest(text, syncState, showBanished);
                 let forest = JSON.parse(payload);
 
                 this.attrs.view.setForest(forest);
 
             } else {
-                api.librarySearchForest(text)
+                api.librarySearchForest(text, showBanished)
                     .then(result => {
                         this.attrs.view.setForest(result.result);
                     })
@@ -597,6 +631,16 @@ class SyncHeader extends components.NavHeader {
     syncState() {
         return this.attrs.chk.attrs.checkState;
     }
+
+}
+
+class SyncFooter extends components.NavFooter {
+    constructor(parent) {
+        super();
+
+        this.attrs.parent = parent
+
+    }
 }
 
 export class SyncPage extends DomElement {
@@ -605,6 +649,7 @@ export class SyncPage extends DomElement {
 
         this.attrs = {
             header: new SyncHeader(this),
+            footer: new SyncFooter(this),
             view: new LibraryTreeView(this, components.TreeItem.SELECTION_MODE_CHECK),
             more: new components.MoreMenu(this.handleHideFileMore.bind(this)),
             more_context_item: null,
@@ -617,6 +662,9 @@ export class SyncPage extends DomElement {
         this.appendChild(this.attrs.more)
         this.appendChild(this.attrs.header)
         this.appendChild(this.attrs.view)
+        this.appendChild(this.attrs.footer)
+
+        this.attrs.footer_lbl1 = this.attrs.footer.addText("")
 
     }
 
@@ -636,6 +684,11 @@ export class SyncPage extends DomElement {
 
             registerAndroidEvent('onsyncprogress', this.handleSyncProgress.bind(this))
             registerAndroidEvent('onsynccomplete', this.handleSyncComplete.bind(this))
+
+            registerAndroidEvent('onresume', this.handleResume.bind(this))
+
+            this.updateInfo()
+
         }
 
     }
@@ -646,6 +699,11 @@ export class SyncPage extends DomElement {
             registerAndroidEvent('onfetchprogress', ()=>{})
             registerAndroidEvent('onfetchcomplete', ()=>{})
             registerAndroidEvent('onsyncstatusupdated', ()=>{})
+
+            registerAndroidEvent('onsyncprogress', ()=>{})
+            registerAndroidEvent('onsynccomplete', ()=>{})
+
+            registerAndroidEvent('onresume', ()=>{})
         }
     }
 
@@ -657,16 +715,19 @@ export class SyncPage extends DomElement {
         this.attrs.view.reset()
 
         this.attrs.search_promise = new Promise((accept, reject) => {
+
             if (daedalus.platform.isAndroid) {
 
                 let syncState = this.attrs.header.syncState();
-                let payload = AndroidNativeAudio.buildForest(text, syncState);
+                let showBanished = false;
+                let payload = AndroidNativeAudio.buildForest(text, syncState, showBanished);
                 let forest = JSON.parse(payload);
 
                 this.attrs.view.setForest(forest);
 
             } else {
-                api.librarySearchForest(text)
+                let showBanished = false;
+                api.librarySearchForest(text, showBanished)
                     .then(result => {
                         this.attrs.view.setForest(result.result);
                     })
@@ -716,6 +777,8 @@ export class SyncPage extends DomElement {
 
     handleFetchComplete(payload) {
         console.log("fetch complete: " + JSON.stringify(payload))
+
+        this.updateInfo()
     }
 
     handleSyncProgress(payload) {
@@ -725,6 +788,8 @@ export class SyncPage extends DomElement {
     handleSyncComplete(payload) {
         console.log("fetch complete: " + JSON.stringify(payload))
         this.attrs.header.updateStatus("sync complete");
+
+        this.updateInfo()
     }
 
 
@@ -732,8 +797,23 @@ export class SyncPage extends DomElement {
         this.search(this.attrs.header.searchText())
     }
 
+    handleResume(payload) {
+        console.log("app resumed from js")
+        if (daedalus.platform.isAndroid) {
+            // TODO: only query when onResume and the JS thinks its still in progress
+            AndroidNativeAudio.syncQueryStatus();
+        }
+    }
+
     showMore(item) {
         console.log("on show more clicked");
+    }
+
+    updateInfo() {
+        if (daedalus.platform.isAndroid) {
+            const info = JSON.parse(AndroidNativeAudio.getSyncInfo())
+            this.attrs.footer_lbl1.setText(`records: ${info.record_count} synced: ${info.synced_tracks}`)
+        }
     }
 }
 
@@ -792,7 +872,7 @@ class SavedSearchList extends DomElement {
 
 export class SavedSearchPage extends DomElement {
     constructor() {
-        super("div", {className: style.SavedSearchPage}, []);
+        super("div", {className: style.savedSearchPage}, []);
 
         this.attrs = {
             device: audio.AudioDevice.instance(),

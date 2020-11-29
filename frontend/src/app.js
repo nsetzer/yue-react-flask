@@ -76,6 +76,8 @@ function buildRouter(parent, container) {
     rt.addAuthRoute(u.userFs, (cbk)=>parent.handleRoute(cbk, pages.FileSystemPage), '/login');
     rt.addAuthRoute(u.userPlaylist, (cbk)=>parent.handleRoute(cbk, pages.PlaylistPage), '/login');
     rt.addAuthRoute(u.userSettings, (cbk)=>parent.handleRoute(cbk, pages.SettingsPage), '/login');
+    rt.addAuthRoute(u.userNotesContent, (cbk)=>parent.handleRoute(cbk, pages.NotesPage), '/login');
+    rt.addAuthRoute(u.userNotesList, (cbk)=>parent.handleRoute(cbk, pages.NotesPage), '/login');
     rt.addAuthRoute(u.userLibraryList, (cbk)=>parent.handleRoute(cbk, pages.LibraryPage), '/login');
     rt.addAuthRoute(u.userLibrarySync, (cbk)=>parent.handleRoute(cbk, pages.SyncPage), '/login');
     rt.addAuthRoute(u.userLibrarySavedSearch, (cbk)=>parent.handleRoute(cbk, pages.SavedSearchPage), '/login');
@@ -113,6 +115,19 @@ export class Root extends DomElement {
 
     }
 
+    doNavigate(res_path) {
+        //if (daedalus.platform.isAndroid) {
+        if (!this.attrs.nav.isFixed()) {
+            //this.attrs.router.clear()
+            // call on a timeout to let the menu animation complete smoothly
+            // animation is .5s as defined in the NavMenu style
+            setTimeout(()=>{history.pushState({}, "", res_path);}, 500);
+        } else {
+            history.pushState({}, "", res_path);
+        }
+        this.attrs.nav.hide();
+    }
+
     buildRouter() {
 
         this.attrs.router = buildRouter(this, this.attrs.container)
@@ -122,18 +137,24 @@ export class Root extends DomElement {
         store.globals.showMenu = () => {this.attrs.nav.show();}
 
         this.attrs.nav.addAction(resources.svg.music_note, "Playlist", ()=>{
-            history.pushState({}, "", "/u/playlist");
-            this.attrs.nav.hide();
+
+            this.doNavigate("/u/playlist")
+            //history.pushState({}, "", "/u/playlist");
+
+            //this.attrs.router.clear()
+            //setTimeout(()=>{history.pushState({}, "", "/u/playlist");}, 500);
+
+            //this.attrs.nav.hide();
         });
 
         this.attrs.nav.addAction(resources.svg.playlist, "Library", ()=>{
-            history.pushState({}, "", "/u/library/list");
-            this.attrs.nav.hide();
+            this.doNavigate("/u/library/list")
+            //history.pushState({}, "", "/u/library/list");
+            //this.attrs.nav.hide();
         });
 
         this.attrs.nav.addSubAction(resources.svg.bolt, "Dynamic Playlist", ()=>{
-            history.pushState({}, "", "/u/library/saved");
-            this.attrs.nav.hide();
+            this.doNavigate("/u/library/saved")
         });
 
         //this.attrs.nav.addAction(resources.svg.externalmedia, "Radio", ()=>{
@@ -143,34 +164,32 @@ export class Root extends DomElement {
 
         if (daedalus.platform.isAndroid) {
             this.attrs.nav.addSubAction(resources.svg.download, "Sync", ()=>{
-                history.pushState({}, "", "/u/library/sync");
-                this.attrs.nav.hide();
+                this.doNavigate("/u/library/sync")
             });
         }
 
         this.attrs.nav.addAction(resources.svg.documents, "Storage", ()=>{
-            history.pushState({}, "", "/u/storage/list");
-            this.attrs.nav.hide();
+            this.doNavigate("/u/storage/list")
         });
 
         this.attrs.nav.addSubAction(resources.svg.note, "Notes", ()=>{
-            this.attrs.nav.hide();
+            this.doNavigate("/u/notes")
         });
 
         if (daedalus.platform.isAndroid) {
             this.attrs.nav.addAction(resources.svg.documents, "File System", ()=>{
-                history.pushState({}, "", "/u/fs");
-                this.attrs.nav.hide();
+                this.doNavigate("/u/fs")
             });
         }
 
         this.attrs.nav.addAction(resources.svg.settings, "Settings", ()=>{
-            history.pushState({}, "", "/u/settings");
-            this.attrs.nav.hide();
+            this.doNavigate("/u/settings")
         });
 
         this.attrs.nav.addAction(resources.svg.logout, "Log Out", ()=>{
             api.clearUserToken();
+            // clear the cache of content
+            this.attrs.page_cache = {}
             history.pushState({}, "", "/")
         });
 
@@ -226,16 +245,19 @@ export class Root extends DomElement {
                 .then((data) => {
                     if (!data.token_is_valid) {
                         api.clearUserToken()
-
                     }
                     this.buildRouter()
                 })
-                .catch((err) => {console.error(err)})
+                .catch((err) => {
+                    console.error(err)
+                    if (daedalus.platform.isAndroid) {
+                        this.buildRouter()
+                    }
+                })
         } else {
             this.buildRouter()
         }
     }
-
 
     handleResize(event) {
         this.toggleShowMenuFixed();

@@ -103,6 +103,11 @@ const style = {
         width: "calc(100%-2em)",
     }),
 
+    footerText: StyleSheet({
+        height: "32px",
+        line-height: "32px", // vertical center
+    }),
+
 
     toolbar2Start: StyleSheet({
         'justify-content': 'flex-start',
@@ -141,8 +146,9 @@ export class NavHeader extends DomElement {
     }
 
     addAction(icon, callback) {
-        this.attrs.toolbarInner.appendChild(
-            new SvgButtonElement(icon, callback))
+        const child = new SvgButtonElement(icon, callback)
+        this.attrs.toolbarInner.appendChild(child)
+        return child;
     }
 
     addRow(center=false) {
@@ -193,8 +199,20 @@ export class NavFooter extends DomElement {
     }
 
     addAction(icon, callback) {
+        const child = new SvgButtonElement(icon, callback)
+        this.attrs.toolbarInner.appendChild(child)
+        return child;
+    }
+
+    addText(text) {
+
+        const child = new TextElement(text)
         this.attrs.toolbarInner.appendChild(
-            new SvgButtonElement(icon, callback))
+            new DomElement("div",
+                {className: style.footerText},
+                [child])
+            );
+        return child;
     }
 
 }

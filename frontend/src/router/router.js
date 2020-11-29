@@ -30,6 +30,8 @@ export const route_urls = {
     userFs: "/u/fs/:path*",
     userPlaylist: "/u/playlist",
     userSettings: "/u/settings",
+    userNotesContent: "/u/notes/:noteId",
+    userNotesList: "/u/notes",
     userLibraryList: "/u/library/list",
     userLibrarySync: "/u/library/sync",
     userLibrarySavedSearch: "/u/library/saved",

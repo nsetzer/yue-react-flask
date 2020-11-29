@@ -104,6 +104,38 @@ export function fsPublicUriInfo(uid, name) {
     return api.requests.get_json(url);
 }
 
+export function fsNoteList(root, base) {
+    const params = daedalus.util.serializeParameters({root, base})
+    const url = env.baseUrl + '/api/fs/notes' + params;
+    const cfg = getAuthConfig()
+    cfg.headers['Content-Type'] = "application/json"
+    return api.requests.get_json(url, cfg);
+}
+
+export function fsNoteCreate(root, base, title, content, crypt, password) {
+    const params = daedalus.util.serializeParameters({root, base, title, crypt})
+    const url = env.baseUrl + '/api/fs/notes' + params;
+    const cfg = getAuthConfig()
+    cfg.headers['X-YUE-PASSWORD'] = password
+    return api.requests.post(url, content, cfg);
+}
+
+export function fsNoteGetContent(root, base, note_id, crypt, password) {
+    const params = daedalus.util.serializeParameters({root, base, crypt})
+    const url = env.baseUrl + '/api/fs/notes/' + note_id + params;
+    const cfg = getAuthConfig()
+    cfg.headers['X-YUE-PASSWORD'] = password
+    return api.requests.get_text(url, cfg);
+}
+
+export function fsNoteSetContent(root, base, note_id, crypt, password) {
+    const params = daedalus.util.serializeParameters({root, base, crypt})
+    const url = env.baseUrl + '/api/fs/notes/' + note_id + params;
+    const cfg = getAuthConfig()
+    cfg.headers['X-YUE-PASSWORD'] = password
+    return api.requests.post(url, content, cfg);
+}
+
 export function queueGetQueue() {
     const url = env.baseUrl + '/api/queue';
     const cfg = getAuthConfig()
@@ -137,8 +169,8 @@ export function librarySongAudioUrl(songId) {
     return url + params
 }
 
-export function librarySearchForest(query) {
-    const params = daedalus.util.serializeParameters({query})
+export function librarySearchForest(query, showBanished=false) {
+    const params = daedalus.util.serializeParameters({query, showBanished})
     const url = env.baseUrl + '/api/library/forest' + params;
     const cfg = getAuthConfig()
     return api.requests.get_json(url, cfg);

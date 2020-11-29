@@ -26,6 +26,12 @@ export class SvgElement extends DomElement {
     onError(error) {
         console.warn("error loading: ", this.props.src, JSON.stringify(error))
     }
+
+    /*
+    setIcon(url) {
+        this.updateProps({src: url})
+    }
+    */
 }
 
 export class SvgButtonElement extends SvgElement {

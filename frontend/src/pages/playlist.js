@@ -274,22 +274,25 @@ class SongItem extends DomElement {
         }
     }
 
-    updateActive(id) {
-        if (id === undefined) {
-            console.error("err undef")
-            return;
-        }
-        const active = id === this.attrs.song.id
+    updateActive(active) {
+        //if (id === undefined) {
+        //    console.error("err undef")
+        //    return;
+        //}
+        //const active = id === this.attrs.song.id
         if (this.attrs.active != active) {
             this.attrs.active = active
             if (active === true) {
                 this.attrs.txt1.setText((this.attrs.index+1) + ". *** " + this.attrs.song.title)
                 this.addClassName(style.songItemActive)
+                return ">T"
             } else {
                 this.removeClassName(style.songItemActive)
                 this.attrs.txt1.setText((this.attrs.index+1) + ". " + this.attrs.song.title)
+                return ">F"
             }
         }
+        return ">S"
     }
 
     onTouchStart(event) {
@@ -386,7 +389,6 @@ class SongItem extends DomElement {
         event.stopPropagation()
 
     }
-
 }
 
 class ProgressBarTrack extends DomElement {
@@ -564,7 +566,7 @@ class Header extends components.NavHeader {
         this.addAction(resources.svg['media_prev'], ()=>{
             audio.AudioDevice.instance().prev()
         })
-        this.addAction(resources.svg['media_play'], ()=>{
+        this.attrs.act_play_pause = this.addAction(resources.svg['media_play'], ()=>{
             audio.AudioDevice.instance().togglePlayPause()
         })
         this.addAction(resources.svg['media_next'], ()=>{
@@ -627,6 +629,7 @@ class Header extends components.NavHeader {
             this.attrs.txt_SongTitle.setText("Select A Song")
             this.attrs.txt_SongTitle.setText("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
         } else {
+            console.log(`set song: ${song.artist + " - " + song.title}`)
             this.attrs.txt_SongTitle.setText(song.artist + " - " + song.title)
         }
     }
@@ -648,6 +651,12 @@ class Header extends components.NavHeader {
 
     setStatus(status) {
         this.attrs.txt_SongStatus.setText(status)
+
+        if (status === "playing") {
+            this.attrs.act_play_pause.setUrl(resources.svg['media_pause'])
+        } else {
+            this.attrs.act_play_pause.setUrl(resources.svg['media_play'])
+        }
     }
 
 }
@@ -673,6 +682,7 @@ class SongList extends daedalus.DraggableList {
         this.attrs.swipeConfig = SWIPE_RIGHT;
 
     }
+
     updateModel(indexStart, indexEnd) {
         super.updateModel(indexStart, indexEnd);
 
@@ -911,6 +921,7 @@ export class PlaylistPage extends DomElement {
             container: new SongList(),
             padding1: new DomElement("div", {className: style.padding1}, []),
             padding2: new DomElement("div", {className: style.padding2}, []),
+            currentIndex: -1,
         }
 
         this.attrs.container.setPlaceholderClassName(style.songItemPlaceholder)
@@ -930,13 +941,25 @@ export class PlaylistPage extends DomElement {
         this.attrs.device.connectView(this)
 
         if (this.attrs.device.queueLength()==0) {
+            console.log(`playlist mounted. reload queue`)
             this.attrs.device.queueLoad()
         } else {
-            console.log("update")
+            //this.attrs.device.queueLoad()
+            console.log(`playlist mounted. current_index: ${this.attrs.device.current_index}`)
+
+            const song = this.attrs.device.currentSong()
+
+            this.attrs.header.setSong(song)
             this.handleAudioQueueChanged(this.attrs.device.queue)
-            this.handleAudioSongChanged(this.attrs.device.current_song)
+            // or
+            //this.handleAudioSongChanged({...song, index: this.attrs.device.current_index})
+
+            console.log(`playlist mount complete`)
         }
 
+        if (daedalus.platform.isAndroid) {
+            registerAndroidEvent('onresume', this.handleResume.bind(this))
+        }
 
     }
 
@@ -944,6 +967,10 @@ export class PlaylistPage extends DomElement {
         console.log("dismount playlist view")
 
         this.attrs.device.disconnectView(this)
+
+        if (daedalus.platform.isAndroid) {
+            registerAndroidEvent('onresume', ()=>{})
+        }
     }
 
     handleAudioPlay(event) {
@@ -991,9 +1018,16 @@ export class PlaylistPage extends DomElement {
             if (!song.id) {
                 this.attrs.header.setStatus("load error: invalid id")
             } else {
+
+                this.attrs.currentIndex = song.index;
+
+                //this.handleAudioQueueChanged(this.attrs.device.queue)
+
                 this.attrs.header.setStatus("pending")
-                this.attrs.container.children.forEach(child => {
-                    child.updateActive(song.id)
+                this.attrs.container.children.forEach((child,index) => {
+                    //child.updateActive(index===song.index)
+                    child.updateActive(index===song.index)
+                    //console.log(`set active: ${index}::${song.index}::${index===song.index}::${rv}`)
                 })
 
                 this.attrs.header.setTime(0, 0)
@@ -1006,17 +1040,11 @@ export class PlaylistPage extends DomElement {
 
     handleAudioQueueChanged(songList) {
 
-        // TODO: better algorithm
-        //  first scan through all existing children
-        //  and replace items where the song id does not match
-        //  then either remove additional items greater than
-        //  the length of the new list or append items from the
-        //  new list
-
         //this.attrs.container.removeChildren()
-        console.log("handleAudioQueueChanged")
-
         const current_id = audio.AudioDevice.instance().currentSongId();
+        const current_index = audio.AudioDevice.instance().currentSongIndex();
+
+        console.log(`handleAudioQueueChanged: ${this.attrs.device.current_index+1}/${this.attrs.device.queue.length}::${current_id}`)
 
         let miss = 0;
         let hit = 0;
@@ -1045,7 +1073,10 @@ export class PlaylistPage extends DomElement {
                 containerList[index] = item
             }
 
-            item.updateActive(current_id)
+            //item.updateActive(current_id)
+            item.updateActive(index===current_index)
+            //console.log(`set active: ${index}::${current_index}::${index===current_index}::${rv}`)
+
 
             // if too many are being replaced
             //if (miss > .3 * containerList.length) {
@@ -1065,7 +1096,9 @@ export class PlaylistPage extends DomElement {
         for (; index < songList.length; index++) {
             item = new SongItem(this.attrs.container, index, songList[index])
             containerList.push(item)
-            item.updateActive(current_id)
+            //item.updateActive(current_id)
+            item.updateActive(index===current_index)
+            //console.log(`set active: ${index}::${current_index}::${index===current_index}::${rv}`)
             miss += 1
         }
 
@@ -1074,7 +1107,9 @@ export class PlaylistPage extends DomElement {
         }
 
         console.log("miss rate", hit, miss, del)
+    }
 
-
+    handleResume() {
+        console.log("on app resume")
     }
  }

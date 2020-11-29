@@ -272,6 +272,10 @@ export class NavMenu extends DomElement {
         this.attrs.fixed = fixed
     }
 
+    isFixed() {
+        return this.attrs.fixed
+    }
+
     toggle() {
         if (this.hasClassName(style.navMenuShadowShow)) {
             this.hide()

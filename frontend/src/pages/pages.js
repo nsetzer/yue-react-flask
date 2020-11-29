@@ -3,6 +3,7 @@
 include './landing.js'
 include './login.js'
 include './storage.js'
+include './notes.js'
 include './playlist.js'
 include './settings.js'
 include './library.js'

@@ -191,6 +191,7 @@ function mapSongToObj(song) {
         id: song.id,
     }
 }
+
 class NativeDeviceImpl {
 
     constructor(device) {
@@ -211,7 +212,6 @@ class NativeDeviceImpl {
 
         this._currentTime = 0
         this._duration = 0
-
     }
 
     setQueue(queue) {
@@ -319,7 +319,10 @@ class NativeDeviceImpl {
     }
 
     onerror(payload) {
-
+        // error payload is not standardized
+        // it may be an empty object
+        // on android, it may contain 'what' and 'extra'
+        // which are platform dependent integers
     }
 
     ontimeupdate(payload) {
@@ -327,6 +330,9 @@ class NativeDeviceImpl {
         // on android when the ui is not active updates are not processed/
         // assume the queue is in sync, and update the ui whenever a time
         // update occurs and we detect that the frontend data is out of date.
+
+        //console.log(`audio impl: time update: ${payload.currentIndex}/${this.device.current_index}`)
+
         if (payload.currentIndex != this.device.current_index) {
             console.error("detected out of date information");
             this.device.current_index = payload.currentIndex;
@@ -341,7 +347,8 @@ class NativeDeviceImpl {
 
         this.device._sendEvent('handleAudioTimeUpdate', {
             currentTime: this._currentTime,
-            duration: this._duration
+            duration: this._duration,
+            currentIndex: this.device.current_index
         })
     }
 
@@ -349,7 +356,9 @@ class NativeDeviceImpl {
 
         const index = payload.index;
 
-        this.device._sendEvent('handleAudioSongChanged', this.device.queue[index]);
+        this.device.current_song = this.device.queue[index]
+
+        this.device._sendEvent('handleAudioSongChanged', {...this.device.current_song, index});
     }
 
 }
@@ -360,7 +369,7 @@ export class AudioDevice {
     constructor() {
         this.connected_elements = [];
         this.current_index = -1;
-        this.current_song = null;
+        this.current_song = null; // deprecated
         this.queue = []
 
         this.impl = null;
@@ -439,7 +448,6 @@ export class AudioDevice {
             this.impl.updateQueue(this.current_index, this.queue)
             this._sendEvent('handleAudioQueueChanged', this.queue)
         }
-
     }
 
     queueMoveSongDown(index) {
@@ -471,7 +479,6 @@ export class AudioDevice {
         }
         this.impl.updateQueue(this.current_index, this.queue)
         this._sendEvent('handleAudioQueueChanged', this.queue)
-
     }
 
     queuePlayNext(song) {
@@ -505,7 +512,7 @@ export class AudioDevice {
             } else if (index == this.current_index) {
                 this.pause();
                 this.current_song = this.queue[index];
-                this._sendEvent('handleAudioSongChanged', this.queue[index]);
+                this._sendEvent('handleAudioSongChanged', {...this.queue[index], index});
             } else if (index < this.current_index) {
                 this.current_index -= 1;
                 this.current_song = this.queue[index];
@@ -576,10 +583,22 @@ export class AudioDevice {
         }
     }
 
+    currentSongIndex() {
+        return this.current_index;
+    }
     currentSongId() {
         const idx = this.current_index;
         if (idx >= 0 && idx < this.queue.length) {
             return this.queue[idx].id;
+        }
+        return null;
+    }
+
+    currentSong() {
+        // use in favor of current_song
+        const idx = this.current_index;
+        if (idx >= 0 && idx < this.queue.length) {
+            return this.queue[idx];
         }
         return null;
     }
@@ -618,7 +637,6 @@ export class AudioDevice {
         }
 
         this.connected_elements.push(elem)
-
     }
 
     disconnectView(elem) {
