@@ -138,7 +138,8 @@ def _endpoint_mapper(f):
                     if param.repeated:
                         value = [param.type(v) for v in request.location.query[param.name]]
                     elif param.name in request.location.query:
-                        value = param.type(request.location.query[param.name][0])
+                        value = request.location.query[param.name][0]
+                        value = param.type(value)
                     else:
                         value = param.default
 
@@ -523,6 +524,7 @@ class String(OpenApiParameter):
                 v = v.lower()
 
             if v not in self.attrs['enum']:
+                logging.info("received invalid enum: %r", value)
                 raise Exception("invalid input. not in enum range")
 
         return v

@@ -499,6 +499,8 @@ class StorageDao(object):
         if offset is not None:
             query = query.offset(offset).order_by(asc(FsTab.c.file_path))
 
+            query.order_by(asc(FsTab.c.id))
+
         result = self.db.session.execute(query).fetchall()
 
         for item in result:

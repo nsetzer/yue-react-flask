@@ -642,7 +642,7 @@ class FileSysResource(Resource):
     @requires_auth("filesystem_read")
     def get_user_note_content(self, request):
         password = request.headers.get('X-YUE-PASSWORD', None)
-        resPath = self.filesys_service.fs.join(request.query.base, note_id)
+        resPath = self.filesys_service.fs.join(request.query.base, request.args.note_id)
         return _list_path(request, self.filesys_service, request.query.root, resPath,
             False, password=password, preview=None)
 
@@ -656,7 +656,7 @@ class FileSysResource(Resource):
     @requires_auth("filesystem_write")
     def set_user_note_content(self, request):
         """convenience function wrapping file upload"""
-        resPath = self.filesys_service.fs.join(request.query.base, note_id)
+        resPath = self.filesys_service.fs.join(request.query.base, request.args.note_id)
 
         stream = request.body
         if request.query.crypt in (CryptMode.server, CryptMode.system):
@@ -675,7 +675,7 @@ class FileSysResource(Resource):
     @requires_auth("filesystem_write")
     def delete_user_note(self, note_id):
         """convenience function wrapping file delete"""
-        resPath = self.filesys_service.fs.join(request.query.base, note_id)
+        resPath = self.filesys_service.fs.join(request.query.base, request.args.note_id)
         self.filesys_service.remove(request.current_user, request.query.root, resPath)
         return Response(200, {}, {"result": "OK"})
 

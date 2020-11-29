@@ -192,6 +192,8 @@ class AudioService(object):
             shuffle = True
             limit = None
 
+        logging.info("search library limit=%d offset=%d showBanished=%r", limit, offset, showBanished)
+
         result = self.libraryDao.search(
             user['id'], user['domain_id'],
             searchTerm, case_insensitive,
@@ -199,6 +201,23 @@ class AudioService(object):
 
         if shuffle:
             result = binshuffle(result, lambda s: s['artist'])[:limit_save]
+
+        return result
+
+    def paginate(self, user, searchTerm,
+        case_insensitive=True,
+        limit=50,
+        last_id=None,
+        showBanished=False):
+        """ query the library and return a list of songs
+
+        query results are restricted by the users domain and role
+        """
+
+        result = self.libraryDao.paginate(
+            user['id'], user['domain_id'],
+            searchTerm,
+            case_insensitive, limit, last_id, showBanished)
 
         return result
 
@@ -316,6 +335,8 @@ class AudioService(object):
         return True
 
     def deleteSong(self, user, song_id):
+
+        self.historyDao.remove(song_id, False)
 
         success = self._deleteSongFile(user, song_id, False)
 

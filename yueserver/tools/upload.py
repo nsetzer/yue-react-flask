@@ -85,15 +85,20 @@ class JsonUploader(object):
     unique across all songs (across all domains)
 
     """
-    def __init__(self, client, transcoder, root, bucket, noexec):
+    def __init__(self, client, transcoder, root, bucket, noexec, create, update):
         super(JsonUploader, self).__init__()
         self.client = client
         self.transcoder = transcoder
         self.root = root
         self.noexec = noexec
 
-        self.do_upload = False
-        self.do_create = True
+        self.do_update = update
+        self.do_create = create
+        print("create: %s update: %s" % (create, update))
+
+        self.update_keys = ['artist', 'artist_key', 'composer',
+                            'album', 'title', 'genre', 'year',
+                            'country', 'language', 'comment', 'rating']
 
         if bucket is not None:
             self.s3fs = S3Upload(bucket)
@@ -108,10 +113,16 @@ class JsonUploader(object):
         self.uploaded = 0
         count = 0
         start = time.time()
-        for song in songs:
+        for local_song in songs:
             count += 1
+
+            static_path = local_song['static_path']
+            remote_song = None
+            if static_path in remote_songs:
+                remote_song = remote_songs[static_path]
+
             try:
-                self._upload_one(song, remote_songs, remote_files)
+                self._upload_one(local_song, remote_song, remote_files)
             except Exception as e:
                 logging.exception("upload %s" % e)
         end = time.time()
@@ -121,10 +132,10 @@ class JsonUploader(object):
         logging.warning("remote_songs: %d" % len(remote_songs))
         logging.warning("remote_files: %d" % len(remote_files))
 
-    def _upload_one(self, song, remote_songs, remote_files):
+    def _upload_one(self, local_song, remote_song, remote_files):
 
-        file_path = song['file_path']
-        static_path = song['static_path']
+        file_path = local_song['file_path']
+        static_path = local_song['static_path']
 
         dir_path, _ = posixpath.split(static_path)
 
@@ -135,7 +146,7 @@ class JsonUploader(object):
         _, art_name = posixpath.split(art_path)
 
         # transcode options
-        volume = min(2.0, song['equalizer'] / 100.0)
+        volume = min(2.0, local_song['equalizer'] / 100.0)
         if volume < 0.2:
             volume = 1.0
 
@@ -144,28 +155,44 @@ class JsonUploader(object):
             "samplerate": 44100,
             "scale": 4,
             "metadata": {
-                "ARTIST": song.get('artist', "Unknown Artist"),
-                "ALBUM": song.get('album', "Unknown Title"),
-                "TITLE": song.get('title', "Unknown Album"),
+                "ARTIST": local_song.get('artist', "Unknown Artist"),
+                "ALBUM": local_song.get('album', "Unknown Title"),
+                "TITLE": local_song.get('title', "Unknown Album"),
             }
         }
 
         # volume has been normalized, so set equalizer to default
-        song['equalizer'] = 100
+        local_song['equalizer'] = 100
 
-        if static_path in remote_songs:
+        print(remote_song is not None)
 
-            if not self.do_upload:
+        _update = remote_song is not None and aud_path in remote_files
+
+        if _update:
+
+            if not self.do_update:
+                print(aud_path)
                 return
 
-            logging.info("update: %s" % static_path)
-            remote_song = remote_songs[static_path]
-            self.updated += 1 if (aud_path in remote_files) else 0
+            # find keys that are different
+            track = {}
+            for key in self.update_keys:
+                if local_song[key] != remote_song[key]:
+                    track[key] = local_song[key]
+
+            if not track:
+                logging.info("up to date: %s %d" % (static_path, len(track)))
+                return;
+            else:
+
+                logging.info("update    : %s %d" % (static_path, len(track)))
+
+            self.updated += 1
 
             if self.noexec:
                 return
 
-            update_song = dict(song)
+            update_song = dict(local_song)
 
             #for key in ['artist', 'artist_key', 'album', 'title',
             #            'composer', 'genre', 'year', 'comment', 'country', 'language',
@@ -173,9 +200,18 @@ class JsonUploader(object):
             #   update_song[key] = remote_song[key]
 
             update_song['id'] = remote_song['id']
+
             self._update_song(update_song)
         else:
             if not self.do_create:
+                logging.info("skip create")
+                return
+
+            # never create if already exists
+            if remote_song is not None:
+                # the only reason to hit this line would be to reupload audio
+                # which isnt implemented -- delete and recreate instead
+                logging.info("skip create")
                 return
 
             if aud_path in remote_files:
@@ -191,7 +227,7 @@ class JsonUploader(object):
             if aud_path not in remote_files:
                 self._transcode_upload(file_path, aud_path, opts)
 
-            song_id = self._create_song(song)
+            song_id = self._create_song(local_song)
 
             if song_id:
                 self._set_audio_path(song_id, aud_path)
@@ -259,8 +295,6 @@ class JsonUploader(object):
     def _update_song(self, song):
 
         remote_song = self._prepare_song_for_transport(song)
-
-        print(remote_song)
 
         response = self.client.library_update_song(json.dumps([remote_song]))
         if response.status_code != 200:
@@ -355,7 +389,7 @@ def _fetch_songs(client):
     logging.info("fetched %d songs" % len(songs))
     return songs
 
-def do_upload(client, data, root, nparallel=1, bucket=None, ffmpeg_path=None, noexec=False):
+def do_upload(client, data, root, nparallel=1, bucket=None, ffmpeg_path=None, noexec=False, create=True, update=False):
 
     transcoder = FFmpeg(ffmpeg_path)
 
@@ -365,7 +399,8 @@ def do_upload(client, data, root, nparallel=1, bucket=None, ffmpeg_path=None, no
     # TODO: a keyboard interrupt should wait for the current task to complete
 
     if nparallel == 1:
-        uploader = JsonUploader(client, transcoder, root, bucket, noexec)
+        uploader = JsonUploader(client, transcoder,
+            root, bucket, noexec, create, update)
         uploader.upload(data, rsongs, rfiles)
 
     else:
@@ -377,7 +412,7 @@ def do_upload(client, data, root, nparallel=1, bucket=None, ffmpeg_path=None, no
 
         for i in range(nparallel):
             uploaders.append(JsonUploader(client, transcoder,
-                root, bucket, noexec))
+                root, bucket, noexec, create, update))
 
         for i, item in enumerate(data):
             partition[i % len(partition)].append(item)

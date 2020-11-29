@@ -63,3 +63,15 @@ class HistoryDao(object):
                    "timestamp": r['timestamp']} for r in lst]
 
         return records
+
+    def remove(self, song_id, commit=False):
+
+        tab = self.dbtables.SongHistoryTable
+        query = tab.delete() \
+            .where(tab.c.song_id == song_id)
+
+        self.db.session.execute(query)
+
+        if commit:
+            self.db.session.commit()
+

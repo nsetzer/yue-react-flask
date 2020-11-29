@@ -130,7 +130,10 @@ class LibraryResource(Resource):
     @requires_auth("library_read")
     @compressed
     def search_library(self, request):
-        """ return song information from the library """
+        """ return song information from the library
+
+        note: when paginating, set orderby to "id" or use the paginate api
+        """
 
         offset = request.query.limit * request.query.page
 
@@ -143,6 +146,26 @@ class LibraryResource(Resource):
             "result": songs,
             "page": request.query.page,
             "page_size": request.query.limit,
+        }
+        return Response(200, {}, obj)
+
+    @get("/api/library/paginate")
+    @param("query", type_=String().default(None))
+    @param("limit", type_=Integer().min(0).max(5000).default(50))
+    @param("last_id", type_=String().default(None))
+    @param("showBanished", type_=Boolean().default(False))
+    @requires_auth("library_read")
+    @compressed
+    def paginate_library(self, request):
+        """ return song information from the library """
+
+        songs = self.audio_service.paginate(request.current_user,
+            request.query.query, limit=request.query.limit,
+            last_id=request.query.last_id,
+            showBanished=request.query.showBanished)
+
+        obj = {
+            "result": songs,
         }
         return Response(200, {}, obj)
 
@@ -187,20 +210,7 @@ class LibraryResource(Resource):
 
         return Response(201, {}, {"result": song_id})
 
-    @delete("/api/library")
-    @param("song_id", type_=String())
-    @requires_auth("library_write")
-    def delete_song(self, request):
 
-        try:
-            success = self.audio_service.deleteSong(
-                request.current_user,
-                request.query.song_id)
-        except AudioServiceException as e:
-            success = False
-
-        return Response(200 if success else 404, {},
-            {"result": "OK" if success else "ERROR"})
 
     @get("/api/library/info")
     @requires_auth("library_read")
@@ -226,6 +236,20 @@ class LibraryResource(Resource):
             return Response(200, {}, {"result": song})
         except AudioServiceException as e:
             return Response(404, {}, {"error": "No Song for id %s" % (request.args.song_id)})
+
+    @delete("/api/library/:song_id")
+    @requires_auth("library_write")
+    def delete_song(self, request):
+
+        try:
+            success = self.audio_service.deleteSong(
+                request.current_user,
+                request.args.song_id)
+        except AudioServiceException as e:
+            success = False
+
+        return Response(200 if success else 404, {},
+            {"result": "OK" if success else "ERROR"})
 
     @get("/api/library/:song_id/audio")
     @param("mode", type_=audio_format)

@@ -743,6 +743,59 @@ class LibraryDao(object):
 
         return self._query(user_id, domain_id, sql_rule, orderby, limit, offset)
 
+    def paginate(self,
+        user_id,
+        domain_id,
+        rule,
+        case_insensitive=True,
+        limit=None,
+        last_id=None,
+        showBanished=False):
+        """
+        similar to search, but use last_id to control paging in a more efficient
+        way.
+
+
+        To use, the first query will not set last_id. up to limit results are
+        then returned. the last id found in the first search should be fed
+        into the subsequent result.
+
+        orderby is always set to sort the id ascending. this is an indexed
+        table. the query can then use greater than comparisons on id
+        to skip to a particular page efficiently
+
+        """
+        print(user_id, domain_id, rule, case_insensitive, last_id, limit)
+
+        if not isinstance(rule, Rule):
+            rule = self.grammar.ruleFromString(rule)
+
+        SongTable = self.dbtables.SongDataTable.c
+        UserTable = self.dbtables.SongUserDataTable.c
+
+        sql_rule = rule.psql() if self.db.kind() == "postgresql" else rule.sql()
+
+        orderby = [asc(self.grammar.getColumnType(Song.id))]
+
+        if last_id is not None:
+            if sql_rule:
+                sql_rule = and_(sql_rule, SongTable.id > last_id)
+            else:
+                sql_rule = SongTable.id > last_id
+
+        if not showBanished:
+            # remove entries that have either the blocked or banished bit set
+            stmt1 = SongTable.banished == 0
+            # if the left outer join produces a null, default to 0 and compare.
+            stmt2 = case([(UserTable.blocked == None, 0)],
+                         else_=UserTable.blocked) == 0
+            stmt3 = and_(stmt1, stmt2)
+            sql_rule = stmt3 if sql_rule is None else and_(sql_rule, stmt3)
+
+        logging.debug(sql_rule)
+
+        return self._query(user_id, domain_id, sql_rule, orderby, limit)
+
     def _query(self,
         user_id,
         domain_id,

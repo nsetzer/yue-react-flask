@@ -27,11 +27,12 @@ import ssl
 import time
 import inspect
 import gzip
+import json
 from datetime import datetime
 
 from collections import defaultdict
 
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, parse_qs
 from http.client import responses
 
 from .server_core import readword, readline, Namespace, \
@@ -121,10 +122,33 @@ class Protocol(object):
 
         url = urlparse(request.path.decode("utf-8"))
 
-        raw_query_args = [unquote(part).split('=', 1) for part in url.query.split("&") if part]
-        query = defaultdict(list)
-        for k, v in raw_query_args:
-            query[k].append(v)
+        #raw_query_args = [unquote(part).split('=', 1) for part in url.query.split("&") if part]
+        #print(raw_query_args)
+        #query = defaultdict(list)
+        #for k, v in raw_query_args:
+        #    # TODO: require unquote of rhs
+        #    if v.startswith("\""):
+        #        try:
+        #            v = json.loads(v)
+        #        except Exception as e:
+        #            print(e)
+        #            pass
+        #    query[k].append(v)
+        #print(query)
+
+        raw_query_args = parse_qs(url.query)
+        query = {}
+        for key, values in raw_query_args.items():
+            query[key] = []
+            for value in values:
+                if value.startswith("\""):
+                    try:
+                        value = json.loads(value)
+                    except Exception as e:
+                        print(e)
+                        pass
+                query[key].append(value)
+
         path = unquote(url.path)
         fragment = unquote(url.fragment)
 
