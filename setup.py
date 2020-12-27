@@ -8,11 +8,11 @@ import shutil
 import subprocess
 from datetime import datetime
 
-from yueserver.app import YueApp, generate_client
+#from yueserver.app import YueApp, generate_client
 from yueserver.config import Config
 
-app = YueApp(Config.null())
-generate_client(app)
+#app = YueApp(Config.null())
+#generate_client(app)
 
 def collect_package(root):
 
@@ -32,8 +32,7 @@ for pkg in pkgs:
 
 entry_points = [
     "ymgr=yueserver.tools.manage:main",
-    "ysync=yueserver.tools.sync2:main",
-    "syn=yueserver.tools.sync2:main",
+    "syn=yueserver.sync.sync:main",
 ]
 
 short_version = "0.1.0"
