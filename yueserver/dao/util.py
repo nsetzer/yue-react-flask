@@ -11,7 +11,6 @@ from collections import OrderedDict
 from io import StringIO
 import bcrypt
 
-from psutil import virtual_memory, cpu_count, cpu_percent
 
 def epoch_time(dt=None):
     """
@@ -164,21 +163,6 @@ def pathCorrectCase(path):
 
     return newpath
 
-def server_health():
-
-    st = virtual_memory()
-
-    vcores = cpu_count()
-    # utilization = cpu_percent(.25)
-
-    PercentFree = 100.0 * st.available / st.total
-    stats = {
-        "PercentFree": PercentFree,
-        "PercentUsed": 100.0 - PercentFree,
-        "CpuCount": vcores,
-    }
-
-    return stats
 
 class CaptureOutput(object):
     """docstring for CaptureOutput"""

@@ -13,7 +13,8 @@ from ..dao.storage import StorageDao
 from ..dao.library import LibraryDao
 from ..dao.settings import SettingsDao, Settings
 from ..dao.queue import SongQueueDao
-from ..dao.filesys.crypt import uuid_token_generate, uuid_token_verify, sha256
+from ..dao.filesys.crypt import sha256
+from ..dao.filesys.token import uuid_token_generate, uuid_token_verify, sha256
 from .exception import UserServiceException
 
 #from itsdangerous import TimedJSONWebSignatureSerializer as Serializer

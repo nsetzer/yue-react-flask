@@ -53,6 +53,8 @@ implement `syn rm`
 
 """
 import os, sys
+import time
+T_START = time.time()
 import argparse
 import posixpath
 import logging
@@ -3333,6 +3335,8 @@ def _register_parsers(parser):
 
 def main():
 
+    print(time.time() - T_START)
+
     parser = argparse.ArgumentParser(
         description='sync utility',
         epilog="The environment variable YUE_ECHO_PASSWORD can be set"
@@ -3364,5 +3368,7 @@ def main():
 
 
 if __name__ == '__main__':
+
+
     main()
 

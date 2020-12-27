@@ -25,7 +25,7 @@ def collect_package(root):
     return pkgs
 
 pkgs = collect_package("yueserver")
-pkgs += collect_package("yueclient")
+# pkgs += collect_package("yueclient")
 
 for pkg in pkgs:
     print(pkg)

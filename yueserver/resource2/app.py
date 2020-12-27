@@ -11,6 +11,8 @@ from yueserver.framework2.openapi import Resource, \
 from yueserver.framework2.security import requires_no_auth, requires_auth, \
     register_handler, register_security, ExceptionHandler
 
+
+
 notfound = """
 <!DOCTYPE html>
 <meta charset="UTF-8">
@@ -36,6 +38,8 @@ class AppResource(Resource):
     def health(self, request):
         """ return status information about the application
         """
+
+        from yueserver.dao.health import server_health
 
         # showing stats on an un-authenticated endpoint seems risky
         health = self.db.health()

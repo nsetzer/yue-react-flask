@@ -10,7 +10,6 @@ import bcrypt
 import hashlib
 import struct
 import time
-import uuid
 
 def generate_secure_password():
     return base64.b64encode(get_random_bytes(32)).decode("utf-8")
@@ -427,72 +426,3 @@ def tunpackb(data):
 
 def tfmt(timestamp):
     return time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(int(timestamp)))
-
-def uuid_token_generate(key, uuidstr, expiry=_two_weeks, now=None):
-    """ generate a token containing a uuid
-
-
-    key:     a 16byte key used for AES-GCM encryption
-    uuidstr: a uuid4 string to encrypt
-
-    the token expires 'expires' seconds from the current time
-    the token is made of two parts, an unencrypted nonce containing
-    version, timestamp, and random data. and the encrypted uuid
-    AES-GCM is used with the nonce as the AAD ensuring data integrity
-    if any part of the token is modified.
-
-    the resulting token is exactly 50 ascii characters and case sensitive
-
-    Note: AES-GCM uses a 12 byte nonce
-    """
-    user = from_hex(uuid.UUID(uuidstr).hex)
-
-    version = b'\x01'
-    t = now if now is not None else time.time()
-    timestamp = tpackb(t + expiry)
-    randbytes = get_random_bytes(1)
-
-    nonce = version + timestamp + randbytes + b"\x00" * 7
-    cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
-    cipher.update(nonce)
-    text, tag = cipher.encrypt_and_digest(user)
-
-    data = version + timestamp + randbytes + text + tag
-    token = base64.b64encode(data, b'-+').decode("ascii")
-    return token.rstrip('=')
-
-def uuid_token_verify(key, token, now=None):
-    """ verify a uuid token and return the uuid string
-
-    key:     a 16byte key used for AES-GCM encryption
-    token:   an encrypted uuid4 string
-
-    """
-
-    if len(token) != 50:
-        raise ValueError("token not formatted correctly: %d" % (len(token)))
-
-    data = base64.b64decode(token.encode("ascii") + b'==', b'-+')
-
-    version = data[:1]
-
-    if version != b'\x01':
-        raise ValueError("Invalid token version")
-
-    timestamp = data[1:4]
-    randbytes = data[4:5]
-    text = data[5:21]
-    tag = data[21:]
-
-    expires = tunpackb(timestamp)
-    t = now if now is not None else time.time()
-    if expires < t:
-        raise ValueError('token has expired: %s' % tfmt(expires))
-
-    nonce = version + timestamp + randbytes + b"\x00" * 7
-    cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
-    cipher.update(nonce)
-    user = cipher.decrypt_and_verify(text, tag)
-    return str(uuid.UUID(to_hex(user).decode('ascii')))
-
-

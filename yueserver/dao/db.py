@@ -19,7 +19,6 @@ import time
 import random
 import logging
 import argparse
-import unittest
 
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm.session import sessionmaker
@@ -661,6 +660,8 @@ def set_test_db(connection_string):
     _db_test_connection_string = connection_string
 
 def main_test(argv, module_items):
+
+    import unittest
 
     parser = argparse.ArgumentParser(description='simple test runner')
 
