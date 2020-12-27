@@ -131,7 +131,7 @@ def validate_key(body):
 
 def _list_path(request, service, root, path, list_=False, password=None, preview=None, dl=True):
     # TODO: move this into the service layer
-    #       the argument against is it still depends on some flask features
+    #       the argument against is it still depends on some framework features
 
     # TODO: check for the header X-YUE-ENCRYPTION
     # it should contain the base64 encoded password for the user

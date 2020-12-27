@@ -58,8 +58,6 @@ from logging.handlers import RotatingFileHandler
 logging.getLogger("engineio").setLevel(logging.WARNING)
 logging.getLogger("socketio").setLevel(logging.WARNING)
 
-from flask import jsonify, render_template
-
 from .config import Config
 
 from .dao.library import Song

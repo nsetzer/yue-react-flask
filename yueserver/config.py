@@ -4,7 +4,7 @@ The Application Configuration used in Yue Server
 """
 import os, sys
 
-from .framework.config import BaseConfig, ApplicationBaseConfig
+from .framework2.config import BaseConfig, ApplicationBaseConfig
 
 class DatabaseConfig(BaseConfig):
     """

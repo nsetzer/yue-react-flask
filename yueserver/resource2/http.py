@@ -16,12 +16,14 @@ class HttpResource(Resource):
         super(HttpResource, self).__init__()
 
     @get("/robots.txt")
+    @requires_no_auth
     def robots(self, request):
         headers = {"Content-Type": 'text/plain'}
         payload = b"User-agent: *\nDisallow: /\n"
         return Response(200, headers, payload)
 
     @get("/manifest.json")
+    @requires_no_auth
     def manifest(self, request):
         keys = {
             "manifest_version": 2,
@@ -31,6 +33,7 @@ class HttpResource(Resource):
         return Response(200, {}, keys)
 
     @get("/.well-known/:path*")
+    @requires_no_auth
     def well_known(self, request):
         """ return files from a well known directory
 
@@ -38,6 +41,13 @@ class HttpResource(Resource):
         """
         base = os.path.join(os.getcwd(), ".well-known")
         return send_file(base, request.args.path)
+
+    @get("/favicon.ico")
+    @requires_no_auth
+    def favicon(self, request):
+        response = send_file(self.config.build_dir, "favicon.ico")
+        response.headers['Cache-Control'] = 'max-age=31536000'
+        return response
 
     @get("/:path*")
     @header("Host", type_=String())

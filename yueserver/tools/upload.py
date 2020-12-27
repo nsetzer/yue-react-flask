@@ -38,13 +38,6 @@ from ..dao.filesys.s3fs import BotoFileSystemImpl
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import cpu_count
 
-try:
-    import boto3
-    import botocore
-except ImportError:
-    boto3 = None
-    botocore = None
-
 class S3Upload(object):
     """docstring for S3Upload"""
     def __init__(self, bucket):

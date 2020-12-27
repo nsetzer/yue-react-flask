@@ -64,16 +64,19 @@ import threading
 from fnmatch import fnmatch
 
 import yueserver
-from yueserver.tools.upload import S3Upload
 from yueserver.dao.search import regexp
-from yueserver.app import connect
-from yueserver.framework.client import split_auth
-from yueserver.framework.crypto import CryptoManager
-from yueserver.tools.sync import SyncManager
+
 from yueserver.dao.filesys.filesys import FileSystem
 from yueserver.dao.filesys.crypt import cryptkey, decryptkey, recryptkey, \
     validatekey, FileEncryptorReader, FileDecryptorWriter, HEADER_SIZE
 from yueserver.dao.search import SearchGrammar, ParseError, Rule, AndSearchRule
+
+from yueserver.framework2.client import ApplicationClient, split_auth
+from yueserver.framework2.crypto import CryptoManager
+from yueserver.app2 import Application
+#from yueserver.framework.crypto import CryptoManager
+#from yueserver.app import connect
+#from yueserver.framework.client import split_auth
 
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm.session import sessionmaker
@@ -1283,8 +1286,13 @@ def get_ctxt(directory):
 
     db = db_connect(userdata['dburl'])
 
-    client = connect(userdata['hostname'],
+    client = ApplicationClient(Application().endpoints())
+
+    client.connect(userdata['hostname'],
         userdata['username'], userdata['password'])
+
+    #client = connect(userdata['hostname'],
+     #   userdata['username'], userdata['password'])
 
     storageDao = LocalStorageDao(db, db.tables)
 
@@ -3188,7 +3196,7 @@ class GetPublicCLI(object):
     def register(self, parser):
 
         subparser = parser.add_parser('getpublic',
-            help="set or revoke public access to a file")
+            help="get status of public access to a file")
         subparser.set_defaults(func=self.execute, cli=self)
 
         subparser.add_argument("paths", nargs="*",

@@ -28,15 +28,13 @@ from ..dao.migrate import migrate_main
 from ..dao.filesys.filesys import FileSystem
 from ..dao.filesys.s3fs import BotoFileSystemImpl
 from ..dao.settings import SettingsDao, Settings
-from ..app import YueApp, generate_client
+#from ..app import YueApp, generate_client
 from ..config import Config
 from ..resource.util import get_features
 from ..framework.client import cli_main
 from ..framework.application import FlaskAppClient
 from ..framework.crypto import CryptoManager
 from ..framework.openapi import OpenApi, curldoc
-
-from pprint import pformat
 
 def drop(args):
     """Creates the db tables."""

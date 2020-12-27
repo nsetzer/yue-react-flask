@@ -15,8 +15,6 @@ from .exception import TranscodeServiceException
 import logging
 import io
 
-from PIL import Image, ImageOps
-
 class TranscodeService(object):
     """docstring for TranscodeService"""
 

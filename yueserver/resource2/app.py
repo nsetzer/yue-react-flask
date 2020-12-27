@@ -83,6 +83,13 @@ class AppResource(Resource):
         base = os.path.join(os.getcwd(), ".well-known")
         return send_file(base, request.args.path)
 
+    @get("/favicon.ico")
+    @requires_no_auth
+    def favicon(self, request):
+        response = send_file(self.config.build_dir, "favicon.ico")
+        response.headers['Cache-Control'] = 'max-age=31536000'
+        return response
+
     @get("/:part/:path*")
     @requires_no_auth
     def root_one(self, request):

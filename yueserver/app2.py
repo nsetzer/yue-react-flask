@@ -89,6 +89,8 @@ from collections import defaultdict
 from urllib.parse import urlparse, unquote
 from http.client import responses
 
+from yueserver.dao.image import init as init_image
+
 from yueserver.framework2.openapi import RegisteredEndpoint, OpenApi, curldoc
 ##--
 from yueserver.framework2.server_core import readline, Namespace, \
@@ -110,11 +112,7 @@ from .dao.db import db_connect, db_init_main
 from .dao.filesys.filesys import FileSystem
 from .dao.filesys.s3fs import BotoFileSystemImpl
 
-from .service.audio_service import AudioService
-from .service.transcode_service import TranscodeService
-from .service.user_service import UserService
-from .service.filesys_service import FileSysService
-from .service.radio_service import RadioService
+
 
 from .resource2.util import register_handlers
 from .resource2.http import HttpResource
@@ -168,78 +166,28 @@ def parseArgs(argv, default_profile=None):
 
 class Application(object):
     """docstring for Application"""
-    def __init__(self, cfg):
+    def __init__(self):
         super(Application, self).__init__()
-
-        self.cfg = cfg
-        self.db = db_connect(self.cfg.database.url)
         self._endpoints = []
 
-        # check that the database is configured.
-        # the number of tables may not match if there are additional
-        # test tables, but in general should be the same
-        nbTablesExpected = len(self.db.metadata.tables.keys())
-        nbTablesActual = len(self.db.engine.table_names())
-        if not self.cfg.null and nbTablesExpected != nbTablesActual:
-            logging.warning("database contains %d tables. expected %d." % (
-                nbTablesActual, nbTablesExpected))
-
-        if cfg.aws.endpoint is not None:
-
-            logging.getLogger("botocore").setLevel(logging.WARNING)
-            logging.getLogger("s3transfer").setLevel(logging.WARNING)
-
-            aws = cfg.aws
-            logging.info("configure s3 %s %s",
-                aws.endpoint,
-                aws.region)
-            s3fs = BotoFileSystemImpl(
-                aws.endpoint,
-                aws.region,
-                aws.access_key,
-                aws.secret_key)
-            FileSystem.register(BotoFileSystemImpl.scheme, s3fs)
-
-        user_service = UserService(self.cfg, self.db, self.db.tables)
-        filesys_service = FileSysService(self.cfg, self.db, self.db.tables)
-        transcode_service = TranscodeService(self.cfg, self.db, self.db.tables)
-        audio_service = AudioService(self.cfg, self.db, self.db.tables)
-
+        self.http_resource = HttpResource()
         self.http_router = Router()
-        self.http_router.registerEndpoints(HttpResource().endpoints())
+        self.http_router.registerEndpoints(self.http_resource.endpoints())
+
+        self.app_resource = AppResource()
+        self.user_resource = UserResource()
+        self.filesys_resource = FileSysResource()
+        self.library_resource = LibraryResource()
+        self.queue_resource = QueueResource()
 
         self.tls_router = Router()
+        self.registerEndpoints(self.user_resource.endpoints())
+        self.registerEndpoints(self.filesys_resource.endpoints())
+        self.registerEndpoints(self.library_resource.endpoints())
+        self.registerEndpoints(self.queue_resource.endpoints())
+        self.registerEndpoints(self.app_resource.endpoints())
 
-        app_resource = AppResource()
-        app_resource.config = self.cfg
-        app_resource.db = self.db
-
-        user_resource = UserResource()
-        user_resource.user_service = user_service
-
-        filesys_resource = FileSysResource()
-        filesys_resource.user_service = user_service
-        filesys_resource.filesys_service = filesys_service
-
-        library_resource = LibraryResource()
-        library_resource.user_service = user_service
-        library_resource.filesys_service = filesys_service
-        library_resource.transcode_service = transcode_service
-        library_resource.audio_service = audio_service
-
-        queue_resource = QueueResource()
-        queue_resource.user_service = user_service
-        queue_resource.audio_service = audio_service
-
-        self.registerEndpoints(user_resource.endpoints())
-        self.registerEndpoints(filesys_resource.endpoints())
-        self.registerEndpoints(library_resource.endpoints())
-        self.registerEndpoints(queue_resource.endpoints())
-        self.registerEndpoints(app_resource.endpoints())
-
-        #self.endpoints()
-        #sys.exit(1)
-        user_resource.app_endpoints = self._endpoints
+        self.user_resource.app_endpoints = self._endpoints
 
     def registerEndpoints(self, endpoints):
         self.tls_router.registerEndpoints(endpoints)
@@ -307,6 +255,63 @@ class Application(object):
         #    RegisteredEndpoint(path, name, callback.__doc__,
         #        options['methods'], params, headers, body[0], returns, auth, scope)
 
+    def init(self, cfg):
+
+        from .service.audio_service import AudioService
+        from .service.transcode_service import TranscodeService
+        from .service.user_service import UserService
+        from .service.filesys_service import FileSysService
+        from .service.radio_service import RadioService
+
+        self.cfg = cfg
+        self.db = db_connect(self.cfg.database.url)
+
+        # check that the database is configured.
+        # the number of tables may not match if there are additional
+        # test tables, but in general should be the same
+        nbTablesExpected = len(self.db.metadata.tables.keys())
+        nbTablesActual = len(self.db.engine.table_names())
+        if not self.cfg.null and nbTablesExpected != nbTablesActual:
+            logging.warning("database contains %d tables. expected %d." % (
+                nbTablesActual, nbTablesExpected))
+
+        if cfg.aws.endpoint is not None:
+
+            logging.getLogger("botocore").setLevel(logging.WARNING)
+            logging.getLogger("s3transfer").setLevel(logging.WARNING)
+
+            aws = cfg.aws
+            logging.info("configure s3 %s %s",
+                aws.endpoint,
+                aws.region)
+            s3fs = BotoFileSystemImpl(
+                aws.endpoint,
+                aws.region,
+                aws.access_key,
+                aws.secret_key)
+            FileSystem.register(BotoFileSystemImpl.scheme, s3fs)
+
+        user_service = UserService(self.cfg, self.db, self.db.tables)
+        filesys_service = FileSysService(self.cfg, self.db, self.db.tables)
+        transcode_service = TranscodeService(self.cfg, self.db, self.db.tables)
+        audio_service = AudioService(self.cfg, self.db, self.db.tables)
+
+        self.app_resource.config = self.cfg
+        self.app_resource.db = self.db
+
+        self.user_resource.user_service = user_service
+
+        self.filesys_resource.user_service = user_service
+        self.filesys_resource.filesys_service = filesys_service
+
+        self.library_resource.user_service = user_service
+        self.library_resource.filesys_service = filesys_service
+        self.library_resource.transcode_service = transcode_service
+        self.library_resource.audio_service = audio_service
+
+        self.queue_resource.user_service = user_service
+        self.queue_resource.audio_service = audio_service
+
     def run(self):
 
         self.site = Site("0.0.0.0")
@@ -330,8 +335,27 @@ class Application(object):
 
         self.site.join()
 
+
+
+def test():
+
+    from .framework2.client import ApplicationClient, AuthenticatedRestClient
+
+    app = Application()
+
+    client = ApplicationClient(app.endpoints())
+
+    client.connect("http://localhost:4200", "admin", "admin")
+
+    resp = client.filesys_get_roots()
+
+    print(resp.status_code)
+    print(resp.text)
+
+
 def main():
     #logging.basicConfig(level=logging.INFO)
+    init_image()
 
     FORMAT = '%(asctime)s %(levelname)-8s %(name)s :%(module)s.%(funcName)s:%(lineno)d: %(message)s'
     logging.basicConfig(level=logging.INFO, format=FORMAT)
@@ -359,7 +383,9 @@ def main():
 
     register_handlers()
 
-    app = Application(cfg)
+    app = Application()
+
+    app.init(cfg)
 
     app.run()
 

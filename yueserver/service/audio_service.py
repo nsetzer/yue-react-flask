@@ -257,10 +257,11 @@ class AudioService(object):
                 artist['albums'].append(album)
 
             songItem = {
-            'id': song[Song.id],
-            'title': song[Song.title],
-            'length': song[Song.length],
-            'comment': song[Song.comment],
+                'id': song[Song.id],
+                'title': song[Song.title],
+                'length': song[Song.length],
+                'comment': song[Song.comment],
+                'album_index': song[Song.album_index],
             }
             album['tracks'].append(songItem)
 

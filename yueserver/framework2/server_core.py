@@ -436,8 +436,6 @@ class UploadMultiPartFile(object):
                                              Dload  Upload   Total   Spent    Left  Speed
             100  375M    0     0  100  375M      0   467k  0:13:42  0:13:43 --:--:--     0
 
-            botocore.exceptions.ReadTimeoutError
-
         """
         if not self._init:
             self._init_body()

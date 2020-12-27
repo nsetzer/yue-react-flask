@@ -15,6 +15,7 @@
 
 import os
 import sys
+
 import io
 import socket
 import threading
@@ -40,6 +41,7 @@ from .server_core import readword, readline, Namespace, \
     CaseInsensitiveDict, UploadChunkedFile, UploadMultiPartFile, \
     Response, \
     TLSSocketClosed, ProtocolError
+
 
 class Protocol(object):
 
@@ -118,8 +120,6 @@ class Protocol(object):
            request.path == b"/system_api.php":
             raise ProtocolError("Suspicious Path")
 
-
-
         url = urlparse(request.path.decode("utf-8"))
 
         #raw_query_args = [unquote(part).split('=', 1) for part in url.query.split("&") if part]
@@ -145,7 +145,6 @@ class Protocol(object):
                     try:
                         value = json.loads(value)
                     except Exception as e:
-                        print(e)
                         pass
                 query[key].append(value)
 
@@ -184,6 +183,8 @@ class Protocol(object):
                     raise ProtocolError("duplicate header")
 
                 request.headers[k] = v.strip()
+
+        #print(request.headers)
 
     def parse_body(self, request):
 
@@ -385,48 +386,48 @@ class ThreadedTCPRequestHandler(socketserver.BaseRequestHandler):
 
                 self.protocol.send_response(self, response)
 
+            except ConnectionResetError as e:
+                logging.error(*self.fmtError(e))
+                break
+
             except ssl.SSLError as e:
-                host, port = self.client_address
-                logging.error("%016X %s:%d %s" % (threading.get_ident(), host, port, e))
+                logging.error(*self.fmtError(e))
                 break
 
             except BrokenPipeError as e:
-                elapsed = int((time.perf_counter() - self.t0) * 1000)
-                transport_protocol = self.transport_protocol.decode()
-                method = self.method.decode()
-                #path = self.path.decode()
-                path = self.path_safe
-                host, port = self.client_address
-                logging.error("%016X %s:%d %s %-8s %s %s" % (
-                    threading.get_ident(), host, port, transport_protocol,
-                    method, path, e))
-
+                logging.error(*self.fmtError(e))
                 break
 
             except socket.timeout as e:
+                logging.error(*self.fmtError(e))
                 break
 
             except TLSSocketClosed as e:
+                if self.method != b"n/a":
+                    logging.error(*self.fmtError(e))
                 break
 
             except ProtocolError as e:
-
-                elapsed = int((time.perf_counter() - self.t0) * 1000)
-                transport_protocol = self.transport_protocol.decode()
-                method = self.method.decode()
-                #path = self.path.decode()
-                path = self.path_safe
-                host, port = self.client_address
-                logging.error("%016X %s:%d %s %-8s %s %s" % (
-                    threading.get_ident(), host, port, transport_protocol,
-                    method, path, e))
-
-                self.request.close()
+                logging.error(*self.fmtError(e))
+                #self.request.close()
                 break
             except BaseException as e:
-                logging.exception("unhandled user exception")
-                self.request.close()
+                logging.exception("unhandled exception")
+                #self.request.close()
                 break
+
+    def fmtError(self, e):
+
+        elapsed = int((time.perf_counter() - self.t0) * 1000)
+        transport_protocol = self.transport_protocol
+        method = self.method
+        #path = self.path.decode()
+        path = self.path_safe
+        host, port = self.client_address
+        fmt = "%016X %s:%d %s %-8s %s %s"
+        args = (fmt, threading.get_ident(), host, port,
+            transport_protocol, method, path, e)
+        return args
 
 def RequestHandlerFactory(_router, _protocol):
 

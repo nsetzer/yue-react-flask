@@ -1,5 +1,13 @@
-from PIL import Image, ImageOps
 import io
+
+Image = None
+ImageOps = None
+
+def init():
+    from PIL import Image as xImage, ImageOps as xImageOps
+    global Image, ImageOps
+    Image = xImage
+    ImageOps = xImageOps
 
 class ImageScale(object):
 

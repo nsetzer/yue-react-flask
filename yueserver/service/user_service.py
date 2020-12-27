@@ -16,9 +16,11 @@ from ..dao.queue import SongQueueDao
 from ..dao.filesys.crypt import uuid_token_generate, uuid_token_verify, sha256
 from .exception import UserServiceException
 
-from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
-from itsdangerous import SignatureExpired, BadSignature
+#from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
+#from itsdangerous import SignatureExpired, BadSignature
+from ..framework2.webtoken import  WebToken, WebTokenException
 
+import json
 import base64
 from bcrypt import gensalt
 
@@ -39,19 +41,36 @@ def parse_apikey_token(token):
         raise Exception("Invalid ApiKey Token")
     return token[7:].decode("utf-8")
 
-def generate_token(secret, user, expiration):
-    s = Serializer(secret, expires_in=expiration)
-    token = s.dumps({
+
+def generate_token_v2(secret, user, expiration):
+    json.dumps({
         'id': user['id'],
         'email': user['email'],
         'domain_id': user['domain_id'],
         'role_id': user['role_id'],
-    }).decode('utf-8')
-    return token
+    })
+    struct.pack(">L", expiration)
+
+def generate_token(secret, user, expiration):
+    #s = Serializer(secret, expires_in=expiration)
+    #token = s.dumps().decode('utf-8')
+    #return token
+
+    wt = WebToken(secret)
+    payload = json.dumps({
+        'id': user['id'],
+        'email': user['email'],
+        'domain_id': user['domain_id'],
+        'role_id': user['role_id'],
+    }).encode("utf-8")
+    return wt.create(payload)
 
 def verify_token(secret, token):
-    s = Serializer(secret)
-    return s.loads(token)
+    #s = Serializer(secret)
+    #return s.loads(token)
+    wt = WebToken(secret)
+    payload = wt.verify(token).decode("utf-8")
+    return json.loads(payload)
 
 class UserException(Exception):
     pass
@@ -159,10 +178,12 @@ class UserService(object):
             self._validate_features(user_data, features)
 
             return user_data
-        except BadSignature:
+        except WebTokenException:
             pass
-        except SignatureExpired:
-            pass
+        #except BadSignature:
+        #    pass
+        #except SignatureExpired:
+        #    pass
 
         raise UserException("Invalid Token")
 

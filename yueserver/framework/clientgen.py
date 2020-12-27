@@ -8,7 +8,7 @@ a RESTful client which can communicate with the given application.
 import os
 import sys
 from .client import RegisteredEndpoint
-from pprint import pformat
+# from pprint import pformat
 
 def generate_client(app, name="client", outdir="."):
     """
