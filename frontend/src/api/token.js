@@ -13,6 +13,10 @@ export function getUsertoken() {
 
 export function setUsertoken(token) {
     window.localStorage.setItem("user_token", token)
+    // cookies can only be used in production (no cross origin requests)
+    //
+    //const escaped_token = token.replace(/-/g, '%2d').replace(/\./g, '%2e')
+    //document.cookie = `user_token=${escaped_token}; path=/; SameSite=Strict; Secure;`
     user_token = token;
 }
 

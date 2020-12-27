@@ -165,9 +165,31 @@ const style = {
         border-width: "2px",
         border-style: "solid",
         border-color: "blue",
+
+        height: ".3em",
+        max-height: ".3em",
+        min-height: ".3em",
+
     })
 }
 
+StyleSheet(`.${style.progressBar}:hover`, {
+    cursor: "pointer"
+})
+
+StyleSheet(`.${style.progressBar}:hover .${style.progressBar_bar}`, {
+        top: ".15em",
+        height: ".5em",
+        max-height: ".5em",
+        min-height: ".5em",
+})
+
+StyleSheet(`.${style.progressBar}:hover .${style.progressBar_button}`, {
+        top: "-.05em",
+        height: ".7em",
+        max-height: ".7em",
+        min-height: ".7em",
+})
 
 StyleSheet(`.${style.songItem}:hover`, {background: '#0000FF22'})
 

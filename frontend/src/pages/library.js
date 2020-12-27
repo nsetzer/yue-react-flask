@@ -126,6 +126,25 @@ function shuffle(a) {
     return a;
 }
 
+// year is only available on android...
+const sort_order = ['year', 'album', 'album_index']
+
+function sortTracks(tracks, order=sort_order) {
+
+
+    tracks.sort((a, b)=> {
+        return order.map((k)=>{
+            // compare each field and return -1, 0, 1
+            const av = a[k];
+            const bv = b[k];
+            // sort ascending
+            return (av == bv) ? 0 : (av < bv) ? -1 : 1;
+        // get first non-zero value
+        }).reduce((p, n)=> p?p:n, 0)
+    })
+    return tracks
+}
+
 class Header extends components.NavHeader {
     constructor(parent) {
         super();
@@ -229,6 +248,17 @@ class Footer extends components.NavFooter {
 
             const count = this.attrs.parent.attrs.view.countSelected()
             this.attrs.parent.attrs.view.selectAll(count == 0)
+
+        })
+
+        this.addAction(resources.svg['sort'], ()=>{
+
+            const songList = this.attrs.parent.attrs.view.getSelectedSongs()
+            console.log("creating playlist", songList.length)
+            audio.AudioDevice.instance().queueSet(sortTracks(songList).splice(0, 100))
+            audio.AudioDevice.instance().next()
+
+            this.attrs.parent.attrs.view.selectAll(false)
 
         })
 
@@ -407,7 +437,6 @@ class LibraryTreeView extends components.TreeView {
         } else {
             if (node.isSelected()) {
                 const song = {...node.attrs.obj, artist, album}
-                console.log(JSON.stringify(song));
                 result.push(song)
             }
         }
@@ -856,6 +885,8 @@ const savedSearches = [
     {name: "stone temple pilots", query: "\"stone temple pilots\""},
     {name: "soundwitch", query: "soundwitch"},
     {name: "Gothic Emily", query: "\"gothic emily\""},
+    {name: "Driving Hits Volume 1", query: ":DRV"},
+    {name: "Driving Hits Volume 2", query: ":VL2"},
 ]
 
 class SavedSearchList extends DomElement {

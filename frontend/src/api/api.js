@@ -128,11 +128,12 @@ export function fsNoteGetContent(root, base, note_id, crypt, password) {
     return api.requests.get_text(url, cfg);
 }
 
-export function fsNoteSetContent(root, base, note_id, crypt, password) {
+export function fsNoteSetContent(root, base, note_id, content, crypt, password) {
     const params = daedalus.util.serializeParameters({root, base, crypt})
     const url = env.baseUrl + '/api/fs/notes/' + note_id + params;
     const cfg = getAuthConfig()
     cfg.headers['X-YUE-PASSWORD'] = password
+    cfg.headers['Content-Type'] = 'text/plain'
     return api.requests.post(url, content, cfg);
 }
 
@@ -182,7 +183,7 @@ export function librarySong(songId) {
     return api.requests.get_json(url, cfg);
 }
 
-export function libraryDomainInfo(songId) {
+export function libraryDomainInfo() {
     const url = env.baseUrl + '/api/library/info';
     const cfg = getAuthConfig()
     return api.requests.get_json(url, cfg);

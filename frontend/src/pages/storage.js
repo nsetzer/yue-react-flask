@@ -90,10 +90,12 @@ const style = {
     }),
     listItemText: StyleSheet({}),
     icon1: StyleSheet({
-        'margin-right': '1em'
+        'margin-right': '1em',
+        border: "1px solid black"
     }),
     icon2: StyleSheet({
         'margin-right': '1em',
+        border: "1px solid black"
         //border: {width: '1px', color: '#000000', 'style': 'solid'}
     }),
     fileDetailsShow: StyleSheet({
@@ -106,10 +108,10 @@ const style = {
 
 
     encryption: {
-        "system": StyleSheet({'min-width': '1em', width: '1em', 'border-color': '#000000', 'border-width': '1px', 'border-radius': '5px 0 0 5px', height: '62px', background: "#9b111e"}),
-        "server": StyleSheet({'min-width': '1em', width: '1em', 'border-color': '#000000', 'border-width': '1px', 'border-radius': '5px 0 0 5px', height: '62px', background: "#0f52ba"}),
-        "client": StyleSheet({'min-width': '1em', width: '1em', 'border-color': '#000000', 'border-width': '1px', 'border-radius': '5px 0 0 5px', height: '62px', background: "#FFD700"}),
-        "none":   StyleSheet({'min-width': '1em', width: '1em', 'border-color': '#000000', 'border-width': '1px', 'border-radius': '5px 0 0 5px', height: '62px', background: "#000000"}),
+        "system": StyleSheet({'min-width': '.5em', width: '.5em', 'border-color': '#000000', 'border-width': '1px', 'border-radius': '5px 0 0 5px', height: '62px', background: "#9b111e"}),
+        "server": StyleSheet({'min-width': '.5em', width: '.5em', 'border-color': '#000000', 'border-width': '1px', 'border-radius': '5px 0 0 5px', height: '62px', background: "#0f52ba"}),
+        "client": StyleSheet({'min-width': '.5em', width: '.5em', 'border-color': '#000000', 'border-width': '1px', 'border-radius': '5px 0 0 5px', height: '62px', background: "#FFD700"}),
+        "none":   StyleSheet({'min-width': '.5em', width: '.5em', 'border-color': '#000000', 'border-width': '1px', 'border-radius': '5px 0 0 5px', height: '62px', background: "#000000"}),
     },
 
     svgDiv: StyleSheet({
@@ -473,8 +475,6 @@ class FileElement extends DomElement {
                 })
                 .catch(error => {console.error(error)})
         }
-
-
     }
 
     handlePublic2Clicked() {
@@ -666,8 +666,6 @@ export class StoragePage extends DomElement {
         this.appendChild(this.attrs.more)
         this.appendChild(this.attrs.header)
         this.appendChild(this.attrs.lst)
-
-
     }
 
     elementMounted() {
@@ -924,6 +922,7 @@ export class StoragePage extends DomElement {
             this.attrs.lst.insertChild(0, elem)
         } else {
             const elem = filemap[fileInfo.name]
+            this.attrs.lst.insertChild(0, elem)
         }
     }
 
@@ -949,6 +948,7 @@ class FormattedText extends DomElement {
 const preview_formats = {
     '.mp4': 'video',
     '.webm': 'video',
+    '.mkv': 'video',
 
     '.jpg': 'image',
     '.jpeg': 'image',
@@ -958,6 +958,7 @@ const preview_formats = {
 
     '.wav': 'audio',
     '.mp3': 'audio',
+    '.ogg': 'audio',
 
     '.pdf': 'pdf',
 }
@@ -993,6 +994,7 @@ export class StoragePreviewPage extends DomElement {
         const [_, ext] = daedalus.util.splitext(path.toLocaleLowerCase())
 
         const format = preview_formats[ext]
+        console.log(`display content ext: ${ext} format: ${format}`)
 
         if (format === undefined) {
             api.fsGetPathContent(root, path)
@@ -1011,6 +1013,9 @@ export class StoragePreviewPage extends DomElement {
             // TODO: videos should be centered, click/tap for full size
             const url = api.fsPathUrl(root, path, 0)
             this.appendChild(new DomElement("video", {src: url, controls: 1}, []))
+        } else if (format === 'audio') {
+            const url = api.fsPathUrl(root, path, 0)
+            this.appendChild(new DomElement("audio", {src: url, controls: 1}, []))
         } else if (format === 'pdf') {
             const url = api.fsPathUrl(root, path, 0)
             console.warn(url)

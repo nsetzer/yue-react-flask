@@ -76,7 +76,8 @@ function buildRouter(parent, container) {
     rt.addAuthRoute(u.userFs, (cbk)=>parent.handleRoute(cbk, pages.FileSystemPage), '/login');
     rt.addAuthRoute(u.userPlaylist, (cbk)=>parent.handleRoute(cbk, pages.PlaylistPage), '/login');
     rt.addAuthRoute(u.userSettings, (cbk)=>parent.handleRoute(cbk, pages.SettingsPage), '/login');
-    rt.addAuthRoute(u.userNotesContent, (cbk)=>parent.handleRoute(cbk, pages.NotesPage), '/login');
+    rt.addAuthRoute(u.userNotesEdit, (cbk)=>parent.handleRoute(cbk, pages.NoteEditPage), '/login');
+    rt.addAuthRoute(u.userNotesContent, (cbk)=>parent.handleRoute(cbk, pages.NoteContentPage), '/login');
     rt.addAuthRoute(u.userNotesList, (cbk)=>parent.handleRoute(cbk, pages.NotesPage), '/login');
     rt.addAuthRoute(u.userLibraryList, (cbk)=>parent.handleRoute(cbk, pages.LibraryPage), '/login');
     rt.addAuthRoute(u.userLibrarySync, (cbk)=>parent.handleRoute(cbk, pages.SyncPage), '/login');
@@ -121,9 +122,15 @@ export class Root extends DomElement {
             //this.attrs.router.clear()
             // call on a timeout to let the menu animation complete smoothly
             // animation is .5s as defined in the NavMenu style
-            setTimeout(()=>{history.pushState({}, "", res_path);}, 500);
+            setTimeout(()=>{
+                history.pushState({}, "", res_path);
+                window.scrollTo(0,0);
+                console.log("scrolled")
+            }, 500);
         } else {
             history.pushState({}, "", res_path);
+            window.scrollTo(0,0);
+            console.log("scrolled")
         }
         this.attrs.nav.hide();
     }

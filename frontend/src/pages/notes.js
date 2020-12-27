@@ -8,6 +8,9 @@ from module daedalus import {
     Router
 }
 import module api
+import module store
+import module router
+import module components
 
 include './util.js'
 
@@ -32,11 +35,35 @@ const styles = {
         height: '1em',
         'min-height': '1em'
     }),
+
     padding2: StyleSheet({
         height: '33vh',
         'min-height': '64px'
     }),
 
+    contentDiv: StyleSheet({
+        //background-color: '#0000FF33',
+
+        'padding-left': '1em',
+        'padding-right': '1em',
+    }),
+
+    contentPre: StyleSheet({
+        'width': '100%',
+        'max-width': '100%',
+        overflow-x: 'scroll',
+    }),
+
+    contentText: StyleSheet({
+        padding: "2px",
+        border: "1px solid black",
+        'width': 'calc(100% - 6px)',
+        // minus header (40), footer (40) and padding (2x16) size
+        'height': 'calc(100vh - 80px - 32px)',
+        'max-height': 'calc(100vh - 80px - 32px)',
+        'max-width': 'calc(100% - 6px)',
+        overflow-x: 'scroll',
+    }),
 }
 
 export class NoteContext {
@@ -44,20 +71,50 @@ export class NoteContext {
     constructor(root, base) {
         this.root = root
         this.base = base
+        this.cache = {}
     }
 
     getList() {
         return api.fsNoteList(this.root, this.base)
     }
 
-    getContent(note_id) {
+    getContent(noteId) {
 
-        return api.fsNoteGetContent(this.root, this.base, note_id, null, null)
+        if (this.cache[noteId] !== undefined) {
+            return new Promise((resolve, reject) => {
+                resolve(this.cache[noteId])
+            })
+        } else {
+            return new Promise((resolve, reject) => {
+                api.fsNoteGetContent(this.root, this.base, noteId, null, null)
+                    .then(result=> {
+                        this.cache[noteId] = result;
+                        resolve(result);
+                    })
+                    .catch(error => {
+                        reject(error);
+                    })
+            })
+        }
+
+    }
+
+    setContent(noteId, content) {
+        this.cache[noteId] = content;
+
+        return api.fsNoteSetContent(this.root, this.base, noteId, content, null, null)
 
     }
 }
 
-class Header extends components.NavHeader {
+function initContext() {
+    if (store.globals.note_ctxt === undefined) {
+        store.globals.note_ctxt = new NoteContext("default", "public/notes")
+    }
+    return store.globals.note_ctxt
+}
+
+class ListHeader extends components.NavHeader {
     constructor(parent) {
         super();
 
@@ -67,25 +124,16 @@ class Header extends components.NavHeader {
             store.globals.showMenu()
         })
 
-        this.addAction(resources.svg['media_prev'], ()=>{
-            audio.AudioDevice.instance().prev()
-        })
-
     }
-
 }
 
-class Footer extends components.NavFooter {
+class ListFooter extends components.NavFooter {
     constructor(parent) {
         super();
 
         this.attrs.parent = parent
 
-        this.addAction(resources.svg['select'], ()=>{
-        })
-
-        this.addAction(resources.svg['media_shuffle'], ()=>{
-        })
+        //this.addAction(resources.svg['select'], ()=>{})
 
     }
 }
@@ -117,15 +165,8 @@ class NotesItem extends DomElement {
 
 
     onClick(event) {
-        console.log("click")
 
-        this.attrs.ctxt.getContent(this.attrs.note_id)
-            .then(result => {
-                console.log(result)
-            })
-            .catch(error => {
-                console.log(error)
-            })
+        router.navigate(router.routes.userNotesContent({noteId: this.attrs.note_id}, {}))
 
     }
 }
@@ -155,8 +196,8 @@ export class NotesPage extends DomElement {
         super("div", {className: styles.page}, []);
 
         this.attrs = {
-            header: new Header(this),
-            footer: new Footer(this),
+            header: new ListHeader(this),
+            footer: new ListFooter(this),
             container: new NotesList(),
             padding1: new DomElement("div", {className: styles.padding1}, []),
             padding2: new DomElement("div", {className: styles.padding2}, []),
@@ -168,7 +209,7 @@ export class NotesPage extends DomElement {
         this.appendChild(this.attrs.padding2)
         this.appendChild(this.attrs.footer)
 
-        this.attrs.ctxt = new NoteContext("default", "public/notes")
+        this.attrs.ctxt = initContext()
 
     }
 
@@ -183,5 +224,191 @@ export class NotesPage extends DomElement {
                 console.log(error)
             })
     }
+}
+
+class ContentHeader extends components.NavHeader {
+    constructor(parent) {
+        super();
+
+        this.attrs.parent = parent
+
+        this.addAction(resources.svg['menu'], ()=>{
+            store.globals.showMenu()
+        })
+
+        this.addAction(resources.svg['return'], ()=>{
+            router.navigate(router.routes.userNotesList({}, {}))
+        })
+
+        this.addAction(resources.svg['edit'], ()=>{
+
+            router.navigate(router.routes.userNotesEdit({
+                noteId: this.attrs.parent.state.match.noteId}, {}))
+
+        })
+
+    }
+}
+
+class ContentFooter extends components.NavFooter {
+    constructor(parent) {
+        super();
+
+        this.attrs.parent = parent
+
+        //this.addAction(resources.svg['select'], ()=>{})
+
+    }
+}
+
+export class NoteContentPage extends DomElement {
+    constructor() {
+        super("div", {className: styles.page}, []);
+
+        this.attrs = {
+            header: new ContentHeader(this),
+            footer: new ContentFooter(this),
+            container: new DomElement("div", {className: styles.contentDiv}, []),
+            padding1: new DomElement("div", {className: styles.padding1}, []),
+            padding2: new DomElement("div", {className: styles.padding2}, []),
+        }
+
+        this.appendChild(this.attrs.header)
+        this.appendChild(this.attrs.padding1)
+        this.appendChild(this.attrs.container)
+        this.appendChild(this.attrs.padding2)
+        this.appendChild(this.attrs.footer)
+
+        this.attrs.ctxt = initContext()
+
+    }
+
+    elementMounted() {
+        this.showContent()
+    }
+
+    showContent() {
+        this.attrs.container.removeChildren()
+
+        this.attrs.ctxt.getContent(this.state.match.noteId)
+            .then(result => {
+
+                this.attrs.container.appendChild(new DomElement("pre", {className: styles.contentPre}, [
+                    new TextElement(result + "\n\n\n")]))
+                //this.attrs.container.appendChild(new components.VSpacer("3em"))
+            })
+            .catch(error => {
+                console.log(error)
+            })
+    }
+
+    beginEdit() {
+
+        this.attrs.container.removeChildren()
+
+        this.attrs.ctxt.getContent(this.state.match.noteId)
+            .then(result => {
+
+                this.attrs.container.appendChild(new DomElement("textarea", {className: styles.contentText}, [
+                    new TextElement(result)]))
+                //this.attrs.container.appendChild(new components.VSpacer("3em"))
+            })
+            .catch(error => {
+                console.log(error)
+            })
+    }
+
+
+}
+
+class EditHeader extends components.NavHeader {
+    constructor(parent) {
+        super();
+
+        this.attrs.parent = parent
+
+        this.addAction(resources.svg['menu'], ()=>{
+            store.globals.showMenu()
+        })
+
+        this.addAction(resources.svg['discard'], ()=>{
+            router.navigate(router.routes.userNotesContent({
+                noteId: this.attrs.parent.state.match.noteId}, {}))
+
+        })
+
+        this.addAction(resources.svg['save'], ()=>{
+
+            const noteId = this.attrs.parent.state.match.noteId
+            const nd = this.attrs.parent.attrs.textarea.getDomNode()
+            console.log(nd.value)
+
+            this.attrs.parent.attrs.ctxt.setContent(
+                this.attrs.parent.state.match.noteId, nd.value)
+                .then((result)=>{
+                    router.navigate(router.routes.userNotesContent(
+                        {noteId}, {}))
+                })
+                .catch((error)=>{
+
+                })
+
+
+        })
+
+    }
+}
+
+class EditFooter extends components.NavFooter {
+    constructor(parent) {
+        super();
+
+        this.attrs.parent = parent
+
+        //this.addAction(resources.svg['select'], ()=>{})
+
+    }
+}
+
+export class NoteEditPage extends DomElement {
+    constructor() {
+        super("div", {className: styles.page}, []);
+
+        this.attrs = {
+            header: new EditHeader(this),
+            footer: new EditFooter(this),
+            container: new DomElement("div", {className: styles.contentDiv}, []),
+            textarea: new DomElement("textarea", {className: styles.contentText}, []),
+            padding1: new DomElement("div", {className: styles.padding1}, []),
+
+        }
+
+        this.appendChild(this.attrs.header)
+        this.appendChild(this.attrs.padding1)
+        this.appendChild(this.attrs.container)
+        this.appendChild(this.attrs.footer)
+
+        this.attrs.container.appendChild(this.attrs.textarea)
+
+        this.attrs.ctxt = initContext()
+
+    }
+
+    elementMounted() {
+        this.showContent()
+    }
+
+    showContent() {
+        this.attrs.textarea.removeChildren()
+
+        this.attrs.ctxt.getContent(this.state.match.noteId)
+            .then(result => {
+                this.attrs.textarea.appendChild(new TextElement(result))
+            })
+            .catch(error => {
+                console.log(error)
+            })
+    }
+
 
 }

@@ -15,6 +15,16 @@ serve:
 			--static ./resources \
 			src/app.js
 
+.PHONY: serve
+serve_min:
+	export PYTHONPATH=../daedalus; \
+		python3.8 -m daedalus serve \
+			--env baseUrl='http://$(HOST):4200' \
+			--env buildDate="$(DATE)" \
+			--static ./resources \
+			--minify \
+			src/app.js
+
 .PHONY: serve_prod
 serve_prod:
 	export PYTHONPATH=../daedalus; \
