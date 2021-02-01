@@ -280,9 +280,8 @@ class ApplicationClient(object):
         endpoint = self._endpoints[name]
 
         method, url, options = _request_builder(endpoint, *args, **kwargs)
-
+        print(method, url, options)
         return Response(getattr(self._client, method)(url, **options))
-
 
 def _request_builder(endpoint, *args, **kwargs):
     """
@@ -325,12 +324,16 @@ def _request_builder(endpoint, *args, **kwargs):
         del kwargs['stream']
 
     if endpoint.body:
-        _type, _mimetype = endpoint.body
-        if _type is not None and method in ["put", "post"]:
-            options['data'] = positional.pop()
+        _type = endpoint.body
+        _mimetype = None
+        if _type is not None:
+            _mimetype = _type.mimetype()
+            if method in ["put", "post"]:
+                options['data'] = positional.pop()
 
-        if 'Content-Type' not in options['headers']:
+        if _mimetype and 'Content-Type' not in options['headers']:
             options['headers']['Content-Type'] = _mimetype
+
     elif method in ["put", "post"]:
         options['data'] = '/dev/null'
 

@@ -150,8 +150,8 @@ class Header extends components.NavHeader {
         super();
 
         this.attrs.parent = parent
-        this.attrs.txtInput = new TextInputElement("", null, () => {
-                this.attrs.parent.search(this.attrs.txtInput.props.value)
+        this.attrs.txtInput = new TextInputElement("", null, (text) => {
+                this.attrs.parent.search(text)
         })
 
         this.attrs.txtInput.updateProps({"autocapitalize": "off"})
@@ -173,6 +173,13 @@ class Header extends components.NavHeader {
         })
 
         this.addRow(false)
+
+        this.addRowAction(0, resources.svg.media_error, ()=>{
+            console.log("clear")
+            this.attrs.txtInput.setText("")
+            console.log(this.attrs.txtInput.props.value)
+        })
+
         this.addRowElement(0, this.attrs.txtInput)
         this.attrs.txtInput.addClassName(style.grow)
 
@@ -185,13 +192,15 @@ class Header extends components.NavHeader {
             this.addRowElement(0, new components.HSpacer("1em"));
         }
 
-        this.attrs.show_banished = new SearchBannishedCheckBox(this.handleCheckShowBannished.bind(this), 0);
-        this.addRowElement(0, new components.HSpacer("1em"));
-        this.addRowElement(0, this.attrs.show_banished);
+        //this.attrs.show_banished = new SearchBannishedCheckBox(this.handleCheckShowBannished.bind(this), 0);
+        //this.addRowElement(0, new components.HSpacer("1em"));
+        //this.addRowElement(0, this.attrs.show_banished);
         this.addRowElement(0, new components.HSpacer("1em"));
 
-        this.addRowAction(0, resources.svg['search'], ()=>{
-            this.attrs.parent.search(this.attrs.txtInput.props.value)
+        this.addRowAction(0, resources.svg.search, ()=>{
+            const text = this.attrs.txtInput.getText()
+            console.log("search: " + text)
+            this.attrs.parent.search(text)
         })
 
         /*
@@ -224,9 +233,9 @@ class Header extends components.NavHeader {
         this.attrs.chk.setCheckState((this.attrs.chk.attrs.checkState + 1)%3)
     }
 
-    handleCheckShowBannished() {
-        this.attrs.show_banished.setCheckState((this.attrs.show_banished.attrs.checkState + 1)%2)
-    }
+    //handleCheckShowBannished() {
+    //    this.attrs.show_banished.setCheckState((this.attrs.show_banished.attrs.checkState + 1)%2)
+    //}
 
     syncState() {
         return this.attrs.chk.attrs.checkState;
@@ -234,7 +243,7 @@ class Header extends components.NavHeader {
 
 
     showBanished() {
-        return this.attrs.show_banished.attrs.checkState;
+        return false; //this.attrs.show_banished.attrs.checkState;
     }
 }
 
@@ -584,8 +593,8 @@ class SyncHeader extends components.NavHeader {
         super();
 
         this.attrs.parent = parent
-        this.attrs.txtInput = new TextInputElement("", null, () => {
-                this.attrs.parent.search(this.attrs.txtInput.props.value)
+        this.attrs.txtInput = new TextInputElement("", null, (text) => {
+                this.attrs.parent.search(text)
         })
 
         this.attrs.txtInput.updateProps({"autocapitalize": "off"})
@@ -618,6 +627,7 @@ class SyncHeader extends components.NavHeader {
 
         this.addAction(resources.svg['download'], ()=>{
             if (daedalus.platform.isAndroid) {
+                console.log("begin sync");
                 AndroidNativeAudio.beginSync("" + api.getAuthToken());
             }
         })
@@ -637,7 +647,7 @@ class SyncHeader extends components.NavHeader {
         }
 
         this.addRowAction(0, resources.svg['search'], ()=>{
-            this.attrs.parent.search(this.attrs.txtInput.props.value)
+            this.attrs.parent.search(this.attrs.txtInput.getText())
         })
 
         this.addRow(false)
@@ -650,7 +660,7 @@ class SyncHeader extends components.NavHeader {
     }
 
     searchText() {
-        return this.attrs.txtInput.props.value
+        return this.attrs.txtInput.getText()
     }
 
     handleCheck() {
@@ -733,6 +743,7 @@ export class SyncPage extends DomElement {
             registerAndroidEvent('onsynccomplete', ()=>{})
 
             registerAndroidEvent('onresume', ()=>{})
+            //registerAndroidEvent('onerror', ()=>{})
         }
     }
 
@@ -834,6 +845,12 @@ export class SyncPage extends DomElement {
         }
     }
 
+    /*
+    handleError(payload) {
+        console.error(payload);
+    }
+    */
+
     showMore(item) {
         console.log("on show more clicked");
     }
@@ -882,11 +899,12 @@ const savedSearches = [
     {name: "grunge best", query: "grunge rating >= 5"},
     {name: "visual best", query: "\"visual kei\" rating >= 5"},
     {name: "english best", query: "language = english rating >= 5"},
-    {name: "stone temple pilots", query: "\"stone temple pilots\""},
+    {name: "stone temple pilots", query: "\"stone temple pilots\" not STPLIGHT"},
     {name: "soundwitch", query: "soundwitch"},
     {name: "Gothic Emily", query: "\"gothic emily\""},
-    {name: "Driving Hits Volume 1", query: ":DRV"},
-    {name: "Driving Hits Volume 2", query: ":VL2"},
+    {name: "Driving Hits Volume 1", query: "\":DRV\" && p lt -14d"},
+    {name: "Driving Hits Volume 2", query: "\":VL2\" && p lt -14d"},
+    {name: "Driving Hits Volume 3", query: "(comment=\":DRV\" or comment=\":VL2\") && p lt -14d"},
 ]
 
 class SavedSearchList extends DomElement {

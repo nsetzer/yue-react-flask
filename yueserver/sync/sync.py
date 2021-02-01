@@ -1765,7 +1765,6 @@ def _status_file_impl(ctxt, ent):
         else:
             sys.stdout.write("f%s %s\n" % (sym, path))
 
-
 class SyncResult(object):
     def __init__(self, ent, state, message):
         super(SyncResult, self).__init__()

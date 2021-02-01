@@ -32,8 +32,6 @@ class WebToken(object):
     The user data can be any sequence of bytes. for JWT compatability, the
     user data should be utf-8 encoded json.
 
-
-
     """
     ONE_HOUR =  60 * 60
     ONE_DAY = 24 * ONE_HOUR
@@ -65,6 +63,9 @@ class WebToken(object):
         tag = base64.urlsafe_b64encode(h.digest())
 
         return (bdy + tag).decode("utf-8")
+
+    def create_json(self, payload):
+        return self.create(json.dumps(payload).encode("utf-8"))
 
     def verify(self, token):
 
@@ -99,13 +100,39 @@ class WebToken(object):
         now = self.now()
 
         if expires_at < now:
-            raise WebTokenExpired("expired token")
+            e = WebTokenExpired("expired token")
+            # set extra data on the exception containing the real time values
+            e.issued_at = issued_at + WebToken.EPOCH_BASE
+            e.expires_at = expires_at + WebToken.EPOCH_BASE
+            e.now = now + WebToken.EPOCH_BASE
+            raise e
 
         payload = base64.urlsafe_b64decode(parts[1])
 
         return payload
 
+    def verify_json(self, token):
+        payload = self.verify(token)
+        return json.loads(payload.decode("utf-8"))
 
     def now(self):
         return int(time.time()) - WebToken.EPOCH_BASE
 
+
+def main():
+    key = b"0" * 16
+    wt = WebToken(key, -100)
+    token = wt.create(b"abc")
+
+    try:
+        wt.verify(token)
+    except WebTokenExpired as e:
+        print(e.issued_at, e.expires_at, e.now, e)
+
+    try:
+        wt.verify('x' + token)
+    except WebTokenInvalidSignature as e:
+        print(e)
+
+if __name__ == '__main__':
+    main()

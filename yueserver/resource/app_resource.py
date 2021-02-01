@@ -10,7 +10,8 @@ from flask import jsonify, render_template, g, request, \
     send_file, send_from_directory, Response, make_response
 
 from ..dao.library import Song
-from ..dao.util import parse_iso_format, pathCorrectCase, server_health
+from ..dao.util import parse_iso_format, pathCorrectCase
+#  server_health
 
 from ..framework.web_resource import WebResource, \
     get, post, put, delete, header, body, compressed, httpError, \

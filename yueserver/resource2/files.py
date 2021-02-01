@@ -410,6 +410,7 @@ class FileSysResource(Resource):
 
         offset = request.query.limit * request.query.page
 
+        # TODO: this should fail if the user cannot access 'root'
         files = self.filesys_service.listIndex(request.current_user,
             request.args.root, "", limit=request.query.limit, offset=offset)
 

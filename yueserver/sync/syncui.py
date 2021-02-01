@@ -1,4 +1,4 @@
-#! cd ../.. && python3 -m yueserver.tools.syncui -n
+#! cd ../.. && python3 -m yueserver.sync.syncui -n
 
 # syncui cmd push arg with relative path `syncui .` does not work
 # remove
@@ -37,10 +37,16 @@
 # formalize stats collection of FS implementations
 #
 import time
-ts_start = time.time()
-print("%.3f : start" % ts_start)
 import os
 import sys
+ts_start = time.time()
+errf = open("./werr.log", "w");
+errf.write("%.3f : start\n" % ts_start);
+errf.write("%s\n" % sys.stdout);
+errf.flush()
+print("%.3f : start" % ts_start)
+errf.write("%s\n" % sys.stdout);
+errf.flush()
 import math
 import logging
 import posixpath
@@ -60,8 +66,6 @@ def trace(*args, **kwargs):
     filename = os.path.split(frame.filename)[-1]
     print(f"{filename}:{frame.function}:{frame.lineno}", *args, **kwargs)
 
-
-
 import PIL
 
 if sys.platform == 'win32':
@@ -70,13 +74,20 @@ if sys.platform == 'win32':
         has_win32gui = True
     except ImportError:
         has_win32gui = False
-        sys.stderr.write("error importing win32gui")
+        if sys.stderr:
+            sys.stderr.write("error importing win32gui")
 
 from datetime import datetime
 
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
+
+
+QT_VERSION_TUPLE = tuple(int(x) for x in QT_VERSION_STR.split(".")[:3])
+PYQT_V6 = QT_VERSION_TUPLE >= (6,0,0)
+print(PYQT_V6)
+print(Qt.Alignment.AlignLeft)
 
 from yueserver.dao.filesys.filesys import FileSystem
 from yueserver.dao.filesys.drives import get_drives
@@ -91,7 +102,7 @@ from yueserver.qtcommon import resource
 from yueserver.qtcommon import tango
 from yueserver.framework.config import BaseConfig, yload, ydump
 
-from yueserver.tools import sync2
+from yueserver.sync import sync
 
 from yueserver.dao.search import (
     SearchGrammar, AndSearchRule, OrSearchRule, NotSearchRule, ColumnSearchRule,
@@ -148,14 +159,14 @@ def executeDiffAction(action, pwd, ent1, ent2):
 
     opts = {"pwd": pwd}
 
-    if isinstance(ent1, sync2.DirEnt):
+    if isinstance(ent1, sync.DirEnt):
         path = ent1.local_base
     else:
         path = ent1.local_path
 
     opts['left'] = path
 
-    if isinstance(ent2, sync2.DirEnt):
+    if isinstance(ent2, sync.DirEnt):
         path = ent2.local_base
     else:
         path = ent2.local_path
@@ -199,7 +210,7 @@ def executeAction(action, ents, pwd):
 
         for ent in ents:
 
-            if isinstance(ent, sync2.DirEnt):
+            if isinstance(ent, sync.DirEnt):
                 path = ent.local_base
             else:
                 path = ent.local_path
@@ -243,6 +254,7 @@ def executeAction(action, ents, pwd):
             i += 1
 
     args = [arg.format(**opts) for arg in args]
+    print(args)
 
     return openProcess(args, pwd)
 
@@ -426,8 +438,8 @@ def _dummy_sync_iter(ctxt, paths, push, pull, force, recursive):
 
     for dent in paths:
 
-        yield sync2.FileEnt(dent.remote_base, dent.local_base, None, None, None)
-        yield sync2.SyncResult(dent, sync2.FileState.ERROR, dent.remote_base)
+        yield sync.FileEnt(dent.remote_base, dent.local_base, None, None, None)
+        yield sync.SyncResult(dent, sync.FileState.ERROR, dent.remote_base)
 
         QThread.msleep(250)
 
@@ -525,8 +537,8 @@ def _load_drives():
     _dir_contents = []
 
     for drive in get_drives():
-        ent = sync2.DirEnt(drive, None, drive)
-        ent._state = sync2.FileState.SAME
+        ent = sync.DirEnt(drive, None, drive)
+        ent._state = sync.FileState.SAME
         _dir_contents.append(ent)
 
     return _dir_contents
@@ -540,7 +552,7 @@ def _load_context(ctxt, directory):
 
     try:
         abspath, relpath = ctxt.normPath(directory)
-        result = sync2._check(ctxt, relpath, abspath)
+        result = sync._check(ctxt, relpath, abspath)
 
         _dir_contents = result.dirs + result.files
         return _dir_contents
@@ -562,12 +574,12 @@ def _load_default(fs, directory):
             #    record = fs.file_info(fullpath)
             #except FileNotFoundError as e:
             #    trace("not found: %s" % e)
-            #    ent = sync2.DirEnt(name, None, fullpath, sync2.FileState.ERROR)
+            #    ent = sync.DirEnt(name, None, fullpath, sync.FileState.ERROR)
             #    _dir_contents.append(ent)
             #    continue
             #except OSError as e:
             #    trace(type(e), e, fullpath)
-            #    ent = sync2.DirEnt(name, None, fullpath, sync2.FileState.ERROR)
+            #    ent = sync.DirEnt(name, None, fullpath, sync.FileState.ERROR)
             #    _dir_contents.append(ent)
             #    continue
 
@@ -580,14 +592,14 @@ def _load_default(fs, directory):
                     "permission": record.permission,
                 }
 
-                ent = sync2.FileEnt(None, fullpath, None, None, af)
-                ent._state = sync2.FileState.SAME
+                ent = sync.FileEnt(None, fullpath, None, None, af)
+                ent._state = sync.FileState.SAME
                 _dir_contents.append(ent)
             else:
-                ent = sync2.DirEnt(record.name, None, fullpath)
+                ent = sync.DirEnt(record.name, None, fullpath)
                 ent._permission = record.permission
                 ent._mtime = record.mtime
-                ent._state = sync2.FileState.SAME
+                ent._state = sync.FileState.SAME
                 _dir_contents.append(ent)
 
         except FileNotFoundError:
@@ -669,8 +681,8 @@ class LocationContext(QObject):
                     content = _load_default(self.fs, directory)
 
             # useful for color testing
-            # for state in sync2.FileState.states():
-            #    content.append(sync2.DirEnt(state, state, state, state))
+            # for state in sync.FileState.states():
+            #    content.append(sync.DirEnt(state, state, state, state))
 
             self._active_context = ctxt
             self._dir_contents = content
@@ -855,7 +867,7 @@ class LocationContext(QObject):
 
     def renameEntry(self, ent, name):
 
-        if isinstance(ent, sync2.DirEnt):
+        if isinstance(ent, sync.DirEnt):
             local_path = ent.local_base
             remote_path = ent.remote_base
         else:
@@ -879,15 +891,15 @@ class LocationContext(QObject):
         else:
             new_remote_path = remote_path
 
-        if isinstance(ent, sync2.DirEnt):
-            new_ent = sync2.DirEnt(name, new_remote_path, new_local_path)
+        if isinstance(ent, sync.DirEnt):
+            new_ent = sync.DirEnt(name, new_remote_path, new_local_path)
 
         elif not self.hasActiveContext():
-            new_ent = sync2.FileEnt(None, new_local_path, None, None, af)
-            new_ent._state = sync2.FileState.SAME
+            new_ent = sync.FileEnt(None, new_local_path, None, None, af)
+            new_ent._state = sync.FileState.SAME
 
         else:
-            new_ent = sync2._check_file(
+            new_ent = sync._check_file(
                 self.activeContext(), remote_path, local_path)
 
         return new_ent
@@ -945,25 +957,25 @@ class AppContext(QObject):
 
         # this duplicates the logic from get_ctxt
         try:
-            userdata = sync2.get_cfg(directory)
+            userdata = sync.get_cfg(directory)
 
-        except sync2.SyncException as e:
+        except sync.SyncException as e:
             return None
 
         try:
             db_path = self.fs.join(
                 userdata['local_base'], ".yue", "database.sqlite")
 
-            db = sync2.db_connect("sqlite:///" + db_path)
+            db = sync.db_connect("sqlite:///" + db_path)
 
             # TODO: emit connection details
             trace(userdata['hostname'])
-            client = sync2.connect(userdata['hostname'],
+            client = sync.connect(userdata['hostname'],
                 userdata['username'], userdata['password'])
 
-            storageDao = sync2.LocalStorageDao(db, db.tables)
+            storageDao = sync.LocalStorageDao(db, db.tables)
 
-            ctxt = sync2.SyncContext(client, storageDao, self.fs,
+            ctxt = sync.SyncContext(client, storageDao, self.fs,
                 userdata['root'], userdata['remote_base'], userdata['local_base'])
 
             # replace the get password implementation
@@ -975,7 +987,7 @@ class AppContext(QObject):
             ctxt.username = userdata['username']
             ctxt.showHiddenNames = True
 
-        except sync2.SyncException as e:
+        except sync.SyncException as e:
             #self.loadContextError.emit(directory, str(e))
             trace("ld ctxt error", str(e))
             return None
@@ -1030,41 +1042,41 @@ class AppContext(QObject):
 
     def _getFileStateIcon(self, state):
 
-        if state == sync2.FileState.SAME:
+        if state == sync.FileState.SAME:
             # return self.getImage(":img/fs_same.png")
             return None
 
-        elif state == sync2.FileState.IGNORE:
+        elif state == sync.FileState.IGNORE:
             return self.getImage(":img/fs_ignore.png")
 
-        elif state == sync2.FileState.PUSH:
+        elif state == sync.FileState.PUSH:
             return self.getImage(":/img/fs_push.png")
 
-        elif state == sync2.FileState.PULL:
+        elif state == sync.FileState.PULL:
             return self.getImage(":/img/fs_pull.png")
 
-        elif state == sync2.FileState.CONFLICT_MODIFIED:
+        elif state == sync.FileState.CONFLICT_MODIFIED:
             return self.getImage(":/img/fs_conflict.png")
 
-        elif state == sync2.FileState.CONFLICT_CREATED:
+        elif state == sync.FileState.CONFLICT_CREATED:
             return self.getImage(":/img/fs_conflict.png")
 
-        elif state == sync2.FileState.CONFLICT_VERSION:
+        elif state == sync.FileState.CONFLICT_VERSION:
             return self.getImage(":/img/fs_conflict.png")
 
-        elif state == sync2.FileState.CONFLICT_TYPE:
+        elif state == sync.FileState.CONFLICT_TYPE:
             return self.getImage(":/img/fs_conflict.png")
 
-        elif state == sync2.FileState.DELETE_BOTH:
+        elif state == sync.FileState.DELETE_BOTH:
             return self.getImage(":/img/fs_delete.png")
 
-        elif state == sync2.FileState.DELETE_REMOTE:
+        elif state == sync.FileState.DELETE_REMOTE:
             return self.getImage(":/img/fs_delete.png")
 
-        elif state == sync2.FileState.DELETE_LOCAL:
+        elif state == sync.FileState.DELETE_LOCAL:
             return self.getImage(":/img/fs_delete_remote.png")
 
-        # state == sync2.FileState.ERROR:
+        # state == sync.FileState.ERROR:
         return self.getImage(":/img/fs_error.png")
 
     def getFileIcon(self, path):
@@ -1399,7 +1411,12 @@ class Calendar(ClickableLabel):
         self.timer.start()
 
         fm = QFontMetrics(self.font())
-        self._width = fm.width("X") * 14
+
+        if PYQT_V6:
+            self._width = fm.maxWidth() * 14;
+        else:
+            self._width = fm.width("X") * 14
+
         self._size = QSize(self._width, -1)
 
     def sizeHint(self):
@@ -1673,7 +1690,7 @@ class FileContentSortProxyModel(SortProxyModel):
             val = None
         row = index.data(RowValueRole)
         ent = row[0]
-        dir = isinstance(ent, sync2.DirEnt)
+        dir = isinstance(ent, sync.DirEnt)
 
         if order == Qt.AscendingOrder:
             dir = not dir
@@ -1719,14 +1736,14 @@ class FileContentSortProxyModel(SortProxyModel):
             if not self._show_hidden:
                 return False
         # D:\Storage\public\code\python\ekanscrypt
-        if state == sync2.FileState.IGNORE:
+        if state == sync.FileState.IGNORE:
             if not self._show_blacklist:
                 return False
 
         if not self._rule:
             return True
 
-        if not self._dir and isinstance(ent, sync2.DirEnt):
+        if not self._dir and isinstance(ent, sync.DirEnt):
             return True
 
         return self._rule.check(item)
@@ -1895,7 +1912,7 @@ class FileContextMenu(QMenu):
 
     def _action_open_native(self, ent):
 
-        if isinstance(ent, sync2.DirEnt):
+        if isinstance(ent, sync.DirEnt):
             openNative(ent.local_base)
         else:
             openNative(ent.local_path)
@@ -1906,10 +1923,10 @@ class FileContextMenu(QMenu):
 
         paths = []
         for ent in ents:
-            if isinstance(ent, sync2.DirEnt):
+            if isinstance(ent, sync.DirEnt):
                 paths.append(ent)
             else:
-                paths.append(sync2.DirEnt(None, ent.remote_path, ent.local_path))
+                paths.append(sync.DirEnt(None, ent.remote_path, ent.local_path))
 
         optdialog = SyncOptionsDialog(self)
         if optdialog.exec_() == QDialog.Accepted:
@@ -1996,7 +2013,7 @@ class FileContextMenu(QMenu):
 
     def _action_copy_path(self, ent):
 
-        if isinstance(ent, sync2.DirEnt):
+        if isinstance(ent, sync.DirEnt):
             path = ent.local_base
         else:
             path = ent.local_path
@@ -2011,7 +2028,7 @@ class FileContextMenu(QMenu):
 
         urls = []
         for ent in ents:
-            if isinstance(ent, sync2.DirEnt):
+            if isinstance(ent, sync.DirEnt):
                 path = ent.local_base
             else:
                 path = ent.local_path
@@ -2034,7 +2051,7 @@ class FileContextMenu(QMenu):
 
         urls = []
         for ent in ents:
-            if isinstance(ent, sync2.DirEnt):
+            if isinstance(ent, sync.DirEnt):
                 path = ent.local_base
             else:
                 path = ent.local_path
@@ -2084,7 +2101,7 @@ class FileContextMenu(QMenu):
 
         urls = []
         for ent in ents:
-            if isinstance(ent, sync2.DirEnt):
+            if isinstance(ent, sync.DirEnt):
                 path = ent.local_base
             else:
                 path = ent.local_path
@@ -2139,7 +2156,7 @@ class FileTableRowItem(object):
     @staticmethod
     def fromEntry(ctxt, ent):
 
-        if isinstance(ent, sync2.FileEnt):
+        if isinstance(ent, sync.FileEnt):
 
             df = {'size': 0, "permission": 0, "mtime": 0, "version": 0,
                   "public": "", "encryption": ""}
@@ -2170,7 +2187,7 @@ class FileTableRowItem(object):
                 ctxt.appCtxt._icon_file                   # 14
             ]
 
-        elif isinstance(ent, sync2.DirEnt):
+        elif isinstance(ent, sync.DirEnt):
 
             item = [
                 ent,                                       # 0
@@ -2438,7 +2455,7 @@ class FileTableView(TableView):
 
     def _fmt_remote_path(self, data, row, key):
         ent = data[row][key]
-        if isinstance(ent, sync2.DirEnt):
+        if isinstance(ent, sync.DirEnt):
             return ent.remote_base
         return ent.remote_path
 
@@ -2464,9 +2481,9 @@ class FileTableView(TableView):
         for ent in self.ctxt.contents():
             item = FileTableRowItem.fromEntry(self.ctxt, ent)
             data.append(item)
-            if isinstance(ent, sync2.FileEnt):
+            if isinstance(ent, sync.FileEnt):
                 fcount += 1
-            elif isinstance(ent, sync2.DirEnt):
+            elif isinstance(ent, sync.DirEnt):
                 dcount += 1
 
         self.setNewData(data)
@@ -2562,7 +2579,7 @@ class FileTableView(TableView):
         for row in selection:
             ent = row[FileTableRowItem.COL_ENT]
 
-            if isinstance(ent, sync2.DirEnt):
+            if isinstance(ent, sync.DirEnt):
                 path = ent.local_base
             else:
                 path = ent.local_path
@@ -2620,7 +2637,7 @@ class FileTableView(TableView):
         """
         col = self.baseModel().getColumnIndexByName("filename")
         # todo: check for unique name
-        ent = sync2.DirEnt("New Directory", "", "")
+        ent = sync.DirEnt("New Directory", "", "")
         ent.create = True
         item = FileTableRowItem.fromEntry(self.ctxt, ent)
         self.insertRow(0, item)
@@ -2664,7 +2681,7 @@ class FileTableView(TableView):
             self.ctxt.fs.makedirs(abspath)
 
             # construct a new ent to replace the dummy
-            ent = sync2.DirEnt(value, relpath, abspath, sync2.FileState.PUSH)
+            ent = sync.DirEnt(value, relpath, abspath, sync.FileState.PUSH)
 
             item = FileTableRowItem.fromEntry(self.ctxt, ent)
             self.replaceRow(index.row(), item)
@@ -2692,7 +2709,7 @@ class FileTableView(TableView):
 
         col = self.baseModel().getColumnIndexByName("filename")
         path = self.ctxt.fs.join(self.ctxt.currentLocation(), "newfile.txt")
-        ent = sync2.FileEnt(None, path, None, None, None)
+        ent = sync.FileEnt(None, path, None, None, None)
         ent.create = True
         item = FileTableRowItem.fromEntry(self.ctxt, ent)
         self.insertRow(0, item)
@@ -2737,9 +2754,9 @@ class FileTableView(TableView):
 
             # construct a new ent to replace the dummy
             if self.ctxt.hasActiveContext():
-                ent = sync2._check_file(self.ctxt.activeContext(), relpath, abspath)
+                ent = sync._check_file(self.ctxt.activeContext(), relpath, abspath)
             else:
-                ent = sync2.FileEnt(relpath, abspath, None, None, None)
+                ent = sync.FileEnt(relpath, abspath, None, None, None)
 
             item = FileTableRowItem.fromEntry(self.ctxt, ent)
             self.replaceRow(index.row(), item)
@@ -2805,7 +2822,7 @@ class FileTableView(TableView):
             self.ctxt.fs.rename(ent.local_base, abspath)
 
             # construct a new ent to replace the dummy
-            ent = sync2.DirEnt(value, relpath, abspath, sync2.FileState.PUSH)
+            ent = sync.DirEnt(value, relpath, abspath, sync.FileState.PUSH)
 
             item = FileTableRowItem.fromEntry(self.ctxt, ent)
             self.replaceRow(index.row(), item)
@@ -2860,9 +2877,9 @@ class FileTableView(TableView):
 
             # construct a new ent to replace the dummy
             if self.ctxt.hasActiveContext():
-                ent = sync2._check_file(self.ctxt.activeContext(), relpath, abspath)
+                ent = sync._check_file(self.ctxt.activeContext(), relpath, abspath)
             else:
-                ent = sync2.FileEnt(relpath, abspath, None, None, None)
+                ent = sync.FileEnt(relpath, abspath, None, None, None)
 
             item = FileTableRowItem.fromEntry(self.ctxt, ent)
             self.replaceRow(index.row(), item)
@@ -2893,7 +2910,7 @@ class FileTableView(TableView):
         paths = []
         for row in rows:
             ent = row[FileTableRowItem.COL_ENT]
-            if isinstance(ent, sync2.DirEnt):
+            if isinstance(ent, sync.DirEnt):
                 path = ent.local_base
             else:
                 path = ent.local_path
@@ -2966,14 +2983,14 @@ class FileTableView(TableView):
                 value = original_value
 
             # todo: on editor close remove dummy ents if not committing
-            if isinstance(ent, sync2.DirEnt):
+            if isinstance(ent, sync.DirEnt):
                 # todo: better dummy entry checking?
                 if hasattr(ent, 'create'):
                     self.createDirectory.emit(index, value)
                 else:
                     self.renameDirectory.emit(index, value)
 
-            if isinstance(ent, sync2.FileEnt):
+            if isinstance(ent, sync.FileEnt):
                 if hasattr(ent, 'create'):
                     self.createEmptyFile.emit(index, value)
                 else:
@@ -3048,40 +3065,40 @@ class FileTableView(TableView):
             if row[9] == 'system':
                 return QColor(0x9B, 0x11, 0x1E)
 
-        if state == sync2.FileState.SAME:
+        if state == sync.FileState.SAME:
             return None
 
-        elif state == sync2.FileState.IGNORE:
+        elif state == sync.FileState.IGNORE:
             return QColor(200, 32, 200, 32)
 
-        elif state == sync2.FileState.PUSH:
+        elif state == sync.FileState.PUSH:
             return QColor(32, 200, 32, 32)
 
-        elif state == sync2.FileState.PULL:
+        elif state == sync.FileState.PULL:
             return QColor(32, 32, 200, 32)
 
-        elif state == sync2.FileState.CONFLICT_MODIFIED:
+        elif state == sync.FileState.CONFLICT_MODIFIED:
             return QColor(255, 170, 0, 32)
 
-        elif state == sync2.FileState.CONFLICT_CREATED:
+        elif state == sync.FileState.CONFLICT_CREATED:
             return QColor(255, 170, 0, 32)
 
-        elif state == sync2.FileState.CONFLICT_VERSION:
+        elif state == sync.FileState.CONFLICT_VERSION:
             return QColor(255, 170, 0, 32)
 
-        elif state == sync2.FileState.CONFLICT_TYPE:
+        elif state == sync.FileState.CONFLICT_TYPE:
             return QColor(255, 170, 0, 32)
 
-        elif state == sync2.FileState.DELETE_BOTH:
+        elif state == sync.FileState.DELETE_BOTH:
             return QColor(255, 50, 0, 32)
 
-        elif state == sync2.FileState.DELETE_REMOTE:
+        elif state == sync.FileState.DELETE_REMOTE:
             return QColor(255, 50, 0, 32)
 
-        elif state == sync2.FileState.DELETE_LOCAL:
+        elif state == sync.FileState.DELETE_LOCAL:
             return QColor(255, 50, 0, 32)
 
-        if state == sync2.FileState.ERROR:
+        if state == sync.FileState.ERROR:
             return QColor(255, 0, 0, 64)
 
         return None
@@ -3453,7 +3470,7 @@ class LocationView(QWidget):
     def _getEnt(self):
         path = self.ctxt.currentLocation()
         abspath, relpath = self.ctxt.activeContext().normPath(path)
-        ent = sync2.DirEnt(abspath.split()[-1], relpath, abspath)
+        ent = sync.DirEnt(abspath.split()[-1], relpath, abspath)
         return ent
 
     def onFetchButtonPressed(self):
@@ -3674,7 +3691,7 @@ class FetchProgressThread(ProgressThread):
         # create an iterable in this thread for processing the command
 
         # iterable = _dummy_fetch_iter(ctxt)
-        iterable = sync2._fetch_iter(ctxt)
+        iterable = sync._fetch_iter(ctxt)
 
         while True:
 
@@ -3729,7 +3746,7 @@ class SyncProgressThread(ProgressThread):
         #    self.push, self.pull, self.force, self.recursive
         # )
 
-        iterable = sync2._sync_impl_iter(
+        iterable = sync._sync_impl_iter(
             ctxt, self.paths,
             self.push, self.pull, self.force, self.recursive
         )
@@ -3753,7 +3770,7 @@ class SyncProgressThread(ProgressThread):
 
                 result = next(iterable)
 
-                sym = sync2.FileState.symbol(result.state)
+                sym = sync.FileState.symbol(result.state)
 
                 self.sendStatus("%s %s" % (sym, result.ent.remote_path))
 
@@ -4314,7 +4331,7 @@ class FileEntryInfoDialog(QDialog):
 
     def setEntry(self, ent, hostname=None):
 
-        if isinstance(ent, sync2.DirEnt):
+        if isinstance(ent, sync.DirEnt):
             self.setDirEntry(ent, hostname)
         else:
             self.setFileEntry(ent, hostname)
@@ -4393,27 +4410,27 @@ class FileEntryInfoDialog(QDialog):
 
     def getStatePixmap(self, state):
 
-        if state == sync2.FileState.SAME:
+        if state == sync.FileState.SAME:
             return QPixmap(":/img/fs_same.png")
-        if state == sync2.FileState.IGNORE:
+        if state == sync.FileState.IGNORE:
             return QPixmap(":/img/fs_ignore.png")
-        elif state == sync2.FileState.PUSH:
+        elif state == sync.FileState.PUSH:
             return QPixmap(":/img/fs_push.png")
-        elif state == sync2.FileState.PULL:
+        elif state == sync.FileState.PULL:
             return QPixmap(":/img/fs_pull.png")
-        elif state == sync2.FileState.CONFLICT_MODIFIED:
+        elif state == sync.FileState.CONFLICT_MODIFIED:
             return QPixmap(":/img/fs_conflict.png")
-        elif state == sync2.FileState.CONFLICT_CREATED:
+        elif state == sync.FileState.CONFLICT_CREATED:
             return QPixmap(":/img/fs_conflict.png")
-        elif state == sync2.FileState.CONFLICT_VERSION:
+        elif state == sync.FileState.CONFLICT_VERSION:
             return QPixmap(":/img/fs_conflict.png")
-        elif state == sync2.FileState.CONFLICT_TYPE:
+        elif state == sync.FileState.CONFLICT_TYPE:
             return QPixmap(":/img/fs_conflict.png")
-        elif state == sync2.FileState.DELETE_BOTH:
+        elif state == sync.FileState.DELETE_BOTH:
             return QPixmap(":/img/fs_delete.png")
-        elif state == sync2.FileState.DELETE_REMOTE:
+        elif state == sync.FileState.DELETE_REMOTE:
             return QPixmap(":/img/fs_delete.png")
-        elif state == sync2.FileState.DELETE_LOCAL:
+        elif state == sync.FileState.DELETE_LOCAL:
             return QPixmap(":/img/fs_delete_remote.png")
         return QPixmap(":/img/fs_delete_error.png")
 
@@ -4543,7 +4560,7 @@ class FavoritesPane(Pane):
 
     def previewEntry(self, ent):
 
-        if isinstance(ent, sync2.FileEnt):
+        if isinstance(ent, sync.FileEnt):
             self.view_image.setPath(ent.local_path)
         else:
             logging.info(f"cannot create preview for entry {ent}")
@@ -4723,7 +4740,7 @@ class LocationPane(Pane):
 
         if count == 1:
             ent = self.table_file.getSelection()[0][FileTableRowItem.COL_ENT]
-            if isinstance(ent, sync2.FileEnt) and self.ctxt.fs.islocal(ent.local_path):
+            if isinstance(ent, sync.FileEnt) and self.ctxt.fs.islocal(ent.local_path):
                 self.previewEntry.emit(ent)
             else:
                 self.previewEntry.emit(None)
@@ -4743,7 +4760,7 @@ class LocationPane(Pane):
 
     def onOpenEntry(self, ent):
 
-        if isinstance(ent, sync2.DirEnt):
+        if isinstance(ent, sync.DirEnt):
             # self.ctxt.pushChildDirectory(ent.name())
             self.onLoadLocation("child", ent.name())
         else:
@@ -4825,7 +4842,7 @@ class LocationPane(Pane):
         urls = []
         for item in entries:
             ent = item[FileTableRowItem.COL_ENT]
-            if isinstance(ent, sync2.DirEnt):
+            if isinstance(ent, sync.DirEnt):
                 path = ent.local_base
             else:
                 path = ent.local_path
@@ -4848,7 +4865,7 @@ class LocationPane(Pane):
 
         urls = []
         for ent in entries:
-            if isinstance(ent, sync2.DirEnt):
+            if isinstance(ent, sync.DirEnt):
                 path = ent.local_base
             else:
                 path = ent.local_path
@@ -4994,7 +5011,7 @@ class LocationPane(Pane):
 
         size = self.cfg.iconSize
 
-        if not isinstance(ent, sync2.FileEnt):
+        if not isinstance(ent, sync.FileEnt):
             return None
 
         path = ent.local_path
@@ -5766,7 +5783,7 @@ def main():
     args = parser.parse_args()
 
     if args.edit:
-        ent = sync2.FileEnt(None, args.edit[0], None, None, None)
+        ent = sync.FileEnt(None, args.edit[0], None, None, None)
         openAction(self.ctxt.fs, cfg.open_actions, os.getcwd(), ent)
         return
 
@@ -5843,7 +5860,8 @@ def main():
     app_icon = QIcon(':/img/icon.png')
     app.setWindowIcon(app_icon)
 
-    QGuiApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
+    if not PYQT_V6:
+        QGuiApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
 
     installExceptionHook()
 
@@ -5897,6 +5915,8 @@ def wmain():
     sys.exit(0)
 
 if __name__ == '__main__':
+    errf.write("main\n");
+    errf.flush()
     wmain()
 
 

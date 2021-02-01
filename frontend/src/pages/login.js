@@ -83,8 +83,8 @@ export class LoginPage extends DomElement {
     }
 
     handleLoginClicked() {
-        const username = this.attrs.edit_username.props.value
-        const password = this.attrs.edit_password.props.value
+        const username = this.attrs.edit_username.getText()
+        const password = this.attrs.edit_password.getText()
 
         api.authenticate(username, password)
             .then((data) => {

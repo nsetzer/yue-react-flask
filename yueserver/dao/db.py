@@ -114,7 +114,17 @@ def db_connect(url=None, readonly=False):
     return db_connect_impl(DatabaseTables, url, readonly)
 
 def db_connect_impl(tables_class, url, readonly):
-    engine = create_engine(url)
+    # timeout unused connections
+    if url.startswith("sqlite://"):
+        engine_args = {}
+    else:
+        engine_args = {
+            "pool_size": 10,
+            "max_overflow": 15,
+            "pool_timeout": 300,
+            "pool_recycle": 300
+        }
+    engine = create_engine(url, **engine_args)
     session = scoped_session(sessionmaker(bind=engine))
 
     db = DatabaseConnection()

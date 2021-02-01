@@ -3,12 +3,12 @@ from module daedalus import{
     DomElement,
     ButtonElement,
     TextElement,
-    TextInputElement,
     Router
 }
 import module api
 import module components
 import module store
+import module audio
 
 const style = {
     main: StyleSheet({
@@ -54,6 +54,23 @@ class SettingsButtonItem extends DomElement {
         //this.children[0].setText(text)
     }
 }
+
+class SettingsToggleRangeItem extends DomElement {
+    constructor(title, action, action2) {
+        super("div", {className: style.settingsRowItem}, []);
+        this.attrs.count = 0
+
+        this.appendChild(new ButtonElement(title, () => {action(this)}))
+        this.appendChild(new DomElement("input", {
+            min: 0, max:100, value:50, type: "range", onchange: action2
+        }))
+    }
+
+    setText(text) {
+        //this.children[0].setText(text)
+    }
+}
+
 
 class SettingsGroupItem extends DomElement {
     constructor(title, names) {
@@ -167,6 +184,29 @@ export class SettingsPage extends DomElement {
                 }
             }));
 
-    }
+        this.attrs.noise = [
+            new audio.WhiteNoiseContext(),
+            new audio.PinkNoiseContext(),
+            new audio.BrownNoiseContext(),
+            new audio.OceanNoiseContext(),
+        ]
 
+        for (let i=0; i < this.attrs.noise.length; i++) {
+            let noise = this.attrs.noise[i]
+            this.attrs.container.appendChild(new SettingsToggleRangeItem(noise.color + " noise",
+                (item) => {
+                    if (noise.isPlaying()) {
+                        console.log("pause " + noise.color)
+                        noise.pause()
+                    } else {
+                        console.log("play " + noise.color)
+                        noise.play()
+                    }
+                },
+                (event) => {
+                    noise.setVolume(event.target.value/100)
+                }));
+        }
+
+    }
 }

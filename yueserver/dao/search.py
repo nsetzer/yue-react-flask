@@ -1337,3 +1337,78 @@ class SearchGrammar(Grammar):
         cols = [self.getColumnType(f) for f in self.text_fields]
         return MultiColumnSearchRule(rule, cols, string, colid=self.all_text)
 
+def main():
+    from sqlalchemy.schema import Table, Column, ForeignKey
+    from sqlalchemy.types import Integer, String
+    from sqlalchemy import create_engine, MetaData
+
+    def TestTable(metadata):
+        return Table('test_table', metadata,
+            Column('id', Integer, primary_key=True),
+            Column('shape', String, default=""),
+            Column('name', String, default=""),
+            Column('created', Integer, default=0),
+            Column('duration', Integer, default=0),
+            Column('year', Integer, default=0),
+            Column('length', Integer, default=0)
+        )
+
+    class TestGrammar(SearchGrammar):
+
+        def __init__(self, table):
+            super(TestGrammar, self).__init__()
+
+            # all_text is a meta-column name which is used to search all text fields
+            self.all_text = "all_text"
+            self.text_fields = set(["shape", "name"])
+            self.date_fields = set(["created"])
+            self.time_fields = set("duration")
+            self.year_fields = set("year")
+
+            self.table = table
+
+        def translateColumn(self, colid):
+            return colid
+
+        def getColumnType(self, key):
+            return getattr(self.table.c, key)
+
+    def pprint(engine, statement):
+        c = statement.compile(engine, compile_kwargs={'literal_binds': True})
+        print(c)
+        c = statement.compile(engine, compile_kwargs={'literal_binds': False})
+        print(c, c.params)
+
+    # SELECT * FROM table WHERE text_string LIKE '%\%%' ESCAPE '\';
+
+    engine = create_engine('sqlite://',echo=True)
+    test_table = TestTable(MetaData())
+    grammar = TestGrammar(test_table)
+
+    rule = grammar.ruleFromString("length = 5")
+    statement = rule.sql()
+    pprint(engine, statement)
+
+    rule = grammar.ruleFromString("length == 5")
+    statement = rule.sql()
+    pprint(engine, statement)
+
+    rule = grammar.ruleFromString("length > 5")
+    statement = rule.sql()
+    pprint(engine, statement)
+
+    rule = grammar.ruleFromString("shape !== circle")
+    statement = rule.sql()
+    pprint(engine, statement)
+
+    rule = grammar.ruleFromString("shape = \"cic%\"")
+    statement = rule.sql()
+    pprint(engine, statement)
+
+    rule = grammar.ruleFromString("!x")
+    statement = rule.sql()
+    pprint(engine, statement)
+
+
+if __name__ == '__main__':
+    main()

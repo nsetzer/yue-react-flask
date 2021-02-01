@@ -113,6 +113,7 @@ from .dao.filesys.filesys import FileSystem
 from .dao.filesys.s3fs import BotoFileSystemImpl
 
 
+from .framework2.client import ApplicationClient, AuthenticatedRestClient
 
 from .resource2.util import register_handlers
 from .resource2.http import HttpResource
@@ -335,17 +336,19 @@ class Application(object):
 
         self.site.join()
 
+    @staticmethod
+    def connect(host, username, password):
 
+        app = Application()
+
+        client = ApplicationClient(app.endpoints())
+        client.connect(host, username, password)
+
+        return client
 
 def test():
 
-    from .framework2.client import ApplicationClient, AuthenticatedRestClient
-
-    app = Application()
-
-    client = ApplicationClient(app.endpoints())
-
-    client.connect("http://localhost:4200", "admin", "admin")
+    client = Application.connect("http://localhost:4200", "admin", "admin")
 
     resp = client.filesys_get_roots()
 

@@ -174,7 +174,7 @@ def validatekey(key):
         raise ValueError("Invalid key length")
 
     if not parts[1].startswith('$2b$'):
-        raise ValueError("Invalid key length")
+        raise ValueError("Invalid key")
 
     for part, length in zip(parts, KEY_LENGTH_PARTS):
         if len(part) != length:
@@ -407,22 +407,3 @@ class FileDecryptorWriter(_Closeable):
     def close(self):
         self.wf.close()
 
-_epoch = int(datetime(2010, 1, 1, 0, 0, tzinfo=timezone.utc).timestamp())
-_two_weeks = 2 * 7 * 24 * 60 * 60
-
-def tpack(timestamp):
-    return (int(timestamp) - _epoch) >> 8
-
-def tpackb(timestamp):
-    """ pack a timestamp into 3 bytes """
-    return tpack(timestamp).to_bytes(3, 'big')
-
-def tunpack(timestamp):
-    return (int(timestamp)  << 8) + _epoch
-
-def tunpackb(data):
-    """ unpack a 3 byte timestamp """
-    return tunpack(int.from_bytes(data, 'big'))
-
-def tfmt(timestamp):
-    return time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(int(timestamp)))

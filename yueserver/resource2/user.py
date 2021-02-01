@@ -109,14 +109,14 @@ class UserResource(Resource):
         info = self.user_service.listUser(request.current_user['id'])
         return Response(200, {}, {'result': info})
 
-    @get("/api/user/token")
-    @param("expiry", type_=Integer().default(2 * 60 * 60))
-    @requires_auth("user_read")
-    @returns({200: TokenOpenApiBody()})
-    def get_uuid_token(self, request):
-        token = self.user_service.generateUUIDToken(
-            request.current_user, request.query.expiry)
-        return Response(200, {}, {'result': {"X-TOKEN": token}})
+    #@get("/api/user/token")
+    #@param("expiry", type_=Integer().default(2 * 60 * 60))
+    #@requires_auth("user_read")
+    #@returns({200: TokenOpenApiBody()})
+    #def get_uuid_token(self, request):
+    #    token = self.user_service.generateUUIDToken(
+    #        request.current_user, request.query.expiry)
+    #    return Response(200, {}, {'result': {"X-TOKEN": token}})
 
     @post("/api/user/create")
     @requires_auth("user_create")

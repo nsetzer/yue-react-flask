@@ -21,7 +21,6 @@ from module daedalus import {
     DomElement,
     ButtonElement,
     TextElement,
-    TextInputElement,
     AuthenticatedRouter
 }
 import module api
@@ -110,9 +109,14 @@ export class Root extends DomElement {
             nav: null,
             router: null,
             container: new DomElement("div", {}, []),
+            drawer: new components.ErrorDrawer(resources.svg.media_error)
         }
 
         window.onresize = this.handleResize.bind(this)
+
+        this.appendChild(this.attrs.drawer)
+
+        components.ErrorDrawer.post = (title, message) => {this.attrs.drawer.appendError(title, message)}
 
     }
 
@@ -264,10 +268,19 @@ export class Root extends DomElement {
         } else {
             this.buildRouter()
         }
+
+        if (daedalus.platform.isAndroid) {
+            registerAndroidEvent('onexcept', this.handleError.bind(this))
+        }
     }
 
     handleResize(event) {
         this.toggleShowMenuFixed();
+    }
+
+    handleError(payload) {
+        console.log(JSON.stringify(payload))
+        this.attrs.drawer.appendError(payload.title, payload.message)
     }
 
     toggleShowMenuFixed() {

@@ -3,7 +3,6 @@ from module daedalus import {
     DomElement,
     ButtonElement,
     TextElement,
-    TextInputElement,
     Router
 }
 

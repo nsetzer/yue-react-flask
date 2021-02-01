@@ -101,7 +101,6 @@ class JsonUploader(object):
             self._upload_impl = self._api_upload
 
     def upload(self, songs, remote_songs, remote_files):
-
         self.updated = 0
         self.uploaded = 0
         count = 0
@@ -157,14 +156,14 @@ class JsonUploader(object):
         # volume has been normalized, so set equalizer to default
         local_song['equalizer'] = 100
 
-        print(remote_song is not None)
-
-        _update = remote_song is not None and aud_path in remote_files
+        _update = (remote_song is not None)
+        if not self.do_update:
+            _update = _update and (aud_path in remote_files)
 
         if _update:
 
             if not self.do_update:
-                print(aud_path)
+                print("skip", aud_path)
                 return
 
             # find keys that are different
@@ -333,7 +332,9 @@ def _fetch_files(client, root):
             sys.stderr.write("fetch songs error...\n")
             sys.exit(1)
 
-        result = response.json()['result']
+        result = response.json()
+        print(result)
+        result = result['result']
         for f in result:
             files.add(f['path'])
 
@@ -380,6 +381,9 @@ def _fetch_songs(client):
             break
 
     logging.info("fetched %d songs" % len(songs))
+
+    #curl -u admin:admin "http://localhost:4200/api/fs/default/index"
+
     return songs
 
 def do_upload(client, data, root, nparallel=1, bucket=None, ffmpeg_path=None, noexec=False, create=True, update=False):
@@ -387,6 +391,7 @@ def do_upload(client, data, root, nparallel=1, bucket=None, ffmpeg_path=None, no
     transcoder = FFmpeg(ffmpeg_path)
 
     rsongs = _fetch_songs(client)
+    print(client, root)
     rfiles = _fetch_files(client, root)
 
     # TODO: a keyboard interrupt should wait for the current task to complete

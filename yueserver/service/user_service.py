@@ -14,7 +14,7 @@ from ..dao.library import LibraryDao
 from ..dao.settings import SettingsDao, Settings
 from ..dao.queue import SongQueueDao
 from ..dao.filesys.crypt import sha256
-from ..dao.filesys.token import uuid_token_generate, uuid_token_verify, sha256
+#from ..dao.filesys.token import uuid_token_generate, uuid_token_verify, sha256
 from .exception import UserServiceException
 
 #from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
@@ -58,20 +58,19 @@ def generate_token(secret, user, expiration):
     #return token
 
     wt = WebToken(secret)
-    payload = json.dumps({
+    token = wt.create_json({
         'id': user['id'],
         'email': user['email'],
         'domain_id': user['domain_id'],
         'role_id': user['role_id'],
-    }).encode("utf-8")
-    return wt.create(payload)
+    })
+    return token
 
 def verify_token(secret, token):
     #s = Serializer(secret)
     #return s.loads(token)
     wt = WebToken(secret)
-    payload = wt.verify(token).decode("utf-8")
-    return json.loads(payload)
+    return wt.verify_json(token)
 
 class UserException(Exception):
     pass
@@ -172,7 +171,6 @@ class UserService(object):
         return user_data
 
     def getUserFromToken(self, token, features=None):
-
         try:
             user_data = verify_token(self.secret, token)
 
@@ -185,29 +183,22 @@ class UserService(object):
         #    pass
         #except SignatureExpired:
         #    pass
-
         raise UserException("Invalid Token")
 
-    def getUserFromUUIDToken(self, token, features=None):
-
-        key = sha256(self.secret.encode('utf-8'))[:16]
-        uuid_str = uuid_token_verify(key, token)
-
-        user = self.userDao.findUserById(uuid_str)
-
-        if not user:
-            raise Exception("user %s does not exist or password incorrect" % email)
-
-        user_data = {
-            "id": user.id,
-            "email": user.email,
-            "domain_id": user.domain_id,
-            "role_id": user.role_id
-        }
-
-        self._validate_features(user_data, features)
-
-        return user_data
+    #def getUserFromUUIDToken(self, token, features=None):
+    #    key = sha256(self.secret.encode('utf-8'))[:16]
+    #    uuid_str = uuid_token_verify(key, token)
+    #    user = self.userDao.findUserById(uuid_str)
+    #    if not user:
+    #        raise Exception("user %s does not exist or password incorrect" % email)
+    #    user_data = {
+    #        "id": user.id,
+    #        "email": user.email,
+    #        "domain_id": user.domain_id,
+    #        "role_id": user.role_id
+    #    }
+    #    self._validate_features(user_data, features)
+    #    return user_data
 
     def loginUser(self, email, password):
 
@@ -226,20 +217,21 @@ class UserService(object):
             if verify_token(self.secret, token):
                 is_valid = True
                 reason = "OK"
-        except BadSignature:
-            is_valid = False
-            reason = "Bad Signature"
-        except SignatureExpired:
-            is_valid = False
-            reason = "Expired Signature"
+        except WebTokenException:
+            pass
+        #except BadSignature:
+        #    is_valid = False
+        #    reason = "Bad Signature"
+        #except SignatureExpired:
+        #    is_valid = False
+        #    reason = "Expired Signature"
 
         return is_valid, reason
 
-    def generateUUIDToken(self, user, expiry):
-
-        key = sha256(self.secret.encode('utf-8'))[:16]
-        token = uuid_token_generate(key, user['id'], expiry)
-        return token
+    #def generateUUIDToken(self, user, expiry):
+    #    key = sha256(self.secret.encode('utf-8'))[:16]
+    #    token = uuid_token_generate(key, user['id'], expiry)
+    #    return token
 
     def changeUserPassword(self, user, new_password):
 
